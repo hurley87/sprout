@@ -23,12 +23,22 @@ export class TranscriptWindow {
 // are documented; the model is also instructed to acknowledge stop requests.
 export function requestsStop(text: string): boolean {
   const normalized = text.toLowerCase().replace(/[’]/g, "'");
-  const clause = normalized.split(/[.!?;,]/).map(part => part.trim()).filter(Boolean).at(-1) || "";
+  const clause =
+    normalized
+      .split(/[.!?;,]/)
+      .map(part => part.trim())
+      .filter(Boolean)
+      .at(-1) || "";
   if (/\b(don't|do not|not|never)\s+(want to\s+)?stop\b/.test(clause)) return false;
-  return /\b(stop|i(?:'m| am) done|all done|no more|i (?:want|need) to (?:go|quit|finish)|can we (?:finish|end)|(?:don't|do not) want to (?:play|count)(?: anymore)?)\b/.test(clause);
+  return /\b(stop|i(?:'m| am) done|all done|no more|i (?:want|need) to (?:go|quit|finish)|can we (?:finish|end)|(?:don't|do not) want to (?:play|count)(?: anymore)?)\b/.test(
+    clause,
+  );
 }
 
-const GOODBYE = new RegExp(`${GOODBYE_PHRASE.replace(/[.!]+$/, "").replace(/[\\^$*+?.()|[\]{}]/g, "\\$&")}[.!]?\\s*$`, "i");
+const GOODBYE = new RegExp(
+  `${GOODBYE_PHRASE.replace(/[.!]+$/, "").replace(/[\\^$*+?.()|[\]{}]/g, "\\$&")}[.!]?\\s*$`,
+  "i",
+);
 
 /** The model ending the lesson itself. Not proof that the child heard it. */
 export function saidGoodbye(text: string): boolean {

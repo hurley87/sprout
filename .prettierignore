@@ -1,0 +1,8 @@
+docs/
+*.md
+package-lock.json
+.next/
+out/
+test-results/
+playwright-report/
+next-env.d.ts

@@ -3,8 +3,7 @@ import { LAST_SCENE, MODEL, PROMPT_VERSION, TIMING, sceneAt, sceneContext } from
 import { TranscriptWindow, requestsStop, saidGoodbye } from "./transcript";
 
 export type EndReason =
-  | "parent_stop" | "child_stop" | "model_goodbye" | "wrap_up"
-  | "time_limit" | "connection_failure" | "page_hidden";
+  "parent_stop" | "child_stop" | "model_goodbye" | "wrap_up" | "time_limit" | "connection_failure" | "page_hidden";
 
 // Only an ending the app chose, on a session that reached the provider, asks
 // for finalization. A broken or expired session releases immediately.
@@ -20,7 +19,9 @@ const GRACEFUL_CLOSE: Record<EndReason, boolean> = {
 
 export type Snapshot = {
   status: "starting" | "active" | "wrapping" | "goodbye" | "ended";
-  sceneIndex: number; reason?: EndReason; error?: string;
+  sceneIndex: number;
+  reason?: EndReason;
+  error?: string;
 };
 export type Diagnostic = { at: number; type: string; detail?: unknown };
 
@@ -33,8 +34,7 @@ export interface Transport {
 
 /** What the app is waiting to see on screen before it speaks about it. */
 type PendingDisplay =
-  | { kind: "greeting"; sceneIndex: number }
-  | { kind: "advance"; sceneIndex: number; delegationId: string };
+  { kind: "greeting"; sceneIndex: number } | { kind: "advance"; sceneIndex: number; delegationId: string };
 
 export class LessonSession {
   snapshot: Snapshot = { status: "starting", sceneIndex: 0 };
@@ -53,9 +53,14 @@ export class LessonSession {
   private closed = false;
   private ready = false;
 
-  constructor(private transport: Transport, private changed: (snapshot: Snapshot) => void) {}
+  constructor(
+    private transport: Transport,
+    private changed: (snapshot: Snapshot) => void,
+  ) {}
 
-  private get scene() { return sceneAt(this.snapshot.sceneIndex); }
+  private get scene() {
+    return sceneAt(this.snapshot.sceneIndex);
+  }
 
   log(type: string, detail?: unknown) {
     // Bounded, in-memory prototype diagnostics; no raw audio or SDP.
@@ -66,19 +71,40 @@ export class LessonSession {
   async start() {
     this.log("attempt.started", { model: MODEL, prompt: PROMPT_VERSION });
     this.changed(this.snapshot);
-    this.startupTimer = setTimeout(() => this.fail("Microphone or voice setup took too long. Check browser permission and try again."), TIMING.startup);
-    try { await this.transport.start(event => this.receive(event), message => this.fail(message)); }
-    catch (error) { this.fail(error instanceof Error ? error.message : "Sprout could not start. Please try again."); }
+    this.startupTimer = setTimeout(
+      () => this.fail("Microphone or voice setup took too long. Check browser permission and try again."),
+      TIMING.startup,
+    );
+    try {
+      await this.transport.start(
+        event => this.receive(event),
+        message => this.fail(message),
+      );
+    } catch (error) {
+      this.fail(error instanceof Error ? error.message : "Sprout could not start. Please try again.");
+    }
   }
 
-  private update(patch: Partial<Snapshot>) { this.snapshot = { ...this.snapshot, ...patch }; this.changed(this.snapshot); }
+  private update(patch: Partial<Snapshot>) {
+    this.snapshot = { ...this.snapshot, ...patch };
+    this.changed(this.snapshot);
+  }
 
   private dispatch(command: ClientCommand): boolean {
     this.log("command.sent", command);
-    try { this.transport.send(command); return true; } catch { return false; }
+    try {
+      this.transport.send(command);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
-  private append(type: "session.instructions.append" | "session.thinking.append", content: string, delegationId: string | null = null) {
+  private append(
+    type: "session.instructions.append" | "session.thinking.append",
+    content: string,
+    delegationId: string | null = null,
+  ) {
     if (this.snapshot.status === "ended") return;
     const sent = this.dispatch({ type, event_id: `sprout_${++this.commands}`, content, delegation_id: delegationId });
     if (!sent) this.fail("The voice connection was lost. You can start a new lesson.");
@@ -97,7 +123,8 @@ export class LessonSession {
     // Finalization is accepted after ending, but no further model work is.
     if (event.type === "session.closed") {
       this.log("connection.finalized", { reason: event.reason, usage: event.usage });
-      if (this.snapshot.status !== "ended") this.fail("The voice service ended this attempt. You can start a new lesson.");
+      if (this.snapshot.status !== "ended")
+        this.fail("The voice service ended this attempt. You can start a new lesson.");
       this.close();
       return;
     }
@@ -156,8 +183,11 @@ export class LessonSession {
   private heard(event: TranscriptEvent) {
     const fromChild = event.speaker === "child";
     this.log(fromChild ? "transcript.child_or_nearby_speaker" : "transcript.sprout", {
-      delta: event.delta, start_ms: event.startMs, end_ms: event.endMs,
-      scene: this.scene.id, playbackVerified: false,
+      delta: event.delta,
+      start_ms: event.startMs,
+      end_ms: event.endMs,
+      scene: this.scene.id,
+      playbackVerified: false,
     });
     const speech = fromChild ? this.childSpeech : this.sproutSpeech;
     const utterance = speech.append(event.delta, event.startMs, event.endMs);
@@ -175,12 +205,20 @@ export class LessonSession {
     this.delegations.add(delegationId);
     this.log("action.requested", { action: "advance_scene", id: delegationId });
     if (this.snapshot.status !== "active" || this.pending) {
-      this.append("session.thinking.append", "Scene unchanged. Wait for the current scene confirmation, or finish the current activity if wrapping up. Do not request another scene now.", delegationId);
+      this.append(
+        "session.thinking.append",
+        "Scene unchanged. Wait for the current scene confirmation, or finish the current activity if wrapping up. Do not request another scene now.",
+        delegationId,
+      );
       this.log("action.rejected", "Not ready for a new scene");
       return;
     }
     if (this.snapshot.sceneIndex === LAST_SCENE) {
-      this.append("session.thinking.append", "No more scenes. Keep playing with the current group at the child's pace until wrap-up. Do not delegate again.", delegationId);
+      this.append(
+        "session.thinking.append",
+        "No more scenes. Keep playing with the current group at the child's pace until wrap-up. Do not delegate again.",
+        delegationId,
+      );
       this.log("action.rejected", "Scene boundary");
       return;
     }
@@ -198,7 +236,10 @@ export class LessonSession {
     this.log("scene.displayed", this.scene);
     switch (pending.kind) {
       case "greeting":
-        this.append("session.instructions.append", `Greet the child now in English: introduce yourself as Sprout and invite them to play. ${sceneContext(this.scene)} Then pause and listen.`);
+        this.append(
+          "session.instructions.append",
+          `Greet the child now in English: introduce yourself as Sprout and invite them to play. ${sceneContext(this.scene)} Then pause and listen.`,
+        );
         return;
       case "advance":
         this.append("session.thinking.append", sceneContext(this.scene), pending.delegationId);
@@ -214,17 +255,25 @@ export class LessonSession {
     if (this.snapshot.status !== "active") return;
     this.update({ status: "wrapping" });
     this.log("lesson.wrap_up");
-    this.append("session.instructions.append", "We have played for four and a half minutes. Gently finish this exchange. No new scenes or questions after it. We will say goodbye shortly.");
+    this.append(
+      "session.instructions.append",
+      "We have played for four and a half minutes. Gently finish this exchange. No new scenes or questions after it. We will say goodbye shortly.",
+    );
   }
 
   private goodbye() {
     if (this.snapshot.status === "ended") return;
     this.update({ status: "goodbye" });
     this.log("lesson.goodbye_requested");
-    this.append("session.instructions.append", "The lesson is finished. Say a brief warm goodbye now, then remain quiet. No questions, new activities, or delegation.");
+    this.append(
+      "session.instructions.append",
+      "The lesson is finished. Say a brief warm goodbye now, then remain quiet. No questions, new activities, or delegation.",
+    );
   }
 
-  fail(message: string) { if (this.snapshot.status !== "ended") this.end("connection_failure", message); }
+  fail(message: string) {
+    if (this.snapshot.status !== "ended") this.end("connection_failure", message);
+  }
 
   end(reason: EndReason, error?: string) {
     if (this.snapshot.status === "ended") return;
@@ -237,16 +286,29 @@ export class LessonSession {
     // Invalidate actions BEFORE any resource callback can fire.
     this.update({ status: "ended", reason, error });
     this.transport.stopMedia();
-    if (this.ready && GRACEFUL_CLOSE[reason] && this.dispatch({ type: "session.close", event_id: `sprout_close_${++this.commands}` })) {
+    if (
+      this.ready &&
+      GRACEFUL_CLOSE[reason] &&
+      this.dispatch({ type: "session.close", event_id: `sprout_close_${++this.commands}` })
+    ) {
       // Media is already stopped; briefly keep only transport for final usage.
-      this.closeTimer = setTimeout(() => { this.log("connection.finalization_unconfirmed"); this.close(); }, Math.min(1500, remaining));
+      this.closeTimer = setTimeout(
+        () => {
+          this.log("connection.finalization_unconfirmed");
+          this.close();
+        },
+        Math.min(1500, remaining),
+      );
       return;
     }
     this.log("connection.finalization_unconfirmed");
     this.close();
   }
 
-  dispose() { this.end("page_hidden"); this.close(); }
+  dispose() {
+    this.end("page_hidden");
+    this.close();
+  }
 
   private close() {
     clearTimeout(this.closeTimer);
@@ -256,9 +318,15 @@ export class LessonSession {
   }
 
   report(browser: string) {
-    return { model: MODEL, promptVersion: PROMPT_VERSION, createdAt: new Date(this.createdAt).toISOString(),
+    return {
+      model: MODEL,
+      promptVersion: PROMPT_VERSION,
+      createdAt: new Date(this.createdAt).toISOString(),
       liveStartedAtMs: this.startedAt === undefined ? null : this.startedAt - this.createdAt,
-      ending: this.snapshot.reason, browser,
-      note: "Prototype diagnostics only. Transcript timing is approximate; speaker identity and audio delivery are unverified. No recording or learning conclusions.", events: [...this.events] };
+      ending: this.snapshot.reason,
+      browser,
+      note: "Prototype diagnostics only. Transcript timing is approximate; speaker identity and audio delivery are unverified. No recording or learning conclusions.",
+      events: [...this.events],
+    };
   }
 }

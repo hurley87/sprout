@@ -2,30 +2,43 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { POST } from "../app/api/live/route";
 import { LIVE_CONFIG } from "../lib/lesson";
 
-const request = (body: unknown = { sdp: "v=0\r\n" }, origin = "http://localhost:3000", host = "localhost:3000") => new Request("http://localhost:3000/api/live", {
-  method: "POST", headers: { "Content-Type": "application/json", origin, host }, body: JSON.stringify(body),
+const request = (body: unknown = { sdp: "v=0\r\n" }, origin = "http://localhost:3000", host = "localhost:3000") =>
+  new Request("http://localhost:3000/api/live", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", origin, host },
+    body: JSON.stringify(body),
+  });
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
-afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 describe("local Live session endpoint", () => {
   it("rejects foreign origins before calling the provider", async () => {
-    const fetch = vi.fn(); vi.stubGlobal("fetch", fetch);
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
     expect((await POST(request({}, "https://other.test"))).status).toBe(403);
     expect((await POST(request({}, "http://localhost:4000"))).status).toBe(403);
     expect((await POST(request({}, "http://127.0.0.1:3000"))).status).toBe(403);
     expect(fetch).not.toHaveBeenCalled();
   });
   it("rejects public hosting and DNS-rebound hosts even with a matching origin", async () => {
-    const req = new Request("https://sprout.example/api/live", { method: "POST", headers: { origin: "https://sprout.example", host: "sprout.example" } });
+    const req = new Request("https://sprout.example/api/live", {
+      method: "POST",
+      headers: { origin: "https://sprout.example", host: "sprout.example" },
+    });
     expect((await POST(req)).status).toBe(403);
     // Next reports request.url as localhost regardless of the Host header.
     expect((await POST(request({}, "http://rebind.test:3000", "rebind.test:3000"))).status).toBe(403);
     expect((await POST(request({}, "http://localhost:3000", ""))).status).toBe(403);
   });
-  it.each([["127.0.0.1:3100", "http://127.0.0.1:3100"], ["localhost:3000", "http://localhost:3000"], ["[::1]:3000", "http://[::1]:3000"]])(
-    "accepts the loopback address the page was served from (%s)", async (host, origin) => {
-      vi.stubEnv("OPENAI_API_KEY", "");
-      expect((await POST(request(undefined, origin, host))).status).toBe(503);
-    });
+  it.each([
+    ["127.0.0.1:3100", "http://127.0.0.1:3100"],
+    ["localhost:3000", "http://localhost:3000"],
+    ["[::1]:3000", "http://[::1]:3000"],
+  ])("accepts the loopback address the page was served from (%s)", async (host, origin) => {
+    vi.stubEnv("OPENAI_API_KEY", "");
+    expect((await POST(request(undefined, origin, host))).status).toBe(503);
+  });
   it.each([null, {}, { sdp: 2 }, { sdp: "junk" }])("rejects invalid input %j", async body => {
     expect((await POST(request(body))).status).toBe(400);
   });
@@ -40,11 +53,16 @@ describe("local Live session endpoint", () => {
   });
   it("uses exactly GPT-Live-1 with client delegation and returns only SDP/session ID", async () => {
     vi.stubEnv("OPENAI_API_KEY", "synthetic-test-key");
-    const fetch = vi.fn(async () => Response.json({ session: { id: "live_test", private: "omit" }, transport: { sdp: "answer" }, secret: "omit" }));
+    const fetch = vi.fn(async () =>
+      Response.json({ session: { id: "live_test", private: "omit" }, transport: { sdp: "answer" }, secret: "omit" }),
+    );
     vi.stubGlobal("fetch", fetch);
     const response = await POST(request());
     expect(response.status).toBe(201);
-    expect(await response.json()).toEqual({ session: { id: "live_test" }, transport: { type: "webrtc", sdp: "answer" } });
+    expect(await response.json()).toEqual({
+      session: { id: "live_test" },
+      transport: { type: "webrtc", sdp: "answer" },
+    });
     const calls = fetch.mock.calls as unknown as [string, RequestInit][];
     expect(calls[0][0]).toBe("https://api.openai.com/v1/live/sessions");
     expect(JSON.parse(calls[0][1].body as string).session).toEqual(LIVE_CONFIG);
@@ -63,7 +81,10 @@ describe("local Live session endpoint", () => {
     vi.stubEnv("OPENAI_API_KEY", "synthetic-test-key");
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network")));
     expect((await POST(request())).status).toBe(502);
-    vi.stubGlobal("fetch", vi.fn(async () => Response.json({})));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({})),
+    );
     expect((await POST(request())).status).toBe(502);
   });
 });

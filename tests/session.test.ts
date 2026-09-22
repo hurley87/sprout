@@ -8,7 +8,10 @@ function setup(active = true) {
   const transport: Transport = { start: vi.fn(async () => {}), send: vi.fn(), stopMedia: vi.fn(), close: vi.fn() };
   const session = new LessonSession(transport, vi.fn());
   void session.start();
-  if (active) { deliver(session, { type: "session.started" }); session.displayed(0); }
+  if (active) {
+    deliver(session, { type: "session.started" });
+    session.displayed(0);
+  }
   return { session, transport };
 }
 /** Tests send provider-shaped JSON so the parser boundary is exercised too. */
@@ -18,8 +21,12 @@ function deliver(session: LessonSession, raw: unknown) {
   return event;
 }
 const advance = (id: string) => ({ type: "session.delegation.created", delegation: { id, target: "client" } });
-const speech = (delta: string, start_ms = 0, output = false) =>
-  ({ type: `session.${output ? "output" : "input"}_transcript.delta`, delta, start_ms, end_ms: start_ms + 500 });
+const speech = (delta: string, start_ms = 0, output = false) => ({
+  type: `session.${output ? "output" : "input"}_transcript.delta`,
+  delta,
+  start_ms,
+  end_ms: start_ms + 500,
+});
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
@@ -148,7 +155,9 @@ describe("bounded scene control", () => {
     session.displayed(4);
     expect(transport.send).not.toHaveBeenCalled();
     session.displayed(1);
-    expect(transport.send).toHaveBeenCalledWith(expect.objectContaining({ type: "session.thinking.append", delegation_id: "a" }));
+    expect(transport.send).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "session.thinking.append", delegation_id: "a" }),
+    );
     deliver(session, advance("a"));
     expect(session.snapshot.sceneIndex).toBe(1);
   });
@@ -172,7 +181,9 @@ describe("bounded scene control", () => {
     expect(session.snapshot.sceneIndex).toBe(LAST_SCENE);
   });
   it("keeps every scene within the 1-5 boundary and names objects correctly", () => {
-    expect(SCENES.every(scene => Number.isInteger(scene.quantity) && scene.quantity >= 1 && scene.quantity <= 5)).toBe(true);
+    expect(SCENES.every(scene => Number.isInteger(scene.quantity) && scene.quantity >= 1 && scene.quantity <= 5)).toBe(
+      true,
+    );
     expect(objectName({ id: "x", object: "butterfly", quantity: 3 })).toBe("butterflies");
     expect(objectName({ id: "x", object: "strawberry", quantity: 3 })).toBe("strawberries");
     expect(objectName({ id: "x", object: "duck", quantity: 1 })).toBe("duck");
@@ -181,14 +192,26 @@ describe("bounded scene control", () => {
 });
 
 describe("transcripts and stop requests", () => {
-  it.each(["stop", "Please stop.", "I'm done!", "all done", "I want to go", "no more", "I don't want to play anymore", "Don't stop. Stop!"])("ends on %s", text => {
+  it.each([
+    "stop",
+    "Please stop.",
+    "I'm done!",
+    "all done",
+    "I want to go",
+    "no more",
+    "I don't want to play anymore",
+    "Don't stop. Stop!",
+  ])("ends on %s", text => {
     const { session } = setup();
     deliver(session, speech(text));
     expect(session.snapshot.reason).toBe("child_stop");
   });
-  it.each(["don't stop", "do not stop", "not stop", "one, um, two", "three... no, two", "a dinosaur!"])("does not classify %s as stop", text => {
-    expect(requestsStop(text)).toBe(false);
-  });
+  it.each(["don't stop", "do not stop", "not stop", "one, um, two", "three... no, two", "a dinosaur!"])(
+    "does not classify %s as stop",
+    text => {
+      expect(requestsStop(text)).toBe(false);
+    },
+  );
   it("recognizes fragmented requests, keeps exact transcript and does not claim audio delivery", () => {
     const { session } = setup();
     deliver(session, speech("I want to "));
@@ -243,11 +266,18 @@ describe("provider event parsing", () => {
     expect(parseProviderEvent({ type: "session.input_transcript.delta", delta: "hi" })).toBeNull();
   });
   it("keeps only the fields the app acts on", () => {
-    expect(parseProviderEvent({ type: "error", error: { code: "not_allowed", message: "private detail" } }))
-      .toEqual({ type: "provider.error", eventId: undefined, code: "not_allowed" });
-    expect(parseProviderEvent({ ...advance("a"), arguments: { quantity: 100 } }))
-      .toEqual({ type: "delegation", eventId: undefined, id: "a" });
-    expect(parseProviderEvent({ type: "session.delegation.created", delegation: { id: "a", target: "responses" } })?.type)
-      .toBe("delegation.unsupported");
+    expect(parseProviderEvent({ type: "error", error: { code: "not_allowed", message: "private detail" } })).toEqual({
+      type: "provider.error",
+      eventId: undefined,
+      code: "not_allowed",
+    });
+    expect(parseProviderEvent({ ...advance("a"), arguments: { quantity: 100 } })).toEqual({
+      type: "delegation",
+      eventId: undefined,
+      id: "a",
+    });
+    expect(
+      parseProviderEvent({ type: "session.delegation.created", delegation: { id: "a", target: "responses" } })?.type,
+    ).toBe("delegation.unsupported");
   });
 });

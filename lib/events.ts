@@ -17,7 +17,12 @@ export type Speaker = "child" | "sprout";
 export type TranscriptEvent = Extract<ProviderEvent, { type: "transcript" }>;
 
 export type ClientCommand =
-  | { type: "session.instructions.append" | "session.thinking.append"; event_id: string; content: string; delegation_id: string | null }
+  | {
+      type: "session.instructions.append" | "session.thinking.append";
+      event_id: string;
+      content: string;
+      delegation_id: string | null;
+    }
   | { type: "session.close"; event_id: string };
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
@@ -58,7 +63,14 @@ export function parseProviderEvent(raw: unknown): ProviderEvent | null {
       return { type: "usage", eventId, usage: raw.usage };
     default:
       if (!raw.type.endsWith(".appended")) return null;
-      return { type: "context.appended", eventId, name: raw.type, clientEventId: text(raw.client_event_id), startMs: number(raw.start_ms), endMs: number(raw.end_ms) };
+      return {
+        type: "context.appended",
+        eventId,
+        name: raw.type,
+        clientEventId: text(raw.client_event_id),
+        startMs: number(raw.start_ms),
+        endMs: number(raw.end_ms),
+      };
   }
 }
 
