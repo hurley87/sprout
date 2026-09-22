@@ -2,8 +2,19 @@
 
 import { useEffect, useRef, useState } from "react";
 import { BrowserTransport } from "@/lib/browser-transport";
-import { EMOJI } from "@/lib/lesson";
+import { OBJECTS, objectName, sceneAt } from "@/lib/lesson";
 import { LessonSession, type Snapshot } from "@/lib/session";
+
+function Scene({ index }: { index: number }) {
+  const scene = sceneAt(index);
+  return (
+    <div className="scene" data-scene={scene.id} role="img" aria-label={`A group of ${objectName(scene)} to count`}>
+      {Array.from({ length: scene.quantity }, (_, position) => (
+        <span aria-hidden="true" key={`${scene.id}-${position}`}>{OBJECTS[scene.object].emoji}</span>
+      ))}
+    </div>
+  );
+}
 
 export default function Lesson() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
@@ -28,7 +39,7 @@ export default function Lesson() {
     const current = session.current;
     let second = 0;
     const first = requestAnimationFrame(() => {
-      second = requestAnimationFrame(() => current?.displayed(snapshot.scene.id));
+      second = requestAnimationFrame(() => current?.displayed(snapshot.sceneIndex));
     });
     return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); };
   }, [snapshot]);
@@ -42,7 +53,8 @@ export default function Lesson() {
   }
   function download() {
     if (!session.current) return;
-    const url = URL.createObjectURL(new Blob([JSON.stringify(session.current.report(), null, 2)], { type: "application/json" }));
+    const report = session.current.report(navigator.userAgent);
+    const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }));
     const link = document.createElement("a");
     link.href = url;
     link.download = `sprout-attempt-${session.current.createdAt}.json`;
@@ -59,11 +71,7 @@ export default function Lesson() {
           <button className="end-button" onClick={() => session.current?.end("parent_stop")}>End lesson</button>
           <section className="play-space" aria-label="Counting garden">
             <div className="character" role="img" aria-label="Sprout"><span className="leaf">🌱</span><span className="face">◡</span></div>
-            {snapshot.status === "starting" ? <p className="connecting" role="status">Getting ready to play…</p> : (
-              <div className="scene" data-scene={snapshot.scene.id} role="img" aria-label={`A group of ${snapshot.scene.object}s to count`}>
-                {Array.from({ length: snapshot.scene.quantity }, (_, index) => <span aria-hidden="true" key={`${snapshot.scene.id}-${index}`}>{EMOJI[snapshot.scene.object]}</span>)}
-              </div>
-            )}
+            {snapshot.status === "starting" ? <p className="connecting" role="status">Getting ready to play…</p> : <Scene index={snapshot.sceneIndex} />}
           </section>
         </>
       ) : (

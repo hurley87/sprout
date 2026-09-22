@@ -1,17 +1,27 @@
 import { test, expect, type Page } from "@playwright/test";
 
+type TestState = {
+  emit: (event: object) => void;
+  disconnect: () => void;
+  commands: Record<string, unknown>[];
+  tracks: MediaStreamTrack[];
+  closed: boolean;
+  releaseMic?: () => void;
+};
+
+declare global {
+  interface Window {
+    sproutTest: TestState;
+  }
+}
+
 // This harness replaces ONLY the provider transport. getUserMedia and its
 // tracks are real Chromium APIs backed by Chromium's synthetic microphone.
 async function mockLive(page: Page, pendingMic = false) {
   await page.route("**/api/live", route => route.fulfill({ json: { session: { id: "test" }, transport: { sdp: "test" } } }));
   await page.addInitScript(({ pendingMic }) => {
-    type TestWindow = Window & { sproutTest: {
-      emit: (event: object) => void; disconnect: () => void; commands: Record<string, unknown>[];
-      tracks: MediaStreamTrack[]; closed: boolean; releaseMic?: () => void;
-    } };
-    const state = { commands: [] as Record<string, unknown>[], tracks: [] as MediaStreamTrack[], closed: false,
-      emit: (() => {}) as (event: object) => void, disconnect: () => {}, releaseMic: undefined as (() => void) | undefined };
-    (window as unknown as TestWindow).sproutTest = state;
+    const state: TestState = { commands: [], tracks: [], closed: false, emit: () => {}, disconnect: () => {} };
+    window.sproutTest = state;
     const getUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
     navigator.mediaDevices.getUserMedia = async constraints => {
       const stream = await getUserMedia(constraints);
@@ -47,17 +57,16 @@ async function mockLive(page: Page, pendingMic = false) {
     window.RTCPeerConnection = Peer as unknown as typeof RTCPeerConnection;
   }, { pendingMic });
 }
-async function emit(page: Page, event: object) {
-  await page.evaluate(event => (window as unknown as { sproutTest: { emit: (event: object) => void } }).sproutTest.emit(event), event);
-}
-async function tracksStopped(page: Page) {
-  return page.evaluate(() => (window as unknown as { sproutTest: { tracks: MediaStreamTrack[] } }).sproutTest.tracks.every(t => t.readyState === "ended"));
-}
+const emit = (page: Page, event: object) => page.evaluate(event => window.sproutTest.emit(event), event);
+const commands = (page: Page) => page.evaluate(() => window.sproutTest.commands);
+const sentContent = async (page: Page) => (await commands(page)).map(command => String(command.content ?? ""));
+const tracksStopped = (page: Page) => page.evaluate(() => window.sproutTest.tracks.every(track => track.readyState === "ended"));
+
 async function begin(page: Page) {
   await page.goto("/");
   await page.getByRole("button", { name: "Start counting together" }).click();
   await expect(page.locator('[data-scene="hello-duck"]')).toBeVisible();
-  await expect.poll(() => page.evaluate(() => (window as unknown as { sproutTest: { commands: unknown[] } }).sproutTest.commands.length)).toBeGreaterThan(0);
+  await expect.poll(async () => (await commands(page)).length).toBeGreaterThan(0);
 }
 
 test("parent start, committed scene, stop, late actions, and diagnostics export", async ({ page }) => {
@@ -68,7 +77,7 @@ test("parent start, committed scene, stop, late actions, and diagnostics export"
   await expect(page.getByRole("heading")).toHaveCount(0);
   await emit(page, { type: "session.delegation.created", delegation: { id: "scene2", target: "client" } });
   await expect(page.locator('[data-scene="duck-friends"] > span')).toHaveCount(2);
-  await expect.poll(() => page.evaluate(() => (window as unknown as { sproutTest: { commands: Record<string, unknown>[] } }).sproutTest.commands.some(c => c.delegation_id === "scene2"))).toBe(true);
+  await expect.poll(async () => (await commands(page)).some(command => command.delegation_id === "scene2")).toBe(true);
   await page.getByRole("button", { name: "End lesson" }).click();
   await expect(page.getByText("The microphone and voice playback are off.")).toBeVisible();
   expect(await tracksStopped(page)).toBe(true);
@@ -92,7 +101,7 @@ test("fragmented child stop releases the microphone immediately", async ({ page 
 
 test("connection failure preserves a retryable explanation and stops capture", async ({ page }) => {
   await mockLive(page); await begin(page);
-  await page.evaluate(() => (window as unknown as { sproutTest: { disconnect: () => void } }).sproutTest.disconnect());
+  await page.evaluate(() => window.sproutTest.disconnect());
   await expect(page.getByRole("main").getByRole("alert")).toContainText("connection was lost");
   expect(await tracksStopped(page)).toBe(true);
   await expect(page.getByRole("button", { name: "Start a new lesson" })).toBeVisible();
@@ -101,9 +110,9 @@ test("connection failure preserves a retryable explanation and stops capture", a
 test("stop while microphone permission is pending cleans up the late stream", async ({ page }) => {
   await mockLive(page, true); await page.goto("/");
   await page.getByRole("button", { name: "Start counting together" }).click();
-  await expect.poll(() => page.evaluate(() => Boolean((window as unknown as { sproutTest: { releaseMic?: () => void } }).sproutTest.releaseMic))).toBe(true);
+  await expect.poll(() => page.evaluate(() => Boolean(window.sproutTest.releaseMic))).toBe(true);
   await page.getByRole("button", { name: "End lesson" }).click();
-  await page.evaluate(() => (window as unknown as { sproutTest: { releaseMic: () => void } }).sproutTest.releaseMic());
+  await page.evaluate(() => window.sproutTest.releaseMic?.());
   await expect.poll(() => tracksStopped(page)).toBe(true);
   await expect(page.getByRole("heading", { name: "Bye for now." })).toBeVisible();
 });
@@ -111,9 +120,9 @@ test("stop while microphone permission is pending cleans up the late stream", as
 test("natural timing asks for wrap-up and goodbye, then stops without a model response", async ({ page }) => {
   await mockLive(page); await page.clock.install(); await begin(page);
   await page.clock.fastForward(270_000);
-  await expect.poll(() => page.evaluate(() => (window as unknown as { sproutTest: { commands: Record<string, unknown>[] } }).sproutTest.commands.some(c => String(c.content).includes("four and a half")))).toBe(true);
+  await expect.poll(async () => (await sentContent(page)).some(text => text.includes("four and a half"))).toBe(true);
   await page.clock.fastForward(30_000);
-  await expect.poll(() => page.evaluate(() => (window as unknown as { sproutTest: { commands: Record<string, unknown>[] } }).sproutTest.commands.some(c => String(c.content).includes("Say a brief warm goodbye")))).toBe(true);
+  await expect.poll(async () => (await sentContent(page)).some(text => text.includes("Say a brief warm goodbye"))).toBe(true);
   await page.clock.fastForward(8000);
   await expect(page.getByRole("heading", { name: "Bye for now." })).toBeVisible();
   expect(await tracksStopped(page)).toBe(true);
