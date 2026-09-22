@@ -4,10 +4,11 @@ In a one-child prototype, a mistaken observation can influence every later lesso
 
 ## Consequences
 
-- Store original proposals, parent decisions, and corrected observations separately, with links to the supporting exchange and audio.
+- Store original proposals, parent decisions, and corrected observations separately, with links to the supporting exchange and its timestamp in the session recording.
 - Keep pending and rejected proposals out of planner inputs.
 - Generate the next daily plan after review; that review is then final, and later fixes go into the next day's review.
 - Preserve originals so the builder can see how much repair the Observer needed.
+- Review is meant to verify or lightly correct observations, not to reconstruct them. A loop that routinely depends on substantial parent repair is not considered promising, even if lessons built on the repaired evidence are useful.
 - The resulting experiment validates a parent-reviewed learning loop. Removing this boundary requires an explicit new decision and evidence that autonomous updates are trustworthy.
 
 See the [PRD](../sprout-mvp-prd.md), [architecture](../architecture.md), and [experiment protocol](../experiment-protocol.md).

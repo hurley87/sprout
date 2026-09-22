@@ -82,13 +82,17 @@ _Avoid_: Examiner, assessor
 The parent's decision to accept, correct, or reject proposed observations.
 _Avoid_: Skill grading
 
+**Parent repair**:
+How much the parent had to change proposed observations during review, ranging from light correction (small contextual fixes) to substantial repair (rewriting, reconstructing, or supplying the learning evidence).
+_Avoid_: Observer accuracy score
+
 **Lesson planner**:
 The process that selects a bounded lesson using reviewed evidence and explains that choice.
 _Avoid_: Autonomous curriculum
 
 **Useful adaptation**:
-A change to a later lesson's target, challenge, or support, grounded in earlier reviewed evidence and judged useful by the parent after delivery.
-_Avoid_: Theme change alone, name personalization
+A delivered change to a later lesson's target, challenge, or support that earlier reviewed evidence caused, meaning the lesson would have differed without that observation, and that the parent judges useful.
+_Avoid_: Theme change alone, name personalization, repeating a target without changing challenge or support
 
 **Calibration**:
 The initial exploration of whether the agreed range of quantities offers a suitable challenge.

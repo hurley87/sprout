@@ -50,21 +50,23 @@ Persist completed exchanges incrementally so a dropped connection does not erase
 
 ## 4. Evidence record
 
-A text transcript by itself is insufficient. The Observer needs the actual scene and assistance surrounding the response, and the parent needs the audio to check what was actually said.
+A text transcript by itself is insufficient. The Observer needs the actual scene and assistance surrounding the response, and the parent needs the recording to check what was actually said.
+
+For the MVP, audio handling stays simple: keep one full recording per session, and timestamp utterances, scenes, and support events on the same clock as the recording, measured from session start. When the parent inspects an observation, the UI seeks the full recording to approximately the exchange's timestamp. Do not pre-slice audio per utterance, store separate audio segments, or build clip-generation infrastructure.
 
 Suggested record fields:
 
 | Record | Minimum information |
 | --- | --- |
 | Session | ID, experiment/day, plan ID, start/end times, ending reason, record completeness, analysis/review status, retry relationship if any |
-| Audio | Session audio file (Convex file storage), with offsets so each utterance can be replayed |
-| Utterance | ID, speaker attribution including unknown, text, order/time, audio offset, whether the utterance was finalized or interrupted |
-| Displayed scene | ID, ordered emoji items and arrangement, target quantity, display order/time |
-| Support event | Relevant exchange, support type, source, and the spoken or displayed help |
-| Proposed observation | ID, session, quantity, observed behavior, factual description, support context, uncertainty, references to source utterances and scenes |
+| Session recording | One full-session audio file (Convex file storage) and its start time |
+| Utterance | ID, speaker attribution including unknown, text, order, timestamp, whether the utterance was finalized or interrupted |
+| Displayed scene | ID, ordered emoji items and arrangement, target quantity, display order, timestamp |
+| Support event | Relevant exchange, support type, source, the spoken or displayed help, timestamp |
+| Proposed observation | ID, session, quantity, observed behavior, factual description, support context, uncertainty, references to source utterances and scenes, exchange timestamp |
 | Review decision | Proposal ID, accepted unchanged / corrected / rejected, corrected observation or reason where applicable, parent-added context (e.g. pointing), review time |
 | Lesson plan | Target, three activity parts, themes/scenes, permitted help, rationale, reviewed-evidence references used to generate it |
-| Daily evaluation | Participation judgment, actual useful adaptation and supporting references, notable failures, optional ratings |
+| Daily evaluation | Participation judgment, actual useful adaptation and supporting references, parent repair level and a short note, notable failures, optional ratings |
 
 This is a conceptual contract; concrete Convex schemas and provider event mappings are implementation work.
 
@@ -107,11 +109,10 @@ The planner receives:
 
 It selects one main target, a warm-up, and a fresh example. It can revisit a difficulty, vary the context to check a prior response, or adjust challenge/support within the scope. It must not infer permanent mastery from a single success or create developmental labels.
 
-Every post-calibration plan includes a plain-language rationale and references to the reviewed evidence behind its learning choices. Cosmetic personalization alone is insufficient.
+Every post-calibration plan includes a plain-language rationale and references to the reviewed evidence behind its learning choices. The rationale must make the causal link explicit, so it answers: “What would this lesson have done differently if the referenced observation did not exist?” The planner does not generate a second, counterfactual lesson. Cosmetic personalization or a changed theme alone is insufficient.
 
-Example:
-
-> “Revisit five with ducks because yesterday's total followed counting together; offer a fresh group before supplying help.”
+- **Causal:** “Yesterday she identified five correctly only after counting together, so today Sprout presents a fresh group of five and waits before offering help.”
+- **Not causal:** “Yesterday she practiced five, so today Sprout practices five again with ducks.”
 
 Preserve that rationale and compare it with what actually occurred. A planned adaptation that was never delivered cannot count as a useful adaptation.
 
@@ -129,7 +130,7 @@ First implement one hardcoded activity in a browser on a MacBook. Record the act
 
 - Microphone access and a usable live connection.
 - Thinking pauses, self-correction, genuine interruption, and response pacing.
-- Whether recorded speech and audio are sufficient to inspect the relevant exchange.
+- Whether the timestamped transcript and full-session recording are sufficient to inspect the relevant exchange.
 - Coordination between spoken prompts and the scene actually displayed.
 - Brief goodbye, parent stop, six-minute limit, and connection-failure cleanup.
 
@@ -155,5 +156,5 @@ Verify the following behaviors before the experiment:
 | Child is silent, stops, or connection fails | End/qualify appropriately; do not manufacture a wrong answer. |
 | Observer execution is retried | Do not duplicate proposals or bypass review. |
 | Session reaches the limit | End by six minutes and release media resources. |
-| Parent opens an observation | The linked audio segment replays alongside transcript and scene. |
-| Next lesson cites an observation | The observation is reviewed and relevant to the actual learning adjustment. |
+| Parent opens an observation | The full session recording seeks to approximately the exchange's timestamp, alongside transcript and scene. |
+| Next lesson cites an observation | The observation is reviewed, and the rationale states what the lesson changed because of it. |

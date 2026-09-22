@@ -16,7 +16,7 @@ The MVP asks:
 
 > Does Sprout learn enough about this child to make later lessons clearly better?
 
-A favorite theme or the child's name can support engagement, but does not establish that the learning-memory loop works. A useful adaptation revisits a difficulty, adjusts help, or changes the challenge based on a specific prior observation the parent considers accurate.
+A favorite theme or the child's name can support engagement, but does not establish that the learning-memory loop works. A useful adaptation revisits a difficulty, adjusts help, or changes the challenge because of a specific prior observation the parent considers accurate.
 
 This is a private, supervised experiment for the builder's own child. It does not attempt to prove educational improvement in seven days or support other families independently.
 
@@ -96,7 +96,7 @@ A connection failure ends the session and shows the parent a short explanation. 
 
 ## 5. Evidence and parent review
 
-Retain the session audio and transcript together with displayed scenes and help provided by Sprout. Each learning observation must link to the relevant exchange so the parent can inspect, and replay, what was said and shown.
+Retain one full audio recording of each session, plus a timestamped transcript, displayed scenes, and help provided by Sprout. Each learning observation must link to the relevant exchange and its timestamp so the parent can inspect what was said and shown and play the recording from about that point.
 
 Do not treat generated but unspoken answers, unshown scenes, silence, or disrupted exchanges as observed child performance.
 
@@ -107,7 +107,7 @@ The parent summary supports:
 - Accepting accurate observations, including a one-tap acceptance of an unchanged summary.
 - Correcting an observation, including marking a response as assisted.
 - Rejecting an unsupported observation.
-- Expanding the supporting audio, transcript, scene, and help context.
+- Expanding the supporting transcript, scene, and help context, and playing the session recording from the exchange's timestamp.
 
 There is no live “I helped” control. Preserve the Observer's original proposal separately from the parent's decision and corrected version.
 
@@ -121,7 +121,7 @@ Keep two main views:
 
 **History:** Show the seven-day experiment's sessions, themes, targets, endings, and reviewed observations. Partial sessions and technical retries remain identifiable.
 
-Collect a brief daily evaluation: willingness to participate, whether an evidence-based adaptation actually happened and was useful, and notable conversation or evidence failures. Optional 1–5 ratings cover engagement, appropriateness, observation accuracy, and conversation quality.
+Collect a brief daily evaluation: willingness to participate, whether an evidence-based adaptation actually happened and was useful, how much parent repair the review required, and notable conversation or evidence failures. Optional 1–5 ratings cover engagement, appropriateness, observation accuracy, and conversation quality.
 
 While analysis or review is pending, show that state explicitly. Do not imply that tomorrow's lesson is ready.
 
@@ -132,15 +132,25 @@ The builder, who is also the parent, decides whether the idea merits continued i
 | Signal | Guide |
 | --- | --- |
 | Willing participation | The child willingly participates on at least five of seven days. |
-| Useful adaptation | At least three later sessions make an adjustment based on earlier reviewed evidence that the parent judges useful. |
+| Useful adaptation | At least three later sessions deliver an adjustment caused by earlier reviewed evidence that the parent judges useful. |
 
-Observer acceptance (the share of proposals accepted without correction) is tracked as an informal signal of Observer quality, not a pass/fail criterion.
+A qualifying adaptation should have a clear answer to: “What would this lesson have done differently if the referenced observation did not exist?” The planner's rationale states that causal link; no second, counterfactual lesson is generated. A changed theme or activity alone does not qualify, and a planned adaptation counts only if it was actually delivered.
+
+- **Qualifies:** “Yesterday she identified five correctly only after counting together, so today Sprout presents a fresh group of five and waits before offering help.”
+- **Does not qualify:** “Yesterday she practiced five, so today Sprout practices five again with ducks.”
+
+Parent review should primarily verify or lightly correct Sprout's observations rather than reconstructing what happened. If substantial parent repair is routinely required, the learning-memory loop should not be considered promising even if later adaptations based on corrected evidence are useful.
+
+- **Verified or light correction (expected):** confirming observations, or adding small contextual corrections such as help or pointing the system could not detect.
+- **Substantial repair (weak loop):** rewriting what the child did, reconstructing an exchange, or supplying learning evidence the Observer missed.
+
+Observer acceptance (the share of proposals accepted without correction) is tracked as an informal signal of Observer quality, not a pass/fail criterion. There is no numerical accuracy threshold; the builder judges the level of repair from the daily record.
 
 These are prototype guides, not evidence of academic improvement or calibrated model accuracy. The [experiment protocol](experiment-protocol.md) defines how to record them.
 
 Inspect important failures alongside these signals: repeated interruptions, unreliable transcripts, incorrect scenes, unsupported claims, quiz-like interactions, substantial parent repair, or adaptations that were planned but never delivered.
 
-If the challenge is suitable but the loop is weak, improve it before broadening the product. If the scope is unsuitable or evidence is insufficient, report an inconclusive experiment instead of claiming success or failure.
+If the challenge is suitable but the loop is weak, including when useful adaptations depended on substantial parent repair, improve it before broadening the product. If the scope is unsuitable or evidence is insufficient, report an inconclusive experiment instead of claiming success or failure.
 
 ## 8. Product boundaries
 
