@@ -19,20 +19,20 @@ export class TranscriptWindow {
   }
 }
 
+/** "I don't want to stop" is a request to keep playing, not to stop. */
+const KEEP_PLAYING = /\b(don't|do not|not|never)\s+(want to\s+)?stop\b/;
+const STOP =
+  /\b(stop|i(?:'m| am) done|all done|no more|i (?:want|need) to (?:go|quit|finish)|can we (?:finish|end)|(?:don't|do not) want to (?:play|count)(?: anymore)?)\b/;
+
 // Conservative transcript guard, not a semantic classifier. Recognition limits
 // are documented; the model is also instructed to acknowledge stop requests.
 export function requestsStop(text: string): boolean {
-  const normalized = text.toLowerCase().replace(/[’]/g, "'");
-  const clause =
-    normalized
-      .split(/[.!?;,]/)
-      .map(part => part.trim())
-      .filter(Boolean)
-      .at(-1) || "";
-  if (/\b(don't|do not|not|never)\s+(want to\s+)?stop\b/.test(clause)) return false;
-  return /\b(stop|i(?:'m| am) done|all done|no more|i (?:want|need) to (?:go|quit|finish)|can we (?:finish|end)|(?:don't|do not) want to (?:play|count)(?: anymore)?)\b/.test(
-    clause,
-  );
+  // Every clause counts, so "Stop, please" is heard as readily as "Please stop".
+  return text
+    .toLowerCase()
+    .replace(/[’]/g, "'")
+    .split(/[.!?;,]/)
+    .some(clause => !KEEP_PLAYING.test(clause) && STOP.test(clause));
 }
 
 const GOODBYE = new RegExp(

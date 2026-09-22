@@ -195,6 +195,8 @@ describe("transcripts and stop requests", () => {
   it.each([
     "stop",
     "Please stop.",
+    "Stop, please",
+    "Stop, I don't like this",
     "I'm done!",
     "all done",
     "I want to go",
@@ -206,12 +208,18 @@ describe("transcripts and stop requests", () => {
     deliver(session, speech(text));
     expect(session.snapshot.reason).toBe("child_stop");
   });
-  it.each(["don't stop", "do not stop", "not stop", "one, um, two", "three... no, two", "a dinosaur!"])(
-    "does not classify %s as stop",
-    text => {
-      expect(requestsStop(text)).toBe(false);
-    },
-  );
+  it.each([
+    "don't stop",
+    "do not stop",
+    "not stop",
+    "Please don't stop",
+    "No, I don't want to stop, keep going",
+    "one, um, two",
+    "three... no, two",
+    "a dinosaur!",
+  ])("does not classify %s as stop", text => {
+    expect(requestsStop(text)).toBe(false);
+  });
   it("recognizes fragmented requests, keeps exact transcript and does not claim audio delivery", () => {
     const { session } = setup();
     deliver(session, speech("I want to "));
