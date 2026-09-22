@@ -1,4 +1,8 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Sprout
+
+A private, parent-supervised prototype for short counting lessons that adapt to reviewed evidence from earlier sessions. Start with the [MVP documentation](docs/README.md) for product scope, architecture, and the seven-day experiment.
+
+The application is currently a [Next.js](https://nextjs.org) starter bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
 

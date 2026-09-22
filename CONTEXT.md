@@ -1,0 +1,95 @@
+# Sprout
+
+Sprout supports short, supervised counting lessons that adapt to a child's prior responses. Its language distinguishes what was observed, what the parent reviewed, and what a later lesson changes.
+
+## Language
+
+### People and practice
+
+**Child**:
+The single preschool-aged participant in the prototype's learning activities.
+_Avoid_: Student account
+
+**Parent**:
+The adult who supervises the child, starts lessons, and reviews learning observations.
+_Avoid_: Teacher, examiner
+
+**Experiment**:
+A seven-day run intended to evaluate willing participation, useful lesson adaptation, and the trustworthiness of proposed observations.
+_Avoid_: Clinical assessment, learning assessment
+
+**Lesson**:
+A planned counting experience consisting of a warm-up, one targeted activity, and a fresh example.
+_Avoid_: Test, quiz
+
+**Session**:
+One live attempt at a lesson, which may end normally, early, or because of a technical failure.
+_Avoid_: Completed lesson
+
+**Target quantity**:
+The number of objects, within the agreed learning scope, that the main activity practices.
+_Avoid_: Level, grade
+
+**Theme**:
+The story or play setting used to present a counting activity.
+_Avoid_: Learning objective
+
+### Evidence and interpretation
+
+**Session record**:
+The account of what was said and shown during a session, including help provided and how the session ended.
+_Avoid_: Transcript when referring to the entire record
+
+**Quantity identification**:
+Giving the correct total for a displayed group, without asserting how the child arrived at it.
+_Avoid_: Counted when no count sequence was observed
+
+**Counting aloud with a total**:
+Saying a count sequence and giving the correct total for the displayed group.
+_Avoid_: Proven one-to-one correspondence
+
+**Support**:
+Help preceding a response, including prompts, choices, modeling, counting together, or parent-reported assistance.
+_Avoid_: Failure
+
+**Independent response**:
+A response for which no help was provided in the relevant exchange and no assistance is reported or otherwise evident.
+_Avoid_: Mastery
+
+**Uncertain evidence**:
+An exchange whose speech, attribution, or activity context is insufficiently clear to justify a learning conclusion.
+_Avoid_: Incorrect answer
+
+**Proposed observation**:
+The Observer's interpretation of a specific exchange before parent review.
+_Avoid_: Established fact
+
+**Reviewed evidence**:
+An observation accepted by the parent, either unchanged or after correction, with its supporting context.
+_Avoid_: Model verdict
+
+**Learning profile**:
+The accumulated history of reviewed evidence used to inform future lessons.
+_Avoid_: Mastery score, developmental status
+
+### Review and adaptation
+
+**Observer**:
+The post-session interpreter that proposes learning observations from the session record.
+_Avoid_: Examiner, assessor
+
+**Parent review**:
+The parent's decision to accept, correct, or reject proposed observations.
+_Avoid_: Skill grading
+
+**Lesson planner**:
+The process that selects a bounded lesson using reviewed evidence and explains that choice.
+_Avoid_: Autonomous curriculum
+
+**Useful adaptation**:
+A change to a later lesson's target, challenge, or support, grounded in earlier reviewed evidence and judged useful by the parent after delivery.
+_Avoid_: Theme change alone, name personalization
+
+**Calibration**:
+The initial exploration of whether the agreed range of quantities offers a suitable challenge.
+_Avoid_: Placement test
