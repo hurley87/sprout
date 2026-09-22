@@ -45,10 +45,13 @@ Distinguish observable behaviors:
 | --- | --- |
 | Quantity identification | The child gave the correct total for the displayed group. |
 | Counting aloud with a total | The child said a count sequence and gave the correct total. |
+| Independent response | No help was given in the exchange and none was reported by the parent. |
 | Supported response | The response followed a hint, choice, modeled answer, or reported parent help. |
 | Uncertain evidence | Speech, attribution, scene context, or the exchange was too unclear to support a conclusion. |
 
 A correct total alone does not establish how the child reached it. Spoken counting does not establish that each object was tracked individually. A single successful attempt does not establish consistent understanding; later lessons revisit the quantity with different objects or arrangements.
+
+Sprout cannot see pointing or touch-counting. The parent can add that context during review.
 
 The learning profile is a history of concrete observations and corrections. Do not assign mastery or developmental labels such as “emerging,” “developing,” or “consistent.”
 
@@ -56,7 +59,7 @@ The learning profile is a history of concrete observations and corrections. Do n
 
 Begin playfully with quantities 1–2, then sample the remaining range as the child's responses and available time permit. Do not force completion of all examples.
 
-If the child handles the full range comfortably across varied examples, flag that the experiment may be too easy. The parent explicitly revises the learning scope before continuing the experiment. Sprout must not expand beyond 1–5 automatically. An unsuitable challenge is not evidence that the memory loop failed.
+If the range proves too easy or too hard, the builder adjusts scope or difficulty in code after that day. Sprout must not change its learning scope on its own. An unsuitable challenge is not evidence that the memory loop failed.
 
 ## 4. Lesson experience
 
@@ -93,9 +96,9 @@ A connection failure ends the session and shows the parent a short explanation. 
 
 ## 5. Evidence and parent review
 
-Retain the transcript together with displayed scenes and help provided by Sprout. Each learning observation must link to the relevant exchange so the parent can inspect what was said and shown.
+Retain the session audio and transcript together with displayed scenes and help provided by Sprout. Each learning observation must link to the relevant exchange so the parent can inspect, and replay, what was said and shown.
 
-Do not retain raw audio in Sprout. Do not treat generated but unspoken answers, unshown scenes, silence, or disrupted exchanges as observed child performance.
+Do not treat generated but unspoken answers, unshown scenes, silence, or disrupted exchanges as observed child performance.
 
 Short or interrupted sessions can contribute valid observations from completed exchanges. Record their duration and ending reason without treating the interruption itself as a wrong answer.
 
@@ -104,9 +107,9 @@ The parent summary supports:
 - Accepting accurate observations, including a one-tap acceptance of an unchanged summary.
 - Correcting an observation, including marking a response as assisted.
 - Rejecting an unsupported observation.
-- Expanding the supporting transcript, scene, and help context.
+- Expanding the supporting audio, transcript, scene, and help context.
 
-There is no live “I helped” control. Preserve the Observer's original proposal separately from the parent's decision and corrected version. Measure acceptance before edits.
+There is no live “I helped” control. Preserve the Observer's original proposal separately from the parent's decision and corrected version.
 
 The parent reviews observations; they do not manually author the next lesson or assign skill states.
 
@@ -122,19 +125,20 @@ Collect a brief daily evaluation: willingness to participate, whether an evidenc
 
 While analysis or review is pending, show that state explicitly. Do not imply that tomorrow's lesson is ready.
 
-## 7. Success criteria
+## 7. Success signals
 
-The experiment merits continued investment when all three conditions hold:
+The builder, who is also the parent, decides whether the idea merits continued investment. Two signals guide that judgment:
 
-| Criterion | Threshold |
+| Signal | Guide |
 | --- | --- |
 | Willing participation | The child willingly participates on at least five of seven days. |
 | Useful adaptation | At least three later sessions make an adjustment based on earlier reviewed evidence that the parent judges useful. |
-| Observer acceptance | At least 80% of original learning observations are accepted without correction. |
 
-These are prototype decision rules, not evidence of academic improvement or calibrated model accuracy. The [experiment protocol](experiment-protocol.md) defines counting rules, review outcomes, and incomplete results.
+Observer acceptance (the share of proposals accepted without correction) is tracked as an informal signal of Observer quality, not a pass/fail criterion.
 
-Inspect important failures alongside the thresholds: repeated interruptions, unreliable transcripts, incorrect scenes, unsupported claims, quiz-like interactions, substantial parent repair, or adaptations that were planned but never delivered.
+These are prototype guides, not evidence of academic improvement or calibrated model accuracy. The [experiment protocol](experiment-protocol.md) defines how to record them.
+
+Inspect important failures alongside these signals: repeated interruptions, unreliable transcripts, incorrect scenes, unsupported claims, quiz-like interactions, substantial parent repair, or adaptations that were planned but never delivered.
 
 If the challenge is suitable but the loop is weak, improve it before broadening the product. If the scope is unsuitable or evidence is insufficient, report an inconclusive experiment instead of claiming success or failure.
 
@@ -144,20 +148,22 @@ The parent owns the profile, starts sessions, reviews observations, and remains 
 
 Sprout must not diagnose developmental, speech, or learning conditions; label the child as “behind”; claim clinical authority; encourage secrecy; or position itself as a replacement for parents or teachers. It must not expose an unrestricted general-purpose chatbot.
 
-Deletion features are explicitly deferred for this prototype, including both whole-experiment and individual-session deletion. They are not an MVP acceptance requirement. No automatic retention or deletion schedule is specified here.
+Run the prototype locally on the builder's MacBook rather than as a public deployment, so no user accounts or access control are needed. Provider credentials stay on the server.
+
+Deletion features are explicitly deferred for this prototype, including both whole-experiment and individual-session deletion. All session data, including audio, is kept for the builder's review. To wipe it manually, clear the Convex tables and file storage from the Convex dashboard.
 
 Other non-goals: additional children or families, public signup, subscriptions, tablet-specific support, touch answers, camera input, custom hardware, local models, offline use, generated illustrations, a comprehensive curriculum, teacher dashboards, advanced analytics, rewards, streaks, achievements, and third-party product integrations.
 
 ## 9. Build sequence
 
-The intended application stack remains Next.js, React, TypeScript, Convex, and Vercel. GPT-Live 1 is the initial voice candidate; Jev is optional. Model-specific integration details belong in the [architecture document](architecture.md).
+The intended application stack remains Next.js, React, TypeScript, Convex, and Vercel; the seven-day experiment runs locally. GPT-Live 1 is the initial voice candidate; Jev is optional. Model-specific integration details belong in the [architecture document](architecture.md).
 
 | Slice | Deliverable | Exit criterion |
 | --- | --- | --- |
 | 1. Voice feasibility | MacBook browser, one hardcoded counting activity, emoji scene, basic session record, parent stop, timing limits | Demonstrate usable pauses, interruption handling, transcript evidence, speech/scene coordination, and reliable stopping. Record shortcomings before choosing the live control approach. |
 | 2. Reviewed evidence | Durable session records, Observer proposals, evidence inspection, parent corrections and review gate | A complete or partial session yields reviewable observations; only accepted or corrected evidence becomes eligible for planning. |
 | 3. Adapt tomorrow | Evidence-based learning profile, bounded planner, three-part lesson, explanation of target choice | Session two demonstrably uses reviewed information from session one; the explanation traces to its source. |
-| 4. Seven-day experiment | Today/History views, daily evaluation, experiment report | The parent can run the protocol and evaluate all three criteria without manually reconstructing the record. |
+| 4. Seven-day experiment | Today/History views, daily evaluation, experiment report | The parent can run the protocol and review participation and adaptations without manually reconstructing the record. |
 
 Do not build the full memory pipeline until the voice feasibility gate is met. Add Jev only if that test identifies a concrete need for a separate controller.
 
