@@ -177,4 +177,4 @@ The intended application stack remains Next.js, React, TypeScript, Convex, and V
 
 Do not build the full memory pipeline until the voice feasibility gate is met. Add Jev only if that test identifies a concrete need for a separate controller.
 
-This document specifies intended behavior. The repository currently contains a Next.js starter; this documentation does not claim the described product has been implemented.
+This document specifies intended behavior. The repository contains only the slice 1 voice prototype; this documentation does not claim the rest of the described product has been implemented.
