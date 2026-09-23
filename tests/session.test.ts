@@ -341,6 +341,96 @@ describe("answer-check turn synchronization", () => {
   const released = (transport: Transport) =>
     sent(transport).filter(command => "content" in command && command.content.includes("has not changed"));
 
+  it.each(["", "Oh!", "Ooh!", "Okay!"])(
+    "advances immediately after silence or neutral acknowledgment %s",
+    async reply => {
+      const { session, transport } = setup(true, answering(CONFIDENT));
+      vi.mocked(transport.send).mockClear();
+      deliver(session, speech("One!"));
+      if (reply) deliver(session, speech(reply, 800, true));
+      await settle();
+      expect(session.snapshot.sceneIndex).toBe(1);
+      expect(transport.send).not.toHaveBeenCalled();
+      session.displayed(1);
+      expect(sent(transport)).toEqual([expect.objectContaining({ content: advanceContext(sceneAt(1)) })]);
+    },
+  );
+
+  it("holds an approved advance until the output transcript goes quiet, without evaluating again", async () => {
+    const { session, transport, evaluateAnswer } = setup(true, answering(CONFIDENT));
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("One!"));
+    deliver(session, speech("Let's count this duck together", 800, true));
+    await settle();
+    expect(session.snapshot.sceneIndex).toBe(0);
+    expect(transport.send).not.toHaveBeenCalled();
+    deliver(session, speech("One!", 10_000));
+    deliver(session, speech(". There is one duck.", 1800, true));
+    await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS - 1);
+    expect(session.snapshot.sceneIndex).toBe(0);
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+    expect(released(transport)).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(session.snapshot.sceneIndex).toBe(1);
+    expect(transport.send).not.toHaveBeenCalled();
+    session.displayed(1);
+    session.displayed(1);
+    expect(sent(transport)).toEqual([expect.objectContaining({ content: advanceContext(sceneAt(1)) })]);
+    expect(session.events.filter(event => event.type === "advance.deferred")).toHaveLength(1);
+    expect(session.events.filter(event => event.type === "advance.released")).toHaveLength(1);
+  });
+
+  it.each(["child_stop", "parent_stop", "wrapping", "goodbye", "time_limit"])(
+    "cancels a deferred advance on %s",
+    async ending => {
+      const { session, transport } = setup(true, answering(CONFIDENT));
+      vi.mocked(transport.send).mockClear();
+      deliver(session, speech("One!"));
+      deliver(session, speech("Let us count slowly.", 800, true));
+      await settle();
+      if (ending === "child_stop") deliver(session, speech("I want to stop", 10_000));
+      if (ending === "parent_stop") session.end("parent_stop");
+      if (ending === "wrapping") (session as unknown as { wrap: () => void }).wrap();
+      if (ending === "goodbye") (session as unknown as { goodbye: () => void }).goodbye();
+      if (ending === "time_limit") {
+        vi.setSystemTime(Date.now() + TIMING.hard);
+        deliver(session, { type: "session.usage.updated", usage: {} });
+      }
+      await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS + 1);
+      expect(session.snapshot.sceneIndex).toBe(0);
+      expect(session.events.filter(event => event.type === "advance.released")).toHaveLength(0);
+      expect(
+        sent(transport).filter(command => "content" in command && command.content === advanceContext(sceneAt(1))),
+      ).toHaveLength(0);
+    },
+  );
+
+  it("ignores stale decisions and stays while an approved advance is deferred", async () => {
+    const answers: ((result: AnswerResult) => void)[] = [];
+    const pending: EvaluateAnswer = vi.fn(() => new Promise<AnswerResult>(resolve => answers.push(resolve)));
+    const { session, transport, evaluateAnswer } = setup(true, pending);
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("One!"));
+    await settle();
+    deliver(session, speech(" One duck!", 600));
+    await settle();
+    deliver(session, speech("Let us count the duck together.", 1200, true));
+    answers[1](evaluated(CONFIDENT));
+    await vi.advanceTimersByTimeAsync(0);
+    answers[0](evaluated(UNSURE));
+    await vi.advanceTimersByTimeAsync(0);
+    deliver(session, speech("One!", 10_000));
+    await settle();
+    expect(evaluateAnswer).toHaveBeenCalledTimes(2);
+    expect(released(transport)).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS);
+    expect(session.snapshot.sceneIndex).toBe(1);
+    session.displayed(1);
+    expect(
+      sent(transport).filter(command => "content" in command && command.content === advanceContext(sceneAt(1))),
+    ).toHaveLength(1);
+  });
+
   it("asks GPT-Live to pause after a count until the app reports the scene decision", () => {
     expect(INSTRUCTIONS).toContain("when the child says a number or counts aloud, the app checks the count");
     expect(INSTRUCTIONS).toContain(

@@ -12,7 +12,14 @@ import {
   sceneContext,
   stayContext,
 } from "./lesson";
-import { TranscriptWindow, mentionsNumber, requestsStop, saidGoodbye, type Utterance } from "./transcript";
+import {
+  TranscriptWindow,
+  UTTERANCE_GAP_MS,
+  mentionsNumber,
+  requestsStop,
+  saidGoodbye,
+  type Utterance,
+} from "./transcript";
 
 export type EndReason =
   "parent_stop" | "child_stop" | "model_goodbye" | "wrap_up" | "time_limit" | "connection_failure" | "page_hidden";
@@ -46,6 +53,7 @@ export interface Transport {
 
 /** What the app is waiting to see on screen before it speaks about it. */
 type PendingDisplay = { kind: "greeting" | "advance"; sceneIndex: number };
+type DeferredAdvance = { sceneIndex: number; answerVersion: string; approvedAt: number; spokenChars: number };
 
 export class LessonSession {
   snapshot: Snapshot = { status: "starting", sceneIndex: 0 };
@@ -56,6 +64,8 @@ export class LessonSession {
   private phaseTimers: ReturnType<typeof setTimeout>[] = [];
   private closeTimer?: ReturnType<typeof setTimeout>;
   private settleTimer?: ReturnType<typeof setTimeout>;
+  private deferredTimer?: ReturnType<typeof setTimeout>;
+  private deferredAdvance: DeferredAdvance | null = null;
   private seen = new Set<string>();
   private delegations = new Set<string>();
   private pending: PendingDisplay | null = null;
@@ -216,11 +226,13 @@ export class LessonSession {
     if (fromChild) {
       this.latest = utterance;
       if (requestsStop(utterance.text)) this.end("child_stop");
-      else this.settle(utterance);
+      else if (!this.deferredAdvance) this.settle(utterance);
     } else if (this.snapshot.status !== "goodbye" && saidGoodbye(utterance.text)) {
       // The model ending the lesson itself, usually a stop request the
       // transcript guard could not recognize. Not proof of playback.
       this.end("model_goodbye");
+    } else if (this.deferredAdvance) {
+      this.scheduleDeferredRelease();
     }
   }
 
@@ -233,7 +245,12 @@ export class LessonSession {
 
   /** True while the app could act on an answer about the displayed scene. */
   private get evaluable() {
-    return this.snapshot.status === "active" && !this.pending && this.snapshot.sceneIndex < LAST_SCENE;
+    return (
+      this.snapshot.status === "active" &&
+      !this.pending &&
+      !this.deferredAdvance &&
+      this.snapshot.sceneIndex < LAST_SCENE
+    );
   }
 
   private evaluate(utterance: Utterance) {
@@ -277,8 +294,10 @@ export class LessonSession {
       releasing,
     });
     // An unavailable check leaves the scene alone without judging the child.
-    if (advancing) this.advance();
-    else if (releasing)
+    if (advancing) {
+      if (this.sproutIsHoldingForDecision()) this.advance();
+      else this.deferAdvance(sceneIndex, `${utterance.startMs}:${utterance.text.trim()}`);
+    } else if (releasing)
       this.append(
         "session.instructions.append",
         result.status === "unavailable" ? evaluationUnavailableContext(this.scene) : stayContext(this.scene),
@@ -294,6 +313,58 @@ export class LessonSession {
     const said = this.sproutReply.trim();
     const words = said ? said.split(/\s+/).length : 0;
     return mentionsNumber(utterance.text) && words <= BRIEF_ACK_WORDS;
+  }
+
+  /** Only silence or an explicitly neutral, tiny acknowledgment is safe for an immediate advance. */
+  private sproutIsHoldingForDecision() {
+    return /^(?:oh|ooh|okay)[.!?]*$/i.test(this.sproutReply.trim()) || !this.sproutReply.trim();
+  }
+
+  private deferAdvance(sceneIndex: number, answerVersion: string) {
+    if (this.deferredAdvance) return;
+    this.deferredAdvance = { sceneIndex, answerVersion, approvedAt: Date.now(), spokenChars: this.sproutReply.length };
+    this.log("advance.deferred", {
+      scene: sceneAt(sceneIndex).id,
+      reason: "sprout_substantive_reply",
+      spoken_chars: this.sproutReply.length,
+    });
+    this.scheduleDeferredRelease();
+  }
+
+  private scheduleDeferredRelease() {
+    clearTimeout(this.deferredTimer);
+    // This transport has output transcript deltas but no authoritative output-turn
+    // completion event. One utterance gap without another delta is our boundary;
+    // each new fragment restarts it, and wrap-up/stop cancels it.
+    this.deferredTimer = setTimeout(() => this.releaseDeferredAdvance(), UTTERANCE_GAP_MS);
+  }
+
+  private releaseDeferredAdvance() {
+    const deferred = this.deferredAdvance;
+    if (!deferred) return;
+    this.deferredAdvance = null;
+    clearTimeout(this.deferredTimer);
+    if (
+      this.expireIfOverdue() ||
+      this.snapshot.status !== "active" ||
+      this.pending ||
+      this.snapshot.sceneIndex !== deferred.sceneIndex ||
+      deferred.sceneIndex >= LAST_SCENE
+    )
+      return;
+    this.log("advance.released", {
+      scene: sceneAt(deferred.sceneIndex).id,
+      answer_version: deferred.answerVersion,
+      spoken_chars_at_approval: deferred.spokenChars,
+      delay_ms: Date.now() - deferred.approvedAt,
+      reason: "output_transcript_quiet",
+    });
+    this.advance();
+  }
+
+  private cancelDeferredAdvance() {
+    clearTimeout(this.deferredTimer);
+    this.deferredAdvance = null;
   }
 
   /** The application, not the model, commits the next deterministic scene. */
@@ -340,6 +411,7 @@ export class LessonSession {
 
   private wrap() {
     if (this.snapshot.status !== "active") return;
+    this.cancelDeferredAdvance();
     this.update({ status: "wrapping" });
     this.log("lesson.wrap_up");
     this.append(
@@ -350,6 +422,7 @@ export class LessonSession {
 
   private goodbye() {
     if (this.snapshot.status === "ended") return;
+    this.cancelDeferredAdvance();
     this.update({ status: "goodbye" });
     this.log("lesson.goodbye_requested");
     this.append(
@@ -368,6 +441,7 @@ export class LessonSession {
     if (remaining <= 0) reason = "time_limit";
     clearTimeout(this.startupTimer);
     clearTimeout(this.settleTimer);
+    this.cancelDeferredAdvance();
     this.phaseTimers.forEach(clearTimeout);
     this.evaluation?.abort();
     this.pending = null;

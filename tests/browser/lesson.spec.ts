@@ -154,6 +154,42 @@ test("parent start, committed scene, stop, late actions, and diagnostics export"
   expect(errors).toEqual([]);
 });
 
+test("a correct count waits for Sprout's substantive old-scene turn to finish", async ({ page }) => {
+  await mockLive(page);
+  let evaluations = 0;
+  await page.route("**/api/evaluate", route => {
+    evaluations++;
+    return route.fulfill({ json: { probability: 0.95, model: "jev-test" } });
+  });
+  await begin(page);
+  const before = (await commands(page)).length;
+  await say(page, "One!");
+  await emit(page, {
+    type: "session.output_transcript.delta",
+    delta: "Let's count the duck together",
+    start_ms: 800,
+    end_ms: 1300,
+  });
+  await expect.poll(() => evaluations).toBe(1);
+  await expect(page.locator('[data-scene="hello-duck"]')).toBeVisible();
+  expect(await commands(page)).toHaveLength(before);
+  await emit(page, {
+    type: "session.output_transcript.delta",
+    delta: ". There is one duck.",
+    start_ms: 1800,
+    end_ms: 2300,
+  });
+  await expect(page.locator('[data-scene="duck-friends"]')).toBeVisible();
+  await expect.poll(async () => (await sentContent(page)).filter(text => text.includes("2 ducks"))).toHaveLength(1);
+  expect(evaluations).toBe(1);
+  expect(await releases(page)).toEqual([]);
+  const { shownAt, told } = await page.evaluate(() => ({
+    shownAt: window.sproutTest.shownAt["duck-friends"],
+    told: window.sproutTest.commands.find(command => String(command.content ?? "").includes("2 ducks"))?.at as number,
+  }));
+  expect(told).toBeGreaterThanOrEqual(shownAt);
+});
+
 test("an unconvincing count keeps the scene and releases GPT-Live on it", async ({ page }) => {
   await mockLive(page);
   await mockEvaluate(page, 0.4);
