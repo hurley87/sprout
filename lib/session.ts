@@ -1,7 +1,17 @@
 import { SETTLE_MS, shouldAdvance, type AnswerResult, type EvaluateAnswer } from "./answer";
 import type { ClientCommand, ProviderEvent, TranscriptEvent } from "./events";
-import { LAST_SCENE, MODEL, PROMPT_VERSION, TIMING, advanceContext, sceneAt, sceneContext } from "./lesson";
-import { TranscriptWindow, requestsStop, saidGoodbye, type Utterance } from "./transcript";
+import {
+  BRIEF_ACK_WORDS,
+  LAST_SCENE,
+  MODEL,
+  PROMPT_VERSION,
+  TIMING,
+  advanceContext,
+  sceneAt,
+  sceneContext,
+  stayContext,
+} from "./lesson";
+import { TranscriptWindow, mentionsNumber, requestsStop, saidGoodbye, type Utterance } from "./transcript";
 
 export type EndReason =
   "parent_stop" | "child_stop" | "model_goodbye" | "wrap_up" | "time_limit" | "connection_failure" | "page_hidden";
@@ -55,6 +65,9 @@ export class LessonSession {
   private latest: Utterance | null = null;
   private evaluated = new Set<string>();
   private evaluation?: AbortController;
+  // What Sprout has said since the child last spoke, to tell a held turn from
+  // one it has already taken.
+  private sproutReply = "";
   private commands = 0;
   private closed = false;
   private ready = false;
@@ -198,6 +211,7 @@ export class LessonSession {
     });
     const speech = fromChild ? this.childSpeech : this.sproutSpeech;
     const utterance = speech.append(event.delta, event.startMs, event.endMs);
+    this.sproutReply = fromChild ? "" : this.sproutReply + event.delta;
     if (fromChild) {
       this.latest = utterance;
       if (requestsStop(utterance.text)) this.end("child_stop");
@@ -247,6 +261,9 @@ export class LessonSession {
       this.latest?.startMs !== utterance.startMs ||
       this.latest.text !== utterance.text;
     const advancing = !stale && shouldAdvance(result);
+    // Stale results need no release: newer speech gets its own decision, and a
+    // scene change or wrap-up tells GPT-Live itself.
+    const releasing = !stale && !advancing && this.holding(utterance);
     this.log("answer.evaluated", {
       scene: sceneAt(sceneIndex).id,
       utterance: utterance.text,
@@ -256,10 +273,23 @@ export class LessonSession {
       latency_ms: result.latencyMs,
       stale,
       advancing,
+      releasing,
     });
-    // Anything short of a confident yes leaves the scene alone and the
-    // conversation to GPT-Live.
+    // Anything short of a confident yes leaves the scene alone and hands the
+    // conversation back to GPT-Live.
     if (advancing) this.advance();
+    else if (releasing) this.append("session.instructions.append", stayContext(this.scene));
+  }
+
+  /**
+   * Whether GPT-Live is pausing for this decision, as its prompt asks after a
+   * count. If it has already said more than a brief acknowledgment, it took its
+   * turn anyway and an instruction now would talk over it.
+   */
+  private holding(utterance: Utterance) {
+    const said = this.sproutReply.trim();
+    const words = said ? said.split(/\s+/).length : 0;
+    return mentionsNumber(utterance.text) && words <= BRIEF_ACK_WORDS;
   }
 
   /** The application, not the model, commits the next deterministic scene. */

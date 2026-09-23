@@ -110,6 +110,8 @@ const say = (page: Page, delta: string, start_ms = 0) =>
   emit(page, { type: "session.input_transcript.delta", delta, start_ms, end_ms: start_ms + 500 });
 const commands = (page: Page) => page.evaluate(() => window.sproutTest.commands);
 const sentContent = async (page: Page) => (await commands(page)).map(command => String(command.content ?? ""));
+/** The app telling GPT-Live the scene stayed, which ends its answer-check pause. */
+const releases = async (page: Page) => (await sentContent(page)).filter(text => text.includes("has not changed"));
 const tracksStopped = (page: Page) =>
   page.evaluate(() => window.sproutTest.tracks.every(track => track.readyState === "ended"));
 
@@ -136,6 +138,7 @@ test("parent start, committed scene, stop, late actions, and diagnostics export"
     told: window.sproutTest.commands.find(command => String(command.content ?? "").includes("2 ducks"))?.at as number,
   }));
   expect(told).toBeGreaterThanOrEqual(shownAt);
+  expect(await releases(page)).toEqual([]);
   await page.getByRole("button", { name: "End lesson" }).click();
   await expect(page.getByText("The microphone and voice playback are off.")).toBeVisible();
   expect(await tracksStopped(page)).toBe(true);
@@ -151,15 +154,28 @@ test("parent start, committed scene, stop, late actions, and diagnostics export"
   expect(errors).toEqual([]);
 });
 
-test("an unconvincing answer leaves the scene and the conversation alone", async ({ page }) => {
+test("an unconvincing count keeps the scene and releases GPT-Live on it", async ({ page }) => {
   await mockLive(page);
   await mockEvaluate(page, 0.4);
   await begin(page);
   const before = (await commands(page)).length;
   await say(page, "Five!");
-  await page.waitForTimeout(3000);
+  await expect.poll(() => releases(page)).toEqual([expect.stringContaining("still shows 1 duck")]);
   await expect(page.locator('[data-scene="hello-duck"] > span')).toHaveCount(1);
-  expect(await commands(page)).toHaveLength(before);
+  expect(await commands(page)).toHaveLength(before + 1);
+  // Speech GPT-Live was never asked to pause for is left to it.
+  await say(page, "I have a dinosaur!", 10_000);
+  await page.waitForTimeout(2500);
+  expect(await commands(page)).toHaveLength(before + 1);
+});
+
+test("an evaluation that times out still releases GPT-Live", async ({ page }) => {
+  await mockLive(page);
+  await page.route("**/api/evaluate", () => {});
+  await begin(page);
+  await say(page, "One!");
+  await expect.poll(() => releases(page), { timeout: 8000 }).toHaveLength(1);
+  await expect(page.locator('[data-scene="hello-duck"]')).toBeVisible();
 });
 
 test("fragmented child stop releases the microphone immediately", async ({ page }) => {

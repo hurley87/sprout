@@ -7,14 +7,14 @@
  * react to Sprout, so it probes model control behavior, not preschool speech.
  *
  * Usage: start `npm run dev`, then `npm run test:live [scenario ...] [--repeat N]`.
- * BASE_URL defaults to http://127.0.0.1:3000.
+ * BASE_URL defaults to http://127.0.0.1:3000; LIVE_OUT overrides the output directory.
  */
 import { chromium } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 
 const BASE_URL = process.env.BASE_URL ?? "http://127.0.0.1:3000";
-const OUT = "test-results/live-matrix";
+const OUT = process.env.LIVE_OUT ?? "test-results/live-matrix";
 
 /** [secondsAfterStart, text]. `stop: "none"` lets the app or child end the lesson. */
 const SCENARIOS = {
@@ -264,6 +264,40 @@ function metrics(log) {
     }));
   const scenes = log.filter(e => e.dir === "scene" && e.scene);
   const childSpoke = log.filter(e => e.type === "session.input_transcript.delta");
+  const sproutSpoke = log.filter(e => e.type === "session.output_transcript.delta");
+  const sproutBetween = (from, to) =>
+    sproutSpoke
+      .filter(e => e.at > from && e.at <= to)
+      .map(e => e.delta)
+      .join("")
+      .trim();
+  const words = text => (text ? text.split(/\s+/).length : 0);
+  // The seam: what Sprout said after the child's last word and before the app
+  // told it the outcome. More than a brief acknowledgment means Sprout had
+  // already started its next move and the app's instruction lands mid-turn.
+  const decisions = evaluations.map((e, i) => {
+    const spoke = childSpoke.findLast(d => d.at <= e.askedAt);
+    const until = evaluations[i + 1]?.askedAt ?? Infinity;
+    const told = log.find(
+      o =>
+        o.dir === "out" &&
+        o.at >= e.askedAt &&
+        o.at < until &&
+        /just changed|has not changed/.test(String(o.content ?? "")),
+    );
+    const decidedAt = told?.at ?? log.find(r => r.dir === "evaluate" && r.askedAt === e.askedAt)?.at;
+    const before = spoke && decidedAt ? sproutBetween(spoke.at, decidedAt) : "";
+    const firstWord = spoke && sproutSpoke.find(d => d.at > spoke.at);
+    return {
+      utterance: e.utterance,
+      outcome: told ? (String(told.content).includes("just changed") ? "advanced" : told.type) : "none",
+      sproutBeforeDecision: before,
+      sproutWordsBeforeDecision: words(before),
+      // Last word heard to the first word Sprout says after it: the silence the child hears.
+      speechToFirstWordMs: firstWord ? firstWord.at - spoke.at : null,
+      speechToInstructionMs: spoke && told ? told.at - spoke.at : null,
+    };
+  });
   const advances = scenes.slice(1).map(scene => {
     // The evaluation that caused this scene is the last one before it.
     const cause = evaluations.findLast(e => e.askedAt <= scene.at);
@@ -281,6 +315,7 @@ function metrics(log) {
   });
   return {
     evaluations,
+    decisions,
     advances,
     scenesShown: scenes.map(scene => scene.scene),
     delegationsRefused: log.filter(e => e.type === "session.delegation.created").length,

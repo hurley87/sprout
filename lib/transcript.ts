@@ -42,6 +42,16 @@ export function requestsStop(text: string): boolean {
     .some(clause => !KEEP_PLAYING.test(clause) && STOP.test(clause));
 }
 
+const NUMBER = /\b(\d+|zero|one|two|three|four|five|six|seven|eight|nine|ten)\b/;
+
+/**
+ * The same trigger the prompt gives GPT-Live for pausing until the app has
+ * checked a count. Says nothing about whether the count is right.
+ */
+export function mentionsNumber(text: string): boolean {
+  return NUMBER.test(text.toLowerCase());
+}
+
 const GOODBYE = new RegExp(
   `${GOODBYE_PHRASE.replace(/[.!]+$/, "").replace(/[\\^$*+?.()|[\]{}]/g, "\\$&")}[.!]?\\s*$`,
   "i",

@@ -2,8 +2,27 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ADVANCE_THRESHOLD, SETTLE_MS, shouldAdvance, type AnswerResult, type EvaluateAnswer } from "../lib/answer";
 import { parseProviderEvent } from "../lib/events";
 import { LessonSession, type Transport } from "../lib/session";
-import { GOODBYE_PHRASE, LAST_SCENE, SCENES, TIMING, objectName, sceneAt, sceneContext } from "../lib/lesson";
-import { TranscriptWindow, UTTERANCE_GAP_MS, WINDOW_CHARS, requestsStop, saidGoodbye } from "../lib/transcript";
+import {
+  GOODBYE_PHRASE,
+  INSTRUCTIONS,
+  LAST_SCENE,
+  PROMPT_VERSION,
+  SCENES,
+  TIMING,
+  advanceContext,
+  objectName,
+  sceneAt,
+  sceneContext,
+  stayContext,
+} from "../lib/lesson";
+import {
+  TranscriptWindow,
+  UTTERANCE_GAP_MS,
+  WINDOW_CHARS,
+  mentionsNumber,
+  requestsStop,
+  saidGoodbye,
+} from "../lib/transcript";
 
 const evaluated = (probability: number): AnswerResult => ({
   status: "evaluated",
@@ -199,8 +218,7 @@ describe("answer-gated scene advancement", () => {
     );
   });
   it("leaves the scene alone when the answer is uncertain or the evaluation fails", async () => {
-    const { session, transport } = setup(true, answering(UNSURE));
-    vi.mocked(transport.send).mockClear();
+    const { session } = setup(true, answering(UNSURE));
     deliver(session, speech("Five!"));
     await settle();
     expect(session.snapshot.sceneIndex).toBe(0);
@@ -211,8 +229,6 @@ describe("answer-gated scene advancement", () => {
     await settle();
     expect(offline.session.snapshot.sceneIndex).toBe(0);
     expect(offline.session.snapshot.status).toBe("active");
-    // Nothing is said on the app's behalf; GPT-Live keeps scaffolding.
-    expect(transport.send).not.toHaveBeenCalled();
   });
   it("discards an answer the child has already spoken over", async () => {
     let answer!: (result: AnswerResult) => void;
@@ -316,6 +332,160 @@ describe("answer-gated scene advancement", () => {
     expect(objectName({ id: "x", object: "strawberry", quantity: 3 })).toBe("strawberries");
     expect(objectName({ id: "x", object: "duck", quantity: 1 })).toBe("duck");
     expect(sceneContext({ id: "x", object: "butterfly", quantity: 3 })).toContain("exactly 3 butterflies");
+  });
+});
+
+describe("answer-check turn synchronization", () => {
+  const sent = (transport: Transport) => vi.mocked(transport.send).mock.calls.map(([command]) => command);
+  const released = (transport: Transport) =>
+    sent(transport).filter(command => "content" in command && command.content.includes("has not changed"));
+
+  it("asks GPT-Live to pause after a count until the app reports the scene decision", () => {
+    expect(INSTRUCTIONS).toContain("when the child says a number or counts aloud, the app checks the count");
+    expect(INSTRUCTIONS).toContain(
+      "Do not praise, correct, recount, count together, offer help, or ask another question until the app tells you either that the screen changed or that it has not changed.",
+    );
+    // Only counts pause; everything else is answered straight away.
+    expect(INSTRUCTIONS).toContain("The pause is only for counts: reply straight away to everything else");
+    // The old contract made GPT-Live reply to every answer at once.
+    expect(INSTRUCTIONS).not.toContain("after the child answers, always reply");
+    expect(PROMPT_VERSION).toBe("counting-jev-2");
+  });
+  it("sends nothing while the utterance settles or Jev is deciding", async () => {
+    let answer!: (result: AnswerResult) => void;
+    const pending: EvaluateAnswer = () => new Promise<AnswerResult>(resolve => (answer = resolve));
+    const { session, transport } = setup(true, pending);
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("Five!"));
+    await settle(5000);
+    expect(transport.send).not.toHaveBeenCalled();
+    answer(evaluated(0.02));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(released(transport)).toHaveLength(1);
+  });
+  it("on a confident answer displays the new scene before new-scene instructions and sends no release", async () => {
+    const { session, transport } = setup(true, answering(CONFIDENT));
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("One!"));
+    await settle();
+    expect(session.snapshot.sceneIndex).toBe(1);
+    expect(transport.send).not.toHaveBeenCalled();
+    session.displayed(1);
+    expect(sent(transport)).toEqual([
+      expect.objectContaining({ type: "session.instructions.append", content: advanceContext(sceneAt(1)) }),
+    ]);
+    expect(released(transport)).toHaveLength(0);
+  });
+  it("explicitly releases GPT-Live on the current scene when the answer does not advance", async () => {
+    const { session, transport } = setup(true, answering(UNSURE));
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("Five!"));
+    await settle();
+    expect(session.snapshot.sceneIndex).toBe(0);
+    expect(sent(transport)).toEqual([
+      expect.objectContaining({
+        type: "session.instructions.append",
+        delegation_id: null,
+        content: stayContext(sceneAt(0)),
+      }),
+    ]);
+    expect(stayContext(sceneAt(0))).toContain("still shows 1 duck");
+    expect(session.events.findLast(e => e.type === "answer.evaluated")).toMatchObject({
+      detail: { advancing: false, releasing: true },
+    });
+  });
+  it.each(["request_failed", "http_502", "unreadable_answer"])(
+    "releases GPT-Live when the evaluation is unavailable (%s) rather than leaving it waiting",
+    async reason => {
+      const failing: EvaluateAnswer = async () => ({ status: "unavailable", reason, latencyMs: 3000 });
+      const { session, transport } = setup(true, failing);
+      vi.mocked(transport.send).mockClear();
+      deliver(session, speech("One!"));
+      await settle();
+      expect(session.snapshot).toMatchObject({ sceneIndex: 0, status: "active" });
+      expect(released(transport)).toHaveLength(1);
+    },
+  );
+  it("releases each held count once, including a revision", async () => {
+    const { session, transport } = setup(true, answering(UNSURE));
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("Five!"));
+    await settle();
+    await settle();
+    expect(released(transport)).toHaveLength(1);
+    deliver(session, speech(" No, four!", 600));
+    await settle();
+    expect(released(transport)).toHaveLength(2);
+  });
+  it("does not release speech GPT-Live was never asked to pause for", async () => {
+    const { session, transport } = setup(true, answering(UNSURE));
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("I have a dinosaur! His name is Rex!"));
+    await settle();
+    deliver(session, speech("Umm... I don't know.", 10_000));
+    await settle();
+    expect(transport.send).not.toHaveBeenCalled();
+  });
+  it("does not talk over a reply GPT-Live has already started", async () => {
+    const { session, transport } = setup(true, answering(UNSURE));
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("Five!"));
+    deliver(session, speech("Hmm, let's count together slowly.", 800, true));
+    await settle();
+    expect(transport.send).not.toHaveBeenCalled();
+    // A brief acknowledgment is still a held turn.
+    deliver(session, speech("Three!", 10_000));
+    deliver(session, speech("Ooh, okay!", 10_800, true));
+    await settle();
+    expect(released(transport)).toHaveLength(1);
+  });
+  it("does not release a stale result; the newer speech gets its own decision", async () => {
+    const answers: ((result: AnswerResult) => void)[] = [];
+    const pending: EvaluateAnswer = () => new Promise<AnswerResult>(resolve => answers.push(resolve));
+    const { session, transport } = setup(true, pending);
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("Five!"));
+    await settle();
+    deliver(session, speech(" No, three!", 600));
+    answers[0](evaluated(0.02));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(transport.send).not.toHaveBeenCalled();
+    await settle();
+    answers[1](evaluated(0.02));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(released(transport)).toHaveLength(1);
+  });
+  it("sends no release after a stop request, wrap-up, or the end of the lesson", async () => {
+    let answer!: (result: AnswerResult) => void;
+    const pending: EvaluateAnswer = () => new Promise<AnswerResult>(resolve => (answer = resolve));
+    const { session, transport } = setup(true, pending);
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("Five!", 260_000));
+    await settle();
+    vi.advanceTimersByTime(TIMING.wrap);
+    answer(evaluated(0.02));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(released(transport)).toHaveLength(0);
+
+    const stopped = setup(true, answering(UNSURE));
+    vi.mocked(stopped.transport.send).mockClear();
+    deliver(stopped.session, speech("Five! Stop."));
+    await settle();
+    expect(stopped.session.snapshot.reason).toBe("child_stop");
+    expect(released(stopped.transport)).toHaveLength(0);
+  });
+  it("tells GPT-Live when no more checks are coming, so it never waits forever", () => {
+    expect(sceneContext(sceneAt(LAST_SCENE))).toContain("the screen will not change again");
+    expect(sceneContext(sceneAt(0))).not.toContain("will not change again");
+    expect(INSTRUCTIONS).toContain("or once it asks you to wrap up");
+  });
+  it("uses the same count trigger as the prompt", () => {
+    expect(["Five!", "1 ,2 ,3", "One duck.", "Two? No, wait. One!", "three butterflies"].every(mentionsNumber)).toBe(
+      true,
+    );
+    expect(["Umm... I don't know.", "Yes! More ducks!", "Okay!", "someone", "A duck!"].some(mentionsNumber)).toBe(
+      false,
+    );
   });
 });
 
