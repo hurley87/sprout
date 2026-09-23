@@ -6,14 +6,15 @@ Findings for [issue #2](https://github.com/hurley87/sprout/issues/2), slice 1 (v
 
 **The GPT-Live-only baseline is usable enough to continue, but it does not yet meet the slice 1 exit criterion.** Conversation quality is good: turns are short, one question at a time, interruption and topic changes are handled well, and scaffolding is gentle. Application-owned controls (parent stop, child stop, wrap-up, goodbye, hard limit, failure cleanup) are reliable because they do not depend on the model.
 
-The weak point is **model-owned lesson control**: deciding when to advance the scene, keeping speech consistent with the displayed scene, and re-engaging after silence. These are the problems for the Jev exploration ticket (see [Problems for the Jev ticket](#problems-for-the-jev-ticket)).
+The weak point is **model-owned lesson control**: deciding when to advance the scene, keeping speech consistent with the displayed scene, and re-engaging after silence. These are the problems for the Jev exploration ticket (see [Problems for the Jev ticket](#problems-for-the-jev-ticket)). A [real interactive session](#real-interactive-run--2026-09-23) on 2026-09-23 reproduced three of them while the app-owned controls and scene display behaved correctly. That strengthens the case that GPT-Live-only lesson control is the weak point.
 
-None of this has been tested with a real child yet. That run is still required before the gate is met.
+None of this has been tested with a real child. Preschool speech, child behavior, echo handling and pedagogy with a child remain unvalidated.
 
 ## How it was tested
 
 1. **Automated control/state tests** (`npm test`, `npm run test:browser`): 44 unit tests for the session state machine, scene bounds, stop detection and the session endpoint; 6 Chromium tests with a real `getUserMedia` stream and a mocked provider transport, covering parent stop, fragmented child stop, connection failure, stop during permission prompt, wrap-up/goodbye timing, and missing configuration.
 2. **Live synthetic matrix** (`npm run test:live`, [`scripts/live-matrix.mjs`](../scripts/live-matrix.mjs)): 31 sessions against the real `gpt-live-1` on 2026-09-22, headless Chromium 153. The "child" is macOS text-to-speech on a fixed timeline, fed in as a fake microphone, with every data-channel event and displayed scene logged.
+3. **Real interactive session**: one manual run on 2026-09-23 in Chrome 153 on macOS (see [Real interactive run — 2026-09-23](#real-interactive-run--2026-09-23)).
 
 The synthetic child is a clean adult voice that cannot react to Sprout. Transcription accuracy, preschool pronunciation, speaker echo, and real turn-taking are therefore **not** validated. Some "wrong" answers in multi-step scripts are artifacts of the fixed timeline drifting from the actual scene.
 
@@ -54,12 +55,28 @@ The same "progression" script, where the child counts correctly and asks for mor
 
 The 5½-minute run advanced three times, reaching scene 4 of 6. When delegation happened, speech and scene were well coordinated: the new scene was confirmed and mentioned within about a second.
 
+## Real interactive run — 2026-09-23
+
+One manual session with a live speaker, run as an additional datapoint alongside the synthetic matrix, not as a replacement for it. Setup: `gpt-live-1`, prompt `counting-baseline-2`, Chrome 153 on macOS.
+
+What happened:
+
+- **Scene display was correct.** The app showed the initial `hello-duck` scene and kept it displayed for the whole run.
+- **The prompt instruction was not followed.** The app told GPT-Live to invite the user to count without saying the total first. Sprout instead said "I see 1 duck on the screen. How many can you count?", which gives the answer away.
+- **The lesson did not progress.** After the first correct "One", Sprout confirmed it and then asked the user to count the same duck again. Several more answers followed while the app stayed on `hello-duck`, and GPT-Live never requested an `advance_scene` delegation.
+- **No re-engagement after silence.** Near the end Sprout said "Good counting." and then stayed silent, without ending on a question or speaking again after the silence.
+- **The session ended because the page was hidden**, not because of a connection failure or normal lesson completion.
+
+The app-owned controls and state behaved correctly. There was no sign of a state-machine or scene-rendering failure.
+
+This run reproduces three of the synthetic findings in a real interactive session: pedagogical drift and instruction-following, unreliable scene advancement, and no initiative after silence (problems 4, 1 and 3 below). It is a single session. It does not validate preschool speech, child behavior, echo handling, or pedagogy with an actual child.
+
 ## Problems for the Jev ticket
 
-1. **Unreliable scene advancement.** Whether the model delegates varies from run to run with identical input, and small prompt changes swing it from "sometimes" to "never" (version 3).
+1. **Unreliable scene advancement.** Whether the model delegates varies from run to run with identical input, and small prompt changes swing it from "sometimes" to "never" (version 3). The real interactive run never delegated.
 2. **Speech/scene desync.** The model sometimes names quantities or objects that were never displayed, or accepts a count that contradicts the screen. The app ignores invalid actions but cannot stop the model from *saying* the wrong thing. Evidence records will need to flag these moments.
-3. **No initiative after silence.** The model does not start speaking on its own after prolonged silence, so the "gently offer help" requirement is unmet. This likely needs an external trigger (an application or controller nudge), which conflicts with "GPT-Live owns pacing" and should be an explicit design decision.
-4. **Pedagogical drift.** Recounting correct answers and quickly modeling the answer slow progression and reduce independent evidence. This may be tunable by prompt, but prompt changes also destabilized delegation (see 1).
+3. **No initiative after silence.** The model does not start speaking on its own after prolonged silence, so the "gently offer help" requirement is unmet. This likely needs an external trigger (an application or controller nudge), which conflicts with "GPT-Live owns pacing" and should be an explicit design decision. Reproduced in the real interactive run.
+4. **Pedagogical drift.** Recounting correct answers and quickly modeling the answer slow progression and reduce independent evidence. This may be tunable by prompt, but prompt changes also destabilized delegation (see 1). The real interactive run added a direct instruction-following failure: Sprout stated the total before asking the user to count, despite an explicit instruction not to.
 5. **Occasionally deferred greeting.** In 3 of 31 sessions, the greeting instruction was not acted on until the child spoke.
 
 ## Other fixes made during testing
@@ -69,6 +86,5 @@ The 5½-minute run advanced three times, reaching scene 4 of 6. When delegation 
 
 ## Still required before the gate
 
-- A real parent-and-child session on a MacBook in Chrome, using built-in speakers (checks echo and self-hearing) and a real preschool voice, repeating this matrix where it can be done naturally.
 - A real network drop mid-session.
 - A decision on problems 1–3: prompt iteration, application nudges, or a Jev controller.
