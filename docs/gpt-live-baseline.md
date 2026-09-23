@@ -4,11 +4,11 @@ Findings for [issue #2](https://github.com/hurley87/sprout/issues/2), slice 1 (v
 
 ## Verdict
 
-**The GPT-Live-only baseline is usable enough to continue, but it does not yet meet the slice 1 exit criterion.** Conversation quality is good: turns are short, one question at a time, interruption and topic changes are handled well, and scaffolding is gentle. Application-owned controls (parent stop, child stop, wrap-up, goodbye, hard limit, failure cleanup) are reliable because they do not depend on the model.
+**The GPT-Live-only baseline is complete enough to close slice 1 ([issue #2](https://github.com/hurley87/sprout/issues/2)) and continue to the next experiment.** It established the main result: application-owned controls are reliable, while GPT-Live-only lesson control is not reliable enough. Conversation quality is good: turns are short, one question at a time, interruption and topic changes are handled well, and scaffolding is gentle. Application-owned controls (parent stop, child stop, wrap-up, goodbye, hard limit, failure cleanup) are reliable because they do not depend on the model.
 
 The weak point is **model-owned lesson control**: deciding when to advance the scene, keeping speech consistent with the displayed scene, and re-engaging after silence. These are the problems for the Jev exploration ticket (see [Problems for the Jev ticket](#problems-for-the-jev-ticket)). A [real interactive session](#real-interactive-run--2026-09-23) on 2026-09-23 reproduced three of them while the app-owned controls and scene display behaved correctly. That strengthens the case that GPT-Live-only lesson control is the weak point.
 
-None of this has been tested with a real child. Preschool speech, child behavior, echo handling and pedagogy with a child remain unvalidated.
+None of this has been tested with a real child. Preschool speech, real-child behavior, echo/self-hearing and pedagogy with a child remain unvalidated. Issue #2 explicitly defers this validation (and a real network-drop test) to a later pass once lesson control is more stable, so these are limitations of the baseline rather than gate blockers.
 
 ## How it was tested
 
@@ -84,7 +84,11 @@ This run reproduces three of the synthetic findings in a real interactive sessio
 - The session endpoint's loopback guard compared the browser `Origin` against `request.url`, which Next.js normalizes to `localhost`. Every lesson started from `http://127.0.0.1:3000` (the URL `npm run dev` serves) was rejected. The guard now compares `Origin` with the `Host` header, which also rejects DNS-rebound hostnames.
 - Two browser tests matched the Next.js route announcer as a second `alert`; they now scope to the page's main content.
 
-## Still required before the gate
+## Follow-up work
 
-- A real network drop mid-session.
-- A decision on problems 1–3: prompt iteration, application nudges, or a Jev controller.
+- Explore how to address lesson-control problems 1–3 with application logic, a Jev controller, or both (prompt iteration alone proved unstable; see version 3).
+
+Deferred validation, not required for this slice:
+
+- A real parent-and-child session on a MacBook in Chrome with built-in speakers (preschool speech, echo/self-hearing, child behavior and pedagogy).
+- A real network drop mid-session. Connection-failure handling is covered by automated tests only.
