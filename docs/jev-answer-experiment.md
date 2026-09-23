@@ -10,9 +10,9 @@ Everything else stays where it was. GPT-Live still owns the conversation, person
 
 ## Verdict
 
-**Keep this narrow Jev responsibility.** Across 36 real sessions and 70 evaluations, every one of the 41 correct answers advanced the scene, and nothing else ever did. The decision cost about 280 ms and never produced a scene that Sprout talked about before it was on screen. Against the #2 baseline this replaces "2 of 4 progression runs advanced cleanly" with "41 of 41", and the full-length lesson reached all six scenes instead of stopping at four.
+**Keep this narrow Jev responsibility and the `counting-jev-2` synchronization.** In the original 36-session Jev experiment, all 41 correct answers advanced and nothing else did. The new pause/release prompt was then tested separately: across 15 successful advances in repeated correct-answer and multi-scene runs, Sprout was silent before 14 advance instructions and said only "Oh!" before the other. It never began an instructional sentence before a successful advance in this sample. The audible mid-sentence pivot that occurred on most advances with `counting-jev-1` was eliminated in these runs, without another application-level controller.
 
-The cost is a conversational seam, described under [What got worse](#what-got-worse): Sprout starts answering a correct count before the application has decided, so the advance often interrupts it mid-sentence. That is a pacing problem in the application's own timing, not a fault in the decision, and it is the obvious next thing to tune.
+The tradeoff is a quieter, longer wait after a count: the median last learner transcript to advance instruction was 3.55 s in the new sample, and the median to Sprout's first word was 4.53 s. The live service was slower in several new runs; see [Before and after synchronization](#before-and-after-synchronization) for the timing and failed attempts.
 
 The pre-registered decision rule was: keep if correct-answer advancement is at least 90%, there are no false advancements, added median latency is at most about 2.5 s, and there are no new scene/speech desync failures. All four held.
 
@@ -28,20 +28,26 @@ sequenceDiagram
     participant Screen
     participant GPT as GPTLive
     Child->>App: transcript deltas
+    Child->>GPT: number or count aloud
+    GPT-->>Child: stay silent or tiny neutral acknowledgment
+    Note over GPT,App: GPT waits for an explicit outcome before judging or scaffolding
     App->>App: utterance settles (1.5 s of no new delta)
     App->>Jev: displayed scene + utterance, one Noul question
     Jev-->>App: probability
     alt probability >= 0.90 and still current
         App->>Screen: commit next scene
         Screen-->>App: displayed, after paint
-        App->>GPT: instructions.append, new scene context
-    else anything else
-        App->>App: log only
-        GPT-->>Child: keeps scaffolding on the current scene
+        App->>GPT: advanceContext(new scene)
+        GPT-->>Child: celebrate briefly, invite count on new scene
+    else current result does not advance and GPT is still holding
+        App->>GPT: stayContext(current scene)
+        GPT-->>Child: help or clarify on current scene
+    else stale result or GPT already took its turn
+        App->>App: no new instruction
     end
 ```
 
-GPT-Live no longer has a scene capability. Its prompt (`counting-jev-1`) says the app owns the screen and will tell it after a change. Across all 36 sessions the model never attempted a delegation, so the refusal path was never exercised live; it is covered by unit tests only.
+GPT-Live no longer has a scene capability. Its `counting-jev-2` prompt says the app owns the screen and will tell it after a change. It also asks Sprout to pause after a number or count, without praising, correcting, recounting, helping, or asking another question until the app reports the outcome. `stayContext(...)` explicitly releases that pause when the scene stays put; it is sent only while `holding()` finds at most four words of Sprout speech since the child last spoke. If Sprout already continued, the app does not add a redundant non-advance instruction. On a confident, current answer, the app changes the scene first and sends `advanceContext(...)` after display. `holding()` does not gate this advance path; the live test below specifically checks whether the prompt keeps that path clear. The original 36 sessions had no unsolicited delegation. One of the new correct-answer attempts did, and the app refused it.
 
 ### The question
 
@@ -95,7 +101,7 @@ In the 36 sessions, 17 of the 70 evaluations were built from speech that arrived
 
 ## Results
 
-36 real sessions on 2026-09-23, headless Chromium 153, against real `gpt-live-1` and real `jev-1.13.0`. Same synthetic-child method as #2: macOS text-to-speech on a fixed timeline fed in as a fake microphone, which cannot react to Sprout. Run with `node scripts/live-matrix.mjs <scenario> --repeat N`.
+The original `counting-jev-1` comparison used 36 real sessions on 2026-09-23, headless Chromium 153, against real `gpt-live-1` and real `jev-1.13.0`. The `counting-jev-2` synchronization runs below used the same real models and the same synthetic-child method: macOS text-to-speech on a fixed timeline fed in as a fake microphone, which cannot react to Sprout. Run with `node scripts/live-matrix.mjs <scenario> --repeat N`.
 
 ### Advancement
 
@@ -124,7 +130,7 @@ Probabilities were bimodal with a wide empty band. Everything that advanced scor
 
 Transcription varied between runs of the same script — "One!" came through as `One` in three runs and `1` in two — and the probability was 0.98 in all five. Self-correction worked in both directions: the answer settled on is the one judged.
 
-### Latency
+### Original `counting-jev-1` latency
 
 | Interval | Median | Range |
 | --- | --- | --- |
@@ -132,7 +138,7 @@ Transcription varied between runs of the same script — "One!" came through as 
 | Decision to new scene on screen | 272 ms | 153 – 376 ms |
 | **Child's last word to new scene** | **1777 ms** | 1659 – 1882 ms |
 
-About 1.5 s of that 1.8 s is the application's own settle wait, not the model. Jev is the small part. The wait is also not dead air: GPT-Live has already started responding by then.
+About 1.5 s of that 1.8 s is the application's own settle wait, not the model. In these original runs, the wait was usually filled by GPT-Live speaking early. The new runs below measure the actual pause and include slower Jev responses; the old latency figures must not be carried forward as the current listening experience.
 
 ### Scene and speech coordination
 
@@ -142,9 +148,9 @@ Across all 41 advances, the instruction telling GPT-Live about the new scene was
 
 The 5½-minute `time_limit` run advanced five times and reached **all six scenes**; the #2 baseline reached four. Wrap-up at 4:31, goodbye at 5:01, "Bye for now!" spoken, closed at 5:09 — unchanged from the baseline. On the final scene the child counted "one two three four five" and, correctly, no evaluation was made: there is nothing to advance to.
 
-## Comparison with the #2 baseline
+## Original comparison with the #2 baseline
 
-| | #2 (GPT-Live decides) | #3 (Jev decides, app advances) |
+| | #2 (GPT-Live decides) | Original `counting-jev-1` (Jev decides) |
 | --- | --- | --- |
 | Correct answer advances | 2 of 4 progression runs cleanly; 0 in the real interactive run | 41 of 41 |
 | Same input, same outcome? | No: one run refused for 90 s, one never delegated | Yes: 0.98 in all five identical runs |
@@ -154,16 +160,29 @@ The 5½-minute `time_limit` run advanced five times and reached **all six scenes
 | Added latency | None | ~1.8 s from last word to new scene, of which ~0.3 s is Jev |
 | Prompt stability | Fragile: version 3 dropped delegation to 0 of 9 | Not applicable; the model no longer makes this decision |
 
-Baseline problems 1 (unreliable advancement) and 2 (speech/scene desync) are addressed. Problem 3 (no initiative after silence) and problem 5 (occasionally deferred greeting) are untouched and out of scope here. Problem 4 (pedagogical drift, recounting correct answers) is partly masked rather than fixed: Sprout still starts asking for a recount, and the advance now overrides it.
+In the original Jev comparison, baseline problems 1 (unreliable advancement) and 2 (speech/scene desync) were addressed. The new batch confirms the advance-path speech coordination when a result arrives, but three `correct_once` attempts failed to advance for reasons described below; this batch does not re-establish the original end-to-end success rate. Problem 3 (no initiative after silence) and problem 5 (occasionally deferred greeting) are untouched and out of scope here. In the original `counting-jev-1` runs, problem 4 (pedagogical drift, recounting correct answers) was partly masked: Sprout sometimes started a recount and the advance overrode it. The `counting-jev-2` pause removed that observed advance-path interruption in the new sample.
 
-## What got worse
+## Before and after synchronization
 
-**The advance interrupts Sprout mid-sentence.** GPT-Live begins responding to a correct answer within a few hundred milliseconds, while the application waits 1.5 s to be sure the answer is finished. Sprout has therefore usually started a turn — often "let's count that again" — by the time the instruction arrives, and it pivots audibly. Two real examples:
+With `counting-jev-1`, GPT-Live usually answered a correct count while the app waited for the utterance to settle. Advances then interrupted a real sentence. Two recorded examples were:
 
 - `quick_answer`: "Nice counting! Let's try that duck again — Yay, you counted it just right! Now there are some ducks on the screen."
 - `explicit_stop`: "Thanks. Can you count again with me, nice — Hey! Nice counting! Now there are some ducks on the screen."
 
-This happened on most advances. It is not a desync (the screen and the words agree, and nothing is said about a scene before it is shown) but it does not sound like one person talking. It is caused by the application's settle window, not by Jev: the same seam would appear with an instant oracle unless the wait shrinks or GPT-Live is told to pause briefly after a counting answer. Worth addressing before a real child sees this, and cheap to try.
+The new `counting-jev-2` prompt asks Sprout to wait after a number or count until the app explicitly reports whether the scene changed. The app uses `stayContext(...)` to release a held non-advance turn, and `advanceContext(...)` after a confident advance has been displayed. The new live-matrix measures the text received between the last learner transcript delta and the app's decision/instruction as `sproutBeforeDecision` and `sproutWordsBeforeDecision`.
+
+| New live scenario | Runs | Successful advances | Sprout before each advance instruction |
+| --- | --- | --- | --- |
+| `correct_once`, one exploratory run + five concurrent repeats + three serial repeats | 9 attempts | 6 | Five silent; one said only "Oh!" (1 word) |
+| `progression`, run serially | 3 | 9 (three per run) | Silent on all nine (0 words each) |
+
+Thus **15 of 15 successful advances had no meaningful Sprout turn in progress**: 14 had `sproutWordsBeforeDecision = 0`, and one had `= 1`, a neutral "Oh!". No advancing instruction interrupted a sentence or question in these runs. All three progression runs reached the picnic scene. A separate `self_corrected_to_right` run also advanced with 0 words before the instruction. The observed audible mid-sentence pivot was eliminated in this sample; this does not prove the prompt will always be obeyed with a real child.
+
+For those 15 advances, the median time from the last learner transcript delta to the app's advance instruction was **3,546 ms** (range 1,778–4,496 ms), and to the first Sprout transcript delta was **4,531 ms** (range 905–5,120 ms). The 905 ms case was the one-word "Oh!"; otherwise the first Sprout word followed the instruction. The scene appeared a median **3,522 ms** after the learner's last delta, with the instruction **2–32 ms after** it reached the DOM (median 17 ms). Successful Jev calls took a median **2,017 ms** (range 270–2,967 ms), substantially slower than the 276 ms median in the original batch. The 1.5 s settle rule is unchanged. This is real dead air after many counts, unlike the original runs, and the slower live service contributed to it.
+
+Three of the nine `correct_once` attempts did not advance: two heard the answer but logged no completed `/api/evaluate` response, and one had no provider transcripts at all. The two with speech remained on the original scene and sent `stayContext(...)`; one also attempted an unsolicited delegation, which the app refused. These attempts are excluded from the 15-advance speech classification, but remain failures of end-to-end advancement in this sample. The live-matrix cannot distinguish a timed-out/aborted request from another fetch rejection when no response is logged. They are not evidence of a mid-sentence advance.
+
+On non-advances, the wrong-answer run scored 0.02 and stayed on the first scene: Sprout said "Ooh!" (1 word) before `stayContext(...)`, then offered to count together. `self_corrected_to_wrong` scored 0.04 and also stayed after a one-word acknowledgment. In two `dont_know` runs, GPT-Live responded directly to "I don't know" with reassurance and counting help, and the scene stayed put. Neither run logged a completed Jev response, so they validate the conversational non-count path but not Jev's probability for that utterance. In the progression runs, Sprout sometimes began responding to a non-count or wrong-object answer before the Jev result; `holding()` skipped release once speech exceeded its brief-word limit. One non-advance release arrived after the fragment "Ooh! Let's" (2 words), and another after "Ooh! Let's look again." (4 words); the recorded continuations remained coherent, without an observed audible pivot. This sample gives no concrete reason to retune `BRIEF_ACK_WORDS`.
 
 ### Other limitations
 
@@ -171,8 +190,8 @@ This happened on most advances. It is not a desync (the screen and the words agr
 - No manual interactive session was run for this change; #2's single real session stands as the only non-synthetic datapoint, and it predates this work.
 - Speaker attribution is the provider's. If Sprout's own speech is transcribed as input, it is evaluated as if the child said it. Calibration shows Sprout's typical prompt scoring 0.62–0.67, below the threshold but by less margin than anything else tested.
 - The threshold is tied to `jev-1.13.0`. Unpinning the model invalidates it.
-- The refusal path for an unsolicited delegation was never exercised live.
-- All 150 calibration calls and 70 live evaluations came from one afternoon; this says nothing about drift over weeks.
+- The refusal path was not exercised in the original 36 sessions. One new correct-answer attempt did make an unsolicited delegation; the app refused it. That attempt did not receive a completed Jev result and did not advance.
+- The 150 calibration calls and original 70 live evaluations, plus these synchronization runs, all came from one day; this says nothing about drift over weeks.
 
 ## Future Jev ideas, deliberately not in this change
 
@@ -190,6 +209,7 @@ None of these should be added without their own experiment. `choice` and `score`
 npm run dev                                          # needs OPENAI_API_KEY and TYPESAFE_API_KEY
 npm run test:jev                                     # threshold calibration, text only, ~150 Jev calls
 node scripts/live-matrix.mjs correct_once --repeat 5 # real GPT-Live sessions, billed per second
+node scripts/live-matrix.mjs progression            # multi-scene pause/advance check
 ```
 
-Both scripts write to `test-results/`, which is not committed. `npm test` and `npm run test:browser` cover the decision and advance logic with no network access.
+Both scripts write to `test-results/`, which is not committed. Repeats in one live-matrix command run concurrently; serial invocations were also used above to separate provider load from synchronization behavior. `npm test` and `npm run test:browser` cover the decision and advance logic with no network access.
