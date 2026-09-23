@@ -2,6 +2,9 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests/browser",
+  // Playwright empties this directory on every run, so it must not be the one
+  // the experiment scripts write their evidence to.
+  outputDir: "./test-results/playwright",
   use: {
     baseURL: "http://127.0.0.1:3100",
     viewport: { width: 1440, height: 1000 },
