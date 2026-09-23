@@ -1,52 +1,22 @@
 import { LIVE_CONFIG } from "@/lib/lesson";
+import { isLocalRequest, readJsonBody } from "@/lib/local-request";
 
 export const runtime = "nodejs";
 const LIMIT = 65_536;
-const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const json = (body: object, status: number) =>
   Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
-
-// This unauthenticated prototype is deliberately restricted to loopback. Next
-// normalizes request.url to "localhost", so the browser-sent Host header is
-// checked instead; it also rejects DNS-rebound hostnames.
-function isLocalRequest(request: Request) {
-  const host = request.headers.get("host");
-  const origin = request.headers.get("origin");
-  if (!host || !origin) return false;
-  try {
-    const hostUrl = new URL(`http://${host}`);
-    const originUrl = new URL(origin);
-    return LOOPBACK.has(hostUrl.hostname) && originUrl.protocol === "http:" && originUrl.host === hostUrl.host;
-  } catch {
-    return false;
-  }
-}
 
 export async function POST(request: Request) {
   if (!isLocalRequest(request)) return json({ error: "Start Sprout from its local browser window." }, 403);
   if (!request.headers.get("content-type")?.startsWith("application/json"))
     return json({ error: "Invalid session request." }, 415);
-  let body: unknown;
-  try {
-    const reader = request.body?.getReader();
-    if (!reader) throw new Error("missing body");
-    let size = 0;
-    const chunks: Uint8Array[] = [];
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      if (size > LIMIT) {
-        await reader.cancel();
-        return json({ error: "Session request is too large." }, 413);
-      }
-      chunks.push(value);
-    }
-    body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-  } catch {
-    return json({ error: "Invalid session request." }, 400);
-  }
-  const sdp = (body as { sdp?: unknown } | null)?.sdp;
+  const body = await readJsonBody(request, LIMIT);
+  if (!body.ok)
+    return json(
+      { error: body.tooLarge ? "Session request is too large." : "Invalid session request." },
+      body.tooLarge ? 413 : 400,
+    );
+  const sdp = (body.value as { sdp?: unknown } | null)?.sdp;
   if (typeof sdp !== "string" || !sdp.startsWith("v=0") || sdp.length > LIMIT)
     return json({ error: "Invalid microphone connection offer." }, 400);
   if (!process.env.OPENAI_API_KEY)

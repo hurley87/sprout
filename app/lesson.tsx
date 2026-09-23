@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { fetchEvaluateAnswer } from "@/lib/answer";
 import { BrowserTransport } from "@/lib/browser-transport";
 import { OBJECTS, objectName, sceneAt } from "@/lib/lesson";
-import { LessonSession, type Snapshot } from "@/lib/session";
+import { LessonSession, type Diagnostic, type Snapshot } from "@/lib/session";
+import { JevDiagnostics } from "./jev-diagnostics";
 
 function Scene({ index }: { index: number }) {
   const scene = sceneAt(index);
@@ -18,8 +20,9 @@ function Scene({ index }: { index: number }) {
   );
 }
 
-export default function Lesson() {
+export default function Lesson({ debug }: { debug: boolean }) {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
+  const [diagnosticEvents, setDiagnosticEvents] = useState<readonly Diagnostic[]>([]);
   const audio = useRef<HTMLAudioElement>(null);
   const session = useRef<LessonSession | null>(null);
   const live = snapshot !== null && snapshot.status !== "ended";
@@ -54,8 +57,11 @@ export default function Lesson() {
   function start() {
     if (!audio.current || (session.current && session.current.snapshot.status !== "ended")) return;
     session.current?.dispose();
-    const current = new LessonSession(new BrowserTransport(audio.current), setSnapshot);
+    const current = new LessonSession(new BrowserTransport(audio.current), fetchEvaluateAnswer, setSnapshot, () =>
+      setDiagnosticEvents([...current.events]),
+    );
     session.current = current;
+    setDiagnosticEvents([]);
     void current.start();
   }
   function download() {
@@ -145,6 +151,7 @@ export default function Lesson() {
         </section>
       )}
       {!live && <footer>One small adventure at a time.</footer>}
+      {debug && <JevDiagnostics events={diagnosticEvents} />}
     </main>
   );
 }

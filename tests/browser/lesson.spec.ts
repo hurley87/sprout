@@ -3,7 +3,10 @@ import { test, expect, type Page } from "@playwright/test";
 type TestState = {
   emit: (event: object) => void;
   disconnect: () => void;
+  /** Each command carries `at`, so scene/speech ordering can be checked. */
   commands: Record<string, unknown>[];
+  /** When each scene id first reached the DOM, on the same clock. */
+  shownAt: Record<string, number>;
   tracks: MediaStreamTrack[];
   closed: boolean;
   releaseMic?: () => void;
@@ -17,14 +20,32 @@ declare global {
 
 // This harness replaces ONLY the provider transport. getUserMedia and its
 // tracks are real Chromium APIs backed by Chromium's synthetic microphone.
+/** Later routes win in Playwright, so a test can override this default. */
+async function mockEvaluate(page: Page, probability: number) {
+  await page.route("**/api/evaluate", route => route.fulfill({ json: { probability, model: "jev-test" } }));
+}
+
 async function mockLive(page: Page, pendingMic = false) {
   await page.route("**/api/live", route =>
     route.fulfill({ json: { session: { id: "test" }, transport: { sdp: "test" } } }),
   );
+  // No lesson reaches the real evaluation service; tests that care override this.
+  await mockEvaluate(page, 0);
   await page.addInitScript(
     ({ pendingMic }) => {
-      const state: TestState = { commands: [], tracks: [], closed: false, emit: () => {}, disconnect: () => {} };
+      const state: TestState = {
+        commands: [],
+        shownAt: {},
+        tracks: [],
+        closed: false,
+        emit: () => {},
+        disconnect: () => {},
+      };
       window.sproutTest = state;
+      new MutationObserver(() => {
+        const scene = document.querySelector("[data-scene]")?.getAttribute("data-scene");
+        if (scene && !(scene in state.shownAt)) state.shownAt[scene] = performance.now();
+      }).observe(document, { subtree: true, childList: true, attributes: true });
       const getUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
       navigator.mediaDevices.getUserMedia = async constraints => {
         const stream = await getUserMedia(constraints);
@@ -46,7 +67,7 @@ async function mockLive(page: Page, pendingMic = false) {
           onmessage: null as ((event: { data: string }) => void) | null,
           onclose: null as (() => void) | null,
           onerror: null,
-          send: (raw: string) => state.commands.push(JSON.parse(raw)),
+          send: (raw: string) => state.commands.push({ ...JSON.parse(raw), at: performance.now() }),
           close: () => {
             this.channel.readyState = "closed";
             this.channel.onclose?.();
@@ -85,8 +106,12 @@ async function mockLive(page: Page, pendingMic = false) {
   );
 }
 const emit = (page: Page, event: object) => page.evaluate(event => window.sproutTest.emit(event), event);
+const say = (page: Page, delta: string, start_ms = 0) =>
+  emit(page, { type: "session.input_transcript.delta", delta, start_ms, end_ms: start_ms + 500 });
 const commands = (page: Page) => page.evaluate(() => window.sproutTest.commands);
 const sentContent = async (page: Page) => (await commands(page)).map(command => String(command.content ?? ""));
+/** The app telling GPT-Live the scene stayed, which ends its answer-check pause. */
+const releases = async (page: Page) => (await sentContent(page)).filter(text => text.includes("has not changed"));
 const tracksStopped = (page: Page) =>
   page.evaluate(() => window.sproutTest.tracks.every(track => track.readyState === "ended"));
 
@@ -101,11 +126,19 @@ test("parent start, committed scene, stop, late actions, and diagnostics export"
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
   await mockLive(page);
+  await mockEvaluate(page, 0.95);
   await begin(page);
   await expect(page.getByRole("heading")).toHaveCount(0);
-  await emit(page, { type: "session.delegation.created", delegation: { id: "scene2", target: "client" } });
+  await say(page, "One!");
   await expect(page.locator('[data-scene="duck-friends"] > span')).toHaveCount(2);
-  await expect.poll(async () => (await commands(page)).some(command => command.delegation_id === "scene2")).toBe(true);
+  await expect.poll(async () => (await sentContent(page)).some(text => text.includes("2 ducks"))).toBe(true);
+  // The model is told about the new group only after the app has displayed it.
+  const { shownAt, told } = await page.evaluate(() => ({
+    shownAt: window.sproutTest.shownAt["duck-friends"],
+    told: window.sproutTest.commands.find(command => String(command.content ?? "").includes("2 ducks"))?.at as number,
+  }));
+  expect(told).toBeGreaterThanOrEqual(shownAt);
+  expect(await releases(page)).toEqual([]);
   await page.getByRole("button", { name: "End lesson" }).click();
   await expect(page.getByText("The microphone and voice playback are off.")).toBeVisible();
   expect(await tracksStopped(page)).toBe(true);
@@ -119,6 +152,69 @@ test("parent start, committed scene, stop, late actions, and diagnostics export"
   await page.getByRole("button", { name: "Download attempt diagnostics" }).click();
   expect((await download).suggestedFilename()).toMatch(/^sprout-attempt-/);
   expect(errors).toEqual([]);
+});
+
+test("a correct count waits for Sprout's substantive old-scene turn to finish", async ({ page }) => {
+  await mockLive(page);
+  let evaluations = 0;
+  await page.route("**/api/evaluate", route => {
+    evaluations++;
+    return route.fulfill({ json: { probability: 0.95, model: "jev-test" } });
+  });
+  await begin(page);
+  const before = (await commands(page)).length;
+  await say(page, "One!");
+  await emit(page, {
+    type: "session.output_transcript.delta",
+    delta: "Let's count the duck together",
+    start_ms: 800,
+    end_ms: 1300,
+  });
+  await expect.poll(() => evaluations).toBe(1);
+  await expect(page.locator('[data-scene="hello-duck"]')).toBeVisible();
+  expect(await commands(page)).toHaveLength(before);
+  await emit(page, {
+    type: "session.output_transcript.delta",
+    delta: ". There is one duck.",
+    start_ms: 1800,
+    end_ms: 2300,
+  });
+  await expect(page.locator('[data-scene="duck-friends"]')).toBeVisible();
+  await expect.poll(async () => (await sentContent(page)).filter(text => text.includes("2 ducks"))).toHaveLength(1);
+  expect(evaluations).toBe(1);
+  expect(await releases(page)).toEqual([]);
+  const { shownAt, told } = await page.evaluate(() => ({
+    shownAt: window.sproutTest.shownAt["duck-friends"],
+    told: window.sproutTest.commands.find(command => String(command.content ?? "").includes("2 ducks"))?.at as number,
+  }));
+  expect(told).toBeGreaterThanOrEqual(shownAt);
+});
+
+test("an unconvincing count keeps the scene and releases GPT-Live on it", async ({ page }) => {
+  await mockLive(page);
+  await mockEvaluate(page, 0.4);
+  await begin(page);
+  const before = (await commands(page)).length;
+  await say(page, "Five!");
+  await expect.poll(() => releases(page)).toEqual([expect.stringContaining("still shows 1 duck")]);
+  await expect(page.locator('[data-scene="hello-duck"] > span')).toHaveCount(1);
+  expect(await commands(page)).toHaveLength(before + 1);
+  // Speech GPT-Live was never asked to pause for is left to it.
+  await say(page, "I have a dinosaur!", 10_000);
+  await page.waitForTimeout(2500);
+  expect(await commands(page)).toHaveLength(before + 1);
+});
+
+test("a timed-out evaluation keeps the scene and releases GPT-Live neutrally", async ({ page }) => {
+  await mockLive(page);
+  await page.route("**/api/evaluate", () => {});
+  await begin(page);
+  await say(page, "One!");
+  await expect.poll(() => releases(page), { timeout: 8000 }).toHaveLength(1);
+  expect((await releases(page))[0]).toContain("could not verify");
+  expect((await releases(page))[0]).toContain("count this group again");
+  expect((await releases(page))[0]).not.toContain("Respond to the child's answer");
+  await expect(page.locator('[data-scene="hello-duck"]')).toBeVisible();
 });
 
 test("fragmented child stop releases the microphone immediately", async ({ page }) => {

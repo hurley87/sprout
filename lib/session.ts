@@ -1,6 +1,25 @@
+import { SETTLE_MS, shouldAdvance, type AnswerResult, type EvaluateAnswer } from "./answer";
 import type { ClientCommand, ProviderEvent, TranscriptEvent } from "./events";
-import { LAST_SCENE, MODEL, PROMPT_VERSION, TIMING, sceneAt, sceneContext } from "./lesson";
-import { TranscriptWindow, requestsStop, saidGoodbye } from "./transcript";
+import {
+  BRIEF_ACK_WORDS,
+  LAST_SCENE,
+  MODEL,
+  PROMPT_VERSION,
+  TIMING,
+  advanceContext,
+  evaluationUnavailableContext,
+  sceneAt,
+  sceneContext,
+  stayContext,
+} from "./lesson";
+import {
+  TranscriptWindow,
+  UTTERANCE_GAP_MS,
+  mentionsNumber,
+  requestsStop,
+  saidGoodbye,
+  type Utterance,
+} from "./transcript";
 
 export type EndReason =
   "parent_stop" | "child_stop" | "model_goodbye" | "wrap_up" | "time_limit" | "connection_failure" | "page_hidden";
@@ -33,8 +52,8 @@ export interface Transport {
 }
 
 /** What the app is waiting to see on screen before it speaks about it. */
-type PendingDisplay =
-  { kind: "greeting"; sceneIndex: number } | { kind: "advance"; sceneIndex: number; delegationId: string };
+type PendingDisplay = { kind: "greeting" | "advance"; sceneIndex: number; answerVersion?: string };
+type DeferredAdvance = { sceneIndex: number; answerVersion: string; approvedAt: number; spokenChars: number };
 
 export class LessonSession {
   snapshot: Snapshot = { status: "starting", sceneIndex: 0 };
@@ -44,18 +63,32 @@ export class LessonSession {
   private startupTimer?: ReturnType<typeof setTimeout>;
   private phaseTimers: ReturnType<typeof setTimeout>[] = [];
   private closeTimer?: ReturnType<typeof setTimeout>;
+  private settleTimer?: ReturnType<typeof setTimeout>;
+  private deferredTimer?: ReturnType<typeof setTimeout>;
+  private deferredAdvance: DeferredAdvance | null = null;
   private seen = new Set<string>();
   private delegations = new Set<string>();
   private pending: PendingDisplay | null = null;
   private childSpeech = new TranscriptWindow();
   private sproutSpeech = new TranscriptWindow();
+  // The last thing the child was heard saying, and the utterance versions
+  // already sent for evaluation, so one response is never judged twice.
+  private latest: Utterance | null = null;
+  private lastDeltaAt = 0;
+  private evaluated = new Set<string>();
+  private evaluation?: AbortController;
+  // What Sprout has said since the child last spoke, to tell a held turn from
+  // one it has already taken.
+  private sproutReply = "";
   private commands = 0;
   private closed = false;
   private ready = false;
 
   constructor(
     private transport: Transport,
+    private evaluateAnswer: EvaluateAnswer,
     private changed: (snapshot: Snapshot) => void,
+    private diagnosticChanged?: () => void,
   ) {}
 
   private get scene() {
@@ -66,6 +99,8 @@ export class LessonSession {
     // Bounded, in-memory prototype diagnostics; no raw audio or SDP.
     if (this.events.length >= 8000) this.events.shift();
     this.events.push({ at: Date.now() - this.createdAt, type, detail });
+    if (type.startsWith("answer.") || type.startsWith("advance.") || type === "scene.displayed")
+      this.diagnosticChanged?.();
   }
 
   async start() {
@@ -145,7 +180,7 @@ export class LessonSession {
         this.heard(event);
         return;
       case "delegation":
-        this.requestScene(event.id);
+        this.refuseDelegation(event.id);
         return;
       case "delegation.unsupported":
         this.log("action.rejected", "Invalid delegation");
@@ -191,40 +226,199 @@ export class LessonSession {
     });
     const speech = fromChild ? this.childSpeech : this.sproutSpeech;
     const utterance = speech.append(event.delta, event.startMs, event.endMs);
+    this.sproutReply = fromChild ? "" : this.sproutReply + event.delta;
     if (fromChild) {
-      if (requestsStop(utterance)) this.end("child_stop");
-    } else if (this.snapshot.status !== "goodbye" && saidGoodbye(utterance)) {
+      this.latest = utterance;
+      this.lastDeltaAt = Date.now();
+      if (requestsStop(utterance.text)) this.end("child_stop");
+      else if (!this.deferredAdvance) this.settle(utterance);
+    } else if (this.snapshot.status !== "goodbye" && saidGoodbye(utterance.text)) {
       // The model ending the lesson itself, usually a stop request the
       // transcript guard could not recognize. Not proof of playback.
       this.end("model_goodbye");
+    } else if (this.deferredAdvance) {
+      this.scheduleDeferredRelease();
     }
   }
 
-  private requestScene(delegationId: string) {
+  // GPT-Live has no end-of-turn event, so a response counts as complete only
+  // once it has stopped growing. Every new fragment restarts the wait.
+  private settle(utterance: Utterance) {
+    clearTimeout(this.settleTimer);
+    this.log("answer.settling", {
+      sceneIndex: this.snapshot.sceneIndex,
+      utterance: utterance.text,
+      version: `${utterance.startMs}:${utterance.text.trim()}`,
+      configured_settle_ms: SETTLE_MS,
+    });
+    this.settleTimer = setTimeout(() => this.evaluate(utterance), SETTLE_MS);
+  }
+
+  /** True while the app could act on an answer about the displayed scene. */
+  private get evaluable() {
+    return (
+      this.snapshot.status === "active" &&
+      !this.pending &&
+      !this.deferredAdvance &&
+      this.snapshot.sceneIndex < LAST_SCENE
+    );
+  }
+
+  private evaluate(utterance: Utterance) {
+    const text = utterance.text.trim();
+    if (!this.evaluable || !text) return;
+    // A revised answer is a different version of the same utterance, so it is
+    // judged again; an unchanged one never is.
+    const version = `${utterance.startMs}:${text}`;
+    if (this.evaluated.has(version)) return;
+    this.evaluated.add(version);
+    const sceneIndex = this.snapshot.sceneIndex;
+    const finalDeltaAt = this.lastDeltaAt;
+    const actualSettleMs = Date.now() - finalDeltaAt;
+    this.log("answer.requesting", {
+      version,
+      actual_settle_ms: actualSettleMs,
+      configured_settle_ms: SETTLE_MS,
+    });
+    this.evaluation?.abort();
+    const evaluation = new AbortController();
+    this.evaluation = evaluation;
+    void this.evaluateAnswer({ sceneIndex, utterance: text }, evaluation.signal).then(result =>
+      this.decide(utterance, sceneIndex, version, finalDeltaAt, actualSettleMs, result),
+    );
+  }
+
+  private decide(
+    utterance: Utterance,
+    sceneIndex: number,
+    version: string,
+    finalDeltaAt: number,
+    actualSettleMs: number,
+    result: AnswerResult,
+  ) {
+    // The question was about a moment that may have passed: the child may have
+    // said more, or the lesson may have moved on while the answer was in flight.
+    const stale =
+      !this.evaluable ||
+      this.snapshot.sceneIndex !== sceneIndex ||
+      this.latest?.startMs !== utterance.startMs ||
+      this.latest.text !== utterance.text;
+    const advancing = !stale && shouldAdvance(result);
+    // Stale results need no release: newer speech gets its own decision, and a
+    // scene change or wrap-up tells GPT-Live itself.
+    const releasing = !stale && !advancing && this.holding(utterance);
+    this.log("answer.evaluated", {
+      scene: sceneAt(sceneIndex).id,
+      sceneIndex,
+      version,
+      utterance: utterance.text,
+      ...(result.status === "evaluated"
+        ? { probability: result.probability, model: result.model }
+        : { unavailable: result.reason }),
+      latency_ms: result.latencyMs,
+      total_ms: Date.now() - finalDeltaAt,
+      decision: stale ? "STALE" : result.status === "unavailable" ? "UNAVAILABLE" : advancing ? "ADVANCE" : "STAY",
+      stale,
+      advancing,
+      releasing,
+    });
+    // An unavailable check leaves the scene alone without judging the child.
+    if (advancing) {
+      if (this.sproutIsHoldingForDecision()) this.advance(version);
+      else this.deferAdvance(sceneIndex, `${utterance.startMs}:${utterance.text.trim()}`);
+    } else if (releasing)
+      this.append(
+        "session.instructions.append",
+        result.status === "unavailable" ? evaluationUnavailableContext(this.scene) : stayContext(this.scene),
+      );
+  }
+
+  /**
+   * Whether GPT-Live is pausing for this decision, as its prompt asks after a
+   * count. If it has already said more than a brief acknowledgment, it took its
+   * turn anyway and an instruction now would talk over it.
+   */
+  private holding(utterance: Utterance) {
+    const said = this.sproutReply.trim();
+    const words = said ? said.split(/\s+/).length : 0;
+    return mentionsNumber(utterance.text) && words <= BRIEF_ACK_WORDS;
+  }
+
+  /** Only silence or an explicitly neutral, tiny acknowledgment is safe for an immediate advance. */
+  private sproutIsHoldingForDecision() {
+    return /^(?:oh|ooh|okay)[.!?]*$/i.test(this.sproutReply.trim()) || !this.sproutReply.trim();
+  }
+
+  private deferAdvance(sceneIndex: number, answerVersion: string) {
+    if (this.deferredAdvance) return;
+    this.deferredAdvance = { sceneIndex, answerVersion, approvedAt: Date.now(), spokenChars: this.sproutReply.length };
+    this.log("advance.deferred", {
+      answer_version: answerVersion,
+      scene: sceneAt(sceneIndex).id,
+      reason: "sprout_substantive_reply",
+      spoken_chars: this.sproutReply.length,
+    });
+    this.scheduleDeferredRelease();
+  }
+
+  private scheduleDeferredRelease() {
+    clearTimeout(this.deferredTimer);
+    // This transport has output transcript deltas but no authoritative output-turn
+    // completion event. One utterance gap without another delta is our boundary;
+    // each new fragment restarts it, and wrap-up/stop cancels it.
+    this.deferredTimer = setTimeout(() => this.releaseDeferredAdvance(), UTTERANCE_GAP_MS);
+  }
+
+  private releaseDeferredAdvance() {
+    const deferred = this.deferredAdvance;
+    if (!deferred) return;
+    this.deferredAdvance = null;
+    clearTimeout(this.deferredTimer);
+    if (
+      this.expireIfOverdue() ||
+      this.snapshot.status !== "active" ||
+      this.pending ||
+      this.snapshot.sceneIndex !== deferred.sceneIndex ||
+      deferred.sceneIndex >= LAST_SCENE
+    )
+      return;
+    this.log("advance.released", {
+      scene: sceneAt(deferred.sceneIndex).id,
+      answer_version: deferred.answerVersion,
+      spoken_chars_at_approval: deferred.spokenChars,
+      delay_ms: Date.now() - deferred.approvedAt,
+      reason: "output_transcript_quiet",
+    });
+    this.advance(deferred.answerVersion);
+  }
+
+  private cancelDeferredAdvance() {
+    clearTimeout(this.deferredTimer);
+    if (this.deferredAdvance)
+      this.log("advance.cancelled", {
+        answer_version: this.deferredAdvance.answerVersion,
+        delay_ms: Date.now() - this.deferredAdvance.approvedAt,
+      });
+    this.deferredAdvance = null;
+  }
+
+  /** The application, not the model, commits the next deterministic scene. */
+  private advance(answerVersion: string) {
+    this.log("advance.committed", { answer_version: answerVersion });
+    const sceneIndex = this.snapshot.sceneIndex + 1;
+    this.pending = { kind: "advance", sceneIndex, answerVersion };
+    this.update({ sceneIndex });
+  }
+
+  private refuseDelegation(delegationId: string) {
     if (this.delegations.has(delegationId)) return;
     this.delegations.add(delegationId);
-    this.log("action.requested", { action: "advance_scene", id: delegationId });
-    if (this.snapshot.status !== "active" || this.pending) {
-      this.append(
-        "session.thinking.append",
-        "Scene unchanged. Wait for the current scene confirmation, or finish the current activity if wrapping up. Do not request another scene now.",
-        delegationId,
-      );
-      this.log("action.rejected", "Not ready for a new scene");
-      return;
-    }
-    if (this.snapshot.sceneIndex === LAST_SCENE) {
-      this.append(
-        "session.thinking.append",
-        "No more scenes. Keep playing with the current group at the child's pace until wrap-up. Do not delegate again.",
-        delegationId,
-      );
-      this.log("action.rejected", "Scene boundary");
-      return;
-    }
-    const sceneIndex = this.snapshot.sceneIndex + 1;
-    this.pending = { kind: "advance", sceneIndex, delegationId };
-    this.update({ sceneIndex });
+    this.log("action.rejected", { action: "delegation", id: delegationId, reason: "The app owns scene changes" });
+    this.append(
+      "session.thinking.append",
+      "Nothing happened; you have no backend tools. The app changes the scene by itself and will tell you. Keep playing with the group on screen and do not delegate again.",
+      delegationId,
+    );
   }
 
   // Called after React commits and the browser has a paint opportunity.
@@ -234,6 +428,7 @@ export class LessonSession {
     if (!pending || pending.sceneIndex !== sceneIndex) return;
     this.pending = null;
     this.log("scene.displayed", this.scene);
+    if (pending.answerVersion) this.log("advance.displayed", { answer_version: pending.answerVersion });
     switch (pending.kind) {
       case "greeting":
         this.append(
@@ -242,10 +437,10 @@ export class LessonSession {
         );
         return;
       case "advance":
-        this.append("session.thinking.append", sceneContext(this.scene), pending.delegationId);
+        this.append("session.instructions.append", advanceContext(this.scene));
         return;
       default: {
-        const unhandled: never = pending;
+        const unhandled: never = pending.kind;
         throw new Error(`Unhandled pending display: ${JSON.stringify(unhandled)}`);
       }
     }
@@ -253,6 +448,7 @@ export class LessonSession {
 
   private wrap() {
     if (this.snapshot.status !== "active") return;
+    this.cancelDeferredAdvance();
     this.update({ status: "wrapping" });
     this.log("lesson.wrap_up");
     this.append(
@@ -263,6 +459,7 @@ export class LessonSession {
 
   private goodbye() {
     if (this.snapshot.status === "ended") return;
+    this.cancelDeferredAdvance();
     this.update({ status: "goodbye" });
     this.log("lesson.goodbye_requested");
     this.append(
@@ -280,7 +477,10 @@ export class LessonSession {
     const remaining = this.startedAt === undefined ? TIMING.hard : TIMING.hard - (Date.now() - this.startedAt);
     if (remaining <= 0) reason = "time_limit";
     clearTimeout(this.startupTimer);
+    clearTimeout(this.settleTimer);
+    this.cancelDeferredAdvance();
     this.phaseTimers.forEach(clearTimeout);
+    this.evaluation?.abort();
     this.pending = null;
     this.log("lesson.ended", { reason });
     // Invalidate actions BEFORE any resource callback can fire.

@@ -5,17 +5,24 @@ export const UTTERANCE_GAP_MS = 2500;
 /** Enough context for a short request; keeps diagnostics bounded. */
 export const WINDOW_CHARS = 500;
 
+/** Speech so far in one utterance, identified by when that utterance began. */
+export type Utterance = { text: string; startMs: number };
+
 /** The recent speech of one speaker, rebuilt from provider transcript deltas. */
 export class TranscriptWindow {
   private text = "";
+  private startMs = 0;
   private lastEndMs = -Infinity;
 
   /** Returns the current utterance, so a fresh one never inherits an old negation. */
-  append(delta: string, startMs: number, endMs: number): string {
-    if (startMs - this.lastEndMs > UTTERANCE_GAP_MS) this.text = "";
+  append(delta: string, startMs: number, endMs: number): Utterance {
+    if (startMs - this.lastEndMs > UTTERANCE_GAP_MS) {
+      this.text = "";
+      this.startMs = startMs;
+    }
     this.text = (this.text + delta).slice(-WINDOW_CHARS);
     this.lastEndMs = endMs;
-    return this.text;
+    return { text: this.text, startMs: this.startMs };
   }
 }
 
@@ -33,6 +40,16 @@ export function requestsStop(text: string): boolean {
     .replace(/[’]/g, "'")
     .split(/[.!?;,]/)
     .some(clause => !KEEP_PLAYING.test(clause) && STOP.test(clause));
+}
+
+const NUMBER = /\b(\d+|zero|one|two|three|four|five|six|seven|eight|nine|ten)\b/;
+
+/**
+ * The same trigger the prompt gives GPT-Live for pausing until the app has
+ * checked a count. Says nothing about whether the count is right.
+ */
+export function mentionsNumber(text: string): boolean {
+  return NUMBER.test(text.toLowerCase());
 }
 
 const GOODBYE = new RegExp(
