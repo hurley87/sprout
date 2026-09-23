@@ -10,6 +10,7 @@ Start with the [MVP PRD](sprout-mvp-prd.md) for the agreed product scope. These 
 | [Experiment protocol](experiment-protocol.md) | How to run the seven days and evaluate the results |
 | [ADR 0001](adr/0001-parent-reviewed-evidence.md) | Why only parent-reviewed evidence may inform future lessons |
 | [GPT-Live baseline](gpt-live-baseline.md) | Slice 1 test matrix, observed shortcomings, and problems for the live-control decision |
+| [Jev answer experiment](jev-answer-experiment.md) | Whether one Jev question can drive scene advancement, measured against that baseline |
 
 The PRD owns product requirements. The architecture document describes how to enforce them; the protocol defines how to evaluate them. The glossary contains terminology, and ADRs preserve decisions and their trade-offs.
 

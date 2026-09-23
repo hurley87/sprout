@@ -1,26 +1,40 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ADVANCE_THRESHOLD, SETTLE_MS, shouldAdvance, type AnswerResult, type EvaluateAnswer } from "../lib/answer";
 import { parseProviderEvent } from "../lib/events";
 import { LessonSession, type Transport } from "../lib/session";
 import { GOODBYE_PHRASE, LAST_SCENE, SCENES, TIMING, objectName, sceneAt, sceneContext } from "../lib/lesson";
 import { TranscriptWindow, UTTERANCE_GAP_MS, WINDOW_CHARS, requestsStop, saidGoodbye } from "../lib/transcript";
 
-function setup(active = true) {
+const evaluated = (probability: number): AnswerResult => ({
+  status: "evaluated",
+  probability,
+  model: "jev-test",
+  latencyMs: 12,
+});
+/** Answers every evaluation the same way, which is what most tests need. */
+const answering = (probability: number): EvaluateAnswer => vi.fn(async () => evaluated(probability));
+const CONFIDENT = ADVANCE_THRESHOLD;
+const UNSURE = ADVANCE_THRESHOLD - 0.01;
+
+function setup(active = true, evaluateAnswer: EvaluateAnswer = answering(UNSURE)) {
   const transport: Transport = { start: vi.fn(async () => {}), send: vi.fn(), stopMedia: vi.fn(), close: vi.fn() };
-  const session = new LessonSession(transport, vi.fn());
+  const session = new LessonSession(transport, evaluateAnswer, vi.fn());
   void session.start();
   if (active) {
     deliver(session, { type: "session.started" });
     session.displayed(0);
   }
-  return { session, transport };
+  return { session, transport, evaluateAnswer };
 }
+/** Lets the utterance settle and any resulting evaluation resolve. */
+const settle = (extra = 0) => vi.advanceTimersByTimeAsync(SETTLE_MS + extra);
 /** Tests send provider-shaped JSON so the parser boundary is exercised too. */
 function deliver(session: LessonSession, raw: unknown) {
   const event = parseProviderEvent(raw);
   if (event) session.receive(event);
   return event;
 }
-const advance = (id: string) => ({ type: "session.delegation.created", delegation: { id, target: "client" } });
+const delegation = (id: string) => ({ type: "session.delegation.created", delegation: { id, target: "client" } });
 const speech = (delta: string, start_ms = 0, output = false) => ({
   type: `session.${output ? "output" : "input"}_transcript.delta`,
   delta,
@@ -48,7 +62,7 @@ describe("application lifecycle", () => {
     const { session, transport } = setup();
     vi.advanceTimersByTime(TIMING.wrap);
     expect(session.snapshot.status).toBe("wrapping");
-    deliver(session, advance("late"));
+    deliver(session, delegation("late"));
     expect(session.snapshot.sceneIndex).toBe(0);
     vi.advanceTimersByTime(TIMING.goodbye - TIMING.wrap);
     expect(session.snapshot.status).toBe("goodbye");
@@ -70,7 +84,7 @@ describe("application lifecycle", () => {
   it("hard-stops before applying a delayed event after six minutes", () => {
     const { session, transport } = setup();
     vi.setSystemTime(Date.now() + TIMING.hard);
-    deliver(session, advance("too-late"));
+    deliver(session, delegation("too-late"));
     expect(session.snapshot.reason).toBe("time_limit");
     expect(session.snapshot.sceneIndex).toBe(0);
     expect(transport.close).toHaveBeenCalledOnce();
@@ -86,7 +100,7 @@ describe("application lifecycle", () => {
     const { session, transport } = setup();
     session.end("parent_stop");
     expect(transport.stopMedia).toHaveBeenCalledOnce();
-    deliver(session, advance("late"));
+    deliver(session, delegation("late"));
     deliver(session, speech("continue"));
     session.displayed(1);
     deliver(session, { type: "session.closed", reason: "close_requested", usage: { seconds: 2 } });
@@ -145,40 +159,154 @@ describe("application lifecycle", () => {
   });
 });
 
-describe("bounded scene control", () => {
-  it("acknowledges the actual display and deduplicates delegation IDs", () => {
-    const { session, transport } = setup();
+describe("answer-gated scene advancement", () => {
+  it("treats only a confident answer as a reason to advance", () => {
+    expect(shouldAdvance(evaluated(ADVANCE_THRESHOLD))).toBe(true);
+    expect(shouldAdvance(evaluated(ADVANCE_THRESHOLD - 0.001))).toBe(false);
+    expect(shouldAdvance({ status: "unavailable", reason: "request_failed", latencyMs: 3000 })).toBe(false);
+  });
+  it("waits for the utterance to settle, evaluates it once, then advances", async () => {
+    const { session, evaluateAnswer } = setup(true, answering(CONFIDENT));
+    deliver(session, speech("One!"));
+    await vi.advanceTimersByTimeAsync(SETTLE_MS - 1);
+    expect(evaluateAnswer).not.toHaveBeenCalled();
+    expect(session.snapshot.sceneIndex).toBe(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+    expect(evaluateAnswer).toHaveBeenCalledWith({ sceneIndex: 0, utterance: "One!" }, expect.anything());
+    expect(session.snapshot.sceneIndex).toBe(1);
+  });
+  it("evaluates the whole utterance rather than each fragment", async () => {
+    const { session, evaluateAnswer } = setup(true, answering(CONFIDENT));
+    deliver(session, speech("One, "));
+    await vi.advanceTimersByTimeAsync(SETTLE_MS - 500);
+    deliver(session, speech("two!", 600));
+    await settle();
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+    expect(evaluateAnswer).toHaveBeenCalledWith({ sceneIndex: 0, utterance: "One, two!" }, expect.anything());
+  });
+  it("does not re-evaluate an unchanged utterance but does judge a revision", async () => {
+    const { session, evaluateAnswer } = setup(true, answering(UNSURE));
+    deliver(session, speech("Two?"));
+    await settle();
+    await settle();
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+    deliver(session, speech(" No, wait. One!", 600));
+    await settle();
+    expect(evaluateAnswer).toHaveBeenLastCalledWith(
+      { sceneIndex: 0, utterance: "Two? No, wait. One!" },
+      expect.anything(),
+    );
+  });
+  it("leaves the scene alone when the answer is uncertain or the evaluation fails", async () => {
+    const { session, transport } = setup(true, answering(UNSURE));
     vi.mocked(transport.send).mockClear();
-    deliver(session, advance("a"));
+    deliver(session, speech("Five!"));
+    await settle();
+    expect(session.snapshot.sceneIndex).toBe(0);
+
+    const failing: EvaluateAnswer = async () => ({ status: "unavailable", reason: "request_failed", latencyMs: 3000 });
+    const offline = setup(true, failing);
+    deliver(offline.session, speech("One!"));
+    await settle();
+    expect(offline.session.snapshot.sceneIndex).toBe(0);
+    expect(offline.session.snapshot.status).toBe("active");
+    // Nothing is said on the app's behalf; GPT-Live keeps scaffolding.
+    expect(transport.send).not.toHaveBeenCalled();
+  });
+  it("discards an answer the child has already spoken over", async () => {
+    let answer!: (result: AnswerResult) => void;
+    const pending: EvaluateAnswer = () => new Promise<AnswerResult>(resolve => (answer = resolve));
+    const { session } = setup(true, pending);
+    deliver(session, speech("One!"));
+    await settle();
+    deliver(session, speech(" No, three!", 600));
+    answer(evaluated(0.99));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.snapshot.sceneIndex).toBe(0);
+    expect(session.events.at(-1)).toMatchObject({ type: "answer.evaluated", detail: { stale: true } });
+  });
+  it("discards an answer about a scene that has already been replaced", async () => {
+    const answers: ((result: AnswerResult) => void)[] = [];
+    const pending: EvaluateAnswer = () => new Promise<AnswerResult>(resolve => answers.push(resolve));
+    const { session } = setup(true, pending);
+    deliver(session, speech("One!"));
+    await settle();
+    deliver(session, speech("One duck!", 10_000));
+    await settle();
+    answers[1](evaluated(0.99));
+    await vi.advanceTimersByTimeAsync(0);
+    session.displayed(1);
+    expect(session.snapshot.sceneIndex).toBe(1);
+    answers[0](evaluated(0.99));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.snapshot.sceneIndex).toBe(1);
+  });
+  it("does not evaluate while a scene is waiting to be displayed", async () => {
+    const { session, evaluateAnswer } = setup(true, answering(CONFIDENT));
+    deliver(session, speech("One!"));
+    await settle();
+    expect(session.snapshot.sceneIndex).toBe(1);
+    deliver(session, speech("Two!", 10_000));
+    await settle();
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+  });
+  it("does not evaluate once the lesson is wrapping up or over", async () => {
+    const { session, evaluateAnswer } = setup(true, answering(CONFIDENT));
+    vi.advanceTimersByTime(TIMING.wrap);
+    deliver(session, speech("One!", 270_000));
+    await settle();
+    expect(evaluateAnswer).not.toHaveBeenCalled();
+    expect(session.snapshot.sceneIndex).toBe(0);
+  });
+  it("prefers a stop request over evaluating it as an answer", async () => {
+    const { session, evaluateAnswer } = setup(true, answering(CONFIDENT));
+    deliver(session, speech("I am all done."));
+    await settle();
+    expect(session.snapshot.reason).toBe("child_stop");
+    expect(evaluateAnswer).not.toHaveBeenCalled();
+  });
+  it("tells GPT-Live about the new scene only after the app has displayed it", async () => {
+    const { session, transport } = setup(true, answering(CONFIDENT));
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("One!"));
+    await settle();
     expect(session.snapshot.sceneIndex).toBe(1);
     expect(transport.send).not.toHaveBeenCalled();
     session.displayed(4);
     expect(transport.send).not.toHaveBeenCalled();
     session.displayed(1);
     expect(transport.send).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "session.thinking.append", delegation_id: "a" }),
+      expect.objectContaining({ type: "session.instructions.append", delegation_id: null }),
     );
-    deliver(session, advance("a"));
-    expect(session.snapshot.sceneIndex).toBe(1);
+    expect(vi.mocked(transport.send).mock.calls[0][0]).toMatchObject({ content: expect.stringContaining("2 ducks") });
   });
-  it("rejects another request while a display is pending", () => {
-    const { session } = setup();
-    deliver(session, advance("a"));
-    deliver(session, advance("b"));
-    expect(session.snapshot.sceneIndex).toBe(1);
-    expect(session.events.some(e => e.type === "action.rejected")).toBe(true);
-  });
-  it("cannot invent scenes, change quantity through arguments, or advance past five", () => {
-    const { session } = setup();
+  it("cannot advance past the last scene however confident the answers are", async () => {
+    const { session, evaluateAnswer } = setup(true, answering(1));
     for (let i = 0; i < 20; i++) {
-      deliver(session, { ...advance(`id-${i}`), arguments: { quantity: 100, jsx: "bad" } });
+      deliver(session, speech(`Answer ${i}`, i * 10_000));
+      await settle();
       session.displayed(session.snapshot.sceneIndex);
       expect(session.snapshot.sceneIndex).toBeLessThanOrEqual(LAST_SCENE);
     }
     expect(session.snapshot.sceneIndex).toBe(LAST_SCENE);
     expect(sceneAt(session.snapshot.sceneIndex).quantity).toBe(5);
+    // On the last scene there is nothing to decide, so nothing is asked.
+    expect(vi.mocked(evaluateAnswer).mock.calls).toHaveLength(LAST_SCENE);
+  });
+  it("refuses model delegation without changing the scene", () => {
+    const { session, transport } = setup();
+    vi.mocked(transport.send).mockClear();
+    deliver(session, delegation("a"));
+    deliver(session, delegation("a"));
+    expect(session.snapshot.sceneIndex).toBe(0);
+    expect(transport.send).toHaveBeenCalledOnce();
+    expect(transport.send).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "session.thinking.append", delegation_id: "a" }),
+    );
+    expect(session.events.some(e => e.type === "action.rejected")).toBe(true);
     deliver(session, { type: "session.delegation.created", delegation: { id: "wrong", target: "responses" } });
-    expect(session.snapshot.sceneIndex).toBe(LAST_SCENE);
+    expect(session.snapshot.sceneIndex).toBe(0);
   });
   it("keeps every scene within the 1-5 boundary and names objects correctly", () => {
     expect(SCENES.every(scene => Number.isInteger(scene.quantity) && scene.quantity >= 1 && scene.quantity <= 5)).toBe(
@@ -236,11 +364,11 @@ describe("transcripts and stop requests", () => {
     deliver(session, speech("stop", 5000));
     expect(session.snapshot.reason).toBe("child_stop");
   });
-  it("does not auto-grade, advance, or fill a thinking pause", () => {
+  it("does not advance or fill a thinking pause after an unconvincing answer", async () => {
     const { session, transport } = setup();
     const count = vi.mocked(transport.send).mock.calls.length;
     deliver(session, speech("um, I think"));
-    vi.advanceTimersByTime(25_000);
+    await vi.advanceTimersByTimeAsync(25_000);
     expect(session.snapshot.sceneIndex).toBe(0);
     expect(transport.send).toHaveBeenCalledTimes(count);
   });
@@ -249,13 +377,14 @@ describe("transcripts and stop requests", () => {
 describe("transcript window", () => {
   it("starts a new utterance after a silent gap and keeps one within it", () => {
     const window = new TranscriptWindow();
-    expect(window.append("one ", 0, 500)).toBe("one ");
-    expect(window.append("two", 1000, 1500)).toBe("one two");
-    expect(window.append("three", 1500 + UTTERANCE_GAP_MS + 1, 9000)).toBe("three");
+    expect(window.append("one ", 0, 500)).toEqual({ text: "one ", startMs: 0 });
+    expect(window.append("two", 1000, 1500)).toEqual({ text: "one two", startMs: 0 });
+    const fresh = 1500 + UTTERANCE_GAP_MS + 1;
+    expect(window.append("three", fresh, 9000)).toEqual({ text: "three", startMs: fresh });
   });
   it("keeps only the most recent characters", () => {
     const window = new TranscriptWindow();
-    const text = window.append("x".repeat(WINDOW_CHARS + 50) + "end", 0, 500);
+    const { text } = window.append("x".repeat(WINDOW_CHARS + 50) + "end", 0, 500);
     expect(text).toHaveLength(WINDOW_CHARS);
     expect(text.endsWith("end")).toBe(true);
   });
@@ -279,7 +408,7 @@ describe("provider event parsing", () => {
       eventId: undefined,
       code: "not_allowed",
     });
-    expect(parseProviderEvent({ ...advance("a"), arguments: { quantity: 100 } })).toEqual({
+    expect(parseProviderEvent({ ...delegation("a"), arguments: { quantity: 100 } })).toEqual({
       type: "delegation",
       eventId: undefined,
       id: "a",

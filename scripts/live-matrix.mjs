@@ -6,7 +6,7 @@
  * fake microphone. It is adult synthetic speech on a fixed timeline that cannot
  * react to Sprout, so it probes model control behavior, not preschool speech.
  *
- * Usage: start `npm run dev`, then `npm run test:live [scenario ...]`.
+ * Usage: start `npm run dev`, then `npm run test:live [scenario ...] [--repeat N]`.
  * BASE_URL defaults to http://127.0.0.1:3000.
  */
 import { chromium } from "@playwright/test";
@@ -75,6 +75,33 @@ const SCENARIOS = {
       [42, "One!"],
     ],
   },
+  // Scenarios below were added for the issue #3 Jev experiment.
+  correct_once: {
+    seconds: 45,
+    lines: [[11, "One!"]],
+  },
+  correct_phrasing_a: { seconds: 45, lines: [[11, "One duck."]] },
+  correct_phrasing_b: { seconds: 45, lines: [[11, "There's one!"]] },
+  correct_phrasing_c: { seconds: 45, lines: [[11, "Just one."]] },
+  correct_phrasing_d: { seconds: 45, lines: [[11, "I count one!"]] },
+  incorrect_count: {
+    seconds: 50,
+    lines: [[11, "Five!"]],
+  },
+  dont_know: {
+    seconds: 50,
+    lines: [[11, "Umm... I dont know."]],
+  },
+  /** The revision arrives inside the same utterance, so only "One" is judged. */
+  self_corrected_to_right: {
+    seconds: 50,
+    lines: [[11, "Two? No, wait. One!"]],
+  },
+  /** The reverse: a correct answer the child immediately takes back. */
+  self_corrected_to_wrong: {
+    seconds: 50,
+    lines: [[11, "One! No, three."]],
+  },
   explicit_stop: {
     seconds: 45,
     stop: "none",
@@ -142,12 +169,25 @@ function buildMicTrack(dir, { seconds, lines }) {
   return wav;
 }
 
-/** Records every data-channel event in both directions plus each displayed scene. */
+/** Records data-channel events, displayed scenes, and every answer evaluation. */
 function recordLiveTraffic() {
   const log = [];
   const t0 = performance.now();
   const at = () => Math.round(performance.now() - t0);
   window.__liveLog = log;
+  const nativeFetch = window.fetch.bind(window);
+  window.fetch = async (input, init) => {
+    const url = typeof input === "string" ? input : input.url;
+    if (!url.includes("/api/evaluate")) return nativeFetch(input, init);
+    const asked = at();
+    const response = await nativeFetch(input, init);
+    const answer = await response
+      .clone()
+      .json()
+      .catch(() => null);
+    log.push({ at: at(), dir: "evaluate", askedAt: asked, request: JSON.parse(init.body), answer });
+    return response;
+  };
   const Peer = window.RTCPeerConnection;
   window.RTCPeerConnection = class extends Peer {
     createDataChannel(...args) {
@@ -195,6 +235,10 @@ function timeline(name, scenario, log) {
     flush();
     const page = `  [page ${(e.at / 1000).toFixed(1)}s]`;
     if (e.dir === "scene") rows.push(`${page} SCENE -> ${e.scene}`);
+    else if (e.dir === "evaluate")
+      rows.push(
+        `${page} JEV "${e.request.utterance}" @scene ${e.request.sceneIndex} -> ${e.answer?.probability ?? "no answer"} in ${e.at - e.askedAt}ms`,
+      );
     else if (e.dir === "out")
       rows.push(`${page} APP -> ${e.type}${e.content ? `: ${String(e.content).slice(0, 90)}` : ""}`);
     else if (["session.delegation.created", "session.closed", "error"].includes(e.type))
@@ -204,8 +248,47 @@ function timeline(name, scenario, log) {
   return [`# ${name}`, `mic script: ${scenario.lines.map(([t, s]) => `${t}s "${s}"`).join(" | ")}`, ...rows].join("\n");
 }
 
-async function run(name, scenario) {
-  const dir = `${OUT}/${name}`;
+/**
+ * Per-run numbers for the issue #3 comparison: what Jev was asked, how long it
+ * took, and how closely the scene and Sprout's speech followed an advance.
+ */
+function metrics(log) {
+  const evaluations = log
+    .filter(e => e.dir === "evaluate")
+    .map(e => ({
+      utterance: e.request.utterance,
+      sceneIndex: e.request.sceneIndex,
+      probability: e.answer?.probability ?? null,
+      latencyMs: e.at - e.askedAt,
+      askedAt: e.askedAt,
+    }));
+  const scenes = log.filter(e => e.dir === "scene" && e.scene);
+  const childSpoke = log.filter(e => e.type === "session.input_transcript.delta");
+  const advances = scenes.slice(1).map(scene => {
+    // The evaluation that caused this scene is the last one before it.
+    const cause = evaluations.findLast(e => e.askedAt <= scene.at);
+    const spoke = cause ? childSpoke.findLast(e => e.at <= cause.askedAt) : undefined;
+    const told = log.find(e => e.dir === "out" && e.at >= scene.at && String(e.content ?? "").includes("just changed"));
+    return {
+      scene: scene.scene,
+      probability: cause?.probability ?? null,
+      // What the child actually waits: last word heard, through to new pixels.
+      speechToSceneMs: spoke ? scene.at - spoke.at : null,
+      // The evaluation alone, once the utterance was judged complete.
+      decisionToSceneMs: cause ? scene.at - cause.askedAt : null,
+      sceneToInstructionMs: told ? told.at - scene.at : null,
+    };
+  });
+  return {
+    evaluations,
+    advances,
+    scenesShown: scenes.map(scene => scene.scene),
+    delegationsRefused: log.filter(e => e.type === "session.delegation.created").length,
+  };
+}
+
+async function run(name, scenario, label = name) {
+  const dir = `${OUT}/${label}`;
   mkdirSync(dir, { recursive: true });
   const wav = buildMicTrack(dir, scenario);
   const browser = await chromium.launch({
@@ -227,8 +310,9 @@ async function run(name, scenario) {
     if (scenario.stop !== "none" && (await endButton.isVisible())) await endButton.click();
     await page.waitForTimeout(2000);
     const log = await page.evaluate(() => window.__liveLog);
-    const text = timeline(name, scenario, log);
-    writeFileSync(`${dir}/log.json`, JSON.stringify({ browser: browser.version(), scenario, log }, null, 2));
+    const summary = metrics(log);
+    const text = [timeline(label, scenario, log), `metrics: ${JSON.stringify(summary)}`].join("\n");
+    writeFileSync(`${dir}/log.json`, JSON.stringify({ browser: browser.version(), scenario, summary, log }, null, 2));
     writeFileSync(`${dir}/timeline.txt`, text);
     return text;
   } finally {
@@ -236,15 +320,23 @@ async function run(name, scenario) {
   }
 }
 
-const requested = process.argv.slice(2);
+const args = process.argv.slice(2);
+const repeatFlag = args.indexOf("--repeat");
+const repeat = repeatFlag === -1 ? 1 : Number(args[repeatFlag + 1]);
+const requested = repeatFlag === -1 ? args : args.slice(0, repeatFlag);
 const unknown = requested.filter(name => !(name in SCENARIOS));
-if (unknown.length) {
-  console.error(`Unknown scenario(s): ${unknown.join(", ")}. Available: ${Object.keys(SCENARIOS).join(", ")}`);
+if (unknown.length || !Number.isInteger(repeat) || repeat < 1) {
+  console.error(
+    `Usage: npm run test:live [scenario ...] [--repeat N]. Available: ${Object.keys(SCENARIOS).join(", ")}`,
+  );
   process.exit(1);
 }
 const names = requested.length ? requested : Object.keys(SCENARIOS);
-const results = await Promise.allSettled(names.map(name => run(name, SCENARIOS[name])));
+const runs = names.flatMap(name =>
+  Array.from({ length: repeat }, (_, i) => ({ name, label: repeat === 1 ? name : `${name}-${i + 1}` })),
+);
+const results = await Promise.allSettled(runs.map(({ name, label }) => run(name, SCENARIOS[name], label)));
 results.forEach((result, i) =>
-  console.log(result.status === "fulfilled" ? `${result.value}\n` : `# ${names[i]} FAILED: ${result.reason}\n`),
+  console.log(result.status === "fulfilled" ? `${result.value}\n` : `# ${runs[i].label} FAILED: ${result.reason}\n`),
 );
 if (results.some(result => result.status === "rejected")) process.exitCode = 1;

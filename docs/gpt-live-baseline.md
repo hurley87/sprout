@@ -87,6 +87,7 @@ This run reproduces three of the synthetic findings in a real interactive sessio
 ## Follow-up work
 
 - Explore how to address lesson-control problems 1–3 with application logic, a Jev controller, or both (prompt iteration alone proved unstable; see version 3).
+  - Problems 1 and 2 were taken up in [issue #3](https://github.com/hurley87/sprout/issues/3); see the [Jev answer experiment](jev-answer-experiment.md), which compares against the results recorded above. Problems 3, 4 and 5 are still open.
 
 Deferred validation, not required for this slice:
 

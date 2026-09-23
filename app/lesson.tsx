@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { fetchEvaluateAnswer } from "@/lib/answer";
 import { BrowserTransport } from "@/lib/browser-transport";
 import { OBJECTS, objectName, sceneAt } from "@/lib/lesson";
 import { LessonSession, type Snapshot } from "@/lib/session";
@@ -54,7 +55,7 @@ export default function Lesson() {
   function start() {
     if (!audio.current || (session.current && session.current.snapshot.status !== "ended")) return;
     session.current?.dispose();
-    const current = new LessonSession(new BrowserTransport(audio.current), setSnapshot);
+    const current = new LessonSession(new BrowserTransport(audio.current), fetchEvaluateAnswer, setSnapshot);
     session.current = current;
     void current.start();
   }
