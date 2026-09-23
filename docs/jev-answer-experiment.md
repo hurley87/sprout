@@ -14,7 +14,7 @@ Everything else stays where it was. GPT-Live still owns the conversation, person
 
 The original `counting-jev-1` experiment established whether to keep the narrow Jev responsibility: all 41 correct answers advanced, there were no false advances in the tested non-correct cases, consistency was strong, and the original decision-quality and latency criteria were met. It also exposed the mid-sentence synchronization seam. `counting-jev-2` introduced a pause/release prompt contract that improved synchronization but did not guarantee it in its manual run. The final app-level deferred-advance path handles an approved result that arrives while Sprout is substantively speaking.
 
-The final fresh interactive run reached all six scenes, showed both successful immediate and deferred advances, and recorded neutral recovery after evaluator timeouts. It is one manual session, and it did not include an explicit wrong answer or self-correction. It cannot establish a success rate or validate preschool speech. See [Final interactive run](#final-interactive-run) for observations and gaps.
+The final fresh interactive run reached all six scenes, showed both successful immediate and deferred advances, and recorded neutral recovery after evaluator timeouts. A later instrumented live run showed Jev completing every observed request in 222–405 ms, with the fixed 1.5 s settle wait accounting for most normal answer-to-decision time; it also observed the app correctly discarding a stale evaluation of an incomplete utterance. Both are individual sessions and cannot establish a success rate or validate preschool speech. See [Final interactive run](#final-interactive-run) and [Latest instrumented live run](#latest-instrumented-live-run).
 
 The pre-registered keep criteria belong specifically to `counting-jev-1`: correct-answer advancement of at least 90%, no false advancements, added median latency at most about 2.5 s, and no new scene/speech desync failures. That original experiment met those criteria.
 
@@ -151,7 +151,7 @@ Transcription varied between runs of the same script — "One!" came through as 
 | Decision to new scene on screen | 272 ms | 153 – 376 ms |
 | **Child's last word to new scene** | **1777 ms** | 1659 – 1882 ms |
 
-About 1.5 s of that 1.8 s is the application's own settle wait, not the model. In these original runs, the wait was usually filled by GPT-Live speaking early. The new runs below measure the actual pause and include slower Jev responses; the old latency figures must not be carried forward as the current listening experience.
+About 1.5 s of that 1.8 s is the application's own settle wait, not the model. In these original runs, the wait was usually filled by GPT-Live speaking early. The historical `counting-jev-2` runs below measured longer pauses and included slow Jev responses. A later instrumented live run and standalone benchmark both showed fast Jev requests; the earlier 2–4 second spikes and timeouts remain unexplained and appear intermittent, not representative of normal latency in those later samples.
 
 ### Original `counting-jev-1` scene and speech coordination
 
@@ -261,6 +261,42 @@ The difference of the two p50s is **−2 ms**. That is measurement noise, not ev
 **Classification: inconclusive for the reported 2–4 second spikes.** This run does not reproduce them on either path. It provides no evidence that Sprout's `/api/evaluate` path was the source during this sample. The historical interactive run above did observe slow Jev calls and natural timeouts, but it did not isolate direct provider latency from local routing at those moments. Neither result establishes the cause of intermittent slow requests. Repeat this benchmark when the symptom recurs and compare simultaneous direct and route records.
 
 The `?debug=1` development panel displays the current lesson's answer timeline, configured and actual settle time, browser Jev request time, final decision, deferred advance and in-memory history. This is instrumentation only; it makes no new lesson decision.
+
+### Latest instrumented live run
+
+The latest `?debug=1` attempt, `sprout-attempt-1790198970003.json` (created 2026-09-23 21:29:30 UTC), used `gpt-live-1` with `counting-jev-2`. Transcript timing is approximate, and the diagnostic cannot verify speaker identity or audio delivery. Jev completed every observed evaluation quickly in this run; the five correct answers below advanced:
+
+| Utterance | Probability | Jev latency | Total elapsed | Result |
+| --- | ---: | ---: | ---: | --- |
+| "One" | 0.98 | 328 ms | 1,829 ms | Advanced |
+| "Two" | 0.99 | 380 ms | 1,881 ms | Advanced |
+| "There's three" | 0.98 | 332 ms | 1,833 ms | Advanced |
+| "Three strawberries" | 0.99 | 359 ms | 1,860 ms | Advanced |
+| "There are four ducks" | 0.99 | 222 ms | 1,723 ms | Advanced |
+
+The other observed evaluation was "Yeah": probability 0.19, Jev latency 405 ms, and `STAY`, with no harmful behavioral effect. It was not a count, suggesting that the current implementation may make unnecessary requests for non-count child utterances. This is a follow-up observation, not a blocker for PR #9.
+
+For the five advancing answers, the configured settle delay was about 1,500 ms. The full answer-to-decision totals were 1,723–1,881 ms, leaving Jev calls of 222–380 ms; scene commits/displays followed approval essentially immediately. This supports the conclusion that Jev is normally fast enough for this interaction model in this run, and that the fixed settle wait is the dominant normal latency in the current sequential design. Together with the standalone benchmark, there is no current evidence that Jev is normally multi-second, that `/api/evaluate` adds material normal latency, or that rendering is a meaningful normal delay. The earlier live run's 2–4 second requests and timeouts remain unexplained/intermittent; these samples are evidence, not a universal latency guarantee.
+
+#### Incomplete utterance and stale-result protection
+
+On the 4-duck scene, the learner's transcript arrived slowly. The 1.5-second settle timer fired on the incomplete utterance "There are". Jev evaluated that text at probability 0.07 in 370 ms. Before the result could be acted on, the learner continued with "four", making that evaluation stale. The app marked and discarded it as `STALE`; this was not a Jev error, since Jev evaluated the text it received and the orchestration had fired too early. The completed utterance "There are four ducks" was then evaluated at probability 0.99 in 222 ms and advanced correctly.
+
+This is live evidence that stale-result protection works and, separately, that a fixed 1.5-second silence timer is not a reliable end-of-turn signal for slow or child-like speech.
+
+#### Follow-up experiment
+
+In a separate issue/PR, replace the fixed 1,500 ms transcript settle timer with the best available end-of-turn / end-of-speech signal, then invoke Jev immediately after turn completion. Measure at minimum:
+
+- Final learner word → Jev request.
+- Jev latency.
+- Final learner word → decision.
+- Final learner word → scene display.
+- Stale/discarded evaluations.
+- False advances.
+- Subjective conversational smoothness.
+
+The experiment must preserve self-correction handling, stale-result protection, deterministic app-owned scene transitions, no correctness praise before approval, and no mid-speech scene changes. Speculative/predictive Jev evaluation is deferred; first test proper end-of-turn-triggered evaluation.
 
 ## Reproducing
 
