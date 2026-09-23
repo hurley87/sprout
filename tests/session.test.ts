@@ -10,6 +10,7 @@ import {
   SCENES,
   TIMING,
   advanceContext,
+  evaluationUnavailableContext,
   objectName,
   sceneAt,
   sceneContext,
@@ -394,16 +395,28 @@ describe("answer-check turn synchronization", () => {
       detail: { advancing: false, releasing: true },
     });
   });
-  it.each(["request_failed", "http_502", "unreadable_answer"])(
+  it.each(["timeout", "request_failed", "http_502", "unreadable_answer"])(
     "releases GPT-Live when the evaluation is unavailable (%s) rather than leaving it waiting",
     async reason => {
-      const failing: EvaluateAnswer = async () => ({ status: "unavailable", reason, latencyMs: 3000 });
+      const latencyMs = reason === "timeout" ? 4000 : 3000;
+      const failing: EvaluateAnswer = async () => ({ status: "unavailable", reason, latencyMs });
       const { session, transport } = setup(true, failing);
       vi.mocked(transport.send).mockClear();
       deliver(session, speech("One!"));
       await settle();
       expect(session.snapshot).toMatchObject({ sceneIndex: 0, status: "active" });
+      expect(sent(transport)).toEqual([
+        expect.objectContaining({
+          type: "session.instructions.append",
+          content: evaluationUnavailableContext(sceneAt(0)),
+        }),
+      ]);
       expect(released(transport)).toHaveLength(1);
+      expect(released(transport)[0]).toMatchObject({ content: expect.stringContaining("could not verify") });
+      expect(released(transport)[0]).not.toMatchObject({ content: stayContext(sceneAt(0)) });
+      expect(session.events.findLast(e => e.type === "answer.evaluated")).toMatchObject({
+        detail: { unavailable: reason, latency_ms: latencyMs, stale: false, advancing: false, releasing: true },
+      });
     },
   );
   it("releases each held count once, including a revision", async () => {
@@ -447,7 +460,7 @@ describe("answer-check turn synchronization", () => {
     deliver(session, speech("Five!"));
     await settle();
     deliver(session, speech(" No, three!", 600));
-    answers[0](evaluated(0.02));
+    answers[0]({ status: "unavailable", reason: "timeout", latencyMs: 4000 });
     await vi.advanceTimersByTimeAsync(0);
     expect(transport.send).not.toHaveBeenCalled();
     await settle();
@@ -463,7 +476,7 @@ describe("answer-check turn synchronization", () => {
     deliver(session, speech("Five!", 260_000));
     await settle();
     vi.advanceTimersByTime(TIMING.wrap);
-    answer(evaluated(0.02));
+    answer({ status: "unavailable", reason: "timeout", latencyMs: 4000 });
     await vi.advanceTimersByTimeAsync(0);
     expect(released(transport)).toHaveLength(0);
 
@@ -473,6 +486,24 @@ describe("answer-check turn synchronization", () => {
     await settle();
     expect(stopped.session.snapshot.reason).toBe("child_stop");
     expect(released(stopped.transport)).toHaveLength(0);
+  });
+  it("ignores an unavailable evaluation that arrives after the child stops", async () => {
+    let answer!: (result: AnswerResult) => void;
+    const pending: EvaluateAnswer = () => new Promise<AnswerResult>(resolve => (answer = resolve));
+    const { session, transport } = setup(true, pending);
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("One!"));
+    await settle();
+    deliver(session, speech("I want to stop", 10_000));
+    const sentBeforeResult = vi.mocked(transport.send).mock.calls.length;
+    answer({ status: "unavailable", reason: "timeout", latencyMs: 4000 });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.snapshot).toMatchObject({ status: "ended", reason: "child_stop", sceneIndex: 0 });
+    expect(transport.send).toHaveBeenCalledTimes(sentBeforeResult);
+    expect(released(transport)).toHaveLength(0);
+    expect(session.events.findLast(e => e.type === "answer.evaluated")).toMatchObject({
+      detail: { unavailable: "timeout", stale: true, advancing: false, releasing: false },
+    });
   });
   it("tells GPT-Live when no more checks are coming, so it never waits forever", () => {
     expect(sceneContext(sceneAt(LAST_SCENE))).toContain("the screen will not change again");

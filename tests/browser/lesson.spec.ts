@@ -169,12 +169,15 @@ test("an unconvincing count keeps the scene and releases GPT-Live on it", async 
   expect(await commands(page)).toHaveLength(before + 1);
 });
 
-test("an evaluation that times out still releases GPT-Live", async ({ page }) => {
+test("a timed-out evaluation keeps the scene and releases GPT-Live neutrally", async ({ page }) => {
   await mockLive(page);
   await page.route("**/api/evaluate", () => {});
   await begin(page);
   await say(page, "One!");
   await expect.poll(() => releases(page), { timeout: 8000 }).toHaveLength(1);
+  expect((await releases(page))[0]).toContain("could not verify");
+  expect((await releases(page))[0]).toContain("count this group again");
+  expect((await releases(page))[0]).not.toContain("Respond to the child's answer");
   await expect(page.locator('[data-scene="hello-duck"]')).toBeVisible();
 });
 

@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { POST } from "../app/api/evaluate/route";
-import { ANSWER_QUESTION, ANSWER_QUESTION_ID, MAX_UTTERANCE_CHARS, fetchEvaluateAnswer } from "../lib/answer";
+import {
+  ANSWER_QUESTION,
+  ANSWER_QUESTION_ID,
+  EVALUATION_TIMEOUT_MS,
+  MAX_UTTERANCE_CHARS,
+  fetchEvaluateAnswer,
+} from "../lib/answer";
 import { JEV_MODEL, answerState } from "../lib/jev";
 import { SCENES, sceneAt } from "../lib/lesson";
 
@@ -15,6 +21,8 @@ const answered = (noul: unknown, model = "jev-1.13.0") =>
 const ask = { sceneIndex: 0, utterance: "One!" };
 
 afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
 });
@@ -109,6 +117,27 @@ describe("local answer evaluation endpoint", () => {
 
 describe("browser side of the evaluation seam", () => {
   const signal = () => new AbortController().signal;
+  const timedFetch = (duration: number) => {
+    vi.useFakeTimers();
+    vi.spyOn(AbortSignal, "timeout").mockImplementation(ms => {
+      const timeout = new AbortController();
+      setTimeout(() => timeout.abort(), ms);
+      return timeout.signal;
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_url: string, init: RequestInit) =>
+          new Promise<Response>((resolve, reject) => {
+            const timer = setTimeout(() => resolve(Response.json({ probability: 0.91, model: "jev-test" })), duration);
+            init.signal?.addEventListener("abort", () => {
+              clearTimeout(timer);
+              reject(new Error("aborted"));
+            });
+          }),
+      ),
+    );
+  };
   it("reports a usable probability with its latency", async () => {
     vi.stubGlobal(
       "fetch",
@@ -118,9 +147,26 @@ describe("browser side of the evaluation seam", () => {
     expect(result).toMatchObject({ status: "evaluated", probability: 0.91, model: "jev-1.13.0" });
     expect(result.latencyMs).toBeGreaterThanOrEqual(0);
   });
+  it("accepts an answer just before the four-second deadline", async () => {
+    timedFetch(EVALUATION_TIMEOUT_MS - 1);
+    const pending = fetchEvaluateAnswer(ask, signal());
+    await vi.advanceTimersByTimeAsync(EVALUATION_TIMEOUT_MS - 1);
+    expect(await pending).toMatchObject({
+      status: "evaluated",
+      probability: 0.91,
+      latencyMs: EVALUATION_TIMEOUT_MS - 1,
+    });
+  });
+  it("reports a check that exceeds the deadline as a timeout with latency", async () => {
+    timedFetch(EVALUATION_TIMEOUT_MS + 1);
+    const pending = fetchEvaluateAnswer(ask, signal());
+    await vi.advanceTimersByTimeAsync(EVALUATION_TIMEOUT_MS);
+    expect(await pending).toMatchObject({ status: "unavailable", reason: "timeout", latencyMs: EVALUATION_TIMEOUT_MS });
+  });
   it.each([
     ["an error status", vi.fn(async () => Response.json({ error: "no" }, { status: 502 })), "http_502"],
     ["an unreadable body", vi.fn(async () => Response.json({ probability: "high" })), "unreadable_answer"],
+    ["invalid JSON", vi.fn(async () => new Response("not JSON")), "unreadable_answer"],
     ["a failed request", vi.fn().mockRejectedValue(new Error("offline")), "request_failed"],
   ])("treats %s as no answer rather than a wrong one", async (_name, fetch, reason) => {
     vi.stubGlobal("fetch", fetch);

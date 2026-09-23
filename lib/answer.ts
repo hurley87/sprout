@@ -33,7 +33,7 @@ export const ADVANCE_THRESHOLD = 0.9;
 export const SETTLE_MS = 1500;
 
 /** An evaluation that outlives its usefulness must never reach the lesson. */
-export const EVALUATION_TIMEOUT_MS = 3000;
+export const EVALUATION_TIMEOUT_MS = 4000;
 
 export type AnswerResult =
   | { status: "evaluated"; probability: number; model: string; latencyMs: number }
@@ -65,18 +65,31 @@ function parseProbability(body: unknown): { probability: number; model: string }
 export const fetchEvaluateAnswer: EvaluateAnswer = async (request, signal) => {
   const startedAt = Date.now();
   const elapsed = () => Date.now() - startedAt;
+  const timeout = AbortSignal.timeout(EVALUATION_TIMEOUT_MS);
+  const unavailable = (reason: string): AnswerResult => ({ status: "unavailable", reason, latencyMs: elapsed() });
+  const interrupted = () => (signal.aborted ? "cancelled" : timeout.aborted ? "timeout" : null);
   try {
     const response = await fetch("/api/evaluate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request),
-      signal: AbortSignal.any([signal, AbortSignal.timeout(EVALUATION_TIMEOUT_MS)]),
+      signal: AbortSignal.any([signal, timeout]),
     });
-    if (!response.ok) return { status: "unavailable", reason: `http_${response.status}`, latencyMs: elapsed() };
-    const answer = parseProbability(await response.json().catch(() => null));
-    if (!answer) return { status: "unavailable", reason: "unreadable_answer", latencyMs: elapsed() };
+    const fetchInterruption = interrupted();
+    if (fetchInterruption) return unavailable(fetchInterruption);
+    if (!response.ok) return unavailable(`http_${response.status}`);
+    let body: unknown;
+    try {
+      body = await response.json();
+    } catch {
+      return unavailable(interrupted() ?? "unreadable_answer");
+    }
+    const readInterruption = interrupted();
+    if (readInterruption) return unavailable(readInterruption);
+    const answer = parseProbability(body);
+    if (!answer) return unavailable("unreadable_answer");
     return { status: "evaluated", ...answer, latencyMs: elapsed() };
   } catch {
-    return { status: "unavailable", reason: signal.aborted ? "cancelled" : "request_failed", latencyMs: elapsed() };
+    return unavailable(interrupted() ?? "request_failed");
   }
 };

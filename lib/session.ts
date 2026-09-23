@@ -7,6 +7,7 @@ import {
   PROMPT_VERSION,
   TIMING,
   advanceContext,
+  evaluationUnavailableContext,
   sceneAt,
   sceneContext,
   stayContext,
@@ -275,10 +276,13 @@ export class LessonSession {
       advancing,
       releasing,
     });
-    // Anything short of a confident yes leaves the scene alone and hands the
-    // conversation back to GPT-Live.
+    // An unavailable check leaves the scene alone without judging the child.
     if (advancing) this.advance();
-    else if (releasing) this.append("session.instructions.append", stayContext(this.scene));
+    else if (releasing)
+      this.append(
+        "session.instructions.append",
+        result.status === "unavailable" ? evaluationUnavailableContext(this.scene) : stayContext(this.scene),
+      );
   }
 
   /**

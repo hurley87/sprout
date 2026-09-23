@@ -49,6 +49,11 @@ export function stayContext(scene: Scene) {
   return `The screen has not changed: it still shows ${scene.quantity} ${objectName(scene)}. Continue naturally with this group. Respond to the child's answer, and help, clarify, count together, or invite another count if useful.`;
 }
 
+/** Releases a held count when the app could not check the answer. */
+export function evaluationUnavailableContext(scene: Scene) {
+  return `The screen has not changed because the answer check did not complete. The app could not verify the child's count. Do not tell the child they were wrong or right. Stay with the ${scene.quantity} ${objectName(scene)} currently on screen and gently invite them to count this group again.`;
+}
+
 /**
  * The most Sprout may say while it waits for the app after a count. Anything
  * longer means it already took its turn, and a release would talk over it.
