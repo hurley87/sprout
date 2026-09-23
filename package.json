@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:browser": "playwright test",
     "test:jev": "node scripts/jev-calibration.mjs",
+    "benchmark:jev": "node scripts/jev-latency.mjs",
     "test:live": "node scripts/live-matrix.mjs",
     "typecheck": "next typegen && tsc --noEmit"
   },

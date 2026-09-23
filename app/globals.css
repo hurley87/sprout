@@ -215,6 +215,90 @@ footer {
   border-radius: 8px;
   padding: 8px 12px;
 }
+.jev-diagnostics {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 5;
+  width: min(440px, calc(100vw - 24px));
+  max-height: min(78svh, 760px);
+  overflow: auto;
+  padding: 16px;
+  border: 1px solid #879d80;
+  border-radius: 12px;
+  background: #fffef6f5;
+  box-shadow: 0 8px 30px #29493630;
+  font:
+    12px/1.4 Arial,
+    sans-serif;
+  color: #213e2a;
+}
+.jev-diagnostics h2 {
+  margin: 0 0 10px;
+  font-size: 17px;
+}
+.jev-diagnostics h3 {
+  margin: 15px 0 8px;
+  font-size: 13px;
+}
+.jev-facts {
+  display: grid;
+  grid-template-columns: 125px 1fr;
+  gap: 3px 8px;
+  margin: 0;
+}
+.jev-facts dt {
+  color: #63745f;
+}
+.jev-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.jev-timeline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  list-style: none;
+  padding: 0;
+  margin: 12px 0;
+}
+.jev-timeline li {
+  padding: 3px 5px;
+  border-radius: 4px;
+  background: #e8e8e2;
+  color: #777;
+}
+.jev-timeline li.reached {
+  background: #deebd0;
+  color: #294936;
+}
+.jev-diagnostics details {
+  border-top: 1px solid #d8ddcb;
+  padding-top: 8px;
+}
+.jev-diagnostics summary {
+  cursor: pointer;
+}
+.jev-diagnostics pre {
+  overflow: auto;
+  font-size: 11px;
+  background: #f3f4ee;
+  padding: 8px;
+}
+.jev-history-scroll {
+  overflow-x: auto;
+}
+.jev-diagnostics table {
+  width: 100%;
+  border-collapse: collapse;
+  white-space: nowrap;
+  text-align: left;
+}
+.jev-diagnostics th,
+.jev-diagnostics td {
+  padding: 5px;
+  border-bottom: 1px solid #e3e7db;
+}
 @media (max-width: 600px) {
   .sprout {
     padding: 20px;

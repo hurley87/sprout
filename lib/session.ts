@@ -52,7 +52,7 @@ export interface Transport {
 }
 
 /** What the app is waiting to see on screen before it speaks about it. */
-type PendingDisplay = { kind: "greeting" | "advance"; sceneIndex: number };
+type PendingDisplay = { kind: "greeting" | "advance"; sceneIndex: number; answerVersion?: string };
 type DeferredAdvance = { sceneIndex: number; answerVersion: string; approvedAt: number; spokenChars: number };
 
 export class LessonSession {
@@ -74,6 +74,7 @@ export class LessonSession {
   // The last thing the child was heard saying, and the utterance versions
   // already sent for evaluation, so one response is never judged twice.
   private latest: Utterance | null = null;
+  private lastDeltaAt = 0;
   private evaluated = new Set<string>();
   private evaluation?: AbortController;
   // What Sprout has said since the child last spoke, to tell a held turn from
@@ -87,6 +88,7 @@ export class LessonSession {
     private transport: Transport,
     private evaluateAnswer: EvaluateAnswer,
     private changed: (snapshot: Snapshot) => void,
+    private diagnosticChanged?: () => void,
   ) {}
 
   private get scene() {
@@ -97,6 +99,8 @@ export class LessonSession {
     // Bounded, in-memory prototype diagnostics; no raw audio or SDP.
     if (this.events.length >= 8000) this.events.shift();
     this.events.push({ at: Date.now() - this.createdAt, type, detail });
+    if (type.startsWith("answer.") || type.startsWith("advance.") || type === "scene.displayed")
+      this.diagnosticChanged?.();
   }
 
   async start() {
@@ -225,6 +229,7 @@ export class LessonSession {
     this.sproutReply = fromChild ? "" : this.sproutReply + event.delta;
     if (fromChild) {
       this.latest = utterance;
+      this.lastDeltaAt = Date.now();
       if (requestsStop(utterance.text)) this.end("child_stop");
       else if (!this.deferredAdvance) this.settle(utterance);
     } else if (this.snapshot.status !== "goodbye" && saidGoodbye(utterance.text)) {
@@ -240,6 +245,12 @@ export class LessonSession {
   // once it has stopped growing. Every new fragment restarts the wait.
   private settle(utterance: Utterance) {
     clearTimeout(this.settleTimer);
+    this.log("answer.settling", {
+      sceneIndex: this.snapshot.sceneIndex,
+      utterance: utterance.text,
+      version: `${utterance.startMs}:${utterance.text.trim()}`,
+      configured_settle_ms: SETTLE_MS,
+    });
     this.settleTimer = setTimeout(() => this.evaluate(utterance), SETTLE_MS);
   }
 
@@ -262,15 +273,29 @@ export class LessonSession {
     if (this.evaluated.has(version)) return;
     this.evaluated.add(version);
     const sceneIndex = this.snapshot.sceneIndex;
+    const finalDeltaAt = this.lastDeltaAt;
+    const actualSettleMs = Date.now() - finalDeltaAt;
+    this.log("answer.requesting", {
+      version,
+      actual_settle_ms: actualSettleMs,
+      configured_settle_ms: SETTLE_MS,
+    });
     this.evaluation?.abort();
     const evaluation = new AbortController();
     this.evaluation = evaluation;
     void this.evaluateAnswer({ sceneIndex, utterance: text }, evaluation.signal).then(result =>
-      this.decide(utterance, sceneIndex, result),
+      this.decide(utterance, sceneIndex, version, finalDeltaAt, actualSettleMs, result),
     );
   }
 
-  private decide(utterance: Utterance, sceneIndex: number, result: AnswerResult) {
+  private decide(
+    utterance: Utterance,
+    sceneIndex: number,
+    version: string,
+    finalDeltaAt: number,
+    actualSettleMs: number,
+    result: AnswerResult,
+  ) {
     // The question was about a moment that may have passed: the child may have
     // said more, or the lesson may have moved on while the answer was in flight.
     const stale =
@@ -284,18 +309,22 @@ export class LessonSession {
     const releasing = !stale && !advancing && this.holding(utterance);
     this.log("answer.evaluated", {
       scene: sceneAt(sceneIndex).id,
+      sceneIndex,
+      version,
       utterance: utterance.text,
       ...(result.status === "evaluated"
         ? { probability: result.probability, model: result.model }
         : { unavailable: result.reason }),
       latency_ms: result.latencyMs,
+      total_ms: Date.now() - finalDeltaAt,
+      decision: stale ? "STALE" : result.status === "unavailable" ? "UNAVAILABLE" : advancing ? "ADVANCE" : "STAY",
       stale,
       advancing,
       releasing,
     });
     // An unavailable check leaves the scene alone without judging the child.
     if (advancing) {
-      if (this.sproutIsHoldingForDecision()) this.advance();
+      if (this.sproutIsHoldingForDecision()) this.advance(version);
       else this.deferAdvance(sceneIndex, `${utterance.startMs}:${utterance.text.trim()}`);
     } else if (releasing)
       this.append(
@@ -324,6 +353,7 @@ export class LessonSession {
     if (this.deferredAdvance) return;
     this.deferredAdvance = { sceneIndex, answerVersion, approvedAt: Date.now(), spokenChars: this.sproutReply.length };
     this.log("advance.deferred", {
+      answer_version: answerVersion,
       scene: sceneAt(sceneIndex).id,
       reason: "sprout_substantive_reply",
       spoken_chars: this.sproutReply.length,
@@ -359,18 +389,24 @@ export class LessonSession {
       delay_ms: Date.now() - deferred.approvedAt,
       reason: "output_transcript_quiet",
     });
-    this.advance();
+    this.advance(deferred.answerVersion);
   }
 
   private cancelDeferredAdvance() {
     clearTimeout(this.deferredTimer);
+    if (this.deferredAdvance)
+      this.log("advance.cancelled", {
+        answer_version: this.deferredAdvance.answerVersion,
+        delay_ms: Date.now() - this.deferredAdvance.approvedAt,
+      });
     this.deferredAdvance = null;
   }
 
   /** The application, not the model, commits the next deterministic scene. */
-  private advance() {
+  private advance(answerVersion: string) {
+    this.log("advance.committed", { answer_version: answerVersion });
     const sceneIndex = this.snapshot.sceneIndex + 1;
-    this.pending = { kind: "advance", sceneIndex };
+    this.pending = { kind: "advance", sceneIndex, answerVersion };
     this.update({ sceneIndex });
   }
 
@@ -392,6 +428,7 @@ export class LessonSession {
     if (!pending || pending.sceneIndex !== sceneIndex) return;
     this.pending = null;
     this.log("scene.displayed", this.scene);
+    if (pending.answerVersion) this.log("advance.displayed", { answer_version: pending.answerVersion });
     switch (pending.kind) {
       case "greeting":
         this.append(

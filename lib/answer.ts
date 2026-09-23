@@ -3,6 +3,21 @@
 // Everything behind this seam is replaceable; nothing else in the lesson
 // depends on which model answers the question. See
 // docs/jev-answer-experiment.md for the experiment this supports.
+import { objectName, type Scene } from "./lesson";
+
+export const JEV_MODEL = "jev-1.13.0";
+
+/** Only the displayed scene and the recent utterance are sent to Jev. */
+export function answerState(scene: Scene, utterance: string) {
+  return {
+    displayed: {
+      object: objectName(scene),
+      quantity: scene.quantity,
+      description: `${scene.quantity} ${objectName(scene)}`,
+    },
+    learnerUtterance: utterance,
+  };
+}
 
 /** Question id on the wire; also the key the evaluation answer arrives under. */
 export const ANSWER_QUESTION_ID = "countedDisplayed";

@@ -245,6 +245,23 @@ Recorded so they are not lost, not proposed:
 
 None of these should be added without their own experiment. `choice` and `score` remain unused: the Noul separation was wide enough that nothing here demanded them.
 
+## New latency benchmark (2026-09-23; separate from the answer experiment)
+
+`npm run benchmark:jev` made five warm-up calls on each path, then 50 measured calls on each path. It tested five representative scene/utterance pairs, ten measured repetitions per pair, sequentially and in alternating direct/local-route pairs. The direct path sent the same pinned `jev-1.13.0` Noul question and scene state to `https://api.typesafe.ai/v1/systemone`; the local path sent the same scene/utterance to `/api/evaluate`. Each request had a 4,000 ms timeout. Latency spans the outbound request and reading/parsing its response. Successful-request latency statistics exclude failures and timeouts, which are counted separately. The 1,500 ms transcript settle wait is **excluded** from both paths and is application latency. The script saves safe per-request status, probability, latency and outcome records in the ignored `test-results/jev-latency/results.json`; it never saves credentials or raw provider responses.
+
+This run used the local development server, loaded the existing local app environment, and captured results on 2026-09-23. It is a point-in-time measurement of text evaluation, without GPT-Live, browser audio, or the transcript settle timer.
+
+| Path | Success | Failure | Timeout | Min | Mean | p50 | p90 | p95 | Max |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Direct TypeSafe/Jev | 50/50 | 0 | 0 | 140 ms | 237 ms | 216 ms | 307 ms | 393 ms | 459 ms |
+| Sprout `/api/evaluate` | 50/50 | 0 | 0 | 150 ms | 227 ms | 214 ms | 289 ms | 309 ms | 380 ms |
+
+The difference of the two p50s is **−2 ms**. That is measurement noise, not evidence of a negative server cost; the local route added no measurable latency at this resolution. Across the five scenarios, direct p50 was 173–219 ms and route p50 was 183–225 ms. No request in this sample took 2 seconds or timed out. Adding the configured 1,500 ms settle window to the observed p50 route request yields roughly 1,714 ms before a decision, assuming the timer fires on schedule; the live panel now measures actual settle and full elapsed time separately.
+
+**Classification: inconclusive for the reported 2–4 second spikes.** This run does not reproduce them on either path. It provides no evidence that Sprout's `/api/evaluate` path was the source during this sample. The historical interactive run above did observe slow Jev calls and natural timeouts, but it did not isolate direct provider latency from local routing at those moments. Neither result establishes the cause of intermittent slow requests. Repeat this benchmark when the symptom recurs and compare simultaneous direct and route records.
+
+The `?debug=1` development panel displays the current lesson's answer timeline, configured and actual settle time, browser Jev request time, final decision, deferred advance and in-memory history. This is instrumentation only; it makes no new lesson decision.
+
 ## Reproducing
 
 ```bash

@@ -1,5 +1,5 @@
-import { ANSWER_QUESTION, ANSWER_QUESTION_ID } from "./answer";
-import { objectName, type Scene } from "./lesson";
+import { ANSWER_QUESTION, ANSWER_QUESTION_ID, JEV_MODEL, answerState } from "./answer";
+import type { Scene } from "./lesson";
 
 // Server-only. Asks TypeSafe's Jev the single Noul question defined in
 // lib/answer.ts. The credential and every provider response body stay here.
@@ -9,23 +9,13 @@ const ENDPOINT = "https://api.typesafe.ai/v1/systemone";
  * Pinned rather than `jev-latest`, so the tuned threshold cannot shift when a
  * new release ships. `jev-latest` resolved to this version on 2026-09-23.
  */
-export const JEV_MODEL = "jev-1.13.0";
+export { JEV_MODEL } from "./answer";
 
 export type JevOutcome =
   | { ok: true; probability: number; model: string }
   | { ok: false; reason: "unconfigured" | "rejected" | "unreadable" | "unreachable" };
 
-/** Only what the decision needs: the displayed scene and the recent utterance. */
-export function answerState(scene: Scene, utterance: string) {
-  return {
-    displayed: {
-      object: objectName(scene),
-      quantity: scene.quantity,
-      description: `${scene.quantity} ${objectName(scene)}`,
-    },
-    learnerUtterance: utterance,
-  };
-}
+export { answerState } from "./answer";
 
 function readNoul(body: unknown): number | null {
   if (typeof body !== "object" || body === null) return null;
