@@ -2,7 +2,7 @@
 
 import {
   ADVANCE_THRESHOLD,
-  CORRECTION_WINDOW_MS,
+  ANSWER_SETTLE_MS,
   MICROPHONE_ONSET_MS,
   MICROPHONE_ONSET_QUIET_MS,
   MICROPHONE_QUIET_MS,
@@ -95,6 +95,16 @@ export function JevDiagnostics({ events }: { events: readonly Diagnostic[] }) {
             <dd>{ms(active.turnEndToRequestMs)}</dd>
             <dt>Jev duration</dt>
             <dd>{ms(active.jevMs)}</dd>
+            <dt>Decision time</dt>
+            <dd>{ms(active.decisionAt)}</dd>
+            <dt>Settle remaining when Jev decided</dt>
+            <dd>{ms(active.remainingSettleMsAtDecision)}</dd>
+            <dt>Answer settle interval</dt>
+            <dd>{ms(active.answerSettleMs ?? ANSWER_SETTLE_MS)}</dd>
+            <dt>Settle deadline</dt>
+            <dd>{ms(active.settleReadyAt)}</dd>
+            <dt>Decision releasable</dt>
+            <dd>{ms(active.decisionReleasableAt)}</dd>
             <dt>{active.signal === "microphone_vad" ? "VAD detection → decision" : "Fallback end → decision"}</dt>
             <dd>{ms(active.turnEndToDecisionMs)}</dd>
             <dt>Estimated acoustic end → decision</dt>
@@ -136,8 +146,8 @@ export function JevDiagnostics({ events }: { events: readonly Diagnostic[] }) {
         <p>
           Waiting for a learner count. Microphone onset: {ms(MICROPHONE_ONSET_MS)}; provisional burst quiet:{" "}
           {ms(MICROPHONE_ONSET_QUIET_MS)}; speech stop quiet: {ms(MICROPHONE_QUIET_MS)}; transcript tail:{" "}
-          {ms(TRANSCRIPT_TAIL_MS)}; fallback/grace: {ms(TRANSCRIPT_FALLBACK_MS)}; correction window:{" "}
-          {ms(CORRECTION_WINDOW_MS)}.
+          {ms(TRANSCRIPT_TAIL_MS)}; fallback/grace: {ms(TRANSCRIPT_FALLBACK_MS)}; answer settle interval:{" "}
+          {ms(ANSWER_SETTLE_MS)}. This is a learner-side timing safeguard, not a guaranteed acoustic boundary.
         </p>
       )}
       <h3>Answer feedback ordering</h3>
@@ -156,7 +166,7 @@ export function JevDiagnostics({ events }: { events: readonly Diagnostic[] }) {
             ? `${String(eventDetail(lastViolation).transcript)} at ${ms(lastViolation.at)}; playback is not verified`
             : "None recorded"}
         </dd>
-        <dt>Current Jev decision releasable</dt>
+        <dt>Latest decision became releasable</dt>
         <dd>
           {lastDecisionRelease
             ? `${String(eventDetail(lastDecisionRelease).decision)} at ${ms(lastDecisionRelease.at)}`

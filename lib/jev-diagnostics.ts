@@ -23,6 +23,11 @@ export type EvaluationTrace = {
   vadDetectionMs?: number;
   turnEndToRequestMs?: number;
   jevMs?: number;
+  answerSettleMs?: number;
+  settleReadyAt?: number;
+  decisionAt?: number;
+  remainingSettleMsAtDecision?: number;
+  decisionReleasableAt?: number;
   acousticToDecisionMs?: number;
   turnEndToDecisionMs?: number;
   turnEndToCommitMs?: number;
@@ -46,7 +51,12 @@ export function evaluationHistory(events: readonly Diagnostic[]): EvaluationTrac
   for (const event of events) {
     const detail = detailOf(event);
     if (!detail) continue;
-    const version = event.type.startsWith("answer.") ? detail.version : detail.answer_version;
+    const version =
+      event.type === "answer.decision_releasable"
+        ? detail.answer_version
+        : event.type.startsWith("answer.")
+          ? detail.version
+          : detail.answer_version;
     if (typeof version !== "string") continue;
     if (event.type === "answer.candidate") {
       if (typeof detail.sceneIndex !== "number" || typeof detail.utterance !== "string") continue;
@@ -90,6 +100,10 @@ export function evaluationHistory(events: readonly Diagnostic[]): EvaluationTrac
         break;
       case "answer.evaluated":
         trace.jevMs = detail.latency_ms as number;
+        trace.answerSettleMs = detail.answer_settle_ms as number;
+        trace.settleReadyAt = detail.settle_ready_at as number;
+        trace.decisionAt = detail.decision_at as number;
+        trace.remainingSettleMsAtDecision = detail.remaining_settle_ms_at_decision as number;
         trace.turnEndToDecisionMs = detail.turn_end_to_decision_ms as number;
         trace.acousticToDecisionMs =
           trace.vadDetectionMs === undefined ? undefined : trace.vadDetectionMs + trace.turnEndToDecisionMs;
@@ -109,6 +123,9 @@ export function evaluationHistory(events: readonly Diagnostic[]): EvaluationTrac
       case "advance.released":
         trace.deferredMs = detail.delay_ms as number;
         trace.phase = "evaluated";
+        break;
+      case "answer.decision_releasable":
+        trace.decisionReleasableAt = event.at;
         break;
       case "advance.cancelled":
         trace.deferredMs = detail.delay_ms as number;

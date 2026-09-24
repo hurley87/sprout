@@ -1,5 +1,5 @@
 import {
-  CORRECTION_WINDOW_MS,
+  ANSWER_SETTLE_MS,
   MICROPHONE_QUIET_MS,
   TRANSCRIPT_FALLBACK_MS,
   TRANSCRIPT_TAIL_MS,
@@ -71,17 +71,16 @@ type DeferredAdvance = {
   answerVersion: string;
   approvedAt: number;
   speechEpoch: number;
-  correctionReadyAt: number;
-  decisionReleasableLogged: boolean;
+  settleReadyAt: number;
 };
 type DeferredStay = {
   sceneIndex: number;
   answerVersion: string;
+  decidedAt: number;
   speechEpoch: number;
-  correctionReadyAt: number;
+  settleReadyAt: number;
   decision: "STAY" | "UNAVAILABLE";
   content: string;
-  decisionReleasableLogged: boolean;
 };
 type FeedbackGate = {
   id: number;
@@ -794,6 +793,8 @@ export class LessonSession {
     const currentDecision: NonNullable<FeedbackGate["decision"]> =
       result.status === "unavailable" ? "UNAVAILABLE" : advancing ? "ADVANCE" : "STAY";
     const decision = stale ? "STALE" : currentDecision;
+    const decisionAt = Date.now();
+    const settleReadyAt = Math.max(this.turnEndAt, this.lastDeltaAt) + ANSWER_SETTLE_MS;
     if (!stale) {
       this.updateFeedbackGate("decision_current", version, currentDecision);
     }
@@ -806,8 +807,12 @@ export class LessonSession {
         ? { probability: result.probability, model: result.model }
         : { unavailable: result.reason }),
       latency_ms: result.latencyMs,
-      transcript_to_decision_ms: Date.now() - finalDeltaAt,
-      turn_end_to_decision_ms: Date.now() - turnEndAt,
+      transcript_to_decision_ms: decisionAt - finalDeltaAt,
+      turn_end_to_decision_ms: decisionAt - turnEndAt,
+      answer_settle_ms: ANSWER_SETTLE_MS,
+      settle_ready_at: settleReadyAt - this.createdAt,
+      decision_at: decisionAt - this.createdAt,
+      remaining_settle_ms_at_decision: Math.max(0, settleReadyAt - decisionAt),
       decision,
       stale,
       advancing,
@@ -815,31 +820,34 @@ export class LessonSession {
     });
     // An unavailable check leaves the scene alone without judging the child.
     if (advancing) {
-      this.deferAdvance(sceneIndex, version);
+      this.deferAdvance(sceneIndex, version, decisionAt, settleReadyAt);
     } else if (releasing)
       this.deferStay(
         sceneIndex,
         version,
         result.status === "unavailable" ? "UNAVAILABLE" : "STAY",
         result.status === "unavailable" ? evaluationUnavailableContext(this.scene) : stayContext(this.scene),
+        decisionAt,
+        settleReadyAt,
       );
   }
 
-  private deferAdvance(sceneIndex: number, answerVersion: string) {
+  private deferAdvance(sceneIndex: number, answerVersion: string, decisionAt: number, settleReadyAt: number) {
     if (this.deferredAdvance) return;
     this.deferredAdvance = {
       sceneIndex,
       answerVersion,
-      approvedAt: Date.now(),
+      approvedAt: decisionAt,
       speechEpoch: this.speechEpoch,
-      correctionReadyAt: Math.max(this.turnEndAt, this.lastDeltaAt) + CORRECTION_WINDOW_MS,
-      decisionReleasableLogged: false,
+      settleReadyAt,
     };
     this.log("advance.deferred", {
       answer_version: answerVersion,
       scene: sceneAt(sceneIndex).id,
-      reason: "correction_window",
-      correction_window_ms: CORRECTION_WINDOW_MS,
+      reason: "answer_settle",
+      answer_settle_ms: ANSWER_SETTLE_MS,
+      settle_ready_at: this.deferredAdvance.settleReadyAt - this.createdAt,
+      decision_at: this.deferredAdvance.approvedAt - this.createdAt,
     });
     this.scheduleDeferredRelease();
   }
@@ -848,7 +856,7 @@ export class LessonSession {
     clearTimeout(this.deferredTimer);
     const deferred = this.deferredAdvance;
     if (!deferred) return;
-    const releaseAt = Math.max(deferred.correctionReadyAt, this.activityRecoveryUntil);
+    const releaseAt = Math.max(deferred.settleReadyAt, this.activityRecoveryUntil);
     this.deferredTimer = setTimeout(() => this.releaseDeferredAdvance(), Math.max(0, releaseAt - Date.now()));
   }
 
@@ -870,15 +878,13 @@ export class LessonSession {
       clearTimeout(this.deferredTimer);
       return;
     }
-    if (!deferred.decisionReleasableLogged) {
-      deferred.decisionReleasableLogged = true;
-      this.log("answer.decision_releasable", {
-        answer_version: deferred.answerVersion,
-        scene: sceneAt(deferred.sceneIndex).id,
-        decision: "ADVANCE",
-        correction_window_ms: CORRECTION_WINDOW_MS,
-      });
-    }
+    this.logDecisionReleasable(
+      deferred.answerVersion,
+      deferred.sceneIndex,
+      "ADVANCE",
+      deferred.settleReadyAt,
+      deferred.approvedAt,
+    );
     this.waitForPrematureOutputQuiet(() => {
       if (this.deferredAdvance !== deferred) return;
       this.deferredAdvance = null;
@@ -887,8 +893,7 @@ export class LessonSession {
         scene: sceneAt(deferred.sceneIndex).id,
         answer_version: deferred.answerVersion,
         delay_ms: Date.now() - deferred.approvedAt,
-        reason:
-          this.prematureOutputQuietAt() > deferred.correctionReadyAt ? "output_transcript_quiet" : "correction_window",
+        reason: this.prematureOutputQuietAt() > deferred.settleReadyAt ? "output_transcript_quiet" : "answer_settle",
       });
       this.advance(deferred.answerVersion);
     });
@@ -913,15 +918,22 @@ export class LessonSession {
     this.deferredAdvance = null;
   }
 
-  private deferStay(sceneIndex: number, answerVersion: string, decision: DeferredStay["decision"], content: string) {
+  private deferStay(
+    sceneIndex: number,
+    answerVersion: string,
+    decision: DeferredStay["decision"],
+    content: string,
+    decisionAt: number,
+    settleReadyAt: number,
+  ) {
     this.deferredStay = {
       sceneIndex,
       answerVersion,
+      decidedAt: decisionAt,
       speechEpoch: this.speechEpoch,
-      correctionReadyAt: Math.max(this.turnEndAt, this.lastDeltaAt) + CORRECTION_WINDOW_MS,
+      settleReadyAt,
       decision,
       content,
-      decisionReleasableLogged: false,
     };
     this.log("answer.release_deferred", { answer_version: answerVersion, scene: sceneAt(sceneIndex).id });
     this.scheduleDeferredStayRelease();
@@ -931,7 +943,7 @@ export class LessonSession {
     clearTimeout(this.stayTimer);
     const deferred = this.deferredStay;
     if (!deferred) return;
-    const releaseAt = Math.max(deferred.correctionReadyAt, this.activityRecoveryUntil);
+    const releaseAt = Math.max(deferred.settleReadyAt, this.activityRecoveryUntil);
     this.stayTimer = setTimeout(() => this.releaseDeferredStay(), Math.max(0, releaseAt - Date.now()));
   }
 
@@ -953,15 +965,13 @@ export class LessonSession {
       clearTimeout(this.stayTimer);
       return;
     }
-    if (!deferred.decisionReleasableLogged) {
-      deferred.decisionReleasableLogged = true;
-      this.log("answer.decision_releasable", {
-        answer_version: deferred.answerVersion,
-        scene: sceneAt(deferred.sceneIndex).id,
-        decision: deferred.decision,
-        correction_window_ms: CORRECTION_WINDOW_MS,
-      });
-    }
+    this.logDecisionReleasable(
+      deferred.answerVersion,
+      deferred.sceneIndex,
+      deferred.decision,
+      deferred.settleReadyAt,
+      deferred.decidedAt,
+    );
     this.waitForPrematureOutputQuiet(() => {
       if (this.deferredStay !== deferred) return;
       this.deferredStay = null;
@@ -980,6 +990,26 @@ export class LessonSession {
     this.pendingOutputQuietAction = undefined;
     if (this.deferredStay) this.log("answer.release_cancelled", { answer_version: this.deferredStay.answerVersion });
     this.deferredStay = null;
+  }
+
+  private logDecisionReleasable(
+    answerVersion: string,
+    sceneIndex: number,
+    decision: NonNullable<FeedbackGate["decision"]>,
+    settleReadyAt: number,
+    decisionAt: number,
+  ) {
+    const releasableAt = Date.now();
+    this.log("answer.decision_releasable", {
+      answer_version: answerVersion,
+      scene: sceneAt(sceneIndex).id,
+      decision,
+      answer_settle_ms: ANSWER_SETTLE_MS,
+      settle_ready_at: settleReadyAt - this.createdAt,
+      decision_at: decisionAt - this.createdAt,
+      releasable_at: releasableAt - this.createdAt,
+      remaining_settle_ms: Math.max(0, settleReadyAt - releasableAt),
+    });
   }
 
   /** The application, not the model, commits the next deterministic scene. */

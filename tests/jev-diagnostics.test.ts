@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ANSWER_QUESTION,
   ADVANCE_THRESHOLD,
-  CORRECTION_WINDOW_MS,
+  ANSWER_SETTLE_MS,
   TRANSCRIPT_TAIL_MS,
   TRANSCRIPT_FALLBACK_MS as SETTLE_MS,
 } from "../lib/answer";
@@ -76,7 +76,7 @@ describe("Jev event timeline", () => {
       question: ANSWER_QUESTION,
       threshold: ADVANCE_THRESHOLD,
     });
-    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - 243);
+    await vi.advanceTimersByTimeAsync(ANSWER_SETTLE_MS - 243);
     session.displayed(1);
     expect(evaluationHistory(session.events)[0].displayed).toBe(true);
   });
@@ -98,14 +98,11 @@ describe("Jev event timeline", () => {
       turnEndToDecisionMs: 450,
       acousticToDecisionMs: 1390,
     });
-    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - TRANSCRIPT_TAIL_MS - 200);
-    await vi.advanceTimersByTimeAsync(10);
-    session.receive({ type: "microphone.speech_started" });
-    session.receive({ type: "microphone.speech_stopped", quietMs: 920 });
+    await vi.advanceTimersByTimeAsync(ANSWER_SETTLE_MS - TRANSCRIPT_TAIL_MS - 200);
     session.displayed(1);
     expect(evaluationHistory(session.events)[0]).toMatchObject({
-      turnEndToDisplayMs: CORRECTION_WINDOW_MS + 10,
-      acousticToDisplayMs: CORRECTION_WINDOW_MS + 10 + 940,
+      turnEndToDisplayMs: ANSWER_SETTLE_MS,
+      acousticToDisplayMs: ANSWER_SETTLE_MS + 940,
     });
   });
 
