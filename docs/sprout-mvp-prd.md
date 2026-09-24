@@ -71,6 +71,12 @@ Each lesson has three parts:
 
 The structure guides the lesson; finishing every part is optional. An initially unassisted fresh example does not make earlier help irrelevant. Preserve that context in the observation.
 
+### Tutoring authority
+
+The lesson/curriculum determines **what needs to happen**: the target, required learning intent, challenge/support bounds, and evidence-backed reason for the lesson. The live voice layer determines **how it happens in the moment**: wording, pacing, acknowledgement, clarification, hints, interruption recovery, and bounded playful changes.
+
+Do not turn a lesson plan into an exact tutor script or rigid conversational path. The live tutor may reach the same learning milestone through different natural conversations, but it may not change the learning scope or silently replace the planned objective. Deterministic scene/action state remains application-owned.
+
 Use short sentences, one question at a time, and time for thinking. Tolerate hesitations, interruptions, self-corrections, and incomplete speech. Offer hints, choices, counting together, or a modeled example when helpful.
 
 If the child changes the subject, briefly acknowledge it and incorporate the new theme into counting where practical. Keep the learning objective bounded. If the child repeatedly declines, offer to finish. An explicit request to stop ends the activity.
