@@ -3,6 +3,8 @@
 import {
   ADVANCE_THRESHOLD,
   CORRECTION_WINDOW_MS,
+  MICROPHONE_ONSET_MS,
+  MICROPHONE_ONSET_QUIET_MS,
   MICROPHONE_QUIET_MS,
   TRANSCRIPT_FALLBACK_MS,
   TRANSCRIPT_TAIL_MS,
@@ -115,8 +117,9 @@ export function JevDiagnostics({ events }: { events: readonly Diagnostic[] }) {
         </>
       ) : (
         <p>
-          Waiting for a learner count. Microphone quiet: {ms(MICROPHONE_QUIET_MS)}; transcript tail:{" "}
-          {ms(TRANSCRIPT_TAIL_MS)}; fallback: {ms(TRANSCRIPT_FALLBACK_MS)}; correction window:{" "}
+          Waiting for a learner count. Microphone onset: {ms(MICROPHONE_ONSET_MS)}; provisional burst quiet:{" "}
+          {ms(MICROPHONE_ONSET_QUIET_MS)}; speech stop quiet: {ms(MICROPHONE_QUIET_MS)}; transcript tail:{" "}
+          {ms(TRANSCRIPT_TAIL_MS)}; fallback/grace: {ms(TRANSCRIPT_FALLBACK_MS)}; correction window:{" "}
           {ms(CORRECTION_WINDOW_MS)}.
         </p>
       )}

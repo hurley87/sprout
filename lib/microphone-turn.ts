@@ -1,4 +1,4 @@
-import { MICROPHONE_QUIET_MS } from "./answer";
+import { MICROPHONE_ONSET_MS, MICROPHONE_ONSET_QUIET_MS, MICROPHONE_QUIET_MS } from "./answer";
 import type { MicrophoneEvent } from "./events";
 
 /** Local energy VAD. GPT-Live has no input-turn completion event. This watches
@@ -10,6 +10,10 @@ export class MicrophoneTurnDetector {
   private samples: Float32Array<ArrayBuffer>;
   private frame = 0;
   private active = false;
+  private candidate = false;
+  private voicedMs = 0;
+  private lastVoicedAt?: number;
+  private candidateQuietSince = 0;
   private quietSince = 0;
   private noiseFloor = 0.003;
   private stopped = false;
@@ -36,9 +40,27 @@ export class MicrophoneTurnDetector {
     const voice = rms > Math.max(0.015, this.noiseFloor * 3);
     if (voice) {
       this.quietSince = 0;
-      if (!this.active) {
+      if (!this.active && !this.candidate) {
+        this.candidate = true;
+        this.voicedMs = 0;
+        this.emit({ type: "microphone.activity_started" });
+      } else if (this.candidate && this.lastVoicedAt !== undefined) {
+        this.voicedMs += Math.min(50, Math.max(0, now - this.lastVoicedAt));
+      }
+      this.lastVoicedAt = now;
+      this.candidateQuietSince = 0;
+      if (this.candidate && this.voicedMs >= MICROPHONE_ONSET_MS) {
+        this.candidate = false;
         this.active = true;
         this.emit({ type: "microphone.speech_started" });
+      }
+    } else if (this.candidate) {
+      if (!this.candidateQuietSince) this.candidateQuietSince = now;
+      else if (now - this.candidateQuietSince >= MICROPHONE_ONSET_QUIET_MS) {
+        this.candidate = false;
+        this.voicedMs = 0;
+        this.lastVoicedAt = undefined;
+        this.emit({ type: "microphone.activity_discarded" });
       }
     } else if (this.active) {
       if (!this.quietSince) this.quietSince = now;

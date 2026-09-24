@@ -288,6 +288,107 @@ describe("answer-gated scene advancement", () => {
     expect(session.snapshot.sceneIndex).toBe(0);
     expect(session.events.some(event => event.type === "advance.cancelled")).toBe(true);
   });
+  it("resumes an approved advance after a transcriptless microphone spike", async () => {
+    const { session, evaluateAnswer } = setup(true, answering(CONFIDENT));
+    mic(session, "microphone.speech_started");
+    deliver(session, speech("One"));
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - TRANSCRIPT_TAIL_MS - 1);
+    session.receive({ type: "microphone.activity_started" });
+    await vi.advanceTimersByTimeAsync(1);
+    expect(session.snapshot.sceneIndex).toBe(0);
+    session.receive({ type: "microphone.activity_discarded" });
+    await vi.advanceTimersByTimeAsync(SETTLE_MS - 1);
+    expect(session.snapshot.sceneIndex).toBe(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(session.snapshot.sceneIndex).toBe(1);
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+    expect(session.events.some(event => event.type === "advance.cancelled")).toBe(false);
+  });
+  it("holds an in-flight Jev result through a microphone spike without losing the answer", async () => {
+    let resolve!: (result: AnswerResult) => void;
+    const evaluateAnswer: EvaluateAnswer = vi.fn(() => new Promise<AnswerResult>(r => (resolve = r)));
+    const { session } = setup(true, evaluateAnswer);
+    mic(session, "microphone.speech_started");
+    deliver(session, speech("One"));
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
+    session.receive({ type: "microphone.activity_started" });
+    resolve(evaluated(CONFIDENT));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.snapshot.sceneIndex).toBe(0);
+    session.receive({ type: "microphone.activity_discarded" });
+    await vi.advanceTimersByTimeAsync(SETTLE_MS);
+    expect(session.snapshot.sceneIndex).toBe(0);
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - TRANSCRIPT_TAIL_MS - SETTLE_MS);
+    expect(session.snapshot.sceneIndex).toBe(1);
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+  });
+  it("asks for a repeat when confirmed activity has no transcript", async () => {
+    const { session, transport } = setup(true, answering(CONFIDENT));
+    mic(session, "microphone.speech_started");
+    deliver(session, speech("One"));
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
+    session.receive({ type: "microphone.activity_started" });
+    mic(session, "microphone.speech_started");
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(SETTLE_MS);
+    expect(session.snapshot.sceneIndex).toBe(0);
+    expect(session.events.some(event => event.type === "answer.no_transcript")).toBe(true);
+    expect(vi.mocked(transport.send).mock.calls.map(([command]) => command)).toContainEqual(
+      expect.objectContaining({ content: expect.stringContaining("say it again") }),
+    );
+  });
+  it("does not ask for a repeat when the new transcript arrives during the grace period", async () => {
+    const { session } = setup(true, answering(UNSURE));
+    mic(session, "microphone.speech_started");
+    deliver(session, speech("One"));
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
+    session.receive({ type: "microphone.activity_started" });
+    mic(session, "microphone.speech_started");
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(500);
+    deliver(session, speech("... no, two", 2000));
+    await vi.advanceTimersByTimeAsync(SETTLE_MS);
+    expect(session.events.some(event => event.type === "answer.no_transcript")).toBe(false);
+  });
+  it("judges a correction that arrives during provisional microphone activity", async () => {
+    const evaluateAnswer: EvaluateAnswer = vi.fn(async ({ utterance }) =>
+      evaluated(utterance.includes("two") ? UNSURE : CONFIDENT),
+    );
+    const { session } = setup(true, evaluateAnswer);
+    mic(session, "microphone.speech_started");
+    deliver(session, speech("One"));
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
+    session.receive({ type: "microphone.activity_started" });
+    deliver(session, speech("... no, two", 2000));
+    mic(session, "microphone.speech_started");
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS + CORRECTION_WINDOW_MS);
+    expect(evaluateAnswer).toHaveBeenLastCalledWith({ sceneIndex: 0, utterance: "One... no, two" }, expect.anything());
+    expect(session.snapshot.sceneIndex).toBe(0);
+  });
+  it("uses transcript fallback when a brief correction never confirms microphone onset", async () => {
+    const evaluateAnswer: EvaluateAnswer = vi.fn(async ({ utterance }) =>
+      evaluated(utterance.includes("two") ? UNSURE : CONFIDENT),
+    );
+    const { session } = setup(true, evaluateAnswer);
+    mic(session, "microphone.speech_started");
+    deliver(session, speech("One"));
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
+    session.receive({ type: "microphone.activity_started" });
+    deliver(session, speech("... no, two", 2000));
+    session.receive({ type: "microphone.activity_discarded" });
+    await vi.advanceTimersByTimeAsync(SETTLE_MS);
+    expect(evaluateAnswer).toHaveBeenLastCalledWith({ sceneIndex: 0, utterance: "One... no, two" }, expect.anything());
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
+    expect(session.snapshot.sceneIndex).toBe(0);
+  });
   it("new microphone speech invalidates an in-flight result before its transcript arrives", async () => {
     let resolve!: (result: AnswerResult) => void;
     const { session } = setup(true, () => new Promise(r => (resolve = r)));
