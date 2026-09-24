@@ -629,7 +629,7 @@ export class LessonSession {
       `${this.latest?.startMs}:${this.latest?.text.trim()}` !== deferred.answerVersion ||
       this.snapshot.sceneIndex !== deferred.sceneIndex ||
       !this.latest ||
-      !this.holding(this.latest)
+      !this.sproutIsHoldingForDecision()
     )
       return;
     this.log("answer.release_sent", { answer_version: deferred.answerVersion, scene: sceneAt(deferred.sceneIndex).id });

@@ -641,6 +641,32 @@ describe("answer-check turn synchronization", () => {
     expect(session.events.filter(event => event.type === "answer.release_cancelled")).toHaveLength(1);
   });
 
+  it.each(["Ooh!", "Okay!"])("releases a delayed STAY after neutral acknowledgment %s", async reply => {
+    const { session, transport } = setup(true, answering(UNSURE));
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("Five"));
+    await settle();
+    deliver(session, speech(reply, 800, true));
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - 1);
+    expect(released(transport)).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(released(transport)).toHaveLength(1);
+  });
+
+  it.each([
+    ["STAY", answering(UNSURE)],
+    ["unavailable", async () => ({ status: "unavailable" as const, reason: "timeout", latencyMs: 4000 })],
+  ])("drops a delayed %s instruction after a short substantive reply", async (_decision, evaluateAnswer) => {
+    const { session, transport } = setup(true, evaluateAnswer);
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("Five"));
+    await settle();
+    expect(sent(transport)).toHaveLength(0);
+    deliver(session, speech("Let's count together.", 800, true));
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
+    expect(sent(transport)).toHaveLength(0);
+  });
+
   it("drops a delayed STAY instruction if Sprout has already begun helping", async () => {
     const { session, transport } = setup(true, answering(UNSURE));
     vi.mocked(transport.send).mockClear();
@@ -874,7 +900,7 @@ describe("answer-check turn synchronization", () => {
     expect(transport.send).not.toHaveBeenCalled();
     // A brief acknowledgment is still a held turn.
     deliver(session, speech("Three!", 10_000));
-    deliver(session, speech("Ooh, okay!", 10_800, true));
+    deliver(session, speech("Ooh!", 10_800, true));
     await settle();
     await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
     expect(released(transport)).toHaveLength(1);
