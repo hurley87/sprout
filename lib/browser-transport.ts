@@ -36,8 +36,8 @@ export class BrowserTransport implements Transport {
     }
     this.mic = stream;
     try {
-      this.turnDetector = new MicrophoneTurnDetector(stream, type => {
-        if (!this.cancelled) onEvent({ type });
+      this.turnDetector = new MicrophoneTurnDetector(stream, event => {
+        if (!this.cancelled) onEvent(event);
       });
     } catch {
       // Transcript fallback remains available on browsers without Web Audio.

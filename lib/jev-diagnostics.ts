@@ -16,13 +16,17 @@ export type EvaluationTrace = {
     | "deferred advance";
   signal?: string;
   transcriptAt?: number;
+  estimatedAcousticEndAt?: number;
   turnEndAt?: number;
   requestAt?: number;
   transcriptToRequestMs?: number;
+  vadDetectionMs?: number;
   turnEndToRequestMs?: number;
   jevMs?: number;
+  acousticToDecisionMs?: number;
   turnEndToDecisionMs?: number;
   turnEndToCommitMs?: number;
+  acousticToDisplayMs?: number;
   turnEndToDisplayMs?: number;
   probability?: number;
   reason?: string;
@@ -77,6 +81,9 @@ export function evaluationHistory(events: readonly Diagnostic[]): EvaluationTrac
         trace.phase = "requesting Jev";
         trace.signal = detail.signal as string;
         trace.turnEndAt = detail.turn_end_at as number;
+        trace.vadDetectionMs = typeof detail.vad_detection_ms === "number" ? detail.vad_detection_ms : undefined;
+        trace.estimatedAcousticEndAt =
+          trace.vadDetectionMs === undefined ? undefined : trace.turnEndAt - trace.vadDetectionMs;
         trace.requestAt = event.at;
         trace.transcriptToRequestMs = detail.transcript_to_request_ms as number;
         trace.turnEndToRequestMs = detail.turn_end_to_request_ms as number;
@@ -84,6 +91,8 @@ export function evaluationHistory(events: readonly Diagnostic[]): EvaluationTrac
       case "answer.evaluated":
         trace.jevMs = detail.latency_ms as number;
         trace.turnEndToDecisionMs = detail.turn_end_to_decision_ms as number;
+        trace.acousticToDecisionMs =
+          trace.vadDetectionMs === undefined ? undefined : trace.vadDetectionMs + trace.turnEndToDecisionMs;
         trace.probability = typeof detail.probability === "number" ? detail.probability : undefined;
         trace.reason = typeof detail.unavailable === "string" ? detail.unavailable : undefined;
         trace.decision = detail.decision as EvaluationTrace["decision"];
@@ -110,6 +119,8 @@ export function evaluationHistory(events: readonly Diagnostic[]): EvaluationTrac
       case "advance.displayed":
         trace.displayed = true;
         trace.turnEndToDisplayMs = detail.turn_end_to_display_ms as number;
+        trace.acousticToDisplayMs =
+          trace.vadDetectionMs === undefined ? undefined : trace.vadDetectionMs + trace.turnEndToDisplayMs;
         break;
     }
   }

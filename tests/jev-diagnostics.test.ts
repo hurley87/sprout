@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ANSWER_QUESTION, ADVANCE_THRESHOLD, TRANSCRIPT_FALLBACK_MS as SETTLE_MS } from "../lib/answer";
+import {
+  ANSWER_QUESTION,
+  ADVANCE_THRESHOLD,
+  CORRECTION_WINDOW_MS,
+  TRANSCRIPT_TAIL_MS,
+  TRANSCRIPT_FALLBACK_MS as SETTLE_MS,
+} from "../lib/answer";
 import { parseProviderEvent } from "../lib/events";
 import { evaluationHistory, safeEvaluationRequest } from "../lib/jev-diagnostics";
 import { LessonSession, type Diagnostic, type Transport } from "../lib/session";
@@ -48,22 +54,53 @@ describe("Jev event timeline", () => {
     await vi.advanceTimersByTimeAsync(243);
     const trace = evaluationHistory(session.events)[0];
     expect(trace).toMatchObject({
-      phase: "evaluated",
+      phase: "deferred advance",
       jevMs: 243,
       turnEndToDecisionMs: 243,
       probability: 0.98,
       decision: "ADVANCE",
       stale: false,
-      deferred: false,
+      deferred: true,
     });
+    expect(trace.estimatedAcousticEndAt).toBeUndefined();
+    expect(trace.acousticToDecisionMs).toBeUndefined();
     expect(safeEvaluationRequest(trace)).toEqual({
       state: { displayed: { object: "duck", quantity: 1, description: "1 duck" }, learnerUtterance: "One" },
       model: "jev-1.13.0",
       question: ANSWER_QUESTION,
       threshold: ADVANCE_THRESHOLD,
     });
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - 243);
     session.displayed(1);
     expect(evaluationHistory(session.events)[0].displayed).toBe(true);
+  });
+
+  it("separates measured VAD detection lag from Jev decision and scene display", async () => {
+    const session = sessionWith(async () => {
+      await new Promise(resolve => setTimeout(resolve, 200));
+      return { status: "evaluated", probability: 0.98, model: "jev-1.13.0", latencyMs: 200 };
+    });
+    session.receive({ type: "microphone.speech_started" });
+    say(session, "One");
+    session.receive({ type: "microphone.speech_stopped", quietMs: 940 });
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS + 200);
+    expect(evaluationHistory(session.events)[0]).toMatchObject({
+      signal: "microphone_vad",
+      estimatedAcousticEndAt: -940,
+      turnEndAt: 0,
+      vadDetectionMs: 940,
+      turnEndToDecisionMs: 450,
+      acousticToDecisionMs: 1390,
+    });
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - TRANSCRIPT_TAIL_MS - 200);
+    await vi.advanceTimersByTimeAsync(10);
+    session.receive({ type: "microphone.speech_started" });
+    session.receive({ type: "microphone.speech_stopped", quietMs: 920 });
+    session.displayed(1);
+    expect(evaluationHistory(session.events)[0]).toMatchObject({
+      turnEndToDisplayMs: CORRECTION_WINDOW_MS + 10,
+      acousticToDisplayMs: CORRECTION_WINDOW_MS + 10 + 940,
+    });
   });
 
   it("records timeout, stale decision, deferred advance and cancelled deferral", async () => {

@@ -1,4 +1,5 @@
 import {
+  CORRECTION_WINDOW_MS,
   MICROPHONE_QUIET_MS,
   TRANSCRIPT_FALLBACK_MS,
   TRANSCRIPT_TAIL_MS,
@@ -59,8 +60,16 @@ export interface Transport {
 }
 
 /** What the app is waiting to see on screen before it speaks about it. */
-type PendingDisplay = { kind: "greeting" | "advance"; sceneIndex: number; answerVersion?: string };
-type DeferredAdvance = { sceneIndex: number; answerVersion: string; approvedAt: number; spokenChars: number };
+type PendingDisplay = { kind: "greeting" | "advance"; sceneIndex: number; answerVersion?: string; turnEndAt?: number };
+type DeferredAdvance = {
+  sceneIndex: number;
+  answerVersion: string;
+  approvedAt: number;
+  spokenChars: number;
+  speechEpoch: number;
+  correctionReadyAt: number;
+  outputQuietAt: number;
+};
 
 export class LessonSession {
   snapshot: Snapshot = { status: "starting", sceneIndex: 0 };
@@ -83,6 +92,7 @@ export class LessonSession {
   private latest: Utterance | null = null;
   private lastDeltaAt = 0;
   private turnEndAt = 0;
+  private vadDetectionMs?: number;
   private turnSignal: "microphone_vad" | "transcript_fallback" = "transcript_fallback";
   private microphoneSpeaking = false;
   private speechEpoch = 0;
@@ -194,6 +204,7 @@ export class LessonSession {
       case "microphone.speech_started":
         this.microphoneSpeaking = true;
         this.speechEpoch++;
+        this.vadDetectionMs = undefined;
         clearTimeout(this.settleTimer);
         this.evaluation?.abort();
         this.cancelDeferredAdvance();
@@ -203,8 +214,14 @@ export class LessonSession {
         if (!this.microphoneSpeaking) return;
         this.microphoneSpeaking = false;
         this.turnEndAt = Date.now();
+        this.vadDetectionMs = event.quietMs;
         this.turnSignal = "microphone_vad";
-        this.log("answer.turn_end", { signal: this.turnSignal, quiet_ms: MICROPHONE_QUIET_MS });
+        this.log("answer.turn_end", {
+          signal: this.turnSignal,
+          quiet_threshold_ms: MICROPHONE_QUIET_MS,
+          vad_detection_ms: event.quietMs,
+          estimated_acoustic_end_at: this.turnEndAt - event.quietMs - this.createdAt,
+        });
         if (this.latest && this.transcriptEpoch === this.speechEpoch)
           this.scheduleEvaluation(this.latest, TRANSCRIPT_TAIL_MS);
         return;
@@ -257,17 +274,16 @@ export class LessonSession {
     const utterance = speech.append(event.delta, event.startMs, event.endMs);
     this.sproutReply = fromChild ? "" : this.sproutReply + event.delta;
     if (fromChild) {
+      // A transcript can arrive before local VAD notices renewed speech.
+      this.cancelDeferredAdvance();
       this.latest = utterance;
       this.lastDeltaAt = Date.now();
       this.transcriptEpoch = this.speechEpoch;
       if (requestsStop(utterance.text)) this.end("child_stop");
-      else if (!this.deferredAdvance) {
-        if (
-          this.speechEpoch > 0 &&
-          this.turnSignal === "microphone_vad" &&
-          !this.microphoneSpeaking &&
-          this.turnEndAt >= this.lastDeltaAt - TRANSCRIPT_TAIL_MS
-        )
+      else {
+        // Provider transcript delivery can lag VAD; each fragment after the
+        // latest detected stop restarts the short tail regardless of arrival time.
+        if (this.speechEpoch > 0 && this.turnSignal === "microphone_vad" && !this.microphoneSpeaking)
           this.scheduleEvaluation(utterance, TRANSCRIPT_TAIL_MS);
         else if (!this.microphoneSpeaking) this.scheduleEvaluation(utterance, TRANSCRIPT_FALLBACK_MS);
       }
@@ -276,7 +292,7 @@ export class LessonSession {
       // transcript guard could not recognize. Not proof of playback.
       this.end("model_goodbye");
     } else if (this.deferredAdvance) {
-      this.scheduleDeferredRelease();
+      this.scheduleDeferredRelease(true);
     }
   }
 
@@ -293,6 +309,7 @@ export class LessonSession {
       if (this.microphoneSpeaking) return;
       if (delay === TRANSCRIPT_FALLBACK_MS) {
         this.turnEndAt = Date.now();
+        this.vadDetectionMs = undefined;
         this.turnSignal = "transcript_fallback";
         this.log("answer.turn_end", { signal: this.turnSignal });
       }
@@ -332,6 +349,7 @@ export class LessonSession {
       turn_end_at: turnEndAt - this.createdAt,
       transcript_to_request_ms: Date.now() - finalDeltaAt,
       turn_end_to_request_ms: Date.now() - turnEndAt,
+      ...(this.vadDetectionMs === undefined ? {} : { vad_detection_ms: this.vadDetectionMs }),
     });
     this.evaluation?.abort();
     const evaluation = new AbortController();
@@ -381,8 +399,7 @@ export class LessonSession {
     });
     // An unavailable check leaves the scene alone without judging the child.
     if (advancing) {
-      if (this.sproutIsHoldingForDecision()) this.advance(version);
-      else this.deferAdvance(sceneIndex, `${utterance.startMs}:${utterance.text.trim()}`);
+      this.deferAdvance(sceneIndex, version);
     } else if (releasing)
       this.append(
         "session.instructions.append",
@@ -408,22 +425,35 @@ export class LessonSession {
 
   private deferAdvance(sceneIndex: number, answerVersion: string) {
     if (this.deferredAdvance) return;
-    this.deferredAdvance = { sceneIndex, answerVersion, approvedAt: Date.now(), spokenChars: this.sproutReply.length };
+    this.deferredAdvance = {
+      sceneIndex,
+      answerVersion,
+      approvedAt: Date.now(),
+      spokenChars: this.sproutReply.length,
+      speechEpoch: this.speechEpoch,
+      correctionReadyAt: Math.max(this.turnEndAt, this.lastDeltaAt) + CORRECTION_WINDOW_MS,
+      outputQuietAt: 0,
+    };
     this.log("advance.deferred", {
       answer_version: answerVersion,
       scene: sceneAt(sceneIndex).id,
-      reason: "sprout_substantive_reply",
+      reason: "correction_window",
+      correction_window_ms: CORRECTION_WINDOW_MS,
       spoken_chars: this.sproutReply.length,
     });
     this.scheduleDeferredRelease();
   }
 
-  private scheduleDeferredRelease() {
+  private scheduleDeferredRelease(outputDelta = false) {
     clearTimeout(this.deferredTimer);
-    // This transport has output transcript deltas but no authoritative output-turn
-    // completion event. One utterance gap without another delta is our boundary;
-    // each new fragment restarts it, and wrap-up/stop cancels it.
-    this.deferredTimer = setTimeout(() => this.releaseDeferredAdvance(), UTTERANCE_GAP_MS);
+    const deferred = this.deferredAdvance;
+    if (!deferred) return;
+    // Output has no completed-turn event. A substantive reply needs one
+    // transcript gap before a scene change; each fragment extends that gap.
+    if (!this.sproutIsHoldingForDecision() && (outputDelta || deferred.outputQuietAt === 0))
+      deferred.outputQuietAt = Date.now() + UTTERANCE_GAP_MS;
+    const releaseAt = Math.max(deferred.correctionReadyAt, deferred.outputQuietAt);
+    this.deferredTimer = setTimeout(() => this.releaseDeferredAdvance(), Math.max(0, releaseAt - Date.now()));
   }
 
   private releaseDeferredAdvance() {
@@ -435,6 +465,9 @@ export class LessonSession {
       this.expireIfOverdue() ||
       this.snapshot.status !== "active" ||
       this.pending ||
+      this.microphoneSpeaking ||
+      this.speechEpoch !== deferred.speechEpoch ||
+      `${this.latest?.startMs}:${this.latest?.text.trim()}` !== deferred.answerVersion ||
       this.snapshot.sceneIndex !== deferred.sceneIndex ||
       deferred.sceneIndex >= LAST_SCENE
     )
@@ -444,7 +477,7 @@ export class LessonSession {
       answer_version: deferred.answerVersion,
       spoken_chars_at_approval: deferred.spokenChars,
       delay_ms: Date.now() - deferred.approvedAt,
-      reason: "output_transcript_quiet",
+      reason: deferred.outputQuietAt > deferred.correctionReadyAt ? "output_transcript_quiet" : "correction_window",
     });
     this.advance(deferred.answerVersion);
   }
@@ -466,7 +499,7 @@ export class LessonSession {
       turn_end_to_commit_ms: Date.now() - this.turnEndAt,
     });
     const sceneIndex = this.snapshot.sceneIndex + 1;
-    this.pending = { kind: "advance", sceneIndex, answerVersion };
+    this.pending = { kind: "advance", sceneIndex, answerVersion, turnEndAt: this.turnEndAt };
     this.update({ sceneIndex });
   }
 
@@ -491,7 +524,7 @@ export class LessonSession {
     if (pending.answerVersion)
       this.log("advance.displayed", {
         answer_version: pending.answerVersion,
-        turn_end_to_display_ms: Date.now() - this.turnEndAt,
+        turn_end_to_display_ms: Date.now() - (pending.turnEndAt ?? this.turnEndAt),
       });
     switch (pending.kind) {
       case "greeting":

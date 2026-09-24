@@ -1,4 +1,5 @@
 import { MICROPHONE_QUIET_MS } from "./answer";
+import type { MicrophoneEvent } from "./events";
 
 /** Local energy VAD. GPT-Live has no input-turn completion event. This watches
  * the already-authorized microphone, without recording or retaining samples. */
@@ -15,7 +16,7 @@ export class MicrophoneTurnDetector {
 
   constructor(
     stream: MediaStream,
-    private emit: (event: "microphone.speech_started" | "microphone.speech_stopped") => void,
+    private emit: (event: MicrophoneEvent) => void,
   ) {
     this.context = new AudioContext();
     this.source = this.context.createMediaStreamSource(stream);
@@ -37,14 +38,15 @@ export class MicrophoneTurnDetector {
       this.quietSince = 0;
       if (!this.active) {
         this.active = true;
-        this.emit("microphone.speech_started");
+        this.emit({ type: "microphone.speech_started" });
       }
     } else if (this.active) {
       if (!this.quietSince) this.quietSince = now;
       else if (now - this.quietSince >= MICROPHONE_QUIET_MS) {
+        const quietMs = now - this.quietSince;
         this.active = false;
         this.quietSince = 0;
-        this.emit("microphone.speech_stopped");
+        this.emit({ type: "microphone.speech_stopped", quietMs });
       }
     } else {
       this.noiseFloor = this.noiseFloor * 0.98 + rms * 0.02;

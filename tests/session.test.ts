@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ADVANCE_THRESHOLD,
+  CORRECTION_WINDOW_MS,
+  MICROPHONE_QUIET_MS,
   TRANSCRIPT_FALLBACK_MS as SETTLE_MS,
   TRANSCRIPT_TAIL_MS,
   shouldAdvance,
@@ -69,7 +71,7 @@ const speech = (delta: string, start_ms = 0, output = false) => ({
   end_ms: start_ms + 500,
 });
 const mic = (session: LessonSession, type: "microphone.speech_started" | "microphone.speech_stopped") =>
-  session.receive({ type });
+  session.receive(type === "microphone.speech_stopped" ? { type, quietMs: MICROPHONE_QUIET_MS } : { type });
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
@@ -199,7 +201,12 @@ describe("answer-gated scene advancement", () => {
     await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
     mic(session, "microphone.speech_stopped");
     expect(evaluateAnswer).toHaveBeenCalledOnce();
+    expect(session.snapshot.sceneIndex).toBe(0);
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - TRANSCRIPT_TAIL_MS);
     expect(session.snapshot.sceneIndex).toBe(1);
+    expect(session.events.findLast(e => e.type === "advance.released")?.detail).toMatchObject({
+      reason: "correction_window",
+    });
     expect(session.events.findLast(e => e.type === "answer.requesting")?.detail).toMatchObject({
       signal: "microphone_vad",
     });
@@ -212,6 +219,23 @@ describe("answer-gated scene advancement", () => {
     deliver(session, speech(" one", 600));
     await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
     expect(evaluateAnswer).toHaveBeenCalledWith({ sceneIndex: 0, utterance: "Two... no, one" }, expect.anything());
+  });
+  it("uses the VAD tail for transcript fragments delayed beyond the tail window", async () => {
+    const { session, evaluateAnswer } = setup(true, answering(CONFIDENT));
+    mic(session, "microphone.speech_started");
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS + 150);
+    deliver(session, speech("One", 0));
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS - 50);
+    deliver(session, speech(" duck", 500));
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS - 1);
+    expect(evaluateAnswer).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+    expect(evaluateAnswer).toHaveBeenCalledWith({ sceneIndex: 0, utterance: "One duck" }, expect.anything());
+    expect(session.events.findLast(e => e.type === "answer.requesting")?.detail).toMatchObject({
+      signal: "microphone_vad",
+    });
   });
   it("does not commit an incomplete slow phrase during a speech pause", async () => {
     const { session, evaluateAnswer } = setup(true, answering(CONFIDENT));
@@ -226,7 +250,43 @@ describe("answer-gated scene advancement", () => {
     mic(session, "microphone.speech_stopped");
     await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
     expect(evaluateAnswer).toHaveBeenCalledWith({ sceneIndex: 0, utterance: "There are one duck" }, expect.anything());
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - TRANSCRIPT_TAIL_MS);
     expect(session.snapshot.sceneIndex).toBe(1);
+  });
+  it("does not commit a correct partial count before a later correction", async () => {
+    const evaluateAnswer: EvaluateAnswer = vi.fn(async ({ utterance }) =>
+      evaluated(utterance.includes("two") ? UNSURE : CONFIDENT),
+    );
+    const { session } = setup(true, evaluateAnswer);
+    mic(session, "microphone.speech_started");
+    deliver(session, speech("One"));
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - 1);
+    expect(evaluateAnswer).toHaveBeenCalledWith({ sceneIndex: 0, utterance: "One" }, expect.anything());
+    expect(session.snapshot.sceneIndex).toBe(0);
+
+    mic(session, "microphone.speech_started");
+    deliver(session, speech("... no, two", 2000));
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
+    expect(evaluateAnswer).toHaveBeenLastCalledWith({ sceneIndex: 0, utterance: "One... no, two" }, expect.anything());
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
+    expect(session.snapshot.sceneIndex).toBe(0);
+  });
+  it("cancels an approved advance when a correction transcript arrives without VAD", async () => {
+    const evaluateAnswer: EvaluateAnswer = vi.fn(async ({ utterance }) =>
+      evaluated(utterance.includes("two") ? UNSURE : CONFIDENT),
+    );
+    const { session } = setup(true, evaluateAnswer);
+    deliver(session, speech("One"));
+    await settle();
+    expect(session.snapshot.sceneIndex).toBe(0);
+    deliver(session, speech("... no, two", 600));
+    await settle();
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
+    expect(evaluateAnswer).toHaveBeenCalledTimes(2);
+    expect(session.snapshot.sceneIndex).toBe(0);
+    expect(session.events.some(event => event.type === "advance.cancelled")).toBe(true);
   });
   it("new microphone speech invalidates an in-flight result before its transcript arrives", async () => {
     let resolve!: (result: AnswerResult) => void;
@@ -282,6 +342,7 @@ describe("answer-gated scene advancement", () => {
     await vi.advanceTimersByTimeAsync(1);
     expect(evaluateAnswer).toHaveBeenCalledOnce();
     expect(evaluateAnswer).toHaveBeenCalledWith({ sceneIndex: 0, utterance: "One!" }, expect.anything());
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
     expect(session.snapshot.sceneIndex).toBe(1);
   });
   it("evaluates the whole utterance rather than each fragment", async () => {
@@ -341,6 +402,7 @@ describe("answer-gated scene advancement", () => {
     await settle();
     answers[1](evaluated(0.99));
     await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
     session.displayed(1);
     expect(session.snapshot.sceneIndex).toBe(1);
     answers[0](evaluated(0.99));
@@ -351,6 +413,7 @@ describe("answer-gated scene advancement", () => {
     const { session, evaluateAnswer } = setup(true, answering(CONFIDENT));
     deliver(session, speech("One!"));
     await settle();
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
     expect(session.snapshot.sceneIndex).toBe(1);
     deliver(session, speech("Two!", 10_000));
     await settle();
@@ -376,6 +439,7 @@ describe("answer-gated scene advancement", () => {
     vi.mocked(transport.send).mockClear();
     deliver(session, speech("One!"));
     await settle();
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
     expect(session.snapshot.sceneIndex).toBe(1);
     expect(transport.send).not.toHaveBeenCalled();
     session.displayed(4);
@@ -391,6 +455,7 @@ describe("answer-gated scene advancement", () => {
     for (let i = 0; i < 20; i++) {
       deliver(session, speech(`Answer ${i}`, i * 10_000));
       await settle();
+      await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
       session.displayed(session.snapshot.sceneIndex);
       expect(session.snapshot.sceneIndex).toBeLessThanOrEqual(LAST_SCENE);
     }
@@ -430,13 +495,15 @@ describe("answer-check turn synchronization", () => {
     sent(transport).filter(command => "content" in command && command.content.includes("has not changed"));
 
   it.each(["", "Oh!", "Ooh!", "Okay!"])(
-    "advances immediately after silence or neutral acknowledgment %s",
+    "advances after the correction window with silence or neutral acknowledgment %s",
     async reply => {
       const { session, transport } = setup(true, answering(CONFIDENT));
       vi.mocked(transport.send).mockClear();
       deliver(session, speech("One!"));
       if (reply) deliver(session, speech(reply, 800, true));
       await settle();
+      expect(session.snapshot.sceneIndex).toBe(0);
+      await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
       expect(session.snapshot.sceneIndex).toBe(1);
       expect(transport.send).not.toHaveBeenCalled();
       session.displayed(1);
@@ -452,7 +519,7 @@ describe("answer-check turn synchronization", () => {
     await settle();
     expect(session.snapshot.sceneIndex).toBe(0);
     expect(transport.send).not.toHaveBeenCalled();
-    deliver(session, speech("One!", 10_000));
+    await vi.advanceTimersByTimeAsync(500);
     deliver(session, speech(". There is one duck.", 1800, true));
     await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS - 1);
     expect(session.snapshot.sceneIndex).toBe(0);
@@ -466,6 +533,9 @@ describe("answer-check turn synchronization", () => {
     expect(sent(transport)).toEqual([expect.objectContaining({ content: advanceContext(sceneAt(1)) })]);
     expect(session.events.filter(event => event.type === "advance.deferred")).toHaveLength(1);
     expect(session.events.filter(event => event.type === "advance.released")).toHaveLength(1);
+    expect(session.events.findLast(event => event.type === "advance.released")?.detail).toMatchObject({
+      reason: "output_transcript_quiet",
+    });
   });
 
   it.each(["child_stop", "parent_stop", "wrapping", "goodbye", "time_limit"])(
@@ -507,8 +577,6 @@ describe("answer-check turn synchronization", () => {
     await vi.advanceTimersByTimeAsync(0);
     answers[0](evaluated(UNSURE));
     await vi.advanceTimersByTimeAsync(0);
-    deliver(session, speech("One!", 10_000));
-    await settle();
     expect(evaluateAnswer).toHaveBeenCalledTimes(2);
     expect(released(transport)).toHaveLength(0);
     await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS);
@@ -547,6 +615,7 @@ describe("answer-check turn synchronization", () => {
     vi.mocked(transport.send).mockClear();
     deliver(session, speech("One!"));
     await settle();
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
     expect(session.snapshot.sceneIndex).toBe(1);
     expect(transport.send).not.toHaveBeenCalled();
     session.displayed(1);
