@@ -14,8 +14,7 @@ export type ProviderEvent =
   | (Identified & { type: "session.closed"; reason?: string; usage?: unknown })
   | (Identified & { type: "provider.error"; code?: string })
   | (Identified & { type: "transcript"; speaker: Speaker; delta: string; startMs: number; endMs: number })
-  | (Identified & { type: "delegation"; id: string })
-  | (Identified & { type: "delegation.unsupported" })
+  | (Identified & { type: "delegation.unexpected"; id: string; target?: string })
   | (Identified & { type: "context.appended"; name: string; clientEventId?: string; startMs?: number; endMs?: number })
   | (Identified & { type: "usage"; usage: unknown });
 
@@ -24,11 +23,12 @@ export type TranscriptEvent = Extract<ProviderEvent, { type: "transcript" }>;
 
 export type ClientCommand =
   | {
-      type: "session.instructions.append" | "session.thinking.append";
+      type: "session.instructions.append";
       event_id: string;
       content: string;
-      delegation_id: string | null;
+      delegation_id: null;
     }
+  | { type: "session.thinking.append"; event_id: string; content: string; delegation_id: string }
   | { type: "session.close"; event_id: string };
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
@@ -56,17 +56,13 @@ export function parseProviderEvent(raw: unknown): ProviderEvent | null {
       const speaker: Speaker = raw.type === "session.input_transcript.delta" ? "child" : "sprout";
       return { type: "transcript", eventId, speaker, delta, startMs, endMs };
     }
-    case "session.delegation.created": {
-      const delegation = raw.delegation;
-      if (!isRecord(delegation) || typeof delegation.id !== "string" || delegation.target !== "client") {
-        return { type: "delegation.unsupported", eventId };
-      }
-      // Delegation metadata carries no task text, and the app offers exactly
-      // one capability, so the ID is all that is needed.
-      return { type: "delegation", eventId, id: delegation.id };
-    }
     case "session.usage.updated":
       return { type: "usage", eventId, usage: raw.usage };
+    case "session.delegation.created": {
+      const delegation = raw.delegation;
+      if (!isRecord(delegation) || typeof delegation.id !== "string" || delegation.id.length === 0) return null;
+      return { type: "delegation.unexpected", eventId, id: delegation.id, target: text(delegation.target) };
+    }
     default:
       if (!raw.type.endsWith(".appended")) return null;
       return {

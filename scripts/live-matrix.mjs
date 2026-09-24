@@ -281,6 +281,14 @@ function timeline(name, scenario, log) {
  * took, and how closely the scene and Sprout's speech followed an advance.
  */
 function metrics(log) {
+  const unexpectedDelegationIds = [
+    ...new Set(
+      log
+        .filter(e => e.type === "session.delegation.created")
+        .map(e => e.delegation?.id)
+        .filter(id => typeof id === "string"),
+    ),
+  ];
   const evaluations = log
     .filter(e => e.dir === "evaluate")
     .map(e => ({
@@ -346,7 +354,8 @@ function metrics(log) {
     decisions,
     advances,
     scenesShown: scenes.map(scene => scene.scene),
-    delegationsRefused: log.filter(e => e.type === "session.delegation.created").length,
+    unexpectedDelegationCount: unexpectedDelegationIds.length,
+    unexpectedDelegationIds,
   };
 }
 

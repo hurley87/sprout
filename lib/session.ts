@@ -44,6 +44,9 @@ const GRACEFUL_CLOSE: Record<EndReason, boolean> = {
   page_hidden: false,
 };
 
+const UNEXPECTED_DELEGATION_RELEASE =
+  "No delegated task is available. Resume the current session instructions without inferring or changing lesson state.";
+
 export type Snapshot = {
   status: "starting" | "active" | "wrapping" | "goodbye" | "ended";
   sceneIndex: number;
@@ -137,7 +140,12 @@ export class LessonSession {
     // Bounded, in-memory prototype diagnostics; no raw audio or SDP.
     if (this.events.length >= 8000) this.events.shift();
     this.events.push({ at: Date.now() - this.createdAt, type, detail });
-    if (type.startsWith("answer.") || type.startsWith("advance.") || type === "scene.displayed")
+    if (
+      type.startsWith("answer.") ||
+      type.startsWith("advance.") ||
+      type === "scene.displayed" ||
+      type === "delegation.unexpected"
+    )
       this.diagnosticChanged?.();
   }
 
@@ -173,13 +181,14 @@ export class LessonSession {
     }
   }
 
-  private append(
-    type: "session.instructions.append" | "session.thinking.append",
-    content: string,
-    delegationId: string | null = null,
-  ) {
+  private append(content: string) {
     if (this.snapshot.status === "ended") return;
-    const sent = this.dispatch({ type, event_id: `sprout_${++this.commands}`, content, delegation_id: delegationId });
+    const sent = this.dispatch({
+      type: "session.instructions.append",
+      event_id: `sprout_${++this.commands}`,
+      delegation_id: null,
+      content,
+    });
     if (!sent) this.fail("The voice connection was lost. You can start a new lesson.");
   }
 
@@ -216,6 +225,9 @@ export class LessonSession {
         return;
       case "transcript":
         this.heard(event);
+        return;
+      case "delegation.unexpected":
+        this.releaseUnexpectedDelegation(event.id, event.target);
         return;
       case "microphone.activity_started":
         if (this.microphoneSpeaking || this.provisionalActivity) return;
@@ -279,12 +291,6 @@ export class LessonSession {
           this.scheduleEvaluation(this.latest, TRANSCRIPT_TAIL_MS);
         else if (this.latest) this.scheduleNoTranscriptRecovery(this.speechEpoch);
         return;
-      case "delegation":
-        this.refuseDelegation(event.id);
-        return;
-      case "delegation.unsupported":
-        this.log("action.rejected", "Invalid delegation");
-        return;
       case "context.appended":
         this.log(event.name, { client_event_id: event.clientEventId, start_ms: event.startMs, end_ms: event.endMs });
         return;
@@ -296,6 +302,21 @@ export class LessonSession {
         throw new Error(`Unhandled provider event: ${JSON.stringify(unhandled)}`);
       }
     }
+  }
+
+  private releaseUnexpectedDelegation(id: string, target?: string) {
+    if (this.delegations.has(id)) return;
+    this.delegations.add(id);
+    this.log("delegation.unexpected", { id, target });
+    if (target !== "client") return;
+
+    const sent = this.dispatch({
+      type: "session.thinking.append",
+      event_id: `sprout_${++this.commands}`,
+      delegation_id: id,
+      content: UNEXPECTED_DELEGATION_RELEASE,
+    });
+    if (!sent) this.log("delegation.release_failed", { id });
   }
 
   private begin() {
@@ -451,7 +472,6 @@ export class LessonSession {
       if (this.speechEpoch !== epoch || this.transcriptEpoch === epoch || !this.evaluable) return;
       this.log("answer.no_transcript", { epoch });
       this.append(
-        "session.instructions.append",
         "I could not hear the child's latest answer clearly. Gently ask them to say it again without judging the earlier count or changing the scene.",
       );
     }, TRANSCRIPT_FALLBACK_MS);
@@ -633,7 +653,7 @@ export class LessonSession {
     )
       return;
     this.log("answer.release_sent", { answer_version: deferred.answerVersion, scene: sceneAt(deferred.sceneIndex).id });
-    this.append("session.instructions.append", deferred.content);
+    this.append(deferred.content);
   }
 
   private cancelDeferredStay() {
@@ -653,17 +673,6 @@ export class LessonSession {
     this.update({ sceneIndex });
   }
 
-  private refuseDelegation(delegationId: string) {
-    if (this.delegations.has(delegationId)) return;
-    this.delegations.add(delegationId);
-    this.log("action.rejected", { action: "delegation", id: delegationId, reason: "The app owns scene changes" });
-    this.append(
-      "session.thinking.append",
-      "Nothing happened; you have no backend tools. The app changes the scene by itself and will tell you. Keep playing with the group on screen and do not delegate again.",
-      delegationId,
-    );
-  }
-
   // Called after React commits and the browser has a paint opportunity.
   displayed(sceneIndex: number) {
     if (this.expireIfOverdue()) return;
@@ -679,12 +688,11 @@ export class LessonSession {
     switch (pending.kind) {
       case "greeting":
         this.append(
-          "session.instructions.append",
           `Greet the child now in English: introduce yourself as Sprout and invite them to play. ${sceneContext(this.scene)} Then pause and listen.`,
         );
         return;
       case "advance":
-        this.append("session.instructions.append", advanceContext(this.scene));
+        this.append(advanceContext(this.scene));
         return;
       default: {
         const unhandled: never = pending.kind;
@@ -700,7 +708,6 @@ export class LessonSession {
     this.update({ status: "wrapping" });
     this.log("lesson.wrap_up");
     this.append(
-      "session.instructions.append",
       "We have played for four and a half minutes. Gently finish this exchange. No new scenes or questions after it. We will say goodbye shortly.",
     );
   }
@@ -712,8 +719,7 @@ export class LessonSession {
     this.update({ status: "goodbye" });
     this.log("lesson.goodbye_requested");
     this.append(
-      "session.instructions.append",
-      "The lesson is finished. Say a brief warm goodbye now, then remain quiet. No questions, new activities, or delegation.",
+      "The lesson is finished. Say a brief warm goodbye now, then remain quiet. No questions or new activities.",
     );
   }
 

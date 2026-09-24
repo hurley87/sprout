@@ -63,7 +63,6 @@ function deliver(session: LessonSession, raw: unknown) {
   if (event) session.receive(event);
   return event;
 }
-const delegation = (id: string) => ({ type: "session.delegation.created", delegation: { id, target: "client" } });
 const speech = (delta: string, start_ms = 0, output = false) => ({
   type: `session.${output ? "output" : "input"}_transcript.delta`,
   delta,
@@ -93,7 +92,7 @@ describe("application lifecycle", () => {
     const { session, transport } = setup();
     vi.advanceTimersByTime(TIMING.wrap);
     expect(session.snapshot.status).toBe("wrapping");
-    deliver(session, delegation("late"));
+    deliver(session, speech("We have more to count!", 270_000, true));
     expect(session.snapshot.sceneIndex).toBe(0);
     vi.advanceTimersByTime(TIMING.goodbye - TIMING.wrap);
     expect(session.snapshot.status).toBe("goodbye");
@@ -115,7 +114,7 @@ describe("application lifecycle", () => {
   it("hard-stops before applying a delayed event after six minutes", () => {
     const { session, transport } = setup();
     vi.setSystemTime(Date.now() + TIMING.hard);
-    deliver(session, delegation("too-late"));
+    deliver(session, speech("Let's keep playing!", TIMING.hard, true));
     expect(session.snapshot.reason).toBe("time_limit");
     expect(session.snapshot.sceneIndex).toBe(0);
     expect(transport.close).toHaveBeenCalledOnce();
@@ -131,9 +130,18 @@ describe("application lifecycle", () => {
     const { session, transport } = setup();
     session.end("parent_stop");
     expect(transport.stopMedia).toHaveBeenCalledOnce();
-    deliver(session, delegation("late"));
+    const commandCount = vi.mocked(transport.send).mock.calls.length;
+    deliver(session, speech("Let's keep playing!", 500, true));
     deliver(session, speech("continue"));
+    deliver(session, {
+      type: "session.delegation.created",
+      event_id: "late-delegation-event",
+      delegation: { id: "late-delegation", target: "client" },
+    });
     session.displayed(1);
+    expect(session.snapshot.sceneIndex).toBe(0);
+    expect(vi.mocked(transport.send)).toHaveBeenCalledTimes(commandCount);
+    expect(session.events.some(event => event.type === "delegation.unexpected")).toBe(false);
     deliver(session, { type: "session.closed", reason: "close_requested", usage: { seconds: 2 } });
     session.end("parent_stop");
     vi.runAllTimers();
@@ -188,6 +196,127 @@ describe("application lifecycle", () => {
     expect(session.snapshot.reason).toBe("page_hidden");
     expect(transport.close).toHaveBeenCalledOnce();
   });
+});
+
+describe("unexpected GPT-Live delegation", () => {
+  it("records and releases once without changing the lesson or affecting Jev", async () => {
+    const evaluateAnswer = answering(CONFIDENT);
+    const { session, transport } = setup(true, evaluateAnswer);
+    const snapshotBefore = { ...session.snapshot };
+    vi.mocked(transport.send).mockClear();
+
+    deliver(session, {
+      type: "session.delegation.created",
+      event_id: "delegation-event-1",
+      delegation: { id: "delegation-1", type: "delegation", target: "client" },
+    });
+
+    expect(session.snapshot).toEqual(snapshotBefore);
+    expect(evaluateAnswer).not.toHaveBeenCalled();
+    expect(session.events.filter(event => event.type === "delegation.unexpected")).toHaveLength(1);
+    expect(session.events.find(event => event.type === "delegation.unexpected")?.detail).toEqual({
+      id: "delegation-1",
+      target: "client",
+    });
+    expect(transport.send).toHaveBeenCalledOnce();
+    const fallback = vi.mocked(transport.send).mock.calls[0][0];
+    const fallbackContent = fallback.type === "session.thinking.append" ? fallback.content : "";
+    expect(fallback).toMatchObject({
+      type: "session.thinking.append",
+      delegation_id: "delegation-1",
+      content: fallbackContent,
+    });
+    expect(fallbackContent).toBe(
+      "No delegated task is available. Resume the current session instructions without inferring or changing lesson state.",
+    );
+    expect(fallbackContent).not.toMatch(/\b(?:continue speaking|ask|praise|correct|advance|count together)\b/i);
+
+    // A repeated notification with a different provider event ID is still the same task.
+    deliver(session, {
+      type: "session.delegation.created",
+      event_id: "delegation-event-2",
+      delegation: { id: "delegation-1", type: "delegation", target: "client" },
+    });
+    expect(transport.send).toHaveBeenCalledOnce();
+    expect(session.events.filter(event => event.type === "delegation.unexpected")).toHaveLength(1);
+
+    // Normal answer checking remains application-owned and may advance only through Jev.
+    deliver(session, speech("One!"));
+    await vi.advanceTimersByTimeAsync(SETTLE_MS - 1);
+    expect(evaluateAnswer).not.toHaveBeenCalled();
+    expect(session.snapshot.sceneIndex).toBe(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(evaluateAnswer).toHaveBeenCalledWith({ sceneIndex: 0, utterance: "One!" }, expect.anything());
+    expect(session.snapshot.sceneIndex).toBe(0);
+    expect(
+      vi.mocked(transport.send).mock.calls.filter(([command]) => command.type === "session.thinking.append"),
+    ).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
+    expect(session.snapshot.sceneIndex).toBe(1);
+    session.displayed(1);
+    expect(vi.mocked(transport.send).mock.calls.at(-1)?.[0]).toMatchObject({
+      type: "session.instructions.append",
+      delegation_id: null,
+      content: advanceContext(sceneAt(1)),
+    });
+
+    const report = session.report("test");
+    expect(report.events.filter(event => event.type === "delegation.unexpected")).toHaveLength(1);
+    expect(report.events.find(event => event.type === "delegation.unexpected")?.detail).toMatchObject({
+      id: "delegation-1",
+    });
+  });
+
+  it.each([
+    ["ADVANCE", CONFIDENT, "One!", 1, advanceContext(sceneAt(1))],
+    ["STAY", UNSURE, "Five!", 0, stayContext(sceneAt(0))],
+  ])(
+    "does not alter a pending %s decision or bypass its correction window",
+    async (decision, probability, answer, sceneIndex, context) => {
+      const { session, transport, evaluateAnswer } = setup(true, answering(probability));
+      vi.mocked(transport.send).mockClear();
+      deliver(session, speech(answer));
+      await settle();
+
+      expect(evaluateAnswer).toHaveBeenCalledOnce();
+      expect(session.events.findLast(event => event.type === "answer.evaluated")?.detail).toMatchObject({ decision });
+      expect(session.snapshot.sceneIndex).toBe(0);
+      const pendingSnapshot = { ...session.snapshot };
+
+      deliver(session, {
+        type: "session.delegation.created",
+        event_id: `pending-${decision}-delegation-event`,
+        delegation: { id: `pending-${decision}-delegation`, target: "client" },
+      });
+      expect(session.snapshot).toEqual(pendingSnapshot);
+      expect(evaluateAnswer).toHaveBeenCalledOnce();
+      expect(vi.mocked(transport.send).mock.calls.map(([command]) => command)).toEqual([
+        expect.objectContaining({
+          type: "session.thinking.append",
+          delegation_id: `pending-${decision}-delegation`,
+          content:
+            "No delegated task is available. Resume the current session instructions without inferring or changing lesson state.",
+        }),
+      ]);
+
+      await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - 1);
+      expect(session.snapshot.sceneIndex).toBe(0);
+      expect(
+        vi.mocked(transport.send).mock.calls.filter(([command]) => command.type === "session.instructions.append"),
+      ).toHaveLength(0);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(session.snapshot.sceneIndex).toBe(sceneIndex);
+
+      if (sceneIndex === 1) session.displayed(1);
+      expect(vi.mocked(transport.send).mock.calls.map(([command]) => command)).toEqual([
+        expect.objectContaining({
+          type: "session.thinking.append",
+          delegation_id: `pending-${decision}-delegation`,
+        }),
+        expect.objectContaining({ type: "session.instructions.append", delegation_id: null, content: context }),
+      ]);
+    },
+  );
 });
 
 describe("answer-gated scene advancement", () => {
@@ -549,7 +678,10 @@ describe("answer-gated scene advancement", () => {
     expect(transport.send).toHaveBeenCalledWith(
       expect.objectContaining({ type: "session.instructions.append", delegation_id: null }),
     );
-    expect(vi.mocked(transport.send).mock.calls[0][0]).toMatchObject({ content: expect.stringContaining("2 ducks") });
+    expect(vi.mocked(transport.send).mock.calls[0][0]).toMatchObject({
+      delegation_id: null,
+      content: expect.stringContaining("2 ducks"),
+    });
   });
   it("cannot advance past the last scene however confident the answers are", async () => {
     const { session, evaluateAnswer } = setup(true, answering(1));
@@ -564,20 +696,6 @@ describe("answer-gated scene advancement", () => {
     expect(sceneAt(session.snapshot.sceneIndex).quantity).toBe(5);
     // On the last scene there is nothing to decide, so nothing is asked.
     expect(vi.mocked(evaluateAnswer).mock.calls).toHaveLength(LAST_SCENE);
-  });
-  it("refuses model delegation without changing the scene", () => {
-    const { session, transport } = setup();
-    vi.mocked(transport.send).mockClear();
-    deliver(session, delegation("a"));
-    deliver(session, delegation("a"));
-    expect(session.snapshot.sceneIndex).toBe(0);
-    expect(transport.send).toHaveBeenCalledOnce();
-    expect(transport.send).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "session.thinking.append", delegation_id: "a" }),
-    );
-    expect(session.events.some(e => e.type === "action.rejected")).toBe(true);
-    deliver(session, { type: "session.delegation.created", delegation: { id: "wrong", target: "responses" } });
-    expect(session.snapshot.sceneIndex).toBe(0);
   });
   it("keeps every scene within the 1-5 boundary and names objects correctly", () => {
     expect(SCENES.every(scene => Number.isInteger(scene.quantity) && scene.quantity >= 1 && scene.quantity <= 5)).toBe(
@@ -796,7 +914,15 @@ describe("answer-check turn synchronization", () => {
     expect(INSTRUCTIONS).toContain("The pause is only for counts: reply straight away to everything else");
     // The old contract made GPT-Live reply to every answer at once.
     expect(INSTRUCTIONS).not.toContain("after the child answers, always reply");
-    expect(PROMPT_VERSION).toBe("counting-jev-3");
+    expect(INSTRUCTIONS.match(/Delegation policy:/g)).toHaveLength(1);
+    expect(INSTRUCTIONS).toContain(
+      "Delegation policy:\nBackend tools: None. Sprout has no backend task or reasoning capabilities available through delegation.\nDelegate to the backend when: Never.",
+    );
+    expect(INSTRUCTIONS).toContain(
+      "Do not delegate counting, lesson progression, scene changes, answer checking, scaffolding, or conversation. The application owns deterministic lesson state and will provide updates when state changes. Follow the current turn-taking and answer-check instructions while waiting for application updates; do not infer or change lesson state.",
+    );
+    expect(INSTRUCTIONS).not.toContain("continue the spoken interaction from the currently displayed scene");
+    expect(PROMPT_VERSION).toBe("counting-jev-4");
   });
   it("sends nothing while the utterance settles or Jev is deciding", async () => {
     let answer!: (result: AnswerResult) => void;
@@ -820,7 +946,11 @@ describe("answer-check turn synchronization", () => {
     expect(transport.send).not.toHaveBeenCalled();
     session.displayed(1);
     expect(sent(transport)).toEqual([
-      expect.objectContaining({ type: "session.instructions.append", content: advanceContext(sceneAt(1)) }),
+      expect.objectContaining({
+        type: "session.instructions.append",
+        delegation_id: null,
+        content: advanceContext(sceneAt(1)),
+      }),
     ]);
     expect(released(transport)).toHaveLength(0);
   });
@@ -859,6 +989,7 @@ describe("answer-check turn synchronization", () => {
       expect(sent(transport)).toEqual([
         expect.objectContaining({
           type: "session.instructions.append",
+          delegation_id: null,
           content: evaluationUnavailableContext(sceneAt(0)),
         }),
       ]);
@@ -1063,13 +1194,5 @@ describe("provider event parsing", () => {
       eventId: undefined,
       code: "not_allowed",
     });
-    expect(parseProviderEvent({ ...delegation("a"), arguments: { quantity: 100 } })).toEqual({
-      type: "delegation",
-      eventId: undefined,
-      id: "a",
-    });
-    expect(
-      parseProviderEvent({ type: "session.delegation.created", delegation: { id: "a", target: "responses" } })?.type,
-    ).toBe("delegation.unsupported");
   });
 });

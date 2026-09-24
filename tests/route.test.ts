@@ -51,7 +51,7 @@ describe("local Live session endpoint", () => {
     expect(response.status).toBe(503);
     expect((await response.json()).error).toContain("OPENAI_API_KEY");
   });
-  it("uses exactly GPT-Live-1 with client delegation and returns only SDP/session ID", async () => {
+  it("uses explicit client delegation and returns only SDP/session ID", async () => {
     vi.stubEnv("OPENAI_API_KEY", "synthetic-test-key");
     const fetch = vi.fn(async () =>
       Response.json({ session: { id: "live_test", private: "omit" }, transport: { sdp: "answer" }, secret: "omit" }),
@@ -66,7 +66,10 @@ describe("local Live session endpoint", () => {
     const calls = fetch.mock.calls as unknown as [string, RequestInit][];
     expect(calls[0][0]).toBe("https://api.openai.com/v1/live/sessions");
     expect(JSON.parse(calls[0][1].body as string).session).toEqual(LIVE_CONFIG);
+    expect(LIVE_CONFIG).toMatchObject({ model: "gpt-live-1", store: false });
     expect(LIVE_CONFIG.delegation).toEqual({ type: "client" });
+    expect(LIVE_CONFIG).not.toHaveProperty("tools");
+    expect(LIVE_CONFIG.delegation).not.toHaveProperty("responses");
   });
   it("does not leak provider errors or retry paid creation", async () => {
     vi.stubEnv("OPENAI_API_KEY", "synthetic-test-key");

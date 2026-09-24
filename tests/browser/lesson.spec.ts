@@ -154,7 +154,13 @@ test("parent start, committed scene, stop, late actions, and diagnostics export"
   expect(
     await page.locator("audio").evaluate((audio: HTMLAudioElement) => audio.paused && audio.srcObject === null),
   ).toBe(true);
-  await emit(page, { type: "session.delegation.created", delegation: { id: "late", target: "client" } });
+  const commandsBeforeLateModelOutput = await commands(page);
+  await emit(page, {
+    type: "session.delegation.created",
+    event_id: "late-delegation-event",
+    delegation: { id: "late-delegation", type: "delegation", target: "client" },
+  });
+  expect(await commands(page)).toEqual(commandsBeforeLateModelOutput);
   await expect(page.locator("[data-scene]")).toHaveCount(0);
   await page.getByText("Parent testing notes").click();
   const download = page.waitForEvent("download");
