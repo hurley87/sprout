@@ -595,6 +595,79 @@ describe("answer-check turn synchronization", () => {
   const released = (transport: Transport) =>
     sent(transport).filter(command => "content" in command && command.content.includes("has not changed"));
 
+  it("keeps a wrong partial count private until the child finishes correcting it", async () => {
+    const evaluateAnswer: EvaluateAnswer = vi.fn(async ({ sceneIndex, utterance }) =>
+      evaluated(sceneIndex === 0 || utterance.includes("two") ? CONFIDENT : UNSURE),
+    );
+    const { session, transport } = setup(true, evaluateAnswer);
+    deliver(session, speech("One!"));
+    await settle();
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
+    session.displayed(1);
+    vi.mocked(transport.send).mockClear();
+
+    mic(session, "microphone.speech_started");
+    deliver(session, speech("One", 10_000));
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
+    expect(session.events.findLast(event => event.type === "answer.evaluated")?.detail).toMatchObject({
+      decision: "STAY",
+    });
+    expect(sent(transport)).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(1000);
+    mic(session, "microphone.speech_started");
+    deliver(session, speech("... two", 11_000));
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS + CORRECTION_WINDOW_MS);
+    expect(evaluateAnswer).toHaveBeenLastCalledWith({ sceneIndex: 1, utterance: "One... two" }, expect.anything());
+    expect(session.snapshot.sceneIndex).toBe(2);
+    expect(released(transport)).toHaveLength(0);
+    expect(sent(transport)).toHaveLength(0);
+  });
+
+  it("restarts the STAY hold for a revised count and releases only the final version", async () => {
+    const { session, transport, evaluateAnswer } = setup(true, answering(UNSURE));
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("Five"));
+    await settle();
+    deliver(session, speech("... no, four", 600));
+    await settle();
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - 1);
+    expect(released(transport)).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(evaluateAnswer).toHaveBeenCalledTimes(2);
+    expect(released(transport)).toHaveLength(1);
+    expect(session.events.filter(event => event.type === "answer.release_cancelled")).toHaveLength(1);
+  });
+
+  it("drops a delayed STAY instruction if Sprout has already begun helping", async () => {
+    const { session, transport } = setup(true, answering(UNSURE));
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("Five"));
+    await settle();
+    deliver(session, speech("Let's count these ducks together.", 800, true));
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
+    expect(released(transport)).toHaveLength(0);
+  });
+
+  it("resumes a pending STAY after a transcriptless microphone spike", async () => {
+    const { session, transport } = setup(true, answering(UNSURE));
+    vi.mocked(transport.send).mockClear();
+    mic(session, "microphone.speech_started");
+    deliver(session, speech("Five"));
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - 1);
+    session.receive({ type: "microphone.activity_started" });
+    await vi.advanceTimersByTimeAsync(1);
+    expect(released(transport)).toHaveLength(0);
+    session.receive({ type: "microphone.activity_discarded" });
+    await vi.advanceTimersByTimeAsync(SETTLE_MS - 1);
+    expect(released(transport)).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(released(transport)).toHaveLength(1);
+  });
+
   it.each(["", "Oh!", "Ooh!", "Okay!"])(
     "advances after the correction window with silence or neutral acknowledgment %s",
     async reply => {
@@ -731,6 +804,8 @@ describe("answer-check turn synchronization", () => {
     deliver(session, speech("Five!"));
     await settle();
     expect(session.snapshot.sceneIndex).toBe(0);
+    expect(sent(transport)).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
     expect(sent(transport)).toEqual([
       expect.objectContaining({
         type: "session.instructions.append",
@@ -753,6 +828,8 @@ describe("answer-check turn synchronization", () => {
       deliver(session, speech("One!"));
       await settle();
       expect(session.snapshot).toMatchObject({ sceneIndex: 0, status: "active" });
+      expect(sent(transport)).toHaveLength(0);
+      await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
       expect(sent(transport)).toEqual([
         expect.objectContaining({
           type: "session.instructions.append",
@@ -772,10 +849,11 @@ describe("answer-check turn synchronization", () => {
     vi.mocked(transport.send).mockClear();
     deliver(session, speech("Five!"));
     await settle();
-    await settle();
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
     expect(released(transport)).toHaveLength(1);
     deliver(session, speech(" No, four!", 600));
     await settle();
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
     expect(released(transport)).toHaveLength(2);
   });
   it("does not release speech GPT-Live was never asked to pause for", async () => {
@@ -798,6 +876,7 @@ describe("answer-check turn synchronization", () => {
     deliver(session, speech("Three!", 10_000));
     deliver(session, speech("Ooh, okay!", 10_800, true));
     await settle();
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
     expect(released(transport)).toHaveLength(1);
   });
   it("does not release a stale result; the newer speech gets its own decision", async () => {
@@ -814,6 +893,7 @@ describe("answer-check turn synchronization", () => {
     await settle();
     answers[1](evaluated(0.02));
     await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
     expect(released(transport)).toHaveLength(1);
   });
   it("sends no release after a stop request, wrap-up, or the end of the lesson", async () => {

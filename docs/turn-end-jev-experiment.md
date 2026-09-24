@@ -59,6 +59,10 @@ A regression test showed that Jev could confidently approve “One” on the one
 
 This is a bounded policy, not proof that a learner has finished. A correction after the window can still arrive too late, and normal advances now wait longer than the earlier live-run timings above. The earlier measurements predate this change. A fresh live listening run is needed before claiming the turn-taking guarantee or comparing end-to-display latency again.
 
+## Follow-up: STAY correction window
+
+A wrong partial count could still trigger a `stayContext(...)` instruction as soon as Jev replied, even when the child continued with a correct count during the 2,500 ms correction window. Held STAY and unavailable-check instructions now wait until that same window closes. A new learner transcript or confirmed microphone speech cancels the pending instruction; unconfirmed microphone activity pauses it until the transcript grace period ends. At release, the app checks that the scene and answer are still current and that Sprout has not begun a substantive reply. The two-duck regression covers “One” followed by “… two” without an intervening correction or scaffolding instruction. This adds up to 2,500 ms of wait for non-advancing results when Jev responds early.
+
 ## Follow-up: provisional microphone activity
 
 The energy detector previously treated one loud audio frame as speech start. That immediately cancelled a pending Jev result or approved advance; a click or echo without a child transcript could leave a valid count unadvanced. The detector now reports provisional activity on the first loud frame and confirms speech only after 80 ms of voiced activity. A burst that goes quiet for 150 ms before confirmation is discarded. The session pauses pending work during provisional activity, then resumes an unconfirmed burst's prior decision after a 1,500 ms transcript grace period. A child transcript arriving during the burst supersedes the prior decision and is evaluated after confirmed VAD stop or the transcript fallback.

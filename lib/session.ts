@@ -70,6 +70,13 @@ type DeferredAdvance = {
   correctionReadyAt: number;
   outputQuietAt: number;
 };
+type DeferredStay = {
+  sceneIndex: number;
+  answerVersion: string;
+  speechEpoch: number;
+  correctionReadyAt: number;
+  content: string;
+};
 
 export class LessonSession {
   snapshot: Snapshot = { status: "starting", sceneIndex: 0 };
@@ -82,6 +89,8 @@ export class LessonSession {
   private settleTimer?: ReturnType<typeof setTimeout>;
   private deferredTimer?: ReturnType<typeof setTimeout>;
   private deferredAdvance: DeferredAdvance | null = null;
+  private stayTimer?: ReturnType<typeof setTimeout>;
+  private deferredStay: DeferredStay | null = null;
   private seen = new Set<string>();
   private delegations = new Set<string>();
   private pending: PendingDisplay | null = null;
@@ -214,6 +223,7 @@ export class LessonSession {
         this.activityTranscriptRevision = this.transcriptRevision;
         clearTimeout(this.settleTimer);
         clearTimeout(this.deferredTimer);
+        clearTimeout(this.stayTimer);
         clearTimeout(this.recoveryTimer);
         clearTimeout(this.noTranscriptTimer);
         this.log("answer.activity_started");
@@ -229,6 +239,7 @@ export class LessonSession {
           this.evaluation?.abort();
           if (this.latest) this.scheduleEvaluation(this.latest, TRANSCRIPT_FALLBACK_MS);
         } else if (this.deferredAdvance) this.scheduleDeferredRelease();
+        else if (this.deferredStay) this.scheduleDeferredStayRelease();
         else if (this.heldDecision) this.scheduleHeldDecision();
         else if (!this.evaluation && this.latest) this.scheduleEvaluation(this.latest, TRANSCRIPT_FALLBACK_MS);
         return;
@@ -249,6 +260,7 @@ export class LessonSession {
         clearTimeout(this.settleTimer);
         this.evaluation?.abort();
         this.cancelDeferredAdvance();
+        this.cancelDeferredStay();
         this.log("answer.speech_started", { epoch: this.speechEpoch });
         return;
       case "microphone.speech_stopped":
@@ -324,6 +336,7 @@ export class LessonSession {
       clearTimeout(this.noTranscriptTimer);
       this.evaluation?.abort();
       this.cancelDeferredAdvance();
+      this.cancelDeferredStay();
       this.latest = utterance;
       this.lastDeltaAt = Date.now();
       this.transcriptEpoch = this.speechEpoch;
@@ -373,6 +386,7 @@ export class LessonSession {
       !this.provisionalActivity &&
       !this.pending &&
       !this.deferredAdvance &&
+      !this.deferredStay &&
       this.snapshot.sceneIndex < LAST_SCENE
     );
   }
@@ -487,8 +501,9 @@ export class LessonSession {
     if (advancing) {
       this.deferAdvance(sceneIndex, version);
     } else if (releasing)
-      this.append(
-        "session.instructions.append",
+      this.deferStay(
+        sceneIndex,
+        version,
         result.status === "unavailable" ? evaluationUnavailableContext(this.scene) : stayContext(this.scene),
       );
   }
@@ -579,6 +594,54 @@ export class LessonSession {
     this.deferredAdvance = null;
   }
 
+  private deferStay(sceneIndex: number, answerVersion: string, content: string) {
+    this.deferredStay = {
+      sceneIndex,
+      answerVersion,
+      speechEpoch: this.speechEpoch,
+      correctionReadyAt: Math.max(this.turnEndAt, this.lastDeltaAt) + CORRECTION_WINDOW_MS,
+      content,
+    };
+    this.log("answer.release_deferred", { answer_version: answerVersion, scene: sceneAt(sceneIndex).id });
+    this.scheduleDeferredStayRelease();
+  }
+
+  private scheduleDeferredStayRelease() {
+    clearTimeout(this.stayTimer);
+    const deferred = this.deferredStay;
+    if (!deferred) return;
+    const releaseAt = Math.max(deferred.correctionReadyAt, this.activityRecoveryUntil);
+    this.stayTimer = setTimeout(() => this.releaseDeferredStay(), Math.max(0, releaseAt - Date.now()));
+  }
+
+  private releaseDeferredStay() {
+    const deferred = this.deferredStay;
+    if (!deferred) return;
+    this.deferredStay = null;
+    clearTimeout(this.stayTimer);
+    if (
+      this.expireIfOverdue() ||
+      this.snapshot.status !== "active" ||
+      this.pending ||
+      this.provisionalActivity ||
+      this.microphoneSpeaking ||
+      this.speechEpoch !== deferred.speechEpoch ||
+      `${this.latest?.startMs}:${this.latest?.text.trim()}` !== deferred.answerVersion ||
+      this.snapshot.sceneIndex !== deferred.sceneIndex ||
+      !this.latest ||
+      !this.holding(this.latest)
+    )
+      return;
+    this.log("answer.release_sent", { answer_version: deferred.answerVersion, scene: sceneAt(deferred.sceneIndex).id });
+    this.append("session.instructions.append", deferred.content);
+  }
+
+  private cancelDeferredStay() {
+    clearTimeout(this.stayTimer);
+    if (this.deferredStay) this.log("answer.release_cancelled", { answer_version: this.deferredStay.answerVersion });
+    this.deferredStay = null;
+  }
+
   /** The application, not the model, commits the next deterministic scene. */
   private advance(answerVersion: string) {
     this.log("advance.committed", {
@@ -633,6 +696,7 @@ export class LessonSession {
   private wrap() {
     if (this.snapshot.status !== "active") return;
     this.cancelDeferredAdvance();
+    this.cancelDeferredStay();
     this.update({ status: "wrapping" });
     this.log("lesson.wrap_up");
     this.append(
@@ -644,6 +708,7 @@ export class LessonSession {
   private goodbye() {
     if (this.snapshot.status === "ended") return;
     this.cancelDeferredAdvance();
+    this.cancelDeferredStay();
     this.update({ status: "goodbye" });
     this.log("lesson.goodbye_requested");
     this.append(
@@ -668,6 +733,7 @@ export class LessonSession {
     this.provisionalActivity = false;
     this.activityRecoveryUntil = 0;
     this.cancelDeferredAdvance();
+    this.cancelDeferredStay();
     this.phaseTimers.forEach(clearTimeout);
     this.evaluation?.abort();
     this.pending = null;
