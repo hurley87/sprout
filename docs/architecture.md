@@ -16,6 +16,12 @@ This document translates the [PRD](sprout-mvp-prd.md) into implementation bounda
 
 Live behavior can respond to the child's current utterance immediately. The parent review boundary applies to durable evidence and future lesson planning.
 
+### Count-answer feedback sequencing in the prototype
+
+At learner-turn onset the browser applies temporary playback suppression until the learner turn settles. The app uses the existing answer-candidate signal to send count turns to Jev; settled turns without that signal release the gate without Jev or answer context. Pre-decision substantive output is semantically ignored: it cannot affect correctness, scene progression, scaffolding, or answer acceptance. A current Jev result still observes the 2.5-second correction window. If substantive output occurred while muted, the app waits for a bounded output-transcript quiet interval before releasing the current STAY, ADVANCE, or UNAVAILABLE context; an ADVANCE scene is displayed before its context is sent. The provider acknowledgment then opens playback so output generated from the new context can be heard.
+
+This is client playback suppression, not provider generation cancellation. GPT-Live continues to receive audio and may keep generating transcripts while the browser audio element is muted. The documented [GPT-Live client events](https://developers.openai.com/api/reference/cli/resources/live) expose no per-response cancellation command; `response.cancel` belongs to the [Realtime API](https://platform.openai.com/docs/api-reference/realtime-client-events). Output-transcript silence is only a bounded heuristic for provider output completion; it does not prove that audio has stopped or establish what a child heard. Audio emitted before the browser applies the mute cannot be recalled.
+
 ### Tutoring principle: what vs how
 
 Sprout deliberately separates **what needs to be learned** from **how the live interaction unfolds**.

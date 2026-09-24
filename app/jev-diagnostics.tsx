@@ -14,6 +14,10 @@ import type { Diagnostic } from "@/lib/session";
 
 const ms = (value?: number) => (value === undefined ? "—" : `${Math.round(value).toLocaleString()} ms`);
 const probability = (value?: number) => (value === undefined ? "—" : value.toFixed(2));
+const eventDetail = (event?: Diagnostic) =>
+  event?.detail && typeof event.detail === "object" ? (event.detail as Record<string, unknown>) : {};
+const latestEvent = (events: readonly Diagnostic[], type: string) =>
+  [...events].reverse().find(event => event.type === type);
 
 function Timeline({ trace }: { trace: EvaluationTrace }) {
   const stages = [
@@ -48,6 +52,19 @@ function Timeline({ trace }: { trace: EvaluationTrace }) {
 export function JevDiagnostics({ events }: { events: readonly Diagnostic[] }) {
   const history = evaluationHistory(events);
   const active = history.at(-1);
+  const feedbackGate = latestEvent(events, "answer.feedback_gate");
+  const feedbackGateDetail = eventDetail(feedbackGate);
+  const feedbackViolations = events.filter(event => event.type === "answer.feedback_violation");
+  const lastViolation = feedbackViolations.at(-1);
+  const lastDecisionRelease = latestEvent(events, "answer.decision_releasable");
+  const lastContextRelease = latestEvent(events, "answer.context_release");
+  const contextReleaseId = eventDetail(lastContextRelease).command_id;
+  const contextApplied = events.find(
+    event => event.type === "answer.context_applied" && eventDetail(event).command_id === contextReleaseId,
+  );
+  const nonAnswerRelease = latestEvent(events, "answer.feedback_non_answer_release");
+  const outputQuiet = latestEvent(events, "answer.feedback_output_quiet");
+  const waitingOutputQuiet = latestEvent(events, "answer.feedback_waiting_for_output_quiet");
   return (
     <aside className="jev-diagnostics" aria-label="Jev diagnostics">
       <h2>Jev diagnostics</h2>
@@ -123,6 +140,45 @@ export function JevDiagnostics({ events }: { events: readonly Diagnostic[] }) {
           {ms(CORRECTION_WINDOW_MS)}.
         </p>
       )}
+      <h3>Answer feedback ordering</h3>
+      <dl className="jev-facts">
+        <dt>Browser playback gate</dt>
+        <dd>
+          {feedbackGate
+            ? `${String(feedbackGateDetail.state)} (${String(feedbackGateDetail.phase)}) at ${ms(feedbackGate.at)}`
+            : "Not engaged"}
+        </dd>
+        <dt>Premature substantive transcripts</dt>
+        <dd>{feedbackViolations.length}</dd>
+        <dt>Last transcript violation</dt>
+        <dd>
+          {lastViolation
+            ? `${String(eventDetail(lastViolation).transcript)} at ${ms(lastViolation.at)}; playback is not verified`
+            : "None recorded"}
+        </dd>
+        <dt>Current Jev decision releasable</dt>
+        <dd>
+          {lastDecisionRelease
+            ? `${String(eventDetail(lastDecisionRelease).decision)} at ${ms(lastDecisionRelease.at)}`
+            : "Not yet"}
+        </dd>
+        <dt>Non-answer turn released</dt>
+        <dd>{nonAnswerRelease ? `Yes, at ${ms(nonAnswerRelease.at)}` : "Not recorded"}</dd>
+        <dt>Premature output quiet</dt>
+        <dd>
+          {outputQuiet
+            ? `Transcript quiet at ${ms(outputQuiet.at)}; this is a bounded heuristic, not provider completion`
+            : waitingOutputQuiet
+              ? `Waiting since ${ms(waitingOutputQuiet.at)}; provider output completion is unverified`
+              : "No wait required"}
+        </dd>
+        <dt>Answer context released</dt>
+        <dd>
+          {lastContextRelease
+            ? `${String(eventDetail(lastContextRelease).decision ?? "session context")} at ${ms(lastContextRelease.at)}${contextApplied ? `; applied at ${ms(contextApplied.at)}` : "; awaiting provider acknowledgment"}`
+            : "Not yet"}
+        </dd>
+      </dl>
       <h3>Current lesson history</h3>
       <div className="jev-history-scroll">
         <table>

@@ -46,7 +46,13 @@ const CONFIDENT = ADVANCE_THRESHOLD;
 const UNSURE = ADVANCE_THRESHOLD - 0.01;
 
 function setup(active = true, evaluateAnswer: EvaluateAnswer = answering(UNSURE)) {
-  const transport: Transport = { start: vi.fn(async () => {}), send: vi.fn(), stopMedia: vi.fn(), close: vi.fn() };
+  const transport: Transport = {
+    start: vi.fn(async () => {}),
+    send: vi.fn(),
+    setOutputMuted: vi.fn(),
+    stopMedia: vi.fn(),
+    close: vi.fn(),
+  };
   const session = new LessonSession(transport, evaluateAnswer, vi.fn());
   void session.start();
   if (active) {
@@ -712,6 +718,316 @@ describe("answer-check turn synchronization", () => {
   const sent = (transport: Transport) => vi.mocked(transport.send).mock.calls.map(([command]) => command);
   const released = (transport: Transport) =>
     sent(transport).filter(command => "content" in command && command.content.includes("has not changed"));
+  const acknowledgeLastContext = (session: LessonSession, transport: Transport) => {
+    const command = sent(transport)
+      .filter(command => command.type === "session.instructions.append")
+      .at(-1);
+    if (command?.type === "session.instructions.append")
+      deliver(session, { type: "session.instructions.appended", client_event_id: command.event_id });
+  };
+
+  it("gates substantive correctness speech and advances only after current Jev and displayed-scene context", async () => {
+    let resolveAnswer!: (result: AnswerResult) => void;
+    const pending: EvaluateAnswer = vi.fn(() => new Promise<AnswerResult>(resolve => (resolveAnswer = resolve)));
+    const { session, transport } = setup(true, pending);
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("One!"));
+    await settle();
+    expect(session.events.findLast(event => event.type === "answer.evaluation_pending")?.detail).toMatchObject({
+      utterance: "One!",
+    });
+
+    deliver(session, speech("Yes, that's exactly right!", 800, true));
+    expect(session.events.some(event => event.type === "answer.feedback_violation")).toBe(true);
+    expect(vi.mocked(transport.setOutputMuted)).toHaveBeenLastCalledWith(true);
+    expect(session.snapshot.sceneIndex).toBe(0);
+    expect(sent(transport)).toHaveLength(0);
+
+    resolveAnswer(evaluated(CONFIDENT));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.snapshot.sceneIndex).toBe(0);
+    expect(sent(transport)).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1500);
+    deliver(session, speech("—and right!", 1200, true));
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - 1);
+    expect(session.snapshot.sceneIndex).toBe(0);
+    expect(sent(transport)).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(session.snapshot.sceneIndex).toBe(1);
+    expect(sent(transport)).toHaveLength(0);
+
+    session.displayed(1);
+    expect(sent(transport)).toEqual([expect.objectContaining({ content: advanceContext(sceneAt(1)) })]);
+    expect(vi.mocked(transport.setOutputMuted)).toHaveBeenLastCalledWith(true);
+    acknowledgeLastContext(session, transport);
+    expect(vi.mocked(transport.setOutputMuted)).toHaveBeenLastCalledWith(false);
+    const quietEvents = session.events.filter(event => event.type === "answer.feedback_output_quiet").length;
+    deliver(session, speech("Let's look at the next scene!", 2000, true));
+    expect(vi.mocked(transport.setOutputMuted)).toHaveBeenLastCalledWith(false);
+    expect(session.events.filter(event => event.type === "answer.feedback_output_quiet")).toHaveLength(quietEvents);
+  });
+
+  it("keeps premature corrective speech from releasing STAY; releases only after the current Jev decision", async () => {
+    let resolveAnswer!: (result: AnswerResult) => void;
+    const pending: EvaluateAnswer = () => new Promise<AnswerResult>(resolve => (resolveAnswer = resolve));
+    const { session, transport } = setup(true, pending);
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("Five!"));
+    await settle();
+    deliver(session, speech("Let's count the ducks together.", 800, true));
+    expect(session.events.some(event => event.type === "answer.feedback_violation")).toBe(true);
+    expect(sent(transport)).toHaveLength(0);
+    expect(session.snapshot.sceneIndex).toBe(0);
+
+    resolveAnswer(evaluated(UNSURE));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sent(transport)).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
+    expect(session.snapshot.sceneIndex).toBe(0);
+    expect(released(transport)).toHaveLength(1);
+    expect(session.events.findLast(event => event.type === "answer.decision_releasable")?.detail).toMatchObject({
+      decision: "STAY",
+      correction_window_ms: CORRECTION_WINDOW_MS,
+    });
+    expect(vi.mocked(transport.setOutputMuted)).toHaveBeenLastCalledWith(true);
+    acknowledgeLastContext(session, transport);
+    expect(vi.mocked(transport.setOutputMuted)).toHaveBeenLastCalledWith(false);
+    const quietEvents = session.events.filter(event => event.type === "answer.feedback_output_quiet").length;
+    deliver(session, speech("Let's count the ducks together.", 1500, true));
+    expect(vi.mocked(transport.setOutputMuted)).toHaveBeenLastCalledWith(false);
+    expect(session.events.filter(event => event.type === "answer.feedback_output_quiet")).toHaveLength(quietEvents);
+  });
+
+  it("drains old GPT-Live output before sending the current STAY context", async () => {
+    let resolveAnswer!: (result: AnswerResult) => void;
+    const pending: EvaluateAnswer = () => new Promise<AnswerResult>(resolve => (resolveAnswer = resolve));
+    const { session, transport } = setup(true, pending);
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("Five!"));
+    await settle();
+    deliver(session, speech("Yes, that's right", 800, true));
+    resolveAnswer(evaluated(UNSURE));
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(1500);
+    deliver(session, speech("—", 1200, true));
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - 1500);
+
+    expect(session.snapshot.sceneIndex).toBe(0);
+    expect(released(transport)).toHaveLength(0);
+    expect(vi.mocked(transport.setOutputMuted)).toHaveBeenLastCalledWith(true);
+    expect(session.events.some(event => event.type === "answer.feedback_waiting_for_output_quiet")).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS / 2);
+    deliver(session, speech("right!", 1700, true));
+    expect(vi.mocked(transport.setOutputMuted)).toHaveBeenLastCalledWith(true);
+    await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS - 1);
+    expect(vi.mocked(transport.setOutputMuted)).toHaveBeenLastCalledWith(true);
+    expect(released(transport)).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(released(transport)).toEqual([expect.objectContaining({ content: stayContext(sceneAt(0)) })]);
+    expect(vi.mocked(transport.setOutputMuted)).toHaveBeenLastCalledWith(true);
+    expect(session.events.some(event => event.type === "answer.feedback_output_quiet")).toBe(true);
+    expect(session.snapshot.sceneIndex).toBe(0);
+    acknowledgeLastContext(session, transport);
+    expect(vi.mocked(transport.setOutputMuted)).toHaveBeenLastCalledWith(false);
+    const quietEvents = session.events.filter(event => event.type === "answer.feedback_output_quiet").length;
+    deliver(session, speech("Let's count together.", 2200, true));
+    expect(vi.mocked(transport.setOutputMuted)).toHaveBeenLastCalledWith(false);
+    expect(session.events.filter(event => event.type === "answer.feedback_output_quiet")).toHaveLength(quietEvents);
+    const eventTypes = session.events.map(event => event.type);
+    const order = [
+      "answer.feedback_violation",
+      "answer.evaluated",
+      "answer.decision_releasable",
+      "answer.feedback_waiting_for_output_quiet",
+      "answer.feedback_output_quiet",
+      "answer.context_release",
+      "answer.context_applied",
+    ].map(type => eventTypes.indexOf(type));
+    expect(order.every(index => index >= 0)).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+  });
+
+  it("opens immediately after context acknowledgment when no substantive output occurred", async () => {
+    const { session, transport } = setup(true, answering(UNSURE));
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("Five!"));
+    await settle();
+    await settle(CORRECTION_WINDOW_MS);
+    expect(released(transport)).toHaveLength(1);
+    acknowledgeLastContext(session, transport);
+    expect(vi.mocked(transport.setOutputMuted)).toHaveBeenLastCalledWith(false);
+    expect(session.events.some(event => event.type === "answer.feedback_waiting_for_output_quiet")).toBe(false);
+  });
+
+  it("opens a clean ADVANCE context immediately after acknowledgment", async () => {
+    const { session, transport } = setup(true, answering(CONFIDENT));
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("One!"));
+    await settle();
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
+    expect(session.snapshot.sceneIndex).toBe(1);
+    session.displayed(1);
+    expect(sent(transport)).toEqual([expect.objectContaining({ content: advanceContext(sceneAt(1)) })]);
+    acknowledgeLastContext(session, transport);
+    expect(vi.mocked(transport.setOutputMuted)).toHaveBeenLastCalledWith(false);
+    expect(session.events.some(event => event.type === "answer.feedback_waiting_for_output_quiet")).toBe(false);
+  });
+
+  it.each(["My grandma has a puppy.", "What color are butterflies?", "I don't know."])(
+    "releases settled non-answer turn %s without Jev or correction-window delay",
+    async utterance => {
+      const { session, transport, evaluateAnswer } = setup(true);
+      vi.mocked(transport.setOutputMuted).mockClear();
+      vi.mocked(transport.send).mockClear();
+      session.receive({ type: "microphone.speech_started" });
+      expect(vi.mocked(transport.setOutputMuted)).toHaveBeenLastCalledWith(true);
+      deliver(session, speech(utterance));
+      session.receive({ type: "microphone.speech_stopped", quietMs: MICROPHONE_QUIET_MS });
+      expect(evaluateAnswer).not.toHaveBeenCalled();
+      expect(session.snapshot.sceneIndex).toBe(0);
+      await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS - 1);
+      expect(vi.mocked(transport.setOutputMuted)).toHaveBeenLastCalledWith(true);
+      expect(evaluateAnswer).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(vi.mocked(transport.setOutputMuted)).toHaveBeenLastCalledWith(false);
+      expect(session.events.some(event => event.type === "answer.feedback_non_answer_release")).toBe(true);
+      expect(session.events.findLast(event => event.type === "answer.turn_end")?.detail).toMatchObject({
+        signal: "microphone_vad",
+      });
+      expect(session.events.some(event => event.type === "answer.context_release")).toBe(false);
+      expect(evaluateAnswer).not.toHaveBeenCalled();
+      expect(transport.send).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps ambiguous speech gated until its revised transcript contains the answer", async () => {
+    const evaluateAnswer = answering(UNSURE);
+    const { session, transport } = setup(true, evaluateAnswer);
+    session.receive({ type: "microphone.speech_started" });
+    deliver(session, speech("I think..."));
+    expect(vi.mocked(transport.setOutputMuted)).toHaveBeenLastCalledWith(true);
+    expect(session.events.some(event => event.type === "answer.feedback_non_answer_release")).toBe(false);
+
+    session.receive({ type: "microphone.speech_stopped", quietMs: MICROPHONE_QUIET_MS });
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS / 2);
+    expect(vi.mocked(transport.setOutputMuted)).toHaveBeenLastCalledWith(true);
+    expect(evaluateAnswer).not.toHaveBeenCalled();
+    deliver(session, speech(" two", 600));
+    expect(vi.mocked(transport.setOutputMuted)).toHaveBeenLastCalledWith(true);
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+    expect(evaluateAnswer).toHaveBeenCalledWith({ sceneIndex: 0, utterance: "I think... two" }, expect.anything());
+    expect(session.events.findLast(event => event.type === "answer.evaluated")?.detail).toMatchObject({
+      utterance: "I think... two",
+    });
+  });
+
+  it("cancels stale-output quiet wait when a new child turn starts", async () => {
+    const { session, transport } = setup(true, answering(UNSURE));
+    deliver(session, speech("Five!"));
+    await settle();
+    deliver(session, speech("Let's count together.", 800, true));
+    await vi.advanceTimersByTimeAsync(1500);
+    deliver(session, speech(" still counting", 1200, true));
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - 1500);
+    expect(vi.mocked(transport.setOutputMuted)).toHaveBeenLastCalledWith(true);
+    expect(released(transport)).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS / 2);
+    session.receive({ type: "microphone.speech_started" });
+    expect(vi.mocked(transport.setOutputMuted)).toHaveBeenLastCalledWith(true);
+    expect(session.events.some(event => event.type === "answer.feedback_gate_cancelled")).toBe(true);
+    await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS * 2);
+    expect(vi.mocked(transport.setOutputMuted)).toHaveBeenLastCalledWith(true);
+    deliver(session, speech("four", 2000));
+    expect(session.snapshot.sceneIndex).toBe(0);
+  });
+
+  it("keeps the playback gate closed for a delayed Jev result regardless of elapsed time", async () => {
+    let resolveAnswer!: (result: AnswerResult) => void;
+    const pending: EvaluateAnswer = () => new Promise<AnswerResult>(resolve => (resolveAnswer = resolve));
+    const { session, transport } = setup(true, pending);
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("Five!"));
+    await settle();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(session.snapshot.sceneIndex).toBe(0);
+    expect(sent(transport)).toHaveLength(0);
+    expect(vi.mocked(transport.setOutputMuted)).toHaveBeenLastCalledWith(true);
+    expect(session.events.some(event => event.type === "answer.decision_releasable")).toBe(false);
+
+    resolveAnswer(evaluated(UNSURE));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(released(transport)).toHaveLength(1);
+    expect(session.snapshot.sceneIndex).toBe(0);
+  });
+
+  it("discards the first Jev result after a self-correction and releases only the revised answer", async () => {
+    const answers: ((result: AnswerResult) => void)[] = [];
+    const pending: EvaluateAnswer = vi.fn(() => new Promise<AnswerResult>(resolve => answers.push(resolve)));
+    const { session, transport } = setup(true, pending);
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("One..."));
+    await settle();
+    expect(answers).toHaveLength(1);
+
+    mic(session, "microphone.speech_started");
+    deliver(session, speech(" wait, two", 600));
+    mic(session, "microphone.speech_stopped");
+    answers[0](evaluated(CONFIDENT));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.events.findLast(event => event.type === "answer.evaluated")?.detail).toMatchObject({
+      decision: "STALE",
+      stale: true,
+    });
+    expect(session.snapshot.sceneIndex).toBe(0);
+    expect(sent(transport)).toHaveLength(0);
+    expect(vi.mocked(transport.setOutputMuted)).toHaveBeenLastCalledWith(true);
+
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
+    expect(pending).toHaveBeenCalledTimes(2);
+    answers[1](evaluated(UNSURE));
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
+    expect(session.snapshot.sceneIndex).toBe(0);
+    expect(released(transport)).toHaveLength(1);
+    expect(
+      session.events.some(
+        event =>
+          event.type === "answer.context_release" &&
+          (event.detail as { answer_version?: string })?.answer_version === "0:One... wait, two",
+      ),
+    ).toBe(true);
+  });
+
+  it("allows a neutral backchannel transcript without treating it as answer feedback", async () => {
+    let resolveAnswer!: (result: AnswerResult) => void;
+    const pending: EvaluateAnswer = () => new Promise<AnswerResult>(resolve => (resolveAnswer = resolve));
+    const { session, transport } = setup(true, pending);
+    deliver(session, speech("One!"));
+    await settle();
+    deliver(session, speech("Ooh!", 800, true));
+    expect(session.events.some(event => event.type === "answer.feedback_violation")).toBe(false);
+    expect(vi.mocked(transport.setOutputMuted)).toHaveBeenLastCalledWith(true);
+    resolveAnswer(evaluated(CONFIDENT));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.snapshot.sceneIndex).toBe(0);
+  });
+
+  it("does not let a premature model goodbye end the lesson", async () => {
+    const pending: EvaluateAnswer = () => new Promise<AnswerResult>(() => {});
+    const { session, transport } = setup(true, pending);
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("Five!"));
+    await settle();
+    deliver(session, speech("Bye for now!", 800, true));
+    expect(session.snapshot).toMatchObject({ status: "active", sceneIndex: 0 });
+    expect(session.events.some(event => event.type === "answer.feedback_violation")).toBe(true);
+    expect(sent(transport)).toHaveLength(0);
+    session.end("parent_stop");
+  });
 
   it("keeps a wrong partial count private until the child finishes correcting it", async () => {
     const evaluateAnswer: EvaluateAnswer = vi.fn(async ({ sceneIndex, utterance }) =>
@@ -774,25 +1090,30 @@ describe("answer-check turn synchronization", () => {
   it.each([
     ["STAY", answering(UNSURE)],
     ["unavailable", async () => ({ status: "unavailable" as const, reason: "timeout", latencyMs: 4000 })],
-  ])("drops a delayed %s instruction after a short substantive reply", async (_decision, evaluateAnswer) => {
-    const { session, transport } = setup(true, evaluateAnswer);
-    vi.mocked(transport.send).mockClear();
-    deliver(session, speech("Five"));
-    await settle();
-    expect(sent(transport)).toHaveLength(0);
-    deliver(session, speech("Let's count together.", 800, true));
-    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
-    expect(sent(transport)).toHaveLength(0);
-  });
+  ])(
+    "releases the current %s result after a substantive post-decision transcript",
+    async (_decision, evaluateAnswer) => {
+      const { session, transport } = setup(true, evaluateAnswer);
+      vi.mocked(transport.send).mockClear();
+      deliver(session, speech("Five"));
+      await settle();
+      expect(sent(transport)).toHaveLength(0);
+      deliver(session, speech("Let's count together.", 800, true));
+      await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
+      expect(released(transport)).toHaveLength(1);
+      expect(session.snapshot.sceneIndex).toBe(0);
+    },
+  );
 
-  it("drops a delayed STAY instruction if Sprout has already begun helping", async () => {
+  it("releases the current STAY result even if Sprout has begun helping", async () => {
     const { session, transport } = setup(true, answering(UNSURE));
     vi.mocked(transport.send).mockClear();
     deliver(session, speech("Five"));
     await settle();
     deliver(session, speech("Let's count these ducks together.", 800, true));
     await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
-    expect(released(transport)).toHaveLength(0);
+    expect(released(transport)).toHaveLength(1);
+    expect(session.snapshot.sceneIndex).toBe(0);
   });
 
   it("resumes a pending STAY after a transcriptless microphone spike", async () => {
@@ -829,7 +1150,7 @@ describe("answer-check turn synchronization", () => {
     },
   );
 
-  it("holds an approved advance until the output transcript goes quiet, without evaluating again", async () => {
+  it("ignores premature substantive output when committing a Jev-approved advance", async () => {
     const { session, transport, evaluateAnswer } = setup(true, answering(CONFIDENT));
     vi.mocked(transport.send).mockClear();
     deliver(session, speech("One!"));
@@ -839,11 +1160,14 @@ describe("answer-check turn synchronization", () => {
     expect(transport.send).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(500);
     deliver(session, speech(". There is one duck.", 1800, true));
-    await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS - 1);
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - 500 - 1);
     expect(session.snapshot.sceneIndex).toBe(0);
     expect(evaluateAnswer).toHaveBeenCalledOnce();
     expect(released(transport)).toHaveLength(0);
+    expect(session.snapshot.sceneIndex).toBe(0);
     await vi.advanceTimersByTimeAsync(1);
+    expect(session.snapshot.sceneIndex).toBe(0);
+    await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS - 2000);
     expect(session.snapshot.sceneIndex).toBe(1);
     expect(transport.send).not.toHaveBeenCalled();
     session.displayed(1);

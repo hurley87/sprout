@@ -9,7 +9,6 @@ import {
 } from "./answer";
 import type { ClientCommand, ProviderEvent, TranscriptEvent } from "./events";
 import {
-  BRIEF_ACK_WORDS,
   LAST_SCENE,
   MODEL,
   PROMPT_VERSION,
@@ -58,6 +57,7 @@ export type Diagnostic = { at: number; type: string; detail?: unknown };
 export interface Transport {
   start(onEvent: (event: ProviderEvent) => void, onFailure: (message: string) => void): Promise<void>;
   send(command: ClientCommand): void;
+  setOutputMuted(muted: boolean): void;
   stopMedia(): void;
   close(): void;
 }
@@ -68,17 +68,42 @@ type DeferredAdvance = {
   sceneIndex: number;
   answerVersion: string;
   approvedAt: number;
-  spokenChars: number;
   speechEpoch: number;
   correctionReadyAt: number;
-  outputQuietAt: number;
+  decisionReleasableLogged: boolean;
 };
 type DeferredStay = {
   sceneIndex: number;
   answerVersion: string;
   speechEpoch: number;
   correctionReadyAt: number;
+  decision: "STAY" | "UNAVAILABLE";
   content: string;
+  decisionReleasableLogged: boolean;
+};
+type FeedbackGate = {
+  id: number;
+  sceneIndex: number;
+  phase: "learner_turn" | "candidate_settling" | "evaluation_pending" | "decision_current";
+  answerVersion?: string;
+  decision?: "ADVANCE" | "STAY" | "UNAVAILABLE";
+  contextReleaseSent: boolean;
+  prematureOutputDetected: boolean;
+  prematureOutputQuietLogged: boolean;
+  lastPrematureOutputAt?: number;
+};
+type FeedbackRelease = { commandId: string; gateId: number; answerVersion?: string };
+type PendingOutputQuietAction = { gateId: number; run: () => void };
+
+const NEUTRAL_BACKCHANNELS = new Set(["oh", "ooh", "okay", "ok", "mm", "mmm", "hmm", "uh-huh", "mm-hmm"]);
+const isNeutralBackchannel = (speech: string) => {
+  const words = speech
+    .toLowerCase()
+    .replace(/[.!?,]/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  return words.length > 0 && words.length <= 2 && words.every(word => NEUTRAL_BACKCHANNELS.has(word));
 };
 
 export class LessonSession {
@@ -97,6 +122,11 @@ export class LessonSession {
   private seen = new Set<string>();
   private delegations = new Set<string>();
   private pending: PendingDisplay | null = null;
+  private feedbackGate: FeedbackGate | null = null;
+  private feedbackOutputQuietTimer?: ReturnType<typeof setTimeout>;
+  private pendingOutputQuietAction?: PendingOutputQuietAction;
+  private pendingFeedbackRelease: FeedbackRelease | null = null;
+  private nextFeedbackGateId = 0;
   private childSpeech = new TranscriptWindow();
   private sproutSpeech = new TranscriptWindow();
   // The last thing the child was heard saying, and the utterance versions
@@ -118,9 +148,7 @@ export class LessonSession {
   private heldDecision?: () => void;
   private evaluated = new Set<string>();
   private evaluation?: AbortController;
-  // What Sprout has said since the child last spoke, to tell a held turn from
-  // one it has already taken.
-  private sproutReply = "";
+  private feedbackViolations = new Set<string>();
   private commands = 0;
   private closed = false;
   private ready = false;
@@ -181,15 +209,189 @@ export class LessonSession {
     }
   }
 
-  private append(content: string) {
+  private append(
+    content: string,
+    releaseFeedback?: { answerVersion?: string; decision?: "ADVANCE" | "STAY" | "UNAVAILABLE" },
+  ) {
     if (this.snapshot.status === "ended") return;
+    const eventId = `sprout_${++this.commands}`;
+    const gate = releaseFeedback ? this.feedbackGate : null;
+    if (gate && releaseFeedback) {
+      gate.contextReleaseSent = true;
+      clearTimeout(this.feedbackOutputQuietTimer);
+      this.pendingOutputQuietAction = undefined;
+    }
+    this.pendingFeedbackRelease = gate
+      ? { commandId: eventId, gateId: gate.id, answerVersion: releaseFeedback?.answerVersion }
+      : null;
     const sent = this.dispatch({
       type: "session.instructions.append",
-      event_id: `sprout_${++this.commands}`,
+      event_id: eventId,
       delegation_id: null,
       content,
     });
-    if (!sent) this.fail("The voice connection was lost. You can start a new lesson.");
+    if (!sent) {
+      this.pendingFeedbackRelease = null;
+      this.fail("The voice connection was lost. You can start a new lesson.");
+    } else if (gate && releaseFeedback) {
+      this.log("answer.context_release", {
+        answer_version: releaseFeedback.answerVersion,
+        decision: releaseFeedback.decision,
+        scene: sceneAt(gate.sceneIndex).id,
+        command_id: eventId,
+      });
+    }
+  }
+
+  private startFeedbackGate() {
+    if (this.snapshot.status !== "active" || this.snapshot.sceneIndex >= LAST_SCENE) return;
+    const supersededGateId = this.feedbackGate?.id;
+    if (supersededGateId !== undefined)
+      this.log("answer.feedback_gate_cancelled", {
+        gate_id: supersededGateId,
+        reason: "new_learner_turn",
+        playback_remains_muted: true,
+      });
+    this.pendingFeedbackRelease = null;
+    clearTimeout(this.feedbackOutputQuietTimer);
+    this.pendingOutputQuietAction = undefined;
+    this.feedbackGate = {
+      id: ++this.nextFeedbackGateId,
+      sceneIndex: this.snapshot.sceneIndex,
+      phase: "learner_turn",
+      contextReleaseSent: false,
+      prematureOutputDetected: false,
+      prematureOutputQuietLogged: false,
+    };
+    this.transport.setOutputMuted(true);
+    this.log("answer.feedback_gate", {
+      state: "muted",
+      phase: this.feedbackGate.phase,
+      gate_id: this.feedbackGate.id,
+      scene: this.scene.id,
+      reason: "learner_turn_started",
+      mechanism: "browser_playback_mute",
+    });
+  }
+
+  private updateFeedbackGate(
+    phase: FeedbackGate["phase"],
+    answerVersion?: string,
+    decision?: FeedbackGate["decision"],
+  ) {
+    if (!this.feedbackGate) this.startFeedbackGate();
+    const gate = this.feedbackGate;
+    if (!gate) return;
+    const changed = gate.phase !== phase || gate.answerVersion !== answerVersion || gate.decision !== decision;
+    gate.phase = phase;
+    gate.answerVersion = answerVersion;
+    gate.decision = decision;
+    this.transport.setOutputMuted(true);
+    if (changed)
+      this.log("answer.feedback_gate", {
+        state: "muted",
+        phase,
+        gate_id: gate.id,
+        answer_version: answerVersion,
+        decision,
+        scene: sceneAt(gate.sceneIndex).id,
+        mechanism: "browser_playback_mute",
+      });
+  }
+
+  private openFeedbackGate(reason: string, answerVersion?: string, expectedGateId?: number) {
+    const gate = this.feedbackGate;
+    if (!gate || (expectedGateId !== undefined && gate.id !== expectedGateId)) return;
+    this.feedbackGate = null;
+    this.pendingFeedbackRelease = null;
+    clearTimeout(this.feedbackOutputQuietTimer);
+    this.pendingOutputQuietAction = undefined;
+    this.transport.setOutputMuted(false);
+    this.log("answer.feedback_gate", {
+      state: "open",
+      phase: gate.phase,
+      gate_id: gate.id,
+      answer_version: answerVersion ?? gate.answerVersion,
+      reason,
+      scene: sceneAt(gate.sceneIndex).id,
+      mechanism: "browser_playback_unmuted",
+    });
+  }
+
+  private acknowledgeFeedbackRelease(clientEventId?: string) {
+    const release = this.pendingFeedbackRelease;
+    if (!release || release.commandId !== clientEventId) return;
+    this.pendingFeedbackRelease = null;
+    this.log("answer.context_applied", {
+      answer_version: release.answerVersion,
+      command_id: release.commandId,
+      gate_id: release.gateId,
+    });
+    const gate = this.feedbackGate;
+    if (!gate || gate.id !== release.gateId) return;
+    this.openFeedbackGate("current_context_applied", release.answerVersion, release.gateId);
+  }
+
+  private waitForPrematureOutputQuiet(run: () => void) {
+    const gate = this.feedbackGate;
+    if (!gate || gate.contextReleaseSent || !gate.prematureOutputDetected || gate.lastPrematureOutputAt === undefined) {
+      run();
+      return;
+    }
+    const quietAt = gate.lastPrematureOutputAt + UTTERANCE_GAP_MS;
+    if (Date.now() >= quietAt) {
+      this.logPrematureOutputQuiet(gate);
+      run();
+      return;
+    }
+    this.pendingOutputQuietAction = { gateId: gate.id, run };
+    this.log("answer.feedback_waiting_for_output_quiet", {
+      gate_id: gate.id,
+      quiet_interval_ms: UTTERANCE_GAP_MS,
+      context_release_sent: false,
+      transcript_silence_is_heuristic: true,
+    });
+    this.schedulePrematureOutputQuietCheck(gate);
+  }
+
+  private schedulePrematureOutputQuietCheck(gate: FeedbackGate) {
+    if (this.pendingOutputQuietAction?.gateId !== gate.id || gate.lastPrematureOutputAt === undefined) return;
+    clearTimeout(this.feedbackOutputQuietTimer);
+    this.feedbackOutputQuietTimer = setTimeout(
+      () => {
+        if (this.feedbackGate?.id !== gate.id || gate.contextReleaseSent) return;
+        if (
+          Date.now() < this.activityRecoveryUntil ||
+          Date.now() - (gate.lastPrematureOutputAt ?? Date.now()) < UTTERANCE_GAP_MS
+        ) {
+          this.schedulePrematureOutputQuietCheck(gate);
+          return;
+        }
+        const pending = this.pendingOutputQuietAction;
+        this.pendingOutputQuietAction = undefined;
+        this.logPrematureOutputQuiet(gate);
+        pending?.run();
+      },
+      Math.max(gate.lastPrematureOutputAt + UTTERANCE_GAP_MS, this.activityRecoveryUntil, Date.now()) - Date.now(),
+    );
+  }
+
+  private logPrematureOutputQuiet(gate: FeedbackGate) {
+    if (
+      gate.contextReleaseSent ||
+      !gate.prematureOutputDetected ||
+      gate.lastPrematureOutputAt === undefined ||
+      Date.now() - gate.lastPrematureOutputAt < UTTERANCE_GAP_MS ||
+      gate.prematureOutputQuietLogged
+    )
+      return;
+    gate.prematureOutputQuietLogged = true;
+    this.log("answer.feedback_output_quiet", {
+      gate_id: gate.id,
+      quiet_interval_ms: UTTERANCE_GAP_MS,
+      transcript_silence_is_heuristic: true,
+      provider_output_completion_proven: false,
+    });
   }
 
   /** Guards the entry points where late external input can still arrive. */
@@ -233,11 +435,13 @@ export class LessonSession {
         if (this.microphoneSpeaking || this.provisionalActivity) return;
         this.provisionalActivity = true;
         this.activityTranscriptRevision = this.transcriptRevision;
+        if (!this.feedbackGate) this.startFeedbackGate();
         clearTimeout(this.settleTimer);
         clearTimeout(this.deferredTimer);
         clearTimeout(this.stayTimer);
         clearTimeout(this.recoveryTimer);
         clearTimeout(this.noTranscriptTimer);
+        if (this.pendingOutputQuietAction) clearTimeout(this.feedbackOutputQuietTimer);
         this.log("answer.activity_started");
         return;
       case "microphone.activity_discarded": {
@@ -254,6 +458,9 @@ export class LessonSession {
         else if (this.deferredStay) this.scheduleDeferredStayRelease();
         else if (this.heldDecision) this.scheduleHeldDecision();
         else if (!this.evaluation && this.latest) this.scheduleEvaluation(this.latest, TRANSCRIPT_FALLBACK_MS);
+        else if (this.feedbackGate?.phase === "learner_turn") this.openFeedbackGate("provisional_activity_discarded");
+        if (this.pendingOutputQuietAction && this.feedbackGate)
+          this.schedulePrematureOutputQuietCheck(this.feedbackGate);
         return;
       }
       case "microphone.speech_started":
@@ -273,6 +480,7 @@ export class LessonSession {
         this.evaluation?.abort();
         this.cancelDeferredAdvance();
         this.cancelDeferredStay();
+        this.startFeedbackGate();
         this.log("answer.speech_started", { epoch: this.speechEpoch });
         return;
       case "microphone.speech_stopped":
@@ -293,6 +501,7 @@ export class LessonSession {
         return;
       case "context.appended":
         this.log(event.name, { client_event_id: event.clientEventId, start_ms: event.startMs, end_ms: event.endMs });
+        if (event.name === "session.instructions.appended") this.acknowledgeFeedbackRelease(event.clientEventId);
         return;
       case "usage":
         this.log("session.usage.updated", event.usage);
@@ -347,8 +556,56 @@ export class LessonSession {
     });
     const speech = fromChild ? this.childSpeech : this.sproutSpeech;
     const utterance = speech.append(event.delta, event.startMs, event.endMs);
-    this.sproutReply = fromChild ? "" : this.sproutReply + event.delta;
+    if (!fromChild) {
+      const gate = this.feedbackGate;
+      if (gate && !gate.contextReleaseSent) {
+        const violationKey = `${gate.id}:${utterance.startMs}`;
+        if (utterance.text && !isNeutralBackchannel(utterance.text)) {
+          gate.prematureOutputDetected = true;
+          gate.prematureOutputQuietLogged = false;
+          gate.lastPrematureOutputAt = Date.now();
+          if (gate.phase !== "decision_current" && !this.feedbackViolations.has(violationKey)) {
+            this.feedbackViolations.add(violationKey);
+            this.log("answer.feedback_violation", {
+              gate_id: gate.id,
+              phase: gate.phase,
+              answer_version: gate.answerVersion,
+              scene: sceneAt(gate.sceneIndex).id,
+              transcript: utterance.text,
+              transcript_start_ms: utterance.startMs,
+              transcript_end_ms: event.endMs,
+              audio_output_muted: true,
+              playback_verified: false,
+              provider_generation_cancelled: false,
+            });
+          }
+        } else if (gate.prematureOutputDetected) {
+          // Once substantive output began, every following fragment may be
+          // part of its tail and therefore extends the quiet boundary.
+          gate.prematureOutputQuietLogged = false;
+          gate.lastPrematureOutputAt = Date.now();
+        }
+        if (this.pendingOutputQuietAction?.gateId === gate.id) this.schedulePrematureOutputQuietCheck(gate);
+      }
+    }
     if (fromChild) {
+      if (
+        this.snapshot.status === "active" &&
+        this.snapshot.sceneIndex < LAST_SCENE &&
+        (!this.feedbackGate || this.feedbackGate.phase === "decision_current")
+      )
+        this.startFeedbackGate();
+      else if (this.feedbackGate) {
+        clearTimeout(this.feedbackOutputQuietTimer);
+        this.pendingOutputQuietAction = undefined;
+        this.pendingFeedbackRelease = null;
+        this.feedbackGate.contextReleaseSent = false;
+        this.log("answer.feedback_gate_cancelled", {
+          gate_id: this.feedbackGate.id,
+          reason: "new_learner_transcript",
+          playback_remains_muted: true,
+        });
+      }
       // A transcript can arrive before local VAD notices renewed speech.
       this.transcriptRevision++;
       this.heldDecision = undefined;
@@ -361,6 +618,10 @@ export class LessonSession {
       this.latest = utterance;
       this.lastDeltaAt = Date.now();
       this.transcriptEpoch = this.speechEpoch;
+      if (this.feedbackGate && mentionsNumber(utterance.text)) {
+        const version = `${utterance.startMs}:${utterance.text.trim()}`;
+        this.updateFeedbackGate("candidate_settling", version);
+      }
       if (requestsStop(utterance.text)) this.end("child_stop");
       else {
         // Provider transcript delivery can lag VAD; each fragment after the
@@ -370,17 +631,23 @@ export class LessonSession {
           this.scheduleEvaluation(utterance, TRANSCRIPT_TAIL_MS);
         else if (!this.microphoneSpeaking) this.scheduleEvaluation(utterance, TRANSCRIPT_FALLBACK_MS);
       }
-    } else if (this.snapshot.status !== "goodbye" && saidGoodbye(utterance.text)) {
+    } else if (
+      this.snapshot.status !== "goodbye" &&
+      saidGoodbye(utterance.text) &&
+      (!this.feedbackGate || this.feedbackGate.phase === "decision_current")
+    ) {
       // The model ending the lesson itself, usually a stop request the
       // transcript guard could not recognize. Not proof of playback.
       this.end("model_goodbye");
-    } else if (this.deferredAdvance) {
-      this.scheduleDeferredRelease(true);
+    } else {
+      if (this.deferredStay) this.scheduleDeferredStayRelease();
     }
   }
 
   private scheduleEvaluation(utterance: Utterance, delay: number) {
     clearTimeout(this.settleTimer);
+    if (this.feedbackGate && mentionsNumber(utterance.text))
+      this.updateFeedbackGate("candidate_settling", `${utterance.startMs}:${utterance.text.trim()}`);
     this.log("answer.candidate", {
       sceneIndex: this.snapshot.sceneIndex,
       utterance: utterance.text,
@@ -418,16 +685,36 @@ export class LessonSession {
     // A revised answer is a different version of the same utterance, so it is
     // judged again; an unchanged one never is.
     const version = `${utterance.startMs}:${text}`;
-    if (this.evaluated.has(version)) return;
+    if (this.evaluated.has(version)) {
+      if (this.feedbackGate?.phase === "learner_turn" || this.feedbackGate?.phase === "candidate_settling")
+        this.openFeedbackGate("unchanged_utterance_already_evaluated", version);
+      return;
+    }
     this.evaluated.add(version);
     if (!mentionsNumber(text)) {
       this.log("answer.skipped", { version, reason: "no_count" });
+      if (this.feedbackGate) {
+        this.log("answer.feedback_non_answer_release", {
+          gate_id: this.feedbackGate.id,
+          utterance: text,
+          reason: "settled_turn_without_answer_candidate",
+        });
+      }
+      this.openFeedbackGate("settled_turn_without_answer_candidate", version);
       return;
     }
     const sceneIndex = this.snapshot.sceneIndex;
     const finalDeltaAt = this.lastDeltaAt;
     const turnEndAt = this.turnEndAt;
     const speechEpoch = this.speechEpoch;
+    this.updateFeedbackGate("evaluation_pending", version);
+    this.log("answer.evaluation_pending", {
+      version,
+      scene: sceneAt(sceneIndex).id,
+      sceneIndex,
+      utterance: text,
+      signal: this.turnSignal,
+    });
     this.log("answer.requesting", {
       version,
       signal: this.turnSignal,
@@ -473,6 +760,7 @@ export class LessonSession {
       this.log("answer.no_transcript", { epoch });
       this.append(
         "I could not hear the child's latest answer clearly. Gently ask them to say it again without judging the earlier count or changing the scene.",
+        {},
       );
     }, TRANSCRIPT_FALLBACK_MS);
   }
@@ -500,7 +788,13 @@ export class LessonSession {
     const advancing = !stale && shouldAdvance(result);
     // Stale results need no release: newer speech gets its own decision, and a
     // scene change or wrap-up tells GPT-Live itself.
-    const releasing = !stale && !advancing && this.holding(utterance);
+    const releasing = !stale && !advancing;
+    const currentDecision: NonNullable<FeedbackGate["decision"]> =
+      result.status === "unavailable" ? "UNAVAILABLE" : advancing ? "ADVANCE" : "STAY";
+    const decision = stale ? "STALE" : currentDecision;
+    if (!stale) {
+      this.updateFeedbackGate("decision_current", version, currentDecision);
+    }
     this.log("answer.evaluated", {
       scene: sceneAt(sceneIndex).id,
       sceneIndex,
@@ -512,7 +806,7 @@ export class LessonSession {
       latency_ms: result.latencyMs,
       transcript_to_decision_ms: Date.now() - finalDeltaAt,
       turn_end_to_decision_ms: Date.now() - turnEndAt,
-      decision: stale ? "STALE" : result.status === "unavailable" ? "UNAVAILABLE" : advancing ? "ADVANCE" : "STAY",
+      decision,
       stale,
       advancing,
       releasing,
@@ -524,24 +818,9 @@ export class LessonSession {
       this.deferStay(
         sceneIndex,
         version,
+        result.status === "unavailable" ? "UNAVAILABLE" : "STAY",
         result.status === "unavailable" ? evaluationUnavailableContext(this.scene) : stayContext(this.scene),
       );
-  }
-
-  /**
-   * Whether GPT-Live is pausing for this decision, as its prompt asks after a
-   * count. If it has already said more than a brief acknowledgment, it took its
-   * turn anyway and an instruction now would talk over it.
-   */
-  private holding(utterance: Utterance) {
-    const said = this.sproutReply.trim();
-    const words = said ? said.split(/\s+/).length : 0;
-    return mentionsNumber(utterance.text) && words <= BRIEF_ACK_WORDS;
-  }
-
-  /** Only silence or an explicitly neutral, tiny acknowledgment is safe for an immediate advance. */
-  private sproutIsHoldingForDecision() {
-    return /^(?:oh|ooh|okay)[.!?]*$/i.test(this.sproutReply.trim()) || !this.sproutReply.trim();
   }
 
   private deferAdvance(sceneIndex: number, answerVersion: string) {
@@ -550,38 +829,30 @@ export class LessonSession {
       sceneIndex,
       answerVersion,
       approvedAt: Date.now(),
-      spokenChars: this.sproutReply.length,
       speechEpoch: this.speechEpoch,
       correctionReadyAt: Math.max(this.turnEndAt, this.lastDeltaAt) + CORRECTION_WINDOW_MS,
-      outputQuietAt: 0,
+      decisionReleasableLogged: false,
     };
     this.log("advance.deferred", {
       answer_version: answerVersion,
       scene: sceneAt(sceneIndex).id,
       reason: "correction_window",
       correction_window_ms: CORRECTION_WINDOW_MS,
-      spoken_chars: this.sproutReply.length,
     });
     this.scheduleDeferredRelease();
   }
 
-  private scheduleDeferredRelease(outputDelta = false) {
+  private scheduleDeferredRelease() {
     clearTimeout(this.deferredTimer);
     const deferred = this.deferredAdvance;
     if (!deferred) return;
-    // Output has no completed-turn event. A substantive reply needs one
-    // transcript gap before a scene change; each fragment extends that gap.
-    if (!this.sproutIsHoldingForDecision() && (outputDelta || deferred.outputQuietAt === 0))
-      deferred.outputQuietAt = Date.now() + UTTERANCE_GAP_MS;
-    const releaseAt = Math.max(deferred.correctionReadyAt, deferred.outputQuietAt, this.activityRecoveryUntil);
+    const releaseAt = Math.max(deferred.correctionReadyAt, this.activityRecoveryUntil);
     this.deferredTimer = setTimeout(() => this.releaseDeferredAdvance(), Math.max(0, releaseAt - Date.now()));
   }
 
   private releaseDeferredAdvance() {
     const deferred = this.deferredAdvance;
     if (!deferred) return;
-    this.deferredAdvance = null;
-    clearTimeout(this.deferredTimer);
     if (
       this.expireIfOverdue() ||
       this.snapshot.status !== "active" ||
@@ -592,20 +863,46 @@ export class LessonSession {
       `${this.latest?.startMs}:${this.latest?.text.trim()}` !== deferred.answerVersion ||
       this.snapshot.sceneIndex !== deferred.sceneIndex ||
       deferred.sceneIndex >= LAST_SCENE
-    )
+    ) {
+      this.deferredAdvance = null;
+      clearTimeout(this.deferredTimer);
       return;
-    this.log("advance.released", {
-      scene: sceneAt(deferred.sceneIndex).id,
-      answer_version: deferred.answerVersion,
-      spoken_chars_at_approval: deferred.spokenChars,
-      delay_ms: Date.now() - deferred.approvedAt,
-      reason: deferred.outputQuietAt > deferred.correctionReadyAt ? "output_transcript_quiet" : "correction_window",
+    }
+    if (!deferred.decisionReleasableLogged) {
+      deferred.decisionReleasableLogged = true;
+      this.log("answer.decision_releasable", {
+        answer_version: deferred.answerVersion,
+        scene: sceneAt(deferred.sceneIndex).id,
+        decision: "ADVANCE",
+        correction_window_ms: CORRECTION_WINDOW_MS,
+      });
+    }
+    this.waitForPrematureOutputQuiet(() => {
+      if (this.deferredAdvance !== deferred) return;
+      this.deferredAdvance = null;
+      clearTimeout(this.deferredTimer);
+      this.log("advance.released", {
+        scene: sceneAt(deferred.sceneIndex).id,
+        answer_version: deferred.answerVersion,
+        delay_ms: Date.now() - deferred.approvedAt,
+        reason:
+          this.prematureOutputQuietAt() > deferred.correctionReadyAt ? "output_transcript_quiet" : "correction_window",
+      });
+      this.advance(deferred.answerVersion);
     });
-    this.advance(deferred.answerVersion);
+  }
+
+  private prematureOutputQuietAt() {
+    const gate = this.feedbackGate;
+    if (!gate || gate.contextReleaseSent || !gate.prematureOutputDetected || gate.lastPrematureOutputAt === undefined)
+      return 0;
+    return gate.lastPrematureOutputAt + UTTERANCE_GAP_MS;
   }
 
   private cancelDeferredAdvance() {
     clearTimeout(this.deferredTimer);
+    clearTimeout(this.feedbackOutputQuietTimer);
+    this.pendingOutputQuietAction = undefined;
     if (this.deferredAdvance)
       this.log("advance.cancelled", {
         answer_version: this.deferredAdvance.answerVersion,
@@ -614,13 +911,15 @@ export class LessonSession {
     this.deferredAdvance = null;
   }
 
-  private deferStay(sceneIndex: number, answerVersion: string, content: string) {
+  private deferStay(sceneIndex: number, answerVersion: string, decision: DeferredStay["decision"], content: string) {
     this.deferredStay = {
       sceneIndex,
       answerVersion,
       speechEpoch: this.speechEpoch,
       correctionReadyAt: Math.max(this.turnEndAt, this.lastDeltaAt) + CORRECTION_WINDOW_MS,
+      decision,
       content,
+      decisionReleasableLogged: false,
     };
     this.log("answer.release_deferred", { answer_version: answerVersion, scene: sceneAt(sceneIndex).id });
     this.scheduleDeferredStayRelease();
@@ -637,8 +936,6 @@ export class LessonSession {
   private releaseDeferredStay() {
     const deferred = this.deferredStay;
     if (!deferred) return;
-    this.deferredStay = null;
-    clearTimeout(this.stayTimer);
     if (
       this.expireIfOverdue() ||
       this.snapshot.status !== "active" ||
@@ -648,16 +945,37 @@ export class LessonSession {
       this.speechEpoch !== deferred.speechEpoch ||
       `${this.latest?.startMs}:${this.latest?.text.trim()}` !== deferred.answerVersion ||
       this.snapshot.sceneIndex !== deferred.sceneIndex ||
-      !this.latest ||
-      !this.sproutIsHoldingForDecision()
-    )
+      !this.latest
+    ) {
+      this.deferredStay = null;
+      clearTimeout(this.stayTimer);
       return;
-    this.log("answer.release_sent", { answer_version: deferred.answerVersion, scene: sceneAt(deferred.sceneIndex).id });
-    this.append(deferred.content);
+    }
+    if (!deferred.decisionReleasableLogged) {
+      deferred.decisionReleasableLogged = true;
+      this.log("answer.decision_releasable", {
+        answer_version: deferred.answerVersion,
+        scene: sceneAt(deferred.sceneIndex).id,
+        decision: deferred.decision,
+        correction_window_ms: CORRECTION_WINDOW_MS,
+      });
+    }
+    this.waitForPrematureOutputQuiet(() => {
+      if (this.deferredStay !== deferred) return;
+      this.deferredStay = null;
+      clearTimeout(this.stayTimer);
+      this.log("answer.release_sent", {
+        answer_version: deferred.answerVersion,
+        scene: sceneAt(deferred.sceneIndex).id,
+      });
+      this.append(deferred.content, { answerVersion: deferred.answerVersion, decision: deferred.decision });
+    });
   }
 
   private cancelDeferredStay() {
     clearTimeout(this.stayTimer);
+    clearTimeout(this.feedbackOutputQuietTimer);
+    this.pendingOutputQuietAction = undefined;
     if (this.deferredStay) this.log("answer.release_cancelled", { answer_version: this.deferredStay.answerVersion });
     this.deferredStay = null;
   }
@@ -692,7 +1010,13 @@ export class LessonSession {
         );
         return;
       case "advance":
-        this.append(advanceContext(this.scene));
+        this.waitForPrematureOutputQuiet(() => {
+          if (this.snapshot.status !== "active" || this.feedbackGate?.answerVersion !== pending.answerVersion) return;
+          this.append(advanceContext(this.scene), {
+            answerVersion: pending.answerVersion,
+            decision: "ADVANCE",
+          });
+        });
         return;
       default: {
         const unhandled: never = pending.kind;
@@ -709,6 +1033,7 @@ export class LessonSession {
     this.log("lesson.wrap_up");
     this.append(
       "We have played for four and a half minutes. Gently finish this exchange. No new scenes or questions after it. We will say goodbye shortly.",
+      {},
     );
   }
 
@@ -720,6 +1045,7 @@ export class LessonSession {
     this.log("lesson.goodbye_requested");
     this.append(
       "The lesson is finished. Say a brief warm goodbye now, then remain quiet. No questions or new activities.",
+      {},
     );
   }
 

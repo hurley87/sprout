@@ -76,7 +76,14 @@ async function mockLive(page: Page, pendingMic = false) {
           onmessage: null as ((event: { data: string }) => void) | null,
           onclose: null as (() => void) | null,
           onerror: null,
-          send: (raw: string) => state.commands.push({ ...JSON.parse(raw), at: performance.now() }),
+          send: (raw: string) => {
+            const command = JSON.parse(raw) as Record<string, unknown>;
+            state.commands.push({ ...command, at: performance.now() });
+            if (command.type === "session.instructions.append")
+              queueMicrotask(() =>
+                state.emit({ type: "session.instructions.appended", client_event_id: command.event_id }),
+              );
+          },
           close: () => {
             this.channel.readyState = "closed";
             this.channel.onclose?.();
@@ -218,6 +225,38 @@ test("an unconvincing count keeps the scene and releases GPT-Live on it", async 
   await say(page, "I have a dinosaur!", 10_000);
   await page.waitForTimeout(2500);
   expect(await commands(page)).toHaveLength(before + 1);
+});
+
+test("mutes browser playback through the answer check and unmutes after current context is acknowledged", async ({
+  page,
+}) => {
+  await mockLive(page);
+  let requestEvaluation!: () => void;
+  let completeEvaluation!: () => void;
+  const evaluationRequested = new Promise<void>(resolve => (requestEvaluation = resolve));
+  const evaluation = new Promise<void>(resolve => (completeEvaluation = resolve));
+  await page.route("**/api/evaluate", route => {
+    requestEvaluation();
+    return evaluation.then(() => route.fulfill({ json: { probability: 0.4, model: "jev-test" } }));
+  });
+  await begin(page);
+
+  await say(page, "Five!");
+  await expect(page.locator("audio")).toHaveJSProperty("muted", true);
+  await emit(page, {
+    type: "session.output_transcript.delta",
+    delta: "Let's count the ducks together.",
+    start_ms: 800,
+    end_ms: 1300,
+  });
+  await expect(page.locator('[data-scene="hello-duck"]')).toBeVisible();
+  expect(await releases(page)).toEqual([]);
+
+  await evaluationRequested;
+  completeEvaluation();
+  await expect.poll(() => releases(page)).toHaveLength(1);
+  await expect(page.locator("audio")).toHaveJSProperty("muted", false);
+  await expect(page.locator('[data-scene="hello-duck"] > span')).toHaveCount(1);
 });
 
 test("a timed-out evaluation keeps the scene and releases GPT-Live neutrally", async ({ page }) => {

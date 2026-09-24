@@ -24,7 +24,13 @@ function sessionWith(
     | { status: "unavailable"; reason: string; latencyMs: number }
   >,
 ) {
-  const transport: Transport = { start: async () => {}, send: () => {}, stopMedia: () => {}, close: () => {} };
+  const transport: Transport = {
+    start: async () => {},
+    send: () => {},
+    setOutputMuted: () => {},
+    stopMedia: () => {},
+    close: () => {},
+  };
   const session = new LessonSession(
     transport,
     (_request, signal) => answer(signal),

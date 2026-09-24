@@ -13,6 +13,7 @@ export class BrowserTransport implements Transport {
   private mic?: MediaStream;
   private remote?: MediaStream;
   private turnDetector?: MicrophoneTurnDetector;
+  private outputMuted = false;
   // The single record of "this attempt is over", set by stopMedia(). Late
   // callbacks and resolved awaits check it instead of tracking their own flags.
   private abort = new AbortController();
@@ -137,12 +138,21 @@ export class BrowserTransport implements Transport {
     this.channel.send(JSON.stringify(command));
   }
 
+  /** GPT-Live audio arrives on the WebRTC media track, outside the data channel. */
+  setOutputMuted(muted: boolean) {
+    if (this.outputMuted === muted) return;
+    this.outputMuted = muted;
+    this.audio.muted = muted;
+  }
+
   stopMedia() {
     this.abort.abort();
     this.turnDetector?.close();
     this.mic?.getTracks().forEach(track => track.stop());
     this.remote?.getTracks().forEach(track => track.stop());
     this.audio.pause();
+    this.outputMuted = false;
+    this.audio.muted = false;
     this.audio.srcObject = null;
   }
 
