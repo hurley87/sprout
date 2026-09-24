@@ -11,13 +11,41 @@
  */
 import { chromium } from "@playwright/test";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 
 const BASE_URL = process.env.BASE_URL ?? "http://127.0.0.1:3000";
 const OUT = process.env.LIVE_OUT ?? "test-results/live-matrix";
 
 /** [secondsAfterStart, text]. `stop: "none"` lets the app or child end the lesson. */
 const SCENARIOS = {
+  turn_end_experiment: {
+    seconds: 115,
+    lines: [
+      [11, "One!"],
+      [20, "Yeah."],
+      [28, "One"],
+      [30, "two ducks."],
+      [43, "Two... no, three."],
+      [55, "I don't know."],
+      [65, "Five."],
+      [76, "One, two, three."],
+      [88, "Wait, I am still counting."],
+      [97, "One, two, three."],
+    ],
+  },
+  turn_end_debug: {
+    seconds: 82,
+    lines: [
+      [11, "One!"],
+      [20, "Yeah."],
+      [28, "One"],
+      [30, "two ducks."],
+      [43, "Two... no, three."],
+      [55, "I don't know."],
+      [65, "Five."],
+      [74, "One, two, three."],
+    ],
+  },
   quick_answer: {
     seconds: 50,
     lines: [
@@ -177,7 +205,7 @@ function recordLiveTraffic() {
   window.__liveLog = log;
   const nativeFetch = window.fetch.bind(window);
   window.fetch = async (input, init) => {
-    const url = typeof input === "string" ? input : input.url;
+    const url = typeof input === "string" ? input : (input?.url ?? "");
     if (!url.includes("/api/evaluate")) return nativeFetch(input, init);
     const asked = at();
     const response = await nativeFetch(input, init);
@@ -337,7 +365,7 @@ async function run(name, scenario, label = name) {
   try {
     const page = await (await browser.newContext({ permissions: ["microphone"] })).newPage();
     await page.addInitScript(recordLiveTraffic);
-    await page.goto(BASE_URL);
+    await page.goto(`${BASE_URL}/?debug=1`);
     await page.getByRole("button", { name: "Start counting together" }).click();
     const endButton = page.getByRole("button", { name: "End lesson" });
     const deadline = Date.now() + scenario.seconds * 1000;
@@ -349,6 +377,10 @@ async function run(name, scenario, label = name) {
     const text = [timeline(label, scenario, log), `metrics: ${JSON.stringify(summary)}`].join("\n");
     writeFileSync(`${dir}/log.json`, JSON.stringify({ browser: browser.version(), scenario, summary, log }, null, 2));
     writeFileSync(`${dir}/timeline.txt`, text);
+    await page.getByText("Parent testing notes").click();
+    const downloadPromise = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Download attempt diagnostics" }).click();
+    copyFileSync(await (await downloadPromise).path(), `${dir}/diagnostics.json`);
     return text;
   } finally {
     await browser.close();

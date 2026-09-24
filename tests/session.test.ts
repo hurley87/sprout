@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ADVANCE_THRESHOLD, SETTLE_MS, shouldAdvance, type AnswerResult, type EvaluateAnswer } from "../lib/answer";
+import {
+  ADVANCE_THRESHOLD,
+  TRANSCRIPT_FALLBACK_MS as SETTLE_MS,
+  TRANSCRIPT_TAIL_MS,
+  shouldAdvance,
+  type AnswerResult,
+  type EvaluateAnswer,
+} from "../lib/answer";
 import { parseProviderEvent } from "../lib/events";
 import { LessonSession, type Transport } from "../lib/session";
 import {
@@ -61,6 +68,8 @@ const speech = (delta: string, start_ms = 0, output = false) => ({
   start_ms,
   end_ms: start_ms + 500,
 });
+const mic = (session: LessonSession, type: "microphone.speech_started" | "microphone.speech_stopped") =>
+  session.receive({ type });
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
@@ -180,6 +189,85 @@ describe("application lifecycle", () => {
 });
 
 describe("answer-gated scene advancement", () => {
+  it("evaluates a complete short count from microphone turn end, once", async () => {
+    const { session, evaluateAnswer } = setup(true, answering(CONFIDENT));
+    mic(session, "microphone.speech_started");
+    deliver(session, speech("One"));
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(evaluateAnswer).not.toHaveBeenCalled();
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
+    mic(session, "microphone.speech_stopped");
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+    expect(session.snapshot.sceneIndex).toBe(1);
+    expect(session.events.findLast(e => e.type === "answer.requesting")?.detail).toMatchObject({
+      signal: "microphone_vad",
+    });
+  });
+  it("takes a transcript tail and final self-correction before judging", async () => {
+    const { session, evaluateAnswer } = setup(true, answering(UNSURE));
+    mic(session, "microphone.speech_started");
+    deliver(session, speech("Two... no,", 0));
+    mic(session, "microphone.speech_stopped");
+    deliver(session, speech(" one", 600));
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
+    expect(evaluateAnswer).toHaveBeenCalledWith({ sceneIndex: 0, utterance: "Two... no, one" }, expect.anything());
+  });
+  it("does not commit an incomplete slow phrase during a speech pause", async () => {
+    const { session, evaluateAnswer } = setup(true, answering(CONFIDENT));
+    mic(session, "microphone.speech_started");
+    deliver(session, speech("There are"));
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
+    expect(evaluateAnswer).not.toHaveBeenCalled();
+    mic(session, "microphone.speech_started");
+    await vi.advanceTimersByTimeAsync(800);
+    deliver(session, speech(" one duck", 800));
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
+    expect(evaluateAnswer).toHaveBeenCalledWith({ sceneIndex: 0, utterance: "There are one duck" }, expect.anything());
+    expect(session.snapshot.sceneIndex).toBe(1);
+  });
+  it("new microphone speech invalidates an in-flight result before its transcript arrives", async () => {
+    let resolve!: (result: AnswerResult) => void;
+    const { session } = setup(true, () => new Promise(r => (resolve = r)));
+    mic(session, "microphone.speech_started");
+    deliver(session, speech("One"));
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
+    mic(session, "microphone.speech_started");
+    resolve(evaluated(CONFIDENT));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.snapshot.sceneIndex).toBe(0);
+    expect(session.events.findLast(e => e.type === "answer.evaluated")?.detail).toMatchObject({ decision: "STALE" });
+  });
+  it("stopping the lesson aborts a pending turn-end evaluation", async () => {
+    let signal!: AbortSignal;
+    let resolve!: (result: AnswerResult) => void;
+    const { session } = setup(true, (_request, pendingSignal) => {
+      signal = pendingSignal;
+      return new Promise(r => (resolve = r));
+    });
+    mic(session, "microphone.speech_started");
+    deliver(session, speech("One"));
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
+    session.end("parent_stop");
+    expect(signal.aborted).toBe(true);
+    resolve(evaluated(CONFIDENT));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.snapshot.sceneIndex).toBe(0);
+  });
+  it("does not call Jev for a non-count or uncertain statement without a number", async () => {
+    const { session, evaluateAnswer } = setup();
+    for (const word of ["Yeah", "I don't know"]) {
+      mic(session, "microphone.speech_started");
+      deliver(session, speech(word, word === "Yeah" ? 0 : 3000));
+      mic(session, "microphone.speech_stopped");
+      await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
+    }
+    expect(evaluateAnswer).not.toHaveBeenCalled();
+  });
   it("treats only a confident answer as a reason to advance", () => {
     expect(shouldAdvance(evaluated(ADVANCE_THRESHOLD))).toBe(true);
     expect(shouldAdvance(evaluated(ADVANCE_THRESHOLD - 0.001))).toBe(false);
@@ -440,7 +528,7 @@ describe("answer-check turn synchronization", () => {
     expect(INSTRUCTIONS).toContain("The pause is only for counts: reply straight away to everything else");
     // The old contract made GPT-Live reply to every answer at once.
     expect(INSTRUCTIONS).not.toContain("after the child answers, always reply");
-    expect(PROMPT_VERSION).toBe("counting-jev-2");
+    expect(PROMPT_VERSION).toBe("counting-jev-3");
   });
   it("sends nothing while the utterance settles or Jev is deciding", async () => {
     let answer!: (result: AnswerResult) => void;

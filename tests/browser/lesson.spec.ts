@@ -42,6 +42,15 @@ async function mockLive(page: Page, pendingMic = false) {
         disconnect: () => {},
       };
       window.sproutTest = state;
+      // Provider mock has a continuous fake microphone waveform, not utterances.
+      // Exercise the transcript fallback here; microphone VAD is covered by session tests.
+      Object.defineProperty(window, "AudioContext", {
+        value: class {
+          constructor() {
+            throw new Error("synthetic microphone");
+          }
+        },
+      });
       new MutationObserver(() => {
         const scene = document.querySelector("[data-scene]")?.getAttribute("data-scene");
         if (scene && !(scene in state.shownAt)) state.shownAt[scene] = performance.now();

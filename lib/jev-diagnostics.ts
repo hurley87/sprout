@@ -1,4 +1,4 @@
-import { ADVANCE_THRESHOLD, ANSWER_QUESTION, JEV_MODEL, SETTLE_MS, answerState } from "./answer";
+import { ADVANCE_THRESHOLD, ANSWER_QUESTION, JEV_MODEL, answerState } from "./answer";
 import { objectName, sceneAt } from "./lesson";
 import type { Diagnostic } from "./session";
 
@@ -6,11 +6,24 @@ export type EvaluationTrace = {
   version: string;
   sceneIndex: number;
   utterance: string;
-  phase: "settling" | "requesting Jev" | "evaluated" | "unavailable" | "stale/cancelled" | "deferred advance";
-  configuredSettleMs: number;
-  actualSettleMs?: number;
+  phase:
+    | "turn detection"
+    | "skipped"
+    | "requesting Jev"
+    | "evaluated"
+    | "unavailable"
+    | "stale/cancelled"
+    | "deferred advance";
+  signal?: string;
+  transcriptAt?: number;
+  turnEndAt?: number;
+  requestAt?: number;
+  transcriptToRequestMs?: number;
+  turnEndToRequestMs?: number;
   jevMs?: number;
-  totalMs?: number;
+  turnEndToDecisionMs?: number;
+  turnEndToCommitMs?: number;
+  turnEndToDisplayMs?: number;
   probability?: number;
   reason?: string;
   decision?: "ADVANCE" | "STAY" | "UNAVAILABLE" | "STALE";
@@ -19,28 +32,22 @@ export type EvaluationTrace = {
   deferredMs?: number;
   displayed: boolean;
 };
-
 const detailOf = (event: Diagnostic): Record<string, unknown> | null =>
   event.detail && typeof event.detail === "object" ? (event.detail as Record<string, unknown>) : null;
 
-/** Pure view of the application events. React does not make answer decisions. */
+/** Pure view of application events. */
 export function evaluationHistory(events: readonly Diagnostic[]): EvaluationTrace[] {
   const traces: EvaluationTrace[] = [];
   const byVersion = new Map<string, EvaluationTrace>();
   for (const event of events) {
     const detail = detailOf(event);
     if (!detail) continue;
-    const version =
-      event.type === "answer.settling" || event.type === "answer.requesting" || event.type === "answer.evaluated"
-        ? detail.version
-        : detail.answer_version;
+    const version = event.type.startsWith("answer.") ? detail.version : detail.answer_version;
     if (typeof version !== "string") continue;
-    if (event.type === "answer.settling") {
+    if (event.type === "answer.candidate") {
       if (typeof detail.sceneIndex !== "number" || typeof detail.utterance !== "string") continue;
-      // A transcript delta replaces an unfinished settle candidate. Only
-      // requests that were actually sent belong in evaluation history.
       const previous = traces.at(-1);
-      if (previous?.phase === "settling") {
+      if (previous?.phase === "turn detection") {
         traces.pop();
         byVersion.delete(previous.version);
       }
@@ -48,8 +55,9 @@ export function evaluationHistory(events: readonly Diagnostic[]): EvaluationTrac
         version,
         sceneIndex: detail.sceneIndex,
         utterance: detail.utterance,
-        phase: "settling",
-        configuredSettleMs: SETTLE_MS,
+        phase: "turn detection",
+        signal: detail.signal as string,
+        transcriptAt: detail.transcript_at as number,
         stale: false,
         deferred: false,
         displayed: false,
@@ -61,18 +69,29 @@ export function evaluationHistory(events: readonly Diagnostic[]): EvaluationTrac
     const trace = byVersion.get(version);
     if (!trace) continue;
     switch (event.type) {
+      case "answer.skipped":
+        trace.phase = "skipped";
+        trace.reason = detail.reason as string;
+        break;
       case "answer.requesting":
         trace.phase = "requesting Jev";
-        trace.actualSettleMs = detail.actual_settle_ms as number;
+        trace.signal = detail.signal as string;
+        trace.turnEndAt = detail.turn_end_at as number;
+        trace.requestAt = event.at;
+        trace.transcriptToRequestMs = detail.transcript_to_request_ms as number;
+        trace.turnEndToRequestMs = detail.turn_end_to_request_ms as number;
         break;
       case "answer.evaluated":
         trace.jevMs = detail.latency_ms as number;
-        trace.totalMs = detail.total_ms as number;
+        trace.turnEndToDecisionMs = detail.turn_end_to_decision_ms as number;
         trace.probability = typeof detail.probability === "number" ? detail.probability : undefined;
         trace.reason = typeof detail.unavailable === "string" ? detail.unavailable : undefined;
         trace.decision = detail.decision as EvaluationTrace["decision"];
         trace.stale = detail.stale === true;
         trace.phase = trace.stale ? "stale/cancelled" : trace.reason ? "unavailable" : "evaluated";
+        break;
+      case "advance.committed":
+        trace.turnEndToCommitMs = detail.turn_end_to_commit_ms as number;
         break;
       case "advance.deferred":
         trace.deferred = true;
@@ -90,6 +109,7 @@ export function evaluationHistory(events: readonly Diagnostic[]): EvaluationTrac
         break;
       case "advance.displayed":
         trace.displayed = true;
+        trace.turnEndToDisplayMs = detail.turn_end_to_display_ms as number;
         break;
     }
   }
@@ -104,7 +124,6 @@ export function safeEvaluationRequest(trace: EvaluationTrace) {
     threshold: ADVANCE_THRESHOLD,
   };
 }
-
 export function traceScene(trace: EvaluationTrace) {
   const scene = sceneAt(trace.sceneIndex);
   return `${scene.quantity} ${objectName(scene)}`;

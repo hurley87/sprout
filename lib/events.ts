@@ -4,6 +4,8 @@
 type Identified = { eventId?: string };
 
 export type ProviderEvent =
+  // Produced locally from the browser microphone, never parsed from the provider channel.
+  | (Identified & { type: "microphone.speech_started" | "microphone.speech_stopped" })
   | (Identified & { type: "session.started" })
   | (Identified & { type: "session.closed"; reason?: string; usage?: unknown })
   | (Identified & { type: "provider.error"; code?: string })

@@ -1,6 +1,6 @@
 "use client";
 
-import { ADVANCE_THRESHOLD, SETTLE_MS } from "@/lib/answer";
+import { ADVANCE_THRESHOLD, MICROPHONE_QUIET_MS, TRANSCRIPT_FALLBACK_MS, TRANSCRIPT_TAIL_MS } from "@/lib/answer";
 import { evaluationHistory, safeEvaluationRequest, traceScene, type EvaluationTrace } from "@/lib/jev-diagnostics";
 import type { Diagnostic } from "@/lib/session";
 
@@ -8,7 +8,7 @@ const ms = (value?: number) => (value === undefined ? "—" : `${Math.round(valu
 const probability = (value?: number) => (value === undefined ? "—" : value.toFixed(2));
 
 function Timeline({ trace }: { trace: EvaluationTrace }) {
-  const stages = ["Child transcript", "Settle", "Jev request", "Jev response", "Scene transition"];
+  const stages = ["Child transcript", "Turn end", "Jev request", "Jev response", "Scene transition"];
   const reached = trace.displayed
     ? 5
     : trace.deferred
@@ -17,7 +17,7 @@ function Timeline({ trace }: { trace: EvaluationTrace }) {
         ? 4
         : trace.jevMs !== undefined
           ? 4
-          : trace.actualSettleMs !== undefined
+          : trace.requestAt !== undefined
             ? 3
             : 2;
   return (
@@ -46,14 +46,26 @@ export function JevDiagnostics({ events }: { events: readonly Diagnostic[] }) {
             <dd>“{active.utterance}”</dd>
             <dt>Phase</dt>
             <dd>{active.phase}</dd>
-            <dt>Configured settle</dt>
-            <dd>{ms(active.configuredSettleMs)}</dd>
-            <dt>Actual settle</dt>
-            <dd>{ms(active.actualSettleMs)}</dd>
-            <dt>Jev request</dt>
+            <dt>Turn signal</dt>
+            <dd>{active.signal ?? "—"}</dd>
+            <dt>Transcript at</dt>
+            <dd>{ms(active.transcriptAt)}</dd>
+            <dt>Turn end at</dt>
+            <dd>{ms(active.turnEndAt)}</dd>
+            <dt>Jev start at</dt>
+            <dd>{ms(active.requestAt)}</dd>
+            <dt>Transcript → request</dt>
+            <dd>{ms(active.transcriptToRequestMs)}</dd>
+            <dt>Turn end → request</dt>
+            <dd>{ms(active.turnEndToRequestMs)}</dd>
+            <dt>Jev duration</dt>
             <dd>{ms(active.jevMs)}</dd>
-            <dt>Total to decision</dt>
-            <dd>{ms(active.totalMs)}</dd>
+            <dt>Turn end → decision</dt>
+            <dd>{ms(active.turnEndToDecisionMs)}</dd>
+            <dt>Turn end → commit</dt>
+            <dd>{ms(active.turnEndToCommitMs)}</dd>
+            <dt>Turn end → display</dt>
+            <dd>{ms(active.turnEndToDisplayMs)}</dd>
             <dt>Probability</dt>
             <dd>{probability(active.probability)}</dd>
             <dt>Threshold</dt>
@@ -70,16 +82,21 @@ export function JevDiagnostics({ events }: { events: readonly Diagnostic[] }) {
             <dd>{ms(active.deferredMs)}</dd>
           </dl>
           <Timeline trace={active} />
-          <details>
-            <summary>Request</summary>
-            <p>
-              Safe evaluation payload, model, Noul question and threshold. No credentials or provider response body.
-            </p>
-            <pre>{JSON.stringify(safeEvaluationRequest(active), null, 2)}</pre>
-          </details>
+          {active.requestAt !== undefined && (
+            <details>
+              <summary>Request</summary>
+              <p>
+                Safe evaluation payload, model, Noul question and threshold. No credentials or provider response body.
+              </p>
+              <pre>{JSON.stringify(safeEvaluationRequest(active), null, 2)}</pre>
+            </details>
+          )}
         </>
       ) : (
-        <p>Waiting for a learner answer. Configured settle: {ms(SETTLE_MS)}.</p>
+        <p>
+          Waiting for a learner count. Microphone quiet: {ms(MICROPHONE_QUIET_MS)}; transcript tail:{" "}
+          {ms(TRANSCRIPT_TAIL_MS)}; fallback: {ms(TRANSCRIPT_FALLBACK_MS)}.
+        </p>
       )}
       <h3>Current lesson history</h3>
       <div className="jev-history-scroll">
@@ -88,8 +105,11 @@ export function JevDiagnostics({ events }: { events: readonly Diagnostic[] }) {
             <tr>
               <th>Utterance</th>
               <th>Scene</th>
-              <th>Settle</th>
+              <th>Signal</th>
+              <th>End → request</th>
               <th>Jev</th>
+              <th>End → decision</th>
+              <th>End → display</th>
               <th>Probability</th>
               <th>Decision</th>
               <th>Deferred</th>
@@ -100,8 +120,11 @@ export function JevDiagnostics({ events }: { events: readonly Diagnostic[] }) {
               <tr key={trace.version}>
                 <td>{trace.utterance}</td>
                 <td>{traceScene(trace)}</td>
-                <td>{ms(trace.actualSettleMs)}</td>
+                <td>{trace.signal ?? "—"}</td>
+                <td>{ms(trace.turnEndToRequestMs)}</td>
                 <td>{ms(trace.jevMs)}</td>
+                <td>{ms(trace.turnEndToDecisionMs)}</td>
+                <td>{ms(trace.turnEndToDisplayMs)}</td>
                 <td>{probability(trace.probability)}</td>
                 <td>
                   {trace.reason === "timeout" ? "TIMEOUT / " : ""}
