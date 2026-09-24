@@ -54,6 +54,20 @@ This is a judgment, not a score. Routine substantial repair means the loop is we
 
 Tally each day's original proposals as accepted unchanged, corrected, or rejected. This is a rough read on Observer quality, not a threshold.
 
+### Conversation-quality diagnostics
+
+The optional conversation-quality rating is not sufficient by itself. Record concrete examples when they occur, including:
+
+- false interruptions or child speech cut off while still thinking/continuing;
+- premature correctness praise/correction before the child has settled;
+- noticeable dead air after a clearly completed turn;
+- repeated re-prompts or unnecessary hint escalation;
+- self-corrections that were accepted or cut off;
+- child-initiated questions or off-topic comments and whether Sprout acknowledged and recovered naturally;
+- interactions that became rigid or quiz-like rather than conversational.
+
+These are diagnostic observations for this prototype, not calibrated model scores. Preserve enough session reference/timing context to inspect recurring failures later.
+
 ## 5. Partial sessions and failures
 
 A partial session can contribute reviewed evidence, count as willing participation, and qualify as a useful adaptation if the adjustment actually occurred. Behavior on disconnects, retries, and failed analysis follows the [session lifecycle](architecture.md#3-session-lifecycle) and [review rules](architecture.md#5-observation-and-review-rules). A retry does not add another experiment day. Do not let technical failures disappear from the report.
