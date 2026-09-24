@@ -12,6 +12,10 @@ Start with the [MVP PRD](sprout-mvp-prd.md) for the agreed product scope. These 
 | [GPT-Live baseline](gpt-live-baseline.md) | Slice 1 test matrix, observed shortcomings, and problems for the live-control decision |
 | [Jev answer experiment](jev-answer-experiment.md) | Whether one Jev question can drive scene advancement, measured against that baseline |
 
+## Tutoring principle
+
+Sprout separates **pedagogical intent** from **conversational realization**: the lesson/curriculum determines what needs to happen and why; the live voice model has freedom over how the conversation unfolds inside those bounds. Application control owns deterministic state and validated commits. See [Architecture and evidence flow](architecture.md#tutoring-principle-what-vs-how).
+
 The PRD owns product requirements. The architecture document describes how to enforce them; the protocol defines how to evaluate them. The glossary contains terminology, and ADRs preserve decisions and their trade-offs.
 
 The repository contains the slice 1 voice prototype: one hardcoded GPT-Live-1 counting lesson with in-tab diagnostics. The evidence, review, and planning flows are not yet implemented.
