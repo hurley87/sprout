@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ANSWER_QUESTION, ADVANCE_THRESHOLD, SETTLE_MS } from "../lib/answer";
+import {
+  ANSWER_QUESTION,
+  ADVANCE_THRESHOLD,
+  CORRECTION_WINDOW_MS,
+  TRANSCRIPT_TAIL_MS,
+  TRANSCRIPT_FALLBACK_MS as SETTLE_MS,
+} from "../lib/answer";
 import { parseProviderEvent } from "../lib/events";
 import { evaluationHistory, safeEvaluationRequest } from "../lib/jev-diagnostics";
 import { LessonSession, type Diagnostic, type Transport } from "../lib/session";
@@ -42,57 +48,95 @@ describe("Jev event timeline", () => {
       return { status: "evaluated", probability: 0.98, model: "jev-1.13.0", latencyMs: 243 };
     });
     say(session, "One");
-    expect(evaluationHistory(session.events)[0].phase).toBe("settling");
+    expect(evaluationHistory(session.events)[0].phase).toBe("turn detection");
     await vi.advanceTimersByTimeAsync(SETTLE_MS);
-    expect(evaluationHistory(session.events)[0]).toMatchObject({ phase: "requesting Jev", actualSettleMs: 1500 });
+    expect(evaluationHistory(session.events)[0]).toMatchObject({ phase: "requesting Jev", turnEndToRequestMs: 0 });
     await vi.advanceTimersByTimeAsync(243);
     const trace = evaluationHistory(session.events)[0];
     expect(trace).toMatchObject({
-      phase: "evaluated",
+      phase: "deferred advance",
       jevMs: 243,
-      totalMs: 1743,
+      turnEndToDecisionMs: 243,
       probability: 0.98,
       decision: "ADVANCE",
       stale: false,
-      deferred: false,
+      deferred: true,
     });
+    expect(trace.estimatedAcousticEndAt).toBeUndefined();
+    expect(trace.acousticToDecisionMs).toBeUndefined();
     expect(safeEvaluationRequest(trace)).toEqual({
       state: { displayed: { object: "duck", quantity: 1, description: "1 duck" }, learnerUtterance: "One" },
       model: "jev-1.13.0",
       question: ANSWER_QUESTION,
       threshold: ADVANCE_THRESHOLD,
     });
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - 243);
     session.displayed(1);
     expect(evaluationHistory(session.events)[0].displayed).toBe(true);
   });
 
+  it("separates measured VAD detection lag from Jev decision and scene display", async () => {
+    const session = sessionWith(async () => {
+      await new Promise(resolve => setTimeout(resolve, 200));
+      return { status: "evaluated", probability: 0.98, model: "jev-1.13.0", latencyMs: 200 };
+    });
+    session.receive({ type: "microphone.speech_started" });
+    say(session, "One");
+    session.receive({ type: "microphone.speech_stopped", quietMs: 940 });
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS + 200);
+    expect(evaluationHistory(session.events)[0]).toMatchObject({
+      signal: "microphone_vad",
+      estimatedAcousticEndAt: -940,
+      turnEndAt: 0,
+      vadDetectionMs: 940,
+      turnEndToDecisionMs: 450,
+      acousticToDecisionMs: 1390,
+    });
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - TRANSCRIPT_TAIL_MS - 200);
+    await vi.advanceTimersByTimeAsync(10);
+    session.receive({ type: "microphone.speech_started" });
+    session.receive({ type: "microphone.speech_stopped", quietMs: 920 });
+    session.displayed(1);
+    expect(evaluationHistory(session.events)[0]).toMatchObject({
+      turnEndToDisplayMs: CORRECTION_WINDOW_MS + 10,
+      acousticToDisplayMs: CORRECTION_WINDOW_MS + 10 + 940,
+    });
+  });
+
   it("records timeout, stale decision, deferred advance and cancelled deferral", async () => {
     const events: Diagnostic[] = [
-      { at: -10, type: "answer.settling", detail: { version: "partial", sceneIndex: 1, utterance: "One" } },
-      { at: 0, type: "answer.settling", detail: { version: "a", sceneIndex: 1, utterance: "One, two" } },
-      { at: 1500, type: "answer.requesting", detail: { version: "a", actual_settle_ms: 1500 } },
+      { at: -10, type: "answer.candidate", detail: { version: "partial", sceneIndex: 1, utterance: "One" } },
+      { at: 0, type: "answer.candidate", detail: { version: "a", sceneIndex: 1, utterance: "One, two" } },
+      { at: 1500, type: "answer.requesting", detail: { version: "a", turn_end_to_request_ms: 0 } },
       {
         at: 5500,
         type: "answer.evaluated",
         detail: {
           version: "a",
           latency_ms: 4000,
-          total_ms: 5500,
+          turn_end_to_decision_ms: 4000,
           unavailable: "timeout",
           decision: "UNAVAILABLE",
           stale: false,
         },
       },
-      { at: 6000, type: "answer.settling", detail: { version: "b", sceneIndex: 1, utterance: "One, two" } },
-      { at: 7500, type: "answer.requesting", detail: { version: "b", actual_settle_ms: 1500 } },
+      { at: 6000, type: "answer.candidate", detail: { version: "b", sceneIndex: 1, utterance: "One, two" } },
+      { at: 7500, type: "answer.requesting", detail: { version: "b", turn_end_to_request_ms: 0 } },
       {
         at: 7700,
         type: "answer.evaluated",
-        detail: { version: "b", latency_ms: 200, total_ms: 1700, probability: 0.98, decision: "ADVANCE", stale: false },
+        detail: {
+          version: "b",
+          latency_ms: 200,
+          turn_end_to_decision_ms: 200,
+          probability: 0.98,
+          decision: "ADVANCE",
+          stale: false,
+        },
       },
       { at: 7700, type: "advance.deferred", detail: { answer_version: "b" } },
       { at: 8200, type: "advance.cancelled", detail: { answer_version: "b", delay_ms: 500 } },
-      { at: 8300, type: "answer.settling", detail: { version: "c", sceneIndex: 1, utterance: "Another" } },
+      { at: 8300, type: "answer.candidate", detail: { version: "c", sceneIndex: 1, utterance: "Another" } },
       { at: 8500, type: "answer.evaluated", detail: { version: "c", latency_ms: 200, decision: "STALE", stale: true } },
     ];
     const history = evaluationHistory(events);

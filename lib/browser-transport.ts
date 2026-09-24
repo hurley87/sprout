@@ -1,5 +1,6 @@
 import { parseProviderEvent, parseSessionAnswer, type ClientCommand, type ProviderEvent } from "./events";
 import type { Transport } from "./session";
+import { MicrophoneTurnDetector } from "./microphone-turn";
 
 const serverError = (body: unknown) =>
   typeof body === "object" && body !== null && "error" in body && typeof body.error === "string"
@@ -11,6 +12,7 @@ export class BrowserTransport implements Transport {
   private channel?: RTCDataChannel;
   private mic?: MediaStream;
   private remote?: MediaStream;
+  private turnDetector?: MicrophoneTurnDetector;
   // The single record of "this attempt is over", set by stopMedia(). Late
   // callbacks and resolved awaits check it instead of tracking their own flags.
   private abort = new AbortController();
@@ -33,6 +35,13 @@ export class BrowserTransport implements Transport {
       return;
     }
     this.mic = stream;
+    try {
+      this.turnDetector = new MicrophoneTurnDetector(stream, event => {
+        if (!this.cancelled) onEvent(event);
+      });
+    } catch {
+      // Transcript fallback remains available on browsers without Web Audio.
+    }
     const peer = new RTCPeerConnection();
     this.peer = peer;
     peer.ontrack = ({ track }) => {
@@ -130,6 +139,7 @@ export class BrowserTransport implements Transport {
 
   stopMedia() {
     this.abort.abort();
+    this.turnDetector?.close();
     this.mic?.getTracks().forEach(track => track.stop());
     this.remote?.getTracks().forEach(track => track.stop());
     this.audio.pause();

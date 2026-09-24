@@ -3,7 +3,13 @@
 
 type Identified = { eventId?: string };
 
+export type MicrophoneEvent =
+  | { type: "microphone.activity_started" | "microphone.activity_discarded" | "microphone.speech_started" }
+  | { type: "microphone.speech_stopped"; quietMs: number };
+
 export type ProviderEvent =
+  // Produced locally from the browser microphone, never parsed from the provider channel.
+  | (Identified & MicrophoneEvent)
   | (Identified & { type: "session.started" })
   | (Identified & { type: "session.closed"; reason?: string; usage?: unknown })
   | (Identified & { type: "provider.error"; code?: string })

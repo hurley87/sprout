@@ -40,12 +40,18 @@ export const ANSWER_QUESTION = {
  */
 export const ADVANCE_THRESHOLD = 0.9;
 
-/**
- * GPT-Live emits no authoritative end-of-turn event, so the application defines
- * one: a learner utterance is complete once this much time passes with no new
- * transcript delta for it.
- */
-export const SETTLE_MS = 1500;
+/** Secondary liveness path when microphone activity detection does not fire. */
+export const TRANSCRIPT_FALLBACK_MS = 1500;
+/** Quiet audio required before the local microphone detector signals speech stop. */
+export const MICROPHONE_QUIET_MS = 900;
+/** Sustained microphone energy required before activity becomes confirmed speech. */
+export const MICROPHONE_ONSET_MS = 80;
+/** Quiet needed to discard an unconfirmed microphone burst. */
+export const MICROPHONE_ONSET_QUIET_MS = 150;
+/** Allow the final transcript fragment to arrive after microphone speech stops. */
+export const TRANSCRIPT_TAIL_MS = 250;
+/** Time after detected turn end or the latest transcript to allow a correction before committing a scene. */
+export const CORRECTION_WINDOW_MS = 2500;
 
 /** An evaluation that outlives its usefulness must never reach the lesson. */
 export const EVALUATION_TIMEOUT_MS = 4000;
