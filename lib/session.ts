@@ -63,7 +63,9 @@ export interface Transport {
 }
 
 /** What the app is waiting to see on screen before it speaks about it. */
-type PendingDisplay = { kind: "greeting" | "advance"; sceneIndex: number; answerVersion?: string; turnEndAt?: number };
+type PendingDisplay =
+  | { kind: "greeting"; sceneIndex: number }
+  | { kind: "advance"; sceneIndex: number; previousSceneIndex: number; answerVersion: string; turnEndAt: number };
 type DeferredAdvance = {
   sceneIndex: number;
   answerVersion: string;
@@ -982,12 +984,16 @@ export class LessonSession {
 
   /** The application, not the model, commits the next deterministic scene. */
   private advance(answerVersion: string) {
+    const previousScene = sceneAt(this.snapshot.sceneIndex);
     this.log("advance.committed", {
       answer_version: answerVersion,
+      previous_scene: previousScene.id,
+      previous_quantity: previousScene.quantity,
       turn_end_to_commit_ms: Date.now() - this.turnEndAt,
     });
+    const previousSceneIndex = this.snapshot.sceneIndex;
     const sceneIndex = this.snapshot.sceneIndex + 1;
-    this.pending = { kind: "advance", sceneIndex, answerVersion, turnEndAt: this.turnEndAt };
+    this.pending = { kind: "advance", sceneIndex, previousSceneIndex, answerVersion, turnEndAt: this.turnEndAt };
     this.update({ sceneIndex });
   }
 
@@ -998,10 +1004,12 @@ export class LessonSession {
     if (!pending || pending.sceneIndex !== sceneIndex) return;
     this.pending = null;
     this.log("scene.displayed", this.scene);
-    if (pending.answerVersion)
+    if (pending.kind === "advance")
       this.log("advance.displayed", {
         answer_version: pending.answerVersion,
-        turn_end_to_display_ms: Date.now() - (pending.turnEndAt ?? this.turnEndAt),
+        previous_scene: sceneAt(pending.previousSceneIndex).id,
+        previous_quantity: sceneAt(pending.previousSceneIndex).quantity,
+        turn_end_to_display_ms: Date.now() - pending.turnEndAt,
       });
     switch (pending.kind) {
       case "greeting":
@@ -1012,16 +1020,12 @@ export class LessonSession {
       case "advance":
         this.waitForPrematureOutputQuiet(() => {
           if (this.snapshot.status !== "active" || this.feedbackGate?.answerVersion !== pending.answerVersion) return;
-          this.append(advanceContext(this.scene), {
+          this.append(advanceContext({ previousScene: sceneAt(pending.previousSceneIndex), nextScene: this.scene }), {
             answerVersion: pending.answerVersion,
             decision: "ADVANCE",
           });
         });
         return;
-      default: {
-        const unhandled: never = pending.kind;
-        throw new Error(`Unhandled pending display: ${JSON.stringify(unhandled)}`);
-      }
     }
   }
 

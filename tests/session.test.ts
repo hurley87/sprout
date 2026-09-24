@@ -204,6 +204,25 @@ describe("application lifecycle", () => {
   });
 });
 
+describe("advance transition context", () => {
+  it("confirms the accepted one-duck answer while introducing the two-duck scene", () => {
+    const context = advanceContext({ previousScene: sceneAt(0), nextScene: sceneAt(1) });
+    expect(context).toContain("The previous screen showed exactly 1 duck");
+    expect(context).toContain("shows exactly 2 ducks");
+    expect(context).toMatch(/acknowledge that success first/i);
+    expect(context).toMatch(/Do not say or reveal the new group's quantity/i);
+  });
+
+  it("confirms two ducks before inviting the child to count the new butterflies", () => {
+    const context = advanceContext({ previousScene: sceneAt(1), nextScene: sceneAt(2) });
+    expect(context).toContain("The previous screen showed exactly 2 ducks");
+    expect(context).toContain("shows exactly 3 butterflies");
+    expect(context.indexOf("acknowledge that success first")).toBeLessThan(context.indexOf("orient the child"));
+    expect(context).toMatch(/give one short counting invitation/i);
+    expect(context).toMatch(/Do not say or reveal the new group's quantity/i);
+  });
+});
+
 describe("unexpected GPT-Live delegation", () => {
   it("records and releases once without changing the lesson or affecting Jev", async () => {
     const evaluateAnswer = answering(CONFIDENT);
@@ -263,7 +282,7 @@ describe("unexpected GPT-Live delegation", () => {
     expect(vi.mocked(transport.send).mock.calls.at(-1)?.[0]).toMatchObject({
       type: "session.instructions.append",
       delegation_id: null,
-      content: advanceContext(sceneAt(1)),
+      content: advanceContext({ previousScene: sceneAt(0), nextScene: sceneAt(1) }),
     });
 
     const report = session.report("test");
@@ -274,7 +293,7 @@ describe("unexpected GPT-Live delegation", () => {
   });
 
   it.each([
-    ["ADVANCE", CONFIDENT, "One!", 1, advanceContext(sceneAt(1))],
+    ["ADVANCE", CONFIDENT, "One!", 1, advanceContext({ previousScene: sceneAt(0), nextScene: sceneAt(1) })],
     ["STAY", UNSURE, "Five!", 0, stayContext(sceneAt(0))],
   ])(
     "does not alter a pending %s decision or bypass its correction window",
@@ -757,7 +776,9 @@ describe("answer-check turn synchronization", () => {
     expect(sent(transport)).toHaveLength(0);
 
     session.displayed(1);
-    expect(sent(transport)).toEqual([expect.objectContaining({ content: advanceContext(sceneAt(1)) })]);
+    expect(sent(transport)).toEqual([
+      expect.objectContaining({ content: advanceContext({ previousScene: sceneAt(0), nextScene: sceneAt(1) }) }),
+    ]);
     expect(vi.mocked(transport.setOutputMuted)).toHaveBeenLastCalledWith(true);
     acknowledgeLastContext(session, transport);
     expect(vi.mocked(transport.setOutputMuted)).toHaveBeenLastCalledWith(false);
@@ -869,7 +890,9 @@ describe("answer-check turn synchronization", () => {
     await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
     expect(session.snapshot.sceneIndex).toBe(1);
     session.displayed(1);
-    expect(sent(transport)).toEqual([expect.objectContaining({ content: advanceContext(sceneAt(1)) })]);
+    expect(sent(transport)).toEqual([
+      expect.objectContaining({ content: advanceContext({ previousScene: sceneAt(0), nextScene: sceneAt(1) }) }),
+    ]);
     acknowledgeLastContext(session, transport);
     expect(vi.mocked(transport.setOutputMuted)).toHaveBeenLastCalledWith(false);
     expect(session.events.some(event => event.type === "answer.feedback_waiting_for_output_quiet")).toBe(false);
@@ -1146,7 +1169,9 @@ describe("answer-check turn synchronization", () => {
       expect(session.snapshot.sceneIndex).toBe(1);
       expect(transport.send).not.toHaveBeenCalled();
       session.displayed(1);
-      expect(sent(transport)).toEqual([expect.objectContaining({ content: advanceContext(sceneAt(1)) })]);
+      expect(sent(transport)).toEqual([
+        expect.objectContaining({ content: advanceContext({ previousScene: sceneAt(0), nextScene: sceneAt(1) }) }),
+      ]);
     },
   );
 
@@ -1172,7 +1197,9 @@ describe("answer-check turn synchronization", () => {
     expect(transport.send).not.toHaveBeenCalled();
     session.displayed(1);
     session.displayed(1);
-    expect(sent(transport)).toEqual([expect.objectContaining({ content: advanceContext(sceneAt(1)) })]);
+    expect(sent(transport)).toEqual([
+      expect.objectContaining({ content: advanceContext({ previousScene: sceneAt(0), nextScene: sceneAt(1) }) }),
+    ]);
     expect(session.events.filter(event => event.type === "advance.deferred")).toHaveLength(1);
     expect(session.events.filter(event => event.type === "advance.released")).toHaveLength(1);
     expect(session.events.findLast(event => event.type === "advance.released")?.detail).toMatchObject({
@@ -1200,7 +1227,11 @@ describe("answer-check turn synchronization", () => {
       expect(session.snapshot.sceneIndex).toBe(0);
       expect(session.events.filter(event => event.type === "advance.released")).toHaveLength(0);
       expect(
-        sent(transport).filter(command => "content" in command && command.content === advanceContext(sceneAt(1))),
+        sent(transport).filter(
+          command =>
+            "content" in command &&
+            command.content === advanceContext({ previousScene: sceneAt(0), nextScene: sceneAt(1) }),
+        ),
       ).toHaveLength(0);
     },
   );
@@ -1225,7 +1256,11 @@ describe("answer-check turn synchronization", () => {
     expect(session.snapshot.sceneIndex).toBe(1);
     session.displayed(1);
     expect(
-      sent(transport).filter(command => "content" in command && command.content === advanceContext(sceneAt(1))),
+      sent(transport).filter(
+        command =>
+          "content" in command &&
+          command.content === advanceContext({ previousScene: sceneAt(0), nextScene: sceneAt(1) }),
+      ),
     ).toHaveLength(1);
   });
 
@@ -1246,7 +1281,7 @@ describe("answer-check turn synchronization", () => {
       "Do not delegate counting, lesson progression, scene changes, answer checking, scaffolding, or conversation. The application owns deterministic lesson state and will provide updates when state changes. Follow the current turn-taking and answer-check instructions while waiting for application updates; do not infer or change lesson state.",
     );
     expect(INSTRUCTIONS).not.toContain("continue the spoken interaction from the currently displayed scene");
-    expect(PROMPT_VERSION).toBe("counting-jev-4");
+    expect(PROMPT_VERSION).toBe("counting-jev-5");
   });
   it("sends nothing while the utterance settles or Jev is deciding", async () => {
     let answer!: (result: AnswerResult) => void;
@@ -1273,10 +1308,40 @@ describe("answer-check turn synchronization", () => {
       expect.objectContaining({
         type: "session.instructions.append",
         delegation_id: null,
-        content: advanceContext(sceneAt(1)),
+        content: advanceContext({ previousScene: sceneAt(0), nextScene: sceneAt(1) }),
       }),
     ]);
     expect(released(transport)).toHaveLength(0);
+    expect(session.events.findLast(event => event.type === "advance.displayed")?.detail).toMatchObject({
+      previous_scene: "hello-duck",
+      previous_quantity: 1,
+    });
+  });
+  it("uses the committed two-duck scene as the previous answer before introducing butterflies", async () => {
+    const { session, transport } = setup(true, answering(CONFIDENT));
+    vi.mocked(transport.send).mockClear();
+
+    deliver(session, speech("One!", 0));
+    await settle();
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
+    expect(session.snapshot.sceneIndex).toBe(1);
+    session.displayed(1);
+    expect(sent(transport).at(-1)).toMatchObject({
+      content: advanceContext({ previousScene: sceneAt(0), nextScene: sceneAt(1) }),
+    });
+    acknowledgeLastContext(session, transport);
+
+    const commandCountBeforeSecondAdvance = sent(transport).length;
+    deliver(session, speech("One, two!", 1000));
+    await settle();
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
+    expect(session.snapshot.sceneIndex).toBe(2);
+    expect(sent(transport)).toHaveLength(commandCountBeforeSecondAdvance);
+
+    session.displayed(2);
+    expect(sent(transport).at(-1)).toMatchObject({
+      content: advanceContext({ previousScene: sceneAt(1), nextScene: sceneAt(2) }),
+    });
   });
   it("explicitly releases GPT-Live on the current scene when the answer does not advance", async () => {
     const { session, transport } = setup(true, answering(UNSURE));

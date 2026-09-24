@@ -1,5 +1,5 @@
 export const MODEL = "gpt-live-1";
-export const PROMPT_VERSION = "counting-jev-4";
+export const PROMPT_VERSION = "counting-jev-5";
 export const TIMING = { wrap: 270_000, goodbye: 300_000, finish: 308_000, hard: 360_000, startup: 30_000 };
 
 // The only phrase Sprout is asked to say when a lesson ends early, so the app
@@ -39,9 +39,14 @@ export function sceneContext(scene: Scene) {
   return `The screen now shows exactly ${scene.quantity} ${objectName(scene)}. Invite the child to count them, for example "How many can you count?", without saying the total yourself. Wait and listen.${last ? " This is the last group: the screen will not change again, so reply to the child's counts yourself without waiting for the app." : ""}`;
 }
 
+export type AdvanceContext = { previousScene: Scene; nextScene: Scene };
+
 /** Sent only once the app has committed and displayed the next scene. */
-export function advanceContext(scene: Scene) {
-  return `The child's count was right, so the app has just changed the screen. Briefly celebrate that, then move on. ${sceneContext(scene)}`;
+export function advanceContext({ previousScene, nextScene }: AdvanceContext) {
+  const previousDescription = `${previousScene.quantity} ${objectName(previousScene)}`;
+  const nextDescription = `${nextScene.quantity} ${objectName(nextScene)}`;
+  const last = nextScene.id === SCENES[LAST_SCENE].id;
+  return `The child's answer was correct. The previous screen showed exactly ${previousDescription}. Briefly and specifically acknowledge that success first, using natural varied wording. Keep it short, matter-of-fact, and playful without excessive praise. The app has now changed the screen; it shows exactly ${nextDescription}. After acknowledging the previous answer, smoothly orient the child to this new group and give one short counting invitation. Do not say or reveal the new group's quantity. Wait and listen.${last ? " This is the last group: the screen will not change again, so reply to the child's counts yourself without waiting for the app." : ""}`;
 }
 
 /** Releases the answer-check pause when the app keeps the current scene. */
