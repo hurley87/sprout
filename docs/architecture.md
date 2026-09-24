@@ -16,6 +16,17 @@ This document translates the [PRD](sprout-mvp-prd.md) into implementation bounda
 
 Live behavior can respond to the child's current utterance immediately. The parent review boundary applies to durable evidence and future lesson planning.
 
+### Tutoring principle: what vs how
+
+Sprout deliberately separates **what needs to be learned** from **how the live interaction unfolds**.
+
+- The lesson planner/curriculum owns **what**: the target, evidence-backed rationale, required learning milestones, challenge/support bounds, and intended lesson structure.
+- The live voice layer owns **how**: exact wording, pacing, clarification, acknowledgement, hints, recovery from interruptions, and bounded playful/theme changes that preserve the lesson intent.
+- Application session control owns deterministic state and validated scene/action commits. A conversational model may propose or narrate an action, but it does not become true until the application commits it.
+- Durable learning conclusions remain downstream of the recorded session and parent-review gate; the live model does not write the learning profile.
+
+A lesson plan should therefore be a pedagogical contract, not a transcript script or rigid question/answer state machine. Different natural conversations can satisfy the same milestone. This boundary is intended to let future lesson domains reuse the same tutoring architecture without expanding the counting-only MVP now.
+
 ## 2. Flow
 
 ```mermaid
@@ -108,6 +119,8 @@ The planner receives:
 - The three-part lesson structure and timing limits.
 
 It selects one main target, a warm-up, and a fresh example. It can revisit a difficulty, vary the context to check a prior response, or adjust challenge/support within the scope. It must not infer permanent mastery from a single success or create developmental labels.
+
+The plan describes pedagogical intent rather than exact dialogue. It should carry the target, milestones, support/challenge bounds, and evidence-linked rationale needed to keep the lesson on track while leaving wording, pacing, clarification, and moment-to-moment scaffolding to the live voice layer.
 
 Every post-calibration plan includes a plain-language rationale and references to the reviewed evidence behind its learning choices. The rationale must make the causal link explicit, so it answers: “What would this lesson have done differently if the referenced observation did not exist?” The planner does not generate a second, counterfactual lesson. Cosmetic personalization or a changed theme alone is insufficient.
 
