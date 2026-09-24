@@ -34,7 +34,13 @@ function harness() {
   );
   const emit = vi.fn();
   const detector = new MicrophoneTurnDetector({} as MediaStream, emit);
-  return { frame: (at: number) => frame(at), quiet: () => (amplitude = 0), emit, detector };
+  return {
+    frame: (at: number) => frame(at),
+    quiet: () => (amplitude = 0),
+    loud: () => (amplitude = 0.05),
+    emit,
+    detector,
+  };
 }
 
 describe("microphone turn timing", () => {
@@ -61,6 +67,31 @@ describe("microphone turn timing", () => {
     frame(169);
     expect(emit).toHaveBeenCalledTimes(1);
     frame(171);
+    expect(emit.mock.calls.map(([event]) => event.type)).toEqual([
+      "microphone.activity_started",
+      "microphone.activity_discarded",
+    ]);
+    detector.close();
+  });
+
+  it("does not add short noise bursts across quiet frames to confirm speech", () => {
+    const { frame, quiet, loud, emit, detector } = harness();
+    frame(0);
+    frame(20);
+    quiet();
+    frame(40);
+    loud();
+    frame(60);
+    frame(80);
+    quiet();
+    frame(100);
+    loud();
+    frame(120);
+    frame(140);
+    expect(emit.mock.calls.map(([event]) => event.type)).toEqual(["microphone.activity_started"]);
+    quiet();
+    frame(160);
+    frame(311);
     expect(emit.mock.calls.map(([event]) => event.type)).toEqual([
       "microphone.activity_started",
       "microphone.activity_discarded",

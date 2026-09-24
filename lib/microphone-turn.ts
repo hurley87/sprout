@@ -55,6 +55,10 @@ export class MicrophoneTurnDetector {
         this.emit({ type: "microphone.speech_started" });
       }
     } else if (this.candidate) {
+      // A quiet frame breaks sustained onset; do not count its gap when the
+      // next loud burst arrives before the candidate is discarded.
+      this.voicedMs = 0;
+      this.lastVoicedAt = undefined;
       if (!this.candidateQuietSince) this.candidateQuietSince = now;
       else if (now - this.candidateQuietSince >= MICROPHONE_ONSET_QUIET_MS) {
         this.candidate = false;
