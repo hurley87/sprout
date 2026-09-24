@@ -18,6 +18,8 @@ const eventDetail = (event?: Diagnostic) =>
   event?.detail && typeof event.detail === "object" ? (event.detail as Record<string, unknown>) : {};
 const latestEvent = (events: readonly Diagnostic[], type: string) =>
   [...events].reverse().find(event => event.type === type);
+const firstEvent = (events: readonly Diagnostic[], type: string) => events.find(event => event.type === type);
+const elapsed = (event?: Diagnostic) => (event ? ms(event.at) : "—");
 
 function Timeline({ trace }: { trace: EvaluationTrace }) {
   const stages = [
@@ -65,9 +67,38 @@ export function JevDiagnostics({ events }: { events: readonly Diagnostic[] }) {
   const nonAnswerRelease = latestEvent(events, "answer.feedback_non_answer_release");
   const outputQuiet = latestEvent(events, "answer.feedback_output_quiet");
   const waitingOutputQuiet = latestEvent(events, "answer.feedback_waiting_for_output_quiet");
+  const startup = {
+    ready: firstEvent(events, "lesson.started"),
+    scene: firstEvent(events, "initial_scene.displayed"),
+    context: firstEvent(events, "startup.context_sent"),
+    transcript: firstEvent(events, "startup.first_sprout_transcript"),
+    audio: firstEvent(events, "startup.first_audio_playing"),
+  };
+  const delta = (from?: Diagnostic, to?: Diagnostic) => (from && to ? ms(to.at - from.at) : "—");
   return (
     <aside className="jev-diagnostics" aria-label="Jev diagnostics">
       <h2>Jev diagnostics</h2>
+      <h3>Startup timing</h3>
+      <dl className="jev-facts">
+        <dt>Live/session ready</dt>
+        <dd>{elapsed(startup.ready)}</dd>
+        <dt>Initial scene displayed</dt>
+        <dd>{elapsed(startup.scene)}</dd>
+        <dt>Opening context sent</dt>
+        <dd>{elapsed(startup.context)}</dd>
+        <dt>First Sprout transcript</dt>
+        <dd>{elapsed(startup.transcript)}</dd>
+        <dt>Browser audio playing</dt>
+        <dd>{elapsed(startup.audio)}</dd>
+        <dt>Ready → opening context</dt>
+        <dd>{delta(startup.ready, startup.context)}</dd>
+        <dt>Opening context → first transcript</dt>
+        <dd>{delta(startup.context, startup.transcript)}</dd>
+      </dl>
+      <p>
+        Transcript receipt is not proof of playback. Browser audio playing reports media-element playback activity, not
+        exact acoustic onset or listener audibility.
+      </p>
       {active ? (
         <>
           <dl className="jev-facts">

@@ -21,6 +21,7 @@ import {
   TIMING,
   advanceContext,
   evaluationUnavailableContext,
+  greetingContext,
   objectName,
   sceneAt,
   sceneContext,
@@ -90,10 +91,96 @@ describe("application lifecycle", () => {
     expect(transport.send).not.toHaveBeenCalled();
     session.displayed(0);
     expect(transport.send).toHaveBeenCalledOnce();
+    session.displayed(0);
+    expect(transport.send).toHaveBeenCalledOnce();
     vi.advanceTimersByTime(TIMING.wrap - 1);
     expect(session.snapshot.status).toBe("active");
     vi.advanceTimersByTime(1);
     expect(session.snapshot.status).toBe("wrapping");
+  });
+  it("sends a concise, answer-safe opening only after the initial scene is displayed", () => {
+    const command = greetingContext(sceneAt(0));
+    expect(command).toContain("one brief hello");
+    expect(command).toContain("introduce yourself as Sprout");
+    expect(command).toContain("one counting invitation");
+    expect(command).toContain("one or two short sentences");
+    expect(command).toContain("Do not explain the lesson or rules");
+    expect(command).toContain("preview what happens next");
+    expect(command).toContain("or reveal the quantity");
+    expect(command).toContain("without saying the total yourself");
+    expect(command).toContain("Wait and listen.");
+    expect(command).not.toContain("There is one duck");
+
+    const { session, transport } = setup(false);
+    deliver(session, { type: "session.started" });
+    expect(transport.send).not.toHaveBeenCalled();
+    session.displayed(0);
+    expect(transport.send).toHaveBeenCalledOnce();
+    expect(vi.mocked(transport.send).mock.calls[0][0]).toMatchObject({ content: command });
+    session.displayed(0);
+    expect(transport.send).toHaveBeenCalledOnce();
+  });
+
+  it("records ordered one-shot startup milestones and keeps the first Sprout transcript", () => {
+    const { session, transport } = setup(false);
+    vi.advanceTimersByTime(500);
+    deliver(session, { type: "session.started" });
+    vi.advanceTimersByTime(100);
+    session.displayed(0);
+    session.displayed(0);
+    vi.advanceTimersByTime(300);
+    deliver(session, speech("Hi, I'm Sprout!", 0, true));
+    vi.advanceTimersByTime(200);
+    deliver(session, speech("How many ducks do you see?", 500, true));
+
+    const types = session.events.map(event => event.type);
+    const milestones = [
+      "attempt.started",
+      "lesson.started",
+      "initial_scene.displayed",
+      "startup.context_sent",
+      "startup.first_sprout_transcript",
+    ].map(type => session.events.find(event => event.type === type)!);
+    expect(milestones.map(event => event.type)).toEqual([
+      "attempt.started",
+      "lesson.started",
+      "initial_scene.displayed",
+      "startup.context_sent",
+      "startup.first_sprout_transcript",
+    ]);
+    expect(milestones.slice(0, -1).map(event => event.at)).toEqual([0, 500, 600, 600]);
+    expect(milestones.at(-1)).toMatchObject({
+      at: 900,
+      detail: {
+        startup_elapsed_ms: 900,
+        lesson_started_to_transcript_ms: 400,
+        playback_verified: false,
+      },
+    });
+    expect(types.filter(type => type === "startup.first_sprout_transcript")).toHaveLength(1);
+    expect(transport.send).toHaveBeenCalledOnce();
+  });
+
+  it("routes the first answer through Jev, playback gating, adaptive settle, and confirmation", async () => {
+    const evaluateAnswer = answering(CONFIDENT);
+    const { session, transport } = setup(true, evaluateAnswer);
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("One"));
+    await settle();
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+    expect(session.events.some(event => event.type === "answer.candidate")).toBe(true);
+    expect(session.events.some(event => event.type === "answer.feedback_gate")).toBe(true);
+    expect(session.snapshot.sceneIndex).toBe(0);
+    await vi.advanceTimersByTimeAsync(ANSWER_SETTLE_MS);
+    expect(session.snapshot.sceneIndex).toBe(1);
+    session.displayed(1);
+    expect(vi.mocked(transport.send).mock.calls.map(([command]) => command)).toContainEqual(
+      expect.objectContaining({
+        content: advanceContext({ previousScene: sceneAt(0), nextScene: sceneAt(1) }),
+      }),
+    );
+    expect(session.events.some(event => event.type === "answer.decision_releasable")).toBe(true);
+    expect(session.events.some(event => event.type === "advance.committed")).toBe(true);
   });
   it("wraps at 4:30, requests goodbye at 5:00, stops at 5:08 without model cooperation", () => {
     const { session, transport } = setup();

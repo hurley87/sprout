@@ -16,7 +16,7 @@ import {
   advanceContext,
   evaluationUnavailableContext,
   sceneAt,
-  sceneContext,
+  greetingContext,
   stayContext,
 } from "./lesson";
 import {
@@ -55,7 +55,11 @@ export type Snapshot = {
 export type Diagnostic = { at: number; type: string; detail?: unknown };
 
 export interface Transport {
-  start(onEvent: (event: ProviderEvent) => void, onFailure: (message: string) => void): Promise<void>;
+  start(
+    onEvent: (event: ProviderEvent) => void,
+    onFailure: (message: string) => void,
+    onDiagnostic?: (type: string, detail?: unknown) => void,
+  ): Promise<void>;
   send(command: ClientCommand): void;
   setOutputMuted(muted: boolean): void;
   stopMedia(): void;
@@ -153,6 +157,7 @@ export class LessonSession {
   private commands = 0;
   private closed = false;
   private ready = false;
+  private firstSproutTranscriptLogged = false;
 
   constructor(
     private transport: Transport,
@@ -172,6 +177,10 @@ export class LessonSession {
     if (
       type.startsWith("answer.") ||
       type.startsWith("advance.") ||
+      type.startsWith("startup.") ||
+      type === "attempt.started" ||
+      type === "lesson.started" ||
+      type === "initial_scene.displayed" ||
       type === "scene.displayed" ||
       type === "delegation.unexpected"
     )
@@ -189,6 +198,7 @@ export class LessonSession {
       await this.transport.start(
         event => this.receive(event),
         message => this.fail(message),
+        (type, detail) => this.log(type, detail),
       );
     } catch (error) {
       this.fail(error instanceof Error ? error.message : "Sprout could not start. Please try again.");
@@ -213,8 +223,8 @@ export class LessonSession {
   private append(
     content: string,
     releaseFeedback?: { answerVersion?: string; decision?: "ADVANCE" | "STAY" | "UNAVAILABLE" },
-  ) {
-    if (this.snapshot.status === "ended") return;
+  ): boolean {
+    if (this.snapshot.status === "ended") return false;
     const eventId = `sprout_${++this.commands}`;
     const gate = releaseFeedback ? this.feedbackGate : null;
     if (gate && releaseFeedback) {
@@ -242,6 +252,7 @@ export class LessonSession {
         command_id: eventId,
       });
     }
+    return sent;
   }
 
   private startFeedbackGate() {
@@ -548,6 +559,14 @@ export class LessonSession {
 
   private heard(event: TranscriptEvent) {
     const fromChild = event.speaker === "child";
+    if (!fromChild && !this.firstSproutTranscriptLogged) {
+      this.firstSproutTranscriptLogged = true;
+      this.log("startup.first_sprout_transcript", {
+        startup_elapsed_ms: Date.now() - this.createdAt,
+        lesson_started_to_transcript_ms: this.startedAt === undefined ? null : Date.now() - this.startedAt,
+        playback_verified: false,
+      });
+    }
     this.log(fromChild ? "transcript.child_or_nearby_speaker" : "transcript.sprout", {
       delta: event.delta,
       start_ms: event.startMs,
@@ -1034,6 +1053,7 @@ export class LessonSession {
     if (!pending || pending.sceneIndex !== sceneIndex) return;
     this.pending = null;
     this.log("scene.displayed", this.scene);
+    if (pending.kind === "greeting") this.log("initial_scene.displayed", { scene: this.scene.id });
     if (pending.kind === "advance")
       this.log("advance.displayed", {
         answer_version: pending.answerVersion,
@@ -1043,9 +1063,7 @@ export class LessonSession {
       });
     switch (pending.kind) {
       case "greeting":
-        this.append(
-          `Greet the child now in English: introduce yourself as Sprout and invite them to play. ${sceneContext(this.scene)} Then pause and listen.`,
-        );
+        if (this.append(greetingContext(this.scene))) this.log("startup.context_sent", { scene: this.scene.id });
         return;
       case "advance":
         this.waitForPrematureOutputQuiet(() => {

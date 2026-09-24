@@ -14,6 +14,8 @@ export class BrowserTransport implements Transport {
   private remote?: MediaStream;
   private turnDetector?: MicrophoneTurnDetector;
   private outputMuted = false;
+  private audioPlayingListener?: () => void;
+  private firstAudioPlayingReported = false;
   // The single record of "this attempt is over", set by stopMedia(). Late
   // callbacks and resolved awaits check it instead of tracking their own flags.
   private abort = new AbortController();
@@ -23,7 +25,11 @@ export class BrowserTransport implements Transport {
     return this.abort.signal.aborted;
   }
 
-  async start(onEvent: (event: ProviderEvent) => void, onFailure: (message: string) => void) {
+  async start(
+    onEvent: (event: ProviderEvent) => void,
+    onFailure: (message: string) => void,
+    onDiagnostic?: (type: string, detail?: unknown) => void,
+  ) {
     if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection)
       throw new Error("Use a MacBook browser with microphone support, on localhost.");
     this.audio.autoplay = true;
@@ -52,6 +58,19 @@ export class BrowserTransport implements Transport {
       }
       this.remote = new MediaStream([track]);
       this.audio.srcObject = this.remote;
+      const reportFirstAudioPlaying = () => {
+        if (this.cancelled || this.firstAudioPlayingReported) return;
+        this.firstAudioPlayingReported = true;
+        onDiagnostic?.("startup.first_audio_playing", {
+          source: "remote_media_audio_element",
+          acoustic_onset_verified: false,
+          listener_heard_audio_verified: false,
+        });
+        this.audio.removeEventListener("playing", reportFirstAudioPlaying);
+        this.audioPlayingListener = undefined;
+      };
+      this.audioPlayingListener = reportFirstAudioPlaying;
+      this.audio.addEventListener("playing", reportFirstAudioPlaying);
       void this.audio.play().catch(() => {
         if (!this.cancelled)
           onFailure("The browser blocked Sprout's voice playback. Allow sound for this site, then start a new lesson.");
@@ -147,6 +166,8 @@ export class BrowserTransport implements Transport {
 
   stopMedia() {
     this.abort.abort();
+    if (this.audioPlayingListener) this.audio.removeEventListener("playing", this.audioPlayingListener);
+    this.audioPlayingListener = undefined;
     this.turnDetector?.close();
     this.mic?.getTracks().forEach(track => track.stop());
     this.remote?.getTracks().forEach(track => track.stop());

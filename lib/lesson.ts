@@ -39,6 +39,11 @@ export function sceneContext(scene: Scene) {
   return `The screen now shows exactly ${scene.quantity} ${objectName(scene)}. Invite the child to count them, for example "How many can you count?", without saying the total yourself. Wait and listen.${last ? " This is the last group: the screen will not change again, so reply to the child's counts yourself without waiting for the app." : ""}`;
 }
 
+/** A concise first-turn direction layered over the authoritative scene facts. */
+export function greetingContext(scene: Scene) {
+  return `Start now with one brief hello and introduce yourself as Sprout. Follow the current scene context for one counting invitation. Keep the whole opening to one or two short sentences. Do not explain the lesson or rules, preview what happens next, or reveal the quantity. ${sceneContext(scene)}`;
+}
+
 export type AdvanceContext = { previousScene: Scene; nextScene: Scene };
 
 /** Sent only once the app has committed and displayed the next scene. */
