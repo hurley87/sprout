@@ -195,7 +195,6 @@ describe("answer-gated scene advancement", () => {
     const { session, evaluateAnswer } = setup(true, answering(CONFIDENT));
     mic(session, "microphone.speech_started");
     deliver(session, speech("One"));
-    await vi.advanceTimersByTimeAsync(2000);
     expect(evaluateAnswer).not.toHaveBeenCalled();
     mic(session, "microphone.speech_stopped");
     await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
@@ -210,6 +209,49 @@ describe("answer-gated scene advancement", () => {
     expect(session.events.findLast(e => e.type === "answer.requesting")?.detail).toMatchObject({
       signal: "microphone_vad",
     });
+  });
+  it("evaluates a transcript after the fallback even while VAD stays active", async () => {
+    const { session, evaluateAnswer } = setup(true, answering(CONFIDENT));
+    mic(session, "microphone.speech_started");
+    deliver(session, speech("Two"));
+
+    const scheduled = session.events.findLast(event => event.type === "answer.evaluation_scheduled");
+    expect(scheduled?.detail).toMatchObject({ reason: "transcript_fallback", delay_ms: SETTLE_MS });
+    await vi.advanceTimersByTimeAsync(SETTLE_MS);
+
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+    expect(evaluateAnswer).toHaveBeenCalledWith({ sceneIndex: 0, utterance: "Two" }, expect.anything());
+    expect(session.events.some(event => event.type === "answer.evaluation_proceeding_despite_vad")).toBe(true);
+    expect(session.events.findLast(event => event.type === "answer.requesting")?.detail).toMatchObject({
+      signal: "transcript_fallback",
+    });
+
+    // A later stop can reschedule the tail, but the evaluated transcript must
+    // not produce a second Jev request.
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS + CORRECTION_WINDOW_MS);
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+    expect(session.snapshot.sceneIndex).toBe(1);
+  });
+  it("accelerates a pending transcript fallback when clean VAD stop arrives", async () => {
+    const { session, evaluateAnswer } = setup(true, answering(UNSURE));
+    mic(session, "microphone.speech_started");
+    deliver(session, speech("Two"));
+    await vi.advanceTimersByTimeAsync(100);
+
+    mic(session, "microphone.speech_stopped");
+    const schedules = session.events.filter(event => event.type === "answer.evaluation_scheduled");
+    expect(schedules).toHaveLength(2);
+    expect(schedules[0]?.detail).toMatchObject({ reason: "transcript_fallback", delay_ms: SETTLE_MS });
+    expect(schedules[1]?.detail).toMatchObject({
+      reason: "microphone_vad",
+      delay_ms: TRANSCRIPT_TAIL_MS,
+      restarted_existing_timer: true,
+    });
+
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+    expect(evaluateAnswer).toHaveBeenCalledWith({ sceneIndex: 0, utterance: "Two" }, expect.anything());
   });
   it("takes a transcript tail and final self-correction before judging", async () => {
     const { session, evaluateAnswer } = setup(true, answering(UNSURE));

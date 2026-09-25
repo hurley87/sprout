@@ -349,13 +349,12 @@ export class LessonSession {
       });
       if (requestsStop(utterance.text)) this.end("child_stop");
       else {
-        // Provider transcript delivery can lag VAD; each fragment after the
-        // latest detected stop restarts the short tail regardless of arrival time.
-        if (this.provisionalActivity) return;
+        // Transcript revisions are learner evidence and always get a bounded
+        // evaluation attempt. A clean stop in this speech epoch lets us use
+        // the short tail; otherwise keep the fallback even while VAD is active.
         if (this.speechEpoch > 0 && this.turnSignal === "microphone_vad" && !this.microphoneSpeaking)
           this.scheduleEvaluation(utterance, TRANSCRIPT_TAIL_MS, "transcript_revision");
-        else if (!this.microphoneSpeaking)
-          this.scheduleEvaluation(utterance, TRANSCRIPT_FALLBACK_MS, "transcript_revision");
+        else this.scheduleEvaluation(utterance, TRANSCRIPT_FALLBACK_MS, "transcript_fallback");
       }
     } else if (this.snapshot.status !== "goodbye" && saidGoodbye(utterance.text)) {
       // The model ending the lesson itself, usually a stop request the
@@ -366,7 +365,11 @@ export class LessonSession {
     }
   }
 
-  private scheduleEvaluation(utterance: Utterance, delay: number, reason: "transcript_revision" | "microphone_vad") {
+  private scheduleEvaluation(
+    utterance: Utterance,
+    delay: number,
+    reason: "transcript_revision" | "transcript_fallback" | "microphone_vad",
+  ) {
     const transcriptRevision = this.transcriptRevision;
     const sceneIndex = this.snapshot.sceneIndex;
     const version = `${utterance.startMs}:${utterance.text.trim()}`;
