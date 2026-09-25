@@ -807,6 +807,84 @@ describe("answer-check turn synchronization", () => {
     expect(released(transport)).toHaveLength(1);
   });
 
+  it("cancels an approved ADVANCE when a late correction transcript arrives during VAD grace", async () => {
+    const { session, transport, evaluateAnswer } = setup(true, answering(CONFIDENT));
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("One"));
+    await settle();
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - 200);
+    mic(session, "microphone.speech_started");
+    expect(session.events.filter(event => event.type === "answer.vad_grace_started")).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(500);
+    deliver(session, speech("... no, two", 600));
+    expect(session.events.filter(event => event.type === "advance.cancelled")).toHaveLength(1);
+    await settle();
+    expect(evaluateAnswer).toHaveBeenCalledTimes(2);
+    expect(evaluateAnswer).toHaveBeenLastCalledWith({ sceneIndex: 0, utterance: "One... no, two" }, expect.anything());
+    expect(session.snapshot.sceneIndex).toBe(0);
+    expect(session.events.filter(event => event.type === "advance.committed")).toHaveLength(0);
+    expect(transport.send).not.toHaveBeenCalled();
+  });
+
+  it("bounds ADVANCE grace at the first confirmed speech event despite repeated VAD bursts", async () => {
+    const { session } = setup(true, answering(CONFIDENT));
+    deliver(session, speech("One"));
+    await settle();
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - 200);
+    mic(session, "microphone.speech_started");
+    const graceStarted = session.events.findLast(event => event.type === "answer.vad_grace_started");
+    expect(graceStarted).toBeDefined();
+    const releaseAt = (graceStarted?.detail as { release_at_ms: number }).release_at_ms;
+    await vi.advanceTimersByTimeAsync(400);
+    mic(session, "microphone.speech_stopped");
+    mic(session, "microphone.speech_started");
+    mic(session, "microphone.speech_stopped");
+    mic(session, "microphone.speech_started");
+    expect(session.events.filter(event => event.type === "answer.vad_grace_started")).toHaveLength(1);
+    expect(session.events.filter(event => event.type === "answer.vad_grace_ignored")).toHaveLength(2);
+    expect((graceStarted?.detail as { release_at_ms: number }).release_at_ms).toBe(releaseAt);
+    await vi.advanceTimersByTimeAsync(releaseAt - (Date.now() - session.createdAt) - 1);
+    expect(session.snapshot.sceneIndex).toBe(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(session.snapshot.sceneIndex).toBe(1);
+    expect(session.events.filter(event => event.type === "advance.committed")).toHaveLength(1);
+    expect(session.events.filter(event => event.type === "answer.vad_grace_expired")).toHaveLength(1);
+  });
+
+  it("gives deferred STAY the same bounded grace and cancels it for a late correction", async () => {
+    const { session, transport, evaluateAnswer } = setup(true, answering(UNSURE));
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("Five"));
+    await settle();
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - 200);
+    mic(session, "microphone.speech_started");
+    await vi.advanceTimersByTimeAsync(500);
+    deliver(session, speech("... no, one", 600));
+    expect(session.events.filter(event => event.type === "answer.release_cancelled")).toHaveLength(1);
+    await settle();
+    expect(evaluateAnswer).toHaveBeenCalledTimes(2);
+    expect(session.snapshot.sceneIndex).toBe(0);
+    expect(released(transport)).toHaveLength(0);
+    expect(transport.send).not.toHaveBeenCalled();
+  });
+
+  it("releases deferred STAY after grace expires without a transcript", async () => {
+    const { session, transport } = setup(true, answering(UNSURE));
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("Five"));
+    await settle();
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - 200);
+    mic(session, "microphone.speech_started");
+    const graceStarted = session.events.findLast(event => event.type === "answer.vad_grace_started");
+    const releaseAt = (graceStarted?.detail as { release_at_ms: number }).release_at_ms;
+    mic(session, "microphone.speech_stopped");
+    mic(session, "microphone.speech_started");
+    expect(released(transport)).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(releaseAt - (Date.now() - session.createdAt));
+    expect(released(transport)).toHaveLength(1);
+    expect(session.events.filter(event => event.type === "answer.vad_grace_expired")).toHaveLength(1);
+  });
+
   it.each(["", "Oh!", "Ooh!", "Okay!"])(
     "advances after the correction window with silence or neutral acknowledgment %s",
     async reply => {

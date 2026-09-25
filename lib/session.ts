@@ -69,6 +69,7 @@ type DeferredAdvance = {
   transcriptRevision: number;
   correctionReadyAt: number;
   outputQuietAt: number;
+  vadGraceUntil?: number;
 };
 type DeferredStay = {
   sceneIndex: number;
@@ -76,6 +77,7 @@ type DeferredStay = {
   transcriptRevision: number;
   correctionReadyAt: number;
   content: string;
+  vadGraceUntil?: number;
 };
 
 export class LessonSession {
@@ -104,6 +106,7 @@ export class LessonSession {
   private vadDetectionMs?: number;
   private turnSignal: "microphone_vad" | "transcript_fallback" = "transcript_fallback";
   private microphoneSpeaking = false;
+  private microphoneSpeechStartedAt?: number;
   private provisionalActivity = false;
   private speechEpoch = 0;
   private transcriptEpoch = -1;
@@ -242,6 +245,7 @@ export class LessonSession {
           this.provisionalActivity && this.transcriptRevision !== this.activityTranscriptRevision;
         this.provisionalActivity = false;
         this.microphoneSpeaking = true;
+        this.microphoneSpeechStartedAt = Date.now();
         this.speechEpoch++;
         if (heardDuringActivity) this.transcriptEpoch = this.speechEpoch;
         clearTimeout(this.noTranscriptTimer);
@@ -252,10 +256,12 @@ export class LessonSession {
           pending_evaluation: Boolean(this.settleTimer),
           decision_preserved: Boolean(this.evaluation || this.deferredAdvance),
         });
+        this.startDeferredVadGrace(this.microphoneSpeechStartedAt);
         return;
       case "microphone.speech_stopped":
         if (!this.microphoneSpeaking) return;
         this.microphoneSpeaking = false;
+        this.microphoneSpeechStartedAt = undefined;
         this.turnEndAt = Date.now();
         this.vadDetectionMs = event.quietMs;
         this.turnSignal = "microphone_vad";
@@ -583,6 +589,8 @@ export class LessonSession {
       correctionReadyAt: Math.max(this.turnEndAt, this.lastDeltaAt) + CORRECTION_WINDOW_MS,
       outputQuietAt: 0,
     };
+    if (this.microphoneSpeaking && this.microphoneSpeechStartedAt !== undefined)
+      this.startDeferredVadGrace(this.microphoneSpeechStartedAt);
     this.log("advance.deferred", {
       answer_version: answerVersion,
       scene: sceneAt(sceneIndex).id,
@@ -601,8 +609,12 @@ export class LessonSession {
     // transcript gap before a scene change; each fragment extends that gap.
     if (!this.sproutIsHoldingForDecision() && (outputDelta || deferred.outputQuietAt === 0))
       deferred.outputQuietAt = Date.now() + UTTERANCE_GAP_MS;
-    const releaseAt = Math.max(deferred.correctionReadyAt, deferred.outputQuietAt);
+    const releaseAt = this.deferredAdvanceReleaseAt(deferred);
     this.deferredTimer = setTimeout(() => this.releaseDeferredAdvance(), Math.max(0, releaseAt - Date.now()));
+  }
+
+  private deferredAdvanceReleaseAt(deferred: DeferredAdvance) {
+    return Math.max(deferred.correctionReadyAt, deferred.outputQuietAt, deferred.vadGraceUntil ?? 0);
   }
 
   private releaseDeferredAdvance() {
@@ -625,8 +637,16 @@ export class LessonSession {
       answer_version: deferred.answerVersion,
       spoken_chars_at_approval: deferred.spokenChars,
       delay_ms: Date.now() - deferred.approvedAt,
-      reason: deferred.outputQuietAt > deferred.correctionReadyAt ? "output_transcript_quiet" : "correction_window",
+      reason:
+        deferred.vadGraceUntil !== undefined &&
+        deferred.vadGraceUntil > Math.max(deferred.correctionReadyAt, deferred.outputQuietAt)
+          ? "vad_grace"
+          : deferred.outputQuietAt > deferred.correctionReadyAt
+            ? "output_transcript_quiet"
+            : "correction_window",
     });
+    if (deferred.vadGraceUntil !== undefined)
+      this.log("answer.vad_grace_expired", { decision: "ADVANCE", answer_version: deferred.answerVersion });
     this.advance(deferred.answerVersion);
   }
 
@@ -648,6 +668,8 @@ export class LessonSession {
       correctionReadyAt: Math.max(this.turnEndAt, this.lastDeltaAt) + CORRECTION_WINDOW_MS,
       content,
     };
+    if (this.microphoneSpeaking && this.microphoneSpeechStartedAt !== undefined)
+      this.startDeferredVadGrace(this.microphoneSpeechStartedAt);
     this.log("answer.release_deferred", { answer_version: answerVersion, scene: sceneAt(sceneIndex).id });
     this.scheduleDeferredStayRelease();
   }
@@ -656,7 +678,7 @@ export class LessonSession {
     clearTimeout(this.stayTimer);
     const deferred = this.deferredStay;
     if (!deferred) return;
-    const releaseAt = deferred.correctionReadyAt;
+    const releaseAt = Math.max(deferred.correctionReadyAt, deferred.vadGraceUntil ?? 0);
     this.stayTimer = setTimeout(() => this.releaseDeferredStay(), Math.max(0, releaseAt - Date.now()));
   }
 
@@ -676,8 +698,43 @@ export class LessonSession {
       !this.sproutIsHoldingForDecision()
     )
       return;
-    this.log("answer.release_sent", { answer_version: deferred.answerVersion, scene: sceneAt(deferred.sceneIndex).id });
+    this.log("answer.release_sent", {
+      answer_version: deferred.answerVersion,
+      scene: sceneAt(deferred.sceneIndex).id,
+      reason: deferred.vadGraceUntil !== undefined ? "vad_grace" : "correction_window",
+    });
+    if (deferred.vadGraceUntil !== undefined)
+      this.log("answer.vad_grace_expired", { decision: "STAY", answer_version: deferred.answerVersion });
     this.append("session.instructions.append", deferred.content);
+  }
+
+  /** Confirmed renewed speech buys one fallback interval for a late transcript. */
+  private startDeferredVadGrace(speechStartedAt: number) {
+    const advance = this.deferredAdvance;
+    const stay = this.deferredStay;
+    if (!advance && !stay) return;
+    const decision = advance ? "ADVANCE" : "STAY";
+    const answerVersion = advance?.answerVersion ?? stay?.answerVersion;
+    if (advance?.vadGraceUntil !== undefined || stay?.vadGraceUntil !== undefined) {
+      this.log("answer.vad_grace_ignored", { decision, answer_version: answerVersion, reason: "already_active" });
+      return;
+    }
+    const normalReleaseAt = advance
+      ? Math.max(advance.correctionReadyAt, advance.outputQuietAt)
+      : stay!.correctionReadyAt;
+    if (speechStartedAt >= normalReleaseAt) return;
+    const graceUntil = Math.max(normalReleaseAt, speechStartedAt + TRANSCRIPT_FALLBACK_MS);
+    if (advance) advance.vadGraceUntil = graceUntil;
+    else stay!.vadGraceUntil = graceUntil;
+    this.log("answer.vad_grace_started", {
+      decision,
+      answer_version: answerVersion,
+      grace_ms: TRANSCRIPT_FALLBACK_MS,
+      added_ms: graceUntil - normalReleaseAt,
+      release_at_ms: graceUntil - this.createdAt,
+    });
+    if (advance) this.scheduleDeferredRelease();
+    else this.scheduleDeferredStayRelease();
   }
 
   private cancelDeferredStay() {
