@@ -16,6 +16,14 @@ Start with the [MVP PRD](sprout-mvp-prd.md) for the agreed product scope. These 
 
 Sprout separates **pedagogical intent** from **conversational realization**: the lesson/curriculum determines what needs to happen and why; the live voice model has freedom over how the conversation unfolds inside those bounds. Application control owns deterministic state and validated commits. See [Architecture and evidence flow](architecture.md#tutoring-principle-what-vs-how).
 
+## Learning principles
+
+Sprout is built around a simple hypothesis: **personalized feedback, mastery, active practice, adaptive pacing, and sustained one-to-one intellectual interaction are serious candidate mechanisms for improving learning. AI may make those mechanisms dramatically more scalable.**
+
+Sprout should therefore optimize for those mechanisms—not for AI novelty itself. The tutor should help the learner practice, receive timely feedback, progress when ready, revisit weaknesses, and engage in an ongoing intellectual relationship that builds on prior sessions.
+
+Evidence supports the learning value of several of these mechanisms individually and in combination. What remains much less established is what happens when they can be delivered cheaply, continuously, and personally over years. **Whether that changes the upper tail of human intellectual accomplishment is an open experiment.**
+
 The PRD owns product requirements. The architecture document describes how to enforce them; the protocol defines how to evaluate them. The glossary contains terminology, and ADRs preserve decisions and their trade-offs.
 
 The repository contains the slice 1 voice prototype: one hardcoded GPT-Live-1 counting lesson with in-tab diagnostics. The evidence, review, and planning flows are not yet implemented.
