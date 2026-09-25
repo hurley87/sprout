@@ -288,7 +288,7 @@ describe("answer-gated scene advancement", () => {
     expect(session.snapshot.sceneIndex).toBe(0);
     expect(session.events.some(event => event.type === "advance.cancelled")).toBe(true);
   });
-  it("resumes an approved advance after a transcriptless microphone spike", async () => {
+  it("does not delay an approved advance for a transcriptless microphone spike", async () => {
     const { session, evaluateAnswer } = setup(true, answering(CONFIDENT));
     mic(session, "microphone.speech_started");
     deliver(session, speech("One"));
@@ -297,14 +297,50 @@ describe("answer-gated scene advancement", () => {
     await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - TRANSCRIPT_TAIL_MS - 1);
     session.receive({ type: "microphone.activity_started" });
     await vi.advanceTimersByTimeAsync(1);
-    expect(session.snapshot.sceneIndex).toBe(0);
-    session.receive({ type: "microphone.activity_discarded" });
-    await vi.advanceTimersByTimeAsync(SETTLE_MS - 1);
-    expect(session.snapshot.sceneIndex).toBe(0);
-    await vi.advanceTimersByTimeAsync(1);
     expect(session.snapshot.sceneIndex).toBe(1);
+    expect(session.events.filter(event => event.type === "advance.committed")).toHaveLength(1);
+    session.receive({ type: "microphone.activity_discarded" });
     expect(evaluateAnswer).toHaveBeenCalledOnce();
     expect(session.events.some(event => event.type === "advance.cancelled")).toBe(false);
+  });
+  it("evaluates a transcript once despite repeated background VAD and advances once", async () => {
+    const { session, evaluateAnswer } = setup(true, answering(CONFIDENT));
+    mic(session, "microphone.speech_started");
+    deliver(session, speech("One"));
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(100);
+
+    session.receive({ type: "microphone.activity_started" });
+    mic(session, "microphone.speech_started");
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS - 100);
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+    expect(evaluateAnswer).toHaveBeenCalledWith({ sceneIndex: 0, utterance: "One" }, expect.anything());
+    expect(session.events.some(event => event.type === "answer.evaluation_proceeding_despite_vad")).toBe(true);
+
+    for (let burst = 0; burst < 4; burst++) {
+      mic(session, "microphone.speech_stopped");
+      session.receive({ type: "microphone.activity_started" });
+      mic(session, "microphone.speech_started");
+      await vi.advanceTimersByTimeAsync(400);
+    }
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
+    expect(session.snapshot.sceneIndex).toBe(1);
+    expect(session.events.filter(event => event.type === "advance.committed")).toHaveLength(1);
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+  });
+  it("does not schedule the previous scene transcript after an advance", async () => {
+    const { session, evaluateAnswer } = setup(true, answering(CONFIDENT));
+    deliver(session, speech("One"));
+    await settle();
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
+    expect(session.snapshot.sceneIndex).toBe(1);
+
+    session.displayed(1);
+    session.receive({ type: "microphone.activity_started" });
+    session.receive({ type: "microphone.activity_discarded" });
+    await settle();
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+    expect(session.events.filter(event => event.type === "answer.candidate")).toHaveLength(1);
   });
   it("holds an in-flight Jev result through a microphone spike without losing the answer", async () => {
     let resolve!: (result: AnswerResult) => void;
@@ -715,7 +751,7 @@ describe("answer-check turn synchronization", () => {
     expect(released(transport)).toHaveLength(0);
   });
 
-  it("resumes a pending STAY after a transcriptless microphone spike", async () => {
+  it("does not delay a pending STAY for a transcriptless microphone spike", async () => {
     const { session, transport } = setup(true, answering(UNSURE));
     vi.mocked(transport.send).mockClear();
     mic(session, "microphone.speech_started");
@@ -724,11 +760,8 @@ describe("answer-check turn synchronization", () => {
     await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - 1);
     session.receive({ type: "microphone.activity_started" });
     await vi.advanceTimersByTimeAsync(1);
-    expect(released(transport)).toHaveLength(0);
+    expect(released(transport)).toHaveLength(1);
     session.receive({ type: "microphone.activity_discarded" });
-    await vi.advanceTimersByTimeAsync(SETTLE_MS - 1);
-    expect(released(transport)).toHaveLength(0);
-    await vi.advanceTimersByTimeAsync(1);
     expect(released(transport)).toHaveLength(1);
   });
 
