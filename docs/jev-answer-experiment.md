@@ -43,11 +43,14 @@ sequenceDiagram
         App->>GPT: neutral recovery; no correctness claim
         GPT-->>Child: invite a neutral retry on current scene
     else current probability >= 0.90
-        App->>App: defer approved advance through correction window
-        App->>App: wait for safe output boundary
+        App->>App: defer approved advance through correction and bounded VAD protection
         App->>Screen: commit next scene exactly once
         Screen-->>App: displayed, after paint
-        App->>GPT: advanceContext(new scene)
+        Note over App,Screen: Learner-side protection controls scene commit; provider timing cannot delay the UI
+        App->>App: keep GPT-Live muted while speculative output is active
+        App->>App: wait for safe provider-output boundary after display
+        App->>GPT: append advanceContext(new scene)
+        App->>GPT: unblock playback
         GPT-->>Child: celebrate briefly, invite count on new scene
     else stale result
         App->>App: no new instruction
@@ -56,7 +59,7 @@ sequenceDiagram
 
 GPT-Live no longer has a scene capability. The prompt asks Sprout to wait after a number or count until the app reports its decision, as defense in depth. The application gate enforces this independently of model cooperation. The current application decision controls semantic authority; hidden provider output is used only to find a safe audio boundary. `stayContext(...)` and unavailable recovery release the gate with current-scene context; unavailable wording never implies the count was wrong or right.
 
-For a current approved answer, the app defers scene commit through the correction window, then waits for any hidden output to become quiet before commit. The new scene is displayed before `advanceContext(...)` is appended and playback is unblocked. Output transcript length never determines whether the application decision is authoritative.
+For a current approved answer, the app defers scene commit only for learner-side correction protection and bounded VAD grace. Once that protection completes, it commits and displays the next scene even if GPT-Live is still generating speculative hidden output. Playback remains gated until provider output reaches a safe quiet boundary; only then does the app append `advanceContext(...)` and unblock audio. Output transcript length and content do not determine ADVANCE or scene-commit authority; hidden output is used only for safe audio-release timing.
 
 ### The question
 
@@ -196,6 +199,8 @@ The historical non-advance runs below used the superseded `counting-jev-2` brief
 ## Final interactive run
 
 A fresh real interactive lesson was run on 2026-09-23 in Chrome 153 using `gpt-live-1` and `jev-1.13.0`. The exported diagnostic file is `sprout-attempt-1790195825512.json` (created 2026-09-23 20:37:05 UTC); it contains 286 events across a 171-second live session. Transcript timing is approximate, the provider could not verify audio playback or speaker identity, and its input side labels the other speaker as `child_or_nearby_speaker`. The run is useful as interactive evidence, but those limits mean transcript attribution is not ground truth.
+
+**Historical sequencing note:** This run predates the issue #21 follow-up that decoupled scene commit from provider-output quiet. Its 5,190 ms wait for a quiet boundary before displaying the next scene is preserved below as an observation of the then-current implementation; it is superseded by the current ordering above, where learner-side protection controls scene commit and provider-output quiet controls only audio release.
 
 | Observation | Jev outcome and latency | Scene / synchronization | Sprout and recovery |
 | --- | --- | --- | --- |
