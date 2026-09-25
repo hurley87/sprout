@@ -195,7 +195,6 @@ describe("answer-gated scene advancement", () => {
     const { session, evaluateAnswer } = setup(true, answering(CONFIDENT));
     mic(session, "microphone.speech_started");
     deliver(session, speech("One"));
-    await vi.advanceTimersByTimeAsync(2000);
     expect(evaluateAnswer).not.toHaveBeenCalled();
     mic(session, "microphone.speech_stopped");
     await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
@@ -210,6 +209,49 @@ describe("answer-gated scene advancement", () => {
     expect(session.events.findLast(e => e.type === "answer.requesting")?.detail).toMatchObject({
       signal: "microphone_vad",
     });
+  });
+  it("evaluates a transcript after the fallback even while VAD stays active", async () => {
+    const { session, evaluateAnswer } = setup(true, answering(CONFIDENT));
+    mic(session, "microphone.speech_started");
+    deliver(session, speech("Two"));
+
+    const scheduled = session.events.findLast(event => event.type === "answer.evaluation_scheduled");
+    expect(scheduled?.detail).toMatchObject({ reason: "transcript_fallback", delay_ms: SETTLE_MS });
+    await vi.advanceTimersByTimeAsync(SETTLE_MS);
+
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+    expect(evaluateAnswer).toHaveBeenCalledWith({ sceneIndex: 0, utterance: "Two" }, expect.anything());
+    expect(session.events.some(event => event.type === "answer.evaluation_proceeding_despite_vad")).toBe(true);
+    expect(session.events.findLast(event => event.type === "answer.requesting")?.detail).toMatchObject({
+      signal: "transcript_fallback",
+    });
+
+    // A later stop can reschedule the tail, but the evaluated transcript must
+    // not produce a second Jev request.
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS + CORRECTION_WINDOW_MS);
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+    expect(session.snapshot.sceneIndex).toBe(1);
+  });
+  it("accelerates a pending transcript fallback when clean VAD stop arrives", async () => {
+    const { session, evaluateAnswer } = setup(true, answering(UNSURE));
+    mic(session, "microphone.speech_started");
+    deliver(session, speech("Two"));
+    await vi.advanceTimersByTimeAsync(100);
+
+    mic(session, "microphone.speech_stopped");
+    const schedules = session.events.filter(event => event.type === "answer.evaluation_scheduled");
+    expect(schedules).toHaveLength(2);
+    expect(schedules[0]?.detail).toMatchObject({ reason: "transcript_fallback", delay_ms: SETTLE_MS });
+    expect(schedules[1]?.detail).toMatchObject({
+      reason: "microphone_vad",
+      delay_ms: TRANSCRIPT_TAIL_MS,
+      restarted_existing_timer: true,
+    });
+
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+    expect(evaluateAnswer).toHaveBeenCalledWith({ sceneIndex: 0, utterance: "Two" }, expect.anything());
   });
   it("takes a transcript tail and final self-correction before judging", async () => {
     const { session, evaluateAnswer } = setup(true, answering(UNSURE));
@@ -288,7 +330,7 @@ describe("answer-gated scene advancement", () => {
     expect(session.snapshot.sceneIndex).toBe(0);
     expect(session.events.some(event => event.type === "advance.cancelled")).toBe(true);
   });
-  it("resumes an approved advance after a transcriptless microphone spike", async () => {
+  it("does not delay an approved advance for a transcriptless microphone spike", async () => {
     const { session, evaluateAnswer } = setup(true, answering(CONFIDENT));
     mic(session, "microphone.speech_started");
     deliver(session, speech("One"));
@@ -297,14 +339,50 @@ describe("answer-gated scene advancement", () => {
     await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - TRANSCRIPT_TAIL_MS - 1);
     session.receive({ type: "microphone.activity_started" });
     await vi.advanceTimersByTimeAsync(1);
-    expect(session.snapshot.sceneIndex).toBe(0);
-    session.receive({ type: "microphone.activity_discarded" });
-    await vi.advanceTimersByTimeAsync(SETTLE_MS - 1);
-    expect(session.snapshot.sceneIndex).toBe(0);
-    await vi.advanceTimersByTimeAsync(1);
     expect(session.snapshot.sceneIndex).toBe(1);
+    expect(session.events.filter(event => event.type === "advance.committed")).toHaveLength(1);
+    session.receive({ type: "microphone.activity_discarded" });
     expect(evaluateAnswer).toHaveBeenCalledOnce();
     expect(session.events.some(event => event.type === "advance.cancelled")).toBe(false);
+  });
+  it("evaluates a transcript once despite repeated background VAD and advances once", async () => {
+    const { session, evaluateAnswer } = setup(true, answering(CONFIDENT));
+    mic(session, "microphone.speech_started");
+    deliver(session, speech("One"));
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(100);
+
+    session.receive({ type: "microphone.activity_started" });
+    mic(session, "microphone.speech_started");
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS - 100);
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+    expect(evaluateAnswer).toHaveBeenCalledWith({ sceneIndex: 0, utterance: "One" }, expect.anything());
+    expect(session.events.some(event => event.type === "answer.evaluation_proceeding_despite_vad")).toBe(true);
+
+    for (let burst = 0; burst < 4; burst++) {
+      mic(session, "microphone.speech_stopped");
+      session.receive({ type: "microphone.activity_started" });
+      mic(session, "microphone.speech_started");
+      await vi.advanceTimersByTimeAsync(400);
+    }
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
+    expect(session.snapshot.sceneIndex).toBe(1);
+    expect(session.events.filter(event => event.type === "advance.committed")).toHaveLength(1);
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+  });
+  it("does not schedule the previous scene transcript after an advance", async () => {
+    const { session, evaluateAnswer } = setup(true, answering(CONFIDENT));
+    deliver(session, speech("One"));
+    await settle();
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
+    expect(session.snapshot.sceneIndex).toBe(1);
+
+    session.displayed(1);
+    session.receive({ type: "microphone.activity_started" });
+    session.receive({ type: "microphone.activity_discarded" });
+    await settle();
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+    expect(session.events.filter(event => event.type === "answer.candidate")).toHaveLength(1);
   });
   it("holds an in-flight Jev result through a microphone spike without losing the answer", async () => {
     let resolve!: (result: AnswerResult) => void;
@@ -325,7 +403,7 @@ describe("answer-gated scene advancement", () => {
     expect(session.snapshot.sceneIndex).toBe(1);
     expect(evaluateAnswer).toHaveBeenCalledOnce();
   });
-  it("asks for a repeat when confirmed activity has no transcript", async () => {
+  it("resumes an approved answer after confirmed transcriptless microphone activity without asking for a repeat", async () => {
     const { session, transport } = setup(true, answering(CONFIDENT));
     mic(session, "microphone.speech_started");
     deliver(session, speech("One"));
@@ -334,9 +412,63 @@ describe("answer-gated scene advancement", () => {
     session.receive({ type: "microphone.activity_started" });
     mic(session, "microphone.speech_started");
     mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(SETTLE_MS + CORRECTION_WINDOW_MS);
+    expect(session.snapshot.sceneIndex).toBe(1);
+    expect(session.events.some(event => event.type === "answer.no_transcript")).toBe(false);
+    expect(vi.mocked(transport.send).mock.calls.map(([command]) => command)).not.toContainEqual(
+      expect.objectContaining({ content: expect.stringContaining("say it again") }),
+    );
+  });
+  it("does not send a transcriptless recovery after the approved answer advances the scene", async () => {
+    const { session, transport } = setup(true, answering(CONFIDENT));
+    deliver(session, speech("Two"));
+    await settle();
+    expect(session.events.some(event => event.type === "advance.deferred")).toBe(true);
+
+    // Noise starts a new transcriptless speech epoch while the approved advance is pending.
+    mic(session, "microphone.speech_started");
+    mic(session, "microphone.speech_stopped");
+    expect(session.events.findLast(event => event.type === "answer.no_transcript_scheduled")?.detail).toMatchObject({
+      epoch: 1,
+      transcript_revision: 1,
+      scene_index: 0,
+    });
+
+    // Release the already-approved answer to exercise the scene transition with the timer pending.
+    (session as unknown as { releaseDeferredAdvance(): void }).releaseDeferredAdvance();
+    expect(session.snapshot.sceneIndex).toBe(1);
+    session.displayed(1);
     await vi.advanceTimersByTimeAsync(SETTLE_MS);
-    expect(session.snapshot.sceneIndex).toBe(0);
-    expect(session.events.some(event => event.type === "answer.no_transcript")).toBe(true);
+
+    expect(session.snapshot.sceneIndex).toBe(1);
+    expect(session.events.some(event => event.type === "answer.no_transcript")).toBe(false);
+    const sent = vi.mocked(transport.send).mock.calls.map(([command]) => command);
+    expect(sent).toContainEqual(expect.objectContaining({ content: advanceContext(sceneAt(1)) }));
+    expect(sent).not.toContainEqual(expect.objectContaining({ content: expect.stringContaining("say it again") }));
+  });
+  it("checks the scheduled scene even if cleanup is bypassed", async () => {
+    const { session } = setup();
+    (session as unknown as { scheduleNoTranscriptRecovery(epoch: number): void }).scheduleNoTranscriptRecovery(0);
+
+    // Simulate a scene change without invoking advance()'s timer cleanup.
+    session.snapshot = { ...session.snapshot, sceneIndex: 1 };
+    await vi.advanceTimersByTimeAsync(SETTLE_MS);
+
+    expect(session.snapshot.sceneIndex).toBe(1);
+    expect(session.events.some(event => event.type === "answer.no_transcript")).toBe(false);
+  });
+  it("still sends one gentle repeat when a transcriptless epoch remains in the same scene", async () => {
+    const { session, transport } = setup(true, answering(UNSURE));
+    mic(session, "microphone.speech_started");
+    deliver(session, speech("One"));
+    mic(session, "microphone.speech_stopped");
+    await settle(CORRECTION_WINDOW_MS);
+
+    mic(session, "microphone.speech_started");
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(SETTLE_MS);
+
+    expect(session.events.filter(event => event.type === "answer.no_transcript")).toHaveLength(1);
     expect(vi.mocked(transport.send).mock.calls.map(([command]) => command)).toContainEqual(
       expect.objectContaining({ content: expect.stringContaining("say it again") }),
     );
@@ -389,18 +521,56 @@ describe("answer-gated scene advancement", () => {
     await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
     expect(session.snapshot.sceneIndex).toBe(0);
   });
-  it("new microphone speech invalidates an in-flight result before its transcript arrives", async () => {
+  it("preserves an in-flight approval through confirmed microphone activity without a new transcript", async () => {
     let resolve!: (result: AnswerResult) => void;
-    const { session } = setup(true, () => new Promise(r => (resolve = r)));
+    const evaluateAnswer: EvaluateAnswer = vi.fn(() => new Promise<AnswerResult>(r => (resolve = r)));
+    const { session, transport } = setup(true, evaluateAnswer);
     mic(session, "microphone.speech_started");
     deliver(session, speech("One"));
     mic(session, "microphone.speech_stopped");
     await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
     mic(session, "microphone.speech_started");
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
     resolve(evaluated(CONFIDENT));
     await vi.advanceTimersByTimeAsync(0);
     expect(session.snapshot.sceneIndex).toBe(0);
-    expect(session.events.findLast(e => e.type === "answer.evaluated")?.detail).toMatchObject({ decision: "STALE" });
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(SETTLE_MS - 1);
+    expect(session.snapshot.sceneIndex).toBe(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(session.snapshot.sceneIndex).toBe(0);
+    expect(session.events.findLast(e => e.type === "answer.evaluated")?.detail).toMatchObject({
+      decision: "ADVANCE",
+      stale: false,
+    });
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
+    expect(session.snapshot.sceneIndex).toBe(1);
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+    expect(session.events.filter(e => e.type === "advance.committed")).toHaveLength(1);
+    expect(session.events.some(e => e.type === "answer.no_transcript")).toBe(false);
+    expect(vi.mocked(transport.send).mock.calls.map(([command]) => command)).not.toContainEqual(
+      expect.objectContaining({ content: expect.stringContaining("say it again") }),
+    );
+  });
+  it("invalidates an approved answer when a correction transcript arrives during microphone activity", async () => {
+    const evaluateAnswer: EvaluateAnswer = vi.fn(async ({ utterance }) =>
+      evaluated(utterance.includes("two") ? UNSURE : CONFIDENT),
+    );
+    const { session } = setup(true, evaluateAnswer);
+    deliver(session, speech("One"));
+    await settle();
+    expect(session.events.findLast(e => e.type === "answer.evaluated")?.detail).toMatchObject({ decision: "ADVANCE" });
+
+    mic(session, "microphone.speech_started");
+    deliver(session, speech("... no, two", 600));
+    expect(session.events.some(e => e.type === "advance.cancelled")).toBe(true);
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS + CORRECTION_WINDOW_MS);
+
+    expect(evaluateAnswer).toHaveBeenCalledTimes(2);
+    expect(evaluateAnswer).toHaveBeenLastCalledWith({ sceneIndex: 0, utterance: "One... no, two" }, expect.anything());
+    expect(session.snapshot.sceneIndex).toBe(0);
+    expect(session.events.filter(e => e.type === "advance.committed")).toHaveLength(0);
   });
   it("stopping the lesson aborts a pending turn-end evaluation", async () => {
     let signal!: AbortSignal;
@@ -677,7 +847,7 @@ describe("answer-check turn synchronization", () => {
     expect(released(transport)).toHaveLength(0);
   });
 
-  it("resumes a pending STAY after a transcriptless microphone spike", async () => {
+  it("does not delay a pending STAY for a transcriptless microphone spike", async () => {
     const { session, transport } = setup(true, answering(UNSURE));
     vi.mocked(transport.send).mockClear();
     mic(session, "microphone.speech_started");
@@ -686,12 +856,121 @@ describe("answer-check turn synchronization", () => {
     await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - 1);
     session.receive({ type: "microphone.activity_started" });
     await vi.advanceTimersByTimeAsync(1);
-    expect(released(transport)).toHaveLength(0);
-    session.receive({ type: "microphone.activity_discarded" });
-    await vi.advanceTimersByTimeAsync(SETTLE_MS - 1);
-    expect(released(transport)).toHaveLength(0);
-    await vi.advanceTimersByTimeAsync(1);
     expect(released(transport)).toHaveLength(1);
+    session.receive({ type: "microphone.activity_discarded" });
+    expect(released(transport)).toHaveLength(1);
+  });
+
+  it("cancels an approved ADVANCE when a late correction transcript arrives during VAD grace", async () => {
+    const { session, transport, evaluateAnswer } = setup(true, answering(CONFIDENT));
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("One"));
+    await settle();
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - 200);
+    mic(session, "microphone.speech_started");
+    expect(session.events.filter(event => event.type === "answer.vad_grace_started")).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(500);
+    deliver(session, speech("... no, two", 600));
+    expect(session.events.filter(event => event.type === "advance.cancelled")).toHaveLength(1);
+    await settle();
+    expect(evaluateAnswer).toHaveBeenCalledTimes(2);
+    expect(evaluateAnswer).toHaveBeenLastCalledWith({ sceneIndex: 0, utterance: "One... no, two" }, expect.anything());
+    expect(session.snapshot.sceneIndex).toBe(0);
+    expect(session.events.filter(event => event.type === "advance.committed")).toHaveLength(0);
+    expect(transport.send).not.toHaveBeenCalled();
+  });
+
+  it("does not let early no-op VAD consume grace needed by a later correction", async () => {
+    const { session, transport, evaluateAnswer } = setup(true, answering(CONFIDENT));
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("One"));
+    await settle();
+
+    mic(session, "microphone.speech_started");
+    mic(session, "microphone.speech_stopped");
+    expect(session.events.filter(event => event.type === "answer.vad_grace_started")).toHaveLength(0);
+    expect(session.events.findLast(event => event.type === "answer.vad_grace_ignored")?.detail).toMatchObject({
+      reason: "too_early",
+    });
+
+    const earlyIgnore = session.events.findLast(event => event.type === "answer.vad_grace_ignored");
+    const normalReleaseAt =
+      session.createdAt + (earlyIgnore?.detail as { normal_release_at_ms: number }).normal_release_at_ms;
+    await vi.advanceTimersByTimeAsync(normalReleaseAt - Date.now() - 100);
+    mic(session, "microphone.speech_started");
+    expect(session.events.filter(event => event.type === "answer.vad_grace_started")).toHaveLength(1);
+    expect(session.events.findLast(event => event.type === "answer.vad_grace_started")?.detail).toMatchObject({
+      decision: "ADVANCE",
+    });
+
+    await vi.advanceTimersByTimeAsync(500);
+    deliver(session, speech("... no, two", 600));
+    expect(session.events.filter(event => event.type === "advance.cancelled")).toHaveLength(1);
+    await settle();
+    expect(evaluateAnswer).toHaveBeenCalledTimes(2);
+    expect(evaluateAnswer).toHaveBeenLastCalledWith({ sceneIndex: 0, utterance: "One... no, two" }, expect.anything());
+    expect(session.snapshot.sceneIndex).toBe(0);
+    expect(session.events.filter(event => event.type === "advance.committed")).toHaveLength(0);
+    expect(transport.send).not.toHaveBeenCalled();
+  });
+
+  it("bounds ADVANCE grace at the first confirmed speech event despite repeated VAD bursts", async () => {
+    const { session } = setup(true, answering(CONFIDENT));
+    deliver(session, speech("One"));
+    await settle();
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - 200);
+    mic(session, "microphone.speech_started");
+    const graceStarted = session.events.findLast(event => event.type === "answer.vad_grace_started");
+    expect(graceStarted).toBeDefined();
+    const releaseAt = (graceStarted?.detail as { release_at_ms: number }).release_at_ms;
+    await vi.advanceTimersByTimeAsync(400);
+    mic(session, "microphone.speech_stopped");
+    mic(session, "microphone.speech_started");
+    mic(session, "microphone.speech_stopped");
+    mic(session, "microphone.speech_started");
+    expect(session.events.filter(event => event.type === "answer.vad_grace_started")).toHaveLength(1);
+    expect(session.events.filter(event => event.type === "answer.vad_grace_ignored")).toHaveLength(2);
+    expect((graceStarted?.detail as { release_at_ms: number }).release_at_ms).toBe(releaseAt);
+    await vi.advanceTimersByTimeAsync(releaseAt - (Date.now() - session.createdAt) - 1);
+    expect(session.snapshot.sceneIndex).toBe(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(session.snapshot.sceneIndex).toBe(1);
+    expect(session.events.filter(event => event.type === "advance.committed")).toHaveLength(1);
+    expect(session.events.filter(event => event.type === "answer.vad_grace_expired")).toHaveLength(1);
+  });
+
+  it("gives deferred STAY the same bounded grace and cancels it for a late correction", async () => {
+    const { session, transport, evaluateAnswer } = setup(true, answering(UNSURE));
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("Five"));
+    await settle();
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - 200);
+    mic(session, "microphone.speech_started");
+    await vi.advanceTimersByTimeAsync(500);
+    deliver(session, speech("... no, one", 600));
+    expect(session.events.filter(event => event.type === "answer.release_cancelled")).toHaveLength(1);
+    await settle();
+    expect(evaluateAnswer).toHaveBeenCalledTimes(2);
+    expect(session.snapshot.sceneIndex).toBe(0);
+    expect(released(transport)).toHaveLength(0);
+    expect(transport.send).not.toHaveBeenCalled();
+  });
+
+  it("releases deferred STAY after grace expires without a transcript", async () => {
+    const { session, transport } = setup(true, answering(UNSURE));
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("Five"));
+    await settle();
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - 200);
+    mic(session, "microphone.speech_started");
+    const graceStarted = session.events.findLast(event => event.type === "answer.vad_grace_started");
+    const releaseAt = (graceStarted?.detail as { release_at_ms: number }).release_at_ms;
+    mic(session, "microphone.speech_stopped");
+    mic(session, "microphone.speech_started");
+    expect(released(transport)).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(releaseAt - (Date.now() - session.createdAt));
+    expect(released(transport)).toHaveLength(1);
+    expect(session.events.filter(event => event.type === "answer.vad_grace_expired")).toHaveLength(1);
   });
 
   it.each(["", "Oh!", "Ooh!", "Okay!"])(

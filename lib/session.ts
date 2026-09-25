@@ -66,16 +66,18 @@ type DeferredAdvance = {
   answerVersion: string;
   approvedAt: number;
   spokenChars: number;
-  speechEpoch: number;
+  transcriptRevision: number;
   correctionReadyAt: number;
   outputQuietAt: number;
+  vadGraceUntil?: number;
 };
 type DeferredStay = {
   sceneIndex: number;
   answerVersion: string;
-  speechEpoch: number;
+  transcriptRevision: number;
   correctionReadyAt: number;
   content: string;
+  vadGraceUntil?: number;
 };
 
 export class LessonSession {
@@ -104,15 +106,13 @@ export class LessonSession {
   private vadDetectionMs?: number;
   private turnSignal: "microphone_vad" | "transcript_fallback" = "transcript_fallback";
   private microphoneSpeaking = false;
+  private microphoneSpeechStartedAt?: number;
   private provisionalActivity = false;
   private speechEpoch = 0;
   private transcriptEpoch = -1;
   private transcriptRevision = 0;
   private activityTranscriptRevision = 0;
-  private activityRecoveryUntil = 0;
-  private recoveryTimer?: ReturnType<typeof setTimeout>;
   private noTranscriptTimer?: ReturnType<typeof setTimeout>;
-  private heldDecision?: () => void;
   private evaluated = new Set<string>();
   private evaluation?: AbortController;
   // What Sprout has said since the child last spoke, to tell a held turn from
@@ -221,27 +221,22 @@ export class LessonSession {
         if (this.microphoneSpeaking || this.provisionalActivity) return;
         this.provisionalActivity = true;
         this.activityTranscriptRevision = this.transcriptRevision;
-        clearTimeout(this.settleTimer);
-        clearTimeout(this.deferredTimer);
-        clearTimeout(this.stayTimer);
-        clearTimeout(this.recoveryTimer);
-        clearTimeout(this.noTranscriptTimer);
-        this.log("answer.activity_started");
+        this.cancelNoTranscriptRecovery();
+        this.log("answer.activity_started", {
+          transcript_revision: this.transcriptRevision,
+          pending_evaluation: Boolean(this.settleTimer),
+        });
         return;
       case "microphone.activity_discarded": {
         if (!this.provisionalActivity) return;
         this.provisionalActivity = false;
         const heardNewTranscript = this.transcriptRevision !== this.activityTranscriptRevision;
-        this.activityRecoveryUntil = Date.now() + TRANSCRIPT_FALLBACK_MS;
         this.log("answer.activity_discarded", { heard_new_transcript: heardNewTranscript });
         if (heardNewTranscript) {
-          this.heldDecision = undefined;
           this.evaluation?.abort();
-          if (this.latest) this.scheduleEvaluation(this.latest, TRANSCRIPT_FALLBACK_MS);
+          if (this.latest) this.scheduleEvaluation(this.latest, TRANSCRIPT_FALLBACK_MS, "transcript_revision");
         } else if (this.deferredAdvance) this.scheduleDeferredRelease();
         else if (this.deferredStay) this.scheduleDeferredStayRelease();
-        else if (this.heldDecision) this.scheduleHeldDecision();
-        else if (!this.evaluation && this.latest) this.scheduleEvaluation(this.latest, TRANSCRIPT_FALLBACK_MS);
         return;
       }
       case "microphone.speech_started":
@@ -250,22 +245,23 @@ export class LessonSession {
           this.provisionalActivity && this.transcriptRevision !== this.activityTranscriptRevision;
         this.provisionalActivity = false;
         this.microphoneSpeaking = true;
+        this.microphoneSpeechStartedAt = Date.now();
         this.speechEpoch++;
         if (heardDuringActivity) this.transcriptEpoch = this.speechEpoch;
-        this.activityRecoveryUntil = 0;
-        this.heldDecision = undefined;
-        clearTimeout(this.recoveryTimer);
-        clearTimeout(this.noTranscriptTimer);
+        this.cancelNoTranscriptRecovery();
         this.vadDetectionMs = undefined;
-        clearTimeout(this.settleTimer);
-        this.evaluation?.abort();
-        this.cancelDeferredAdvance();
-        this.cancelDeferredStay();
-        this.log("answer.speech_started", { epoch: this.speechEpoch });
+        this.log("answer.speech_started", {
+          epoch: this.speechEpoch,
+          transcript_revision: this.transcriptRevision,
+          pending_evaluation: Boolean(this.settleTimer),
+          decision_preserved: Boolean(this.evaluation || this.deferredAdvance),
+        });
+        this.startDeferredVadGrace(this.microphoneSpeechStartedAt);
         return;
       case "microphone.speech_stopped":
         if (!this.microphoneSpeaking) return;
         this.microphoneSpeaking = false;
+        this.microphoneSpeechStartedAt = undefined;
         this.turnEndAt = Date.now();
         this.vadDetectionMs = event.quietMs;
         this.turnSignal = "microphone_vad";
@@ -276,8 +272,10 @@ export class LessonSession {
           estimated_acoustic_end_at: this.turnEndAt - event.quietMs - this.createdAt,
         });
         if (this.latest && this.transcriptEpoch === this.speechEpoch)
-          this.scheduleEvaluation(this.latest, TRANSCRIPT_TAIL_MS);
+          this.scheduleEvaluation(this.latest, TRANSCRIPT_TAIL_MS, "microphone_vad");
         else if (this.latest) this.scheduleNoTranscriptRecovery(this.speechEpoch);
+        if (this.deferredAdvance) this.scheduleDeferredRelease();
+        else if (this.deferredStay) this.scheduleDeferredStayRelease();
         return;
       case "delegation":
         this.refuseDelegation(event.id);
@@ -329,25 +327,40 @@ export class LessonSession {
     this.sproutReply = fromChild ? "" : this.sproutReply + event.delta;
     if (fromChild) {
       // A transcript can arrive before local VAD notices renewed speech.
+      const previous = this.latest;
+      const invalidatesPendingAnswer = Boolean(
+        previous && (this.settleTimer || this.evaluation || this.deferredAdvance || this.deferredStay),
+      );
+      const previousRevision = this.transcriptRevision;
       this.transcriptRevision++;
-      this.heldDecision = undefined;
-      this.activityRecoveryUntil = 0;
-      clearTimeout(this.recoveryTimer);
-      clearTimeout(this.noTranscriptTimer);
+      if (invalidatesPendingAnswer)
+        this.log("answer.semantic_answer_invalidated", {
+          reason: "transcript_revision",
+          previous_revision: previousRevision,
+          revision: this.transcriptRevision,
+          previous_version: `${previous?.startMs}:${previous?.text.trim()}`,
+          revised_utterance: utterance.text,
+        });
+      this.cancelNoTranscriptRecovery();
       this.evaluation?.abort();
       this.cancelDeferredAdvance();
       this.cancelDeferredStay();
       this.latest = utterance;
       this.lastDeltaAt = Date.now();
       this.transcriptEpoch = this.speechEpoch;
+      this.log("answer.transcript_revision", {
+        revision: this.transcriptRevision,
+        sceneIndex: this.snapshot.sceneIndex,
+        utterance: utterance.text,
+      });
       if (requestsStop(utterance.text)) this.end("child_stop");
       else {
-        // Provider transcript delivery can lag VAD; each fragment after the
-        // latest detected stop restarts the short tail regardless of arrival time.
-        if (this.provisionalActivity) return;
+        // Transcript revisions are learner evidence and always get a bounded
+        // evaluation attempt. A clean stop in this speech epoch lets us use
+        // the short tail; otherwise keep the fallback even while VAD is active.
         if (this.speechEpoch > 0 && this.turnSignal === "microphone_vad" && !this.microphoneSpeaking)
-          this.scheduleEvaluation(utterance, TRANSCRIPT_TAIL_MS);
-        else if (!this.microphoneSpeaking) this.scheduleEvaluation(utterance, TRANSCRIPT_FALLBACK_MS);
+          this.scheduleEvaluation(utterance, TRANSCRIPT_TAIL_MS, "transcript_revision");
+        else this.scheduleEvaluation(utterance, TRANSCRIPT_FALLBACK_MS, "transcript_fallback");
       }
     } else if (this.snapshot.status !== "goodbye" && saidGoodbye(utterance.text)) {
       // The model ending the lesson itself, usually a stop request the
@@ -358,17 +371,61 @@ export class LessonSession {
     }
   }
 
-  private scheduleEvaluation(utterance: Utterance, delay: number) {
+  private scheduleEvaluation(
+    utterance: Utterance,
+    delay: number,
+    reason: "transcript_revision" | "transcript_fallback" | "microphone_vad",
+  ) {
+    const transcriptRevision = this.transcriptRevision;
+    const sceneIndex = this.snapshot.sceneIndex;
+    const version = `${utterance.startMs}:${utterance.text.trim()}`;
+    const restarting = Boolean(this.settleTimer);
     clearTimeout(this.settleTimer);
+    this.log("answer.evaluation_scheduled", {
+      revision: transcriptRevision,
+      sceneIndex,
+      version,
+      delay_ms: delay,
+      reason,
+      restarted_existing_timer: restarting,
+    });
     this.log("answer.candidate", {
-      sceneIndex: this.snapshot.sceneIndex,
+      sceneIndex,
       utterance: utterance.text,
-      version: `${utterance.startMs}:${utterance.text.trim()}`,
+      version,
       signal: delay === TRANSCRIPT_TAIL_MS ? "microphone_vad" : "transcript_fallback",
       transcript_at: this.lastDeltaAt - this.createdAt,
     });
     this.settleTimer = setTimeout(() => {
-      if (this.microphoneSpeaking || this.provisionalActivity) return;
+      this.settleTimer = undefined;
+      if (
+        transcriptRevision !== this.transcriptRevision ||
+        sceneIndex !== this.snapshot.sceneIndex ||
+        this.latest?.startMs !== utterance.startMs ||
+        this.latest.text !== utterance.text
+      ) {
+        const invalidationReason =
+          transcriptRevision !== this.transcriptRevision
+            ? "transcript_revision"
+            : sceneIndex !== this.snapshot.sceneIndex
+              ? "scene_changed"
+              : "answer_version_changed";
+        this.log("answer.evaluation_invalidated", {
+          reason: invalidationReason,
+          revision: transcriptRevision,
+          sceneIndex,
+          version,
+        });
+        return;
+      }
+      if (this.microphoneSpeaking || this.provisionalActivity)
+        this.log("answer.evaluation_proceeding_despite_vad", {
+          revision: transcriptRevision,
+          sceneIndex,
+          version,
+          microphone_speaking: this.microphoneSpeaking,
+          provisional_activity: this.provisionalActivity,
+        });
       if (delay === TRANSCRIPT_FALLBACK_MS) {
         this.turnEndAt = Date.now();
         this.vadDetectionMs = undefined;
@@ -383,7 +440,6 @@ export class LessonSession {
   private get evaluable() {
     return (
       this.snapshot.status === "active" &&
-      !this.provisionalActivity &&
       !this.pending &&
       !this.deferredAdvance &&
       !this.deferredStay &&
@@ -406,7 +462,7 @@ export class LessonSession {
     const sceneIndex = this.snapshot.sceneIndex;
     const finalDeltaAt = this.lastDeltaAt;
     const turnEndAt = this.turnEndAt;
-    const speechEpoch = this.speechEpoch;
+    const transcriptRevision = this.transcriptRevision;
     this.log("answer.requesting", {
       version,
       signal: this.turnSignal,
@@ -420,41 +476,50 @@ export class LessonSession {
     this.evaluation = evaluation;
     void this.evaluateAnswer({ sceneIndex, utterance: text }, evaluation.signal).then(result => {
       if (this.evaluation === evaluation) this.evaluation = undefined;
-      this.holdOrDecide(() =>
-        this.decide(utterance, sceneIndex, version, finalDeltaAt, turnEndAt, speechEpoch, evaluation.signal, result),
+      this.decide(
+        utterance,
+        sceneIndex,
+        version,
+        finalDeltaAt,
+        turnEndAt,
+        transcriptRevision,
+        evaluation.signal,
+        result,
       );
     });
   }
 
-  private holdOrDecide(decision: () => void) {
-    if (this.provisionalActivity || Date.now() < this.activityRecoveryUntil) {
-      this.heldDecision = decision;
-      if (!this.provisionalActivity) this.scheduleHeldDecision();
-    } else decision();
-  }
-
-  private scheduleHeldDecision() {
-    clearTimeout(this.recoveryTimer);
-    this.recoveryTimer = setTimeout(
-      () => {
-        const decision = this.heldDecision;
-        this.heldDecision = undefined;
-        decision?.();
-      },
-      Math.max(0, this.activityRecoveryUntil - Date.now()),
-    );
-  }
-
   private scheduleNoTranscriptRecovery(epoch: number) {
-    clearTimeout(this.noTranscriptTimer);
+    this.cancelNoTranscriptRecovery();
+    const transcriptRevision = this.transcriptRevision;
+    const sceneIndex = this.snapshot.sceneIndex;
+    this.log("answer.no_transcript_scheduled", {
+      epoch,
+      transcript_revision: transcriptRevision,
+      scene_index: sceneIndex,
+    });
     this.noTranscriptTimer = setTimeout(() => {
-      if (this.speechEpoch !== epoch || this.transcriptEpoch === epoch || !this.evaluable) return;
-      this.log("answer.no_transcript", { epoch });
+      this.noTranscriptTimer = undefined;
+      if (
+        this.speechEpoch !== epoch ||
+        this.transcriptRevision !== transcriptRevision ||
+        this.snapshot.sceneIndex !== sceneIndex ||
+        this.transcriptEpoch === epoch ||
+        !this.evaluable
+      )
+        return;
+      if (this.evaluation || this.deferredAdvance || this.deferredStay) return;
+      this.log("answer.no_transcript", { epoch, transcript_revision: transcriptRevision, scene_index: sceneIndex });
       this.append(
         "session.instructions.append",
         "I could not hear the child's latest answer clearly. Gently ask them to say it again without judging the earlier count or changing the scene.",
       );
     }, TRANSCRIPT_FALLBACK_MS);
+  }
+
+  private cancelNoTranscriptRecovery() {
+    clearTimeout(this.noTranscriptTimer);
+    this.noTranscriptTimer = undefined;
   }
 
   private decide(
@@ -463,7 +528,7 @@ export class LessonSession {
     version: string,
     finalDeltaAt: number,
     turnEndAt: number,
-    speechEpoch: number,
+    transcriptRevision: number,
     evaluationSignal: AbortSignal,
     result: AnswerResult,
   ) {
@@ -472,11 +537,19 @@ export class LessonSession {
     const stale =
       !this.evaluable ||
       evaluationSignal.aborted ||
-      this.microphoneSpeaking ||
-      this.speechEpoch !== speechEpoch ||
+      this.transcriptRevision !== transcriptRevision ||
       this.snapshot.sceneIndex !== sceneIndex ||
       this.latest?.startMs !== utterance.startMs ||
       this.latest.text !== utterance.text;
+    const staleReason = !stale
+      ? undefined
+      : evaluationSignal.aborted
+        ? "evaluation_cancelled"
+        : this.transcriptRevision !== transcriptRevision
+          ? "transcript_revision"
+          : this.snapshot.status !== "active" || this.snapshot.sceneIndex !== sceneIndex
+            ? "lesson_or_scene_changed"
+            : "answer_version_changed";
     const advancing = !stale && shouldAdvance(result);
     // Stale results need no release: newer speech gets its own decision, and a
     // scene change or wrap-up tells GPT-Live itself.
@@ -494,6 +567,7 @@ export class LessonSession {
       turn_end_to_decision_ms: Date.now() - turnEndAt,
       decision: stale ? "STALE" : result.status === "unavailable" ? "UNAVAILABLE" : advancing ? "ADVANCE" : "STAY",
       stale,
+      ...(staleReason ? { stale_reason: staleReason } : {}),
       advancing,
       releasing,
     });
@@ -531,10 +605,12 @@ export class LessonSession {
       answerVersion,
       approvedAt: Date.now(),
       spokenChars: this.sproutReply.length,
-      speechEpoch: this.speechEpoch,
+      transcriptRevision: this.transcriptRevision,
       correctionReadyAt: Math.max(this.turnEndAt, this.lastDeltaAt) + CORRECTION_WINDOW_MS,
       outputQuietAt: 0,
     };
+    if (this.microphoneSpeaking && this.microphoneSpeechStartedAt !== undefined)
+      this.startDeferredVadGrace(this.microphoneSpeechStartedAt);
     this.log("advance.deferred", {
       answer_version: answerVersion,
       scene: sceneAt(sceneIndex).id,
@@ -553,8 +629,12 @@ export class LessonSession {
     // transcript gap before a scene change; each fragment extends that gap.
     if (!this.sproutIsHoldingForDecision() && (outputDelta || deferred.outputQuietAt === 0))
       deferred.outputQuietAt = Date.now() + UTTERANCE_GAP_MS;
-    const releaseAt = Math.max(deferred.correctionReadyAt, deferred.outputQuietAt, this.activityRecoveryUntil);
+    const releaseAt = this.deferredAdvanceReleaseAt(deferred);
     this.deferredTimer = setTimeout(() => this.releaseDeferredAdvance(), Math.max(0, releaseAt - Date.now()));
+  }
+
+  private deferredAdvanceReleaseAt(deferred: DeferredAdvance) {
+    return Math.max(deferred.correctionReadyAt, deferred.outputQuietAt, deferred.vadGraceUntil ?? 0);
   }
 
   private releaseDeferredAdvance() {
@@ -566,9 +646,7 @@ export class LessonSession {
       this.expireIfOverdue() ||
       this.snapshot.status !== "active" ||
       this.pending ||
-      this.provisionalActivity ||
-      this.microphoneSpeaking ||
-      this.speechEpoch !== deferred.speechEpoch ||
+      this.transcriptRevision !== deferred.transcriptRevision ||
       `${this.latest?.startMs}:${this.latest?.text.trim()}` !== deferred.answerVersion ||
       this.snapshot.sceneIndex !== deferred.sceneIndex ||
       deferred.sceneIndex >= LAST_SCENE
@@ -579,8 +657,16 @@ export class LessonSession {
       answer_version: deferred.answerVersion,
       spoken_chars_at_approval: deferred.spokenChars,
       delay_ms: Date.now() - deferred.approvedAt,
-      reason: deferred.outputQuietAt > deferred.correctionReadyAt ? "output_transcript_quiet" : "correction_window",
+      reason:
+        deferred.vadGraceUntil !== undefined &&
+        deferred.vadGraceUntil > Math.max(deferred.correctionReadyAt, deferred.outputQuietAt)
+          ? "vad_grace"
+          : deferred.outputQuietAt > deferred.correctionReadyAt
+            ? "output_transcript_quiet"
+            : "correction_window",
     });
+    if (deferred.vadGraceUntil !== undefined)
+      this.log("answer.vad_grace_expired", { decision: "ADVANCE", answer_version: deferred.answerVersion });
     this.advance(deferred.answerVersion);
   }
 
@@ -598,10 +684,12 @@ export class LessonSession {
     this.deferredStay = {
       sceneIndex,
       answerVersion,
-      speechEpoch: this.speechEpoch,
+      transcriptRevision: this.transcriptRevision,
       correctionReadyAt: Math.max(this.turnEndAt, this.lastDeltaAt) + CORRECTION_WINDOW_MS,
       content,
     };
+    if (this.microphoneSpeaking && this.microphoneSpeechStartedAt !== undefined)
+      this.startDeferredVadGrace(this.microphoneSpeechStartedAt);
     this.log("answer.release_deferred", { answer_version: answerVersion, scene: sceneAt(sceneIndex).id });
     this.scheduleDeferredStayRelease();
   }
@@ -610,7 +698,7 @@ export class LessonSession {
     clearTimeout(this.stayTimer);
     const deferred = this.deferredStay;
     if (!deferred) return;
-    const releaseAt = Math.max(deferred.correctionReadyAt, this.activityRecoveryUntil);
+    const releaseAt = Math.max(deferred.correctionReadyAt, deferred.vadGraceUntil ?? 0);
     this.stayTimer = setTimeout(() => this.releaseDeferredStay(), Math.max(0, releaseAt - Date.now()));
   }
 
@@ -623,17 +711,61 @@ export class LessonSession {
       this.expireIfOverdue() ||
       this.snapshot.status !== "active" ||
       this.pending ||
-      this.provisionalActivity ||
-      this.microphoneSpeaking ||
-      this.speechEpoch !== deferred.speechEpoch ||
+      this.transcriptRevision !== deferred.transcriptRevision ||
       `${this.latest?.startMs}:${this.latest?.text.trim()}` !== deferred.answerVersion ||
       this.snapshot.sceneIndex !== deferred.sceneIndex ||
       !this.latest ||
       !this.sproutIsHoldingForDecision()
     )
       return;
-    this.log("answer.release_sent", { answer_version: deferred.answerVersion, scene: sceneAt(deferred.sceneIndex).id });
+    this.log("answer.release_sent", {
+      answer_version: deferred.answerVersion,
+      scene: sceneAt(deferred.sceneIndex).id,
+      reason: deferred.vadGraceUntil !== undefined ? "vad_grace" : "correction_window",
+    });
+    if (deferred.vadGraceUntil !== undefined)
+      this.log("answer.vad_grace_expired", { decision: "STAY", answer_version: deferred.answerVersion });
+    this.cancelNoTranscriptRecovery();
     this.append("session.instructions.append", deferred.content);
+  }
+
+  /** Confirmed renewed speech buys one fallback interval for a late transcript. */
+  private startDeferredVadGrace(speechStartedAt: number) {
+    const advance = this.deferredAdvance;
+    const stay = this.deferredStay;
+    if (!advance && !stay) return;
+    const decision = advance ? "ADVANCE" : "STAY";
+    const answerVersion = advance?.answerVersion ?? stay?.answerVersion;
+    if (advance?.vadGraceUntil !== undefined || stay?.vadGraceUntil !== undefined) {
+      this.log("answer.vad_grace_ignored", { decision, answer_version: answerVersion, reason: "already_active" });
+      return;
+    }
+    const normalReleaseAt = advance
+      ? Math.max(advance.correctionReadyAt, advance.outputQuietAt)
+      : stay!.correctionReadyAt;
+    if (speechStartedAt >= normalReleaseAt) return;
+    const graceUntil = speechStartedAt + TRANSCRIPT_FALLBACK_MS;
+    if (graceUntil <= normalReleaseAt) {
+      this.log("answer.vad_grace_ignored", {
+        decision,
+        answer_version: answerVersion,
+        reason: "too_early",
+        candidate_release_at_ms: graceUntil - this.createdAt,
+        normal_release_at_ms: normalReleaseAt - this.createdAt,
+      });
+      return;
+    }
+    if (advance) advance.vadGraceUntil = graceUntil;
+    else stay!.vadGraceUntil = graceUntil;
+    this.log("answer.vad_grace_started", {
+      decision,
+      answer_version: answerVersion,
+      grace_ms: TRANSCRIPT_FALLBACK_MS,
+      added_ms: graceUntil - normalReleaseAt,
+      release_at_ms: graceUntil - this.createdAt,
+    });
+    if (advance) this.scheduleDeferredRelease();
+    else this.scheduleDeferredStayRelease();
   }
 
   private cancelDeferredStay() {
@@ -650,6 +782,9 @@ export class LessonSession {
     });
     const sceneIndex = this.snapshot.sceneIndex + 1;
     this.pending = { kind: "advance", sceneIndex, answerVersion, turnEndAt: this.turnEndAt };
+    this.cancelNoTranscriptRecovery();
+    this.latest = null;
+    this.childSpeech = new TranscriptWindow();
     this.update({ sceneIndex });
   }
 
@@ -695,6 +830,7 @@ export class LessonSession {
 
   private wrap() {
     if (this.snapshot.status !== "active") return;
+    this.cancelNoTranscriptRecovery();
     this.cancelDeferredAdvance();
     this.cancelDeferredStay();
     this.update({ status: "wrapping" });
@@ -707,6 +843,7 @@ export class LessonSession {
 
   private goodbye() {
     if (this.snapshot.status === "ended") return;
+    this.cancelNoTranscriptRecovery();
     this.cancelDeferredAdvance();
     this.cancelDeferredStay();
     this.update({ status: "goodbye" });
@@ -727,11 +864,8 @@ export class LessonSession {
     if (remaining <= 0) reason = "time_limit";
     clearTimeout(this.startupTimer);
     clearTimeout(this.settleTimer);
-    clearTimeout(this.recoveryTimer);
-    clearTimeout(this.noTranscriptTimer);
-    this.heldDecision = undefined;
+    this.cancelNoTranscriptRecovery();
     this.provisionalActivity = false;
-    this.activityRecoveryUntil = 0;
     this.cancelDeferredAdvance();
     this.cancelDeferredStay();
     this.phaseTimers.forEach(clearTimeout);
