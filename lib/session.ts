@@ -77,7 +77,6 @@ type DeferredAdvance = {
   spokenChars: number;
   transcriptRevision: number;
   correctionReadyAt: number;
-  outputQuietAt: number;
   vadGraceUntil?: number;
 };
 type DeferredStay = {
@@ -735,7 +734,6 @@ export class LessonSession {
       spokenChars: this.sproutReply.length,
       transcriptRevision: this.transcriptRevision,
       correctionReadyAt: Math.max(this.turnEndAt, this.lastDeltaAt) + CORRECTION_WINDOW_MS,
-      outputQuietAt: this.answerResponseGate?.outputQuietAt ?? 0,
     };
     if (this.microphoneSpeaking && this.microphoneSpeechStartedAt !== undefined)
       this.startDeferredVadGrace(this.microphoneSpeechStartedAt);
@@ -753,13 +751,12 @@ export class LessonSession {
     clearTimeout(this.deferredTimer);
     const deferred = this.deferredAdvance;
     if (!deferred) return;
-    deferred.outputQuietAt = Math.max(deferred.outputQuietAt, this.answerResponseGate?.outputQuietAt ?? 0);
     const releaseAt = this.deferredAdvanceReleaseAt(deferred);
     this.deferredTimer = setTimeout(() => this.releaseDeferredAdvance(), Math.max(0, releaseAt - Date.now()));
   }
 
   private deferredAdvanceReleaseAt(deferred: DeferredAdvance) {
-    return Math.max(deferred.correctionReadyAt, deferred.outputQuietAt, deferred.vadGraceUntil ?? 0);
+    return Math.max(deferred.correctionReadyAt, deferred.vadGraceUntil ?? 0);
   }
 
   private releaseDeferredAdvance() {
@@ -791,12 +788,9 @@ export class LessonSession {
       spoken_chars_at_approval: deferred.spokenChars,
       delay_ms: Date.now() - deferred.approvedAt,
       reason:
-        deferred.vadGraceUntil !== undefined &&
-        deferred.vadGraceUntil > Math.max(deferred.correctionReadyAt, deferred.outputQuietAt)
+        deferred.vadGraceUntil !== undefined && deferred.vadGraceUntil > deferred.correctionReadyAt
           ? "vad_grace"
-          : deferred.outputQuietAt > deferred.correctionReadyAt
-            ? "output_transcript_quiet"
-            : "correction_window",
+          : "correction_window",
     });
     if (deferred.vadGraceUntil !== undefined)
       this.log("answer.vad_grace_expired", { decision: "ADVANCE", answer_version: deferred.answerVersion });
@@ -900,7 +894,7 @@ export class LessonSession {
       return;
     }
     const normalReleaseAt = advance
-      ? Math.max(advance.correctionReadyAt, advance.outputQuietAt)
+      ? advance.correctionReadyAt
       : Math.max(stay!.correctionReadyAt, this.answerResponseGate?.outputQuietAt ?? 0);
     if (speechStartedAt >= normalReleaseAt) return;
     const graceUntil = speechStartedAt + TRANSCRIPT_FALLBACK_MS;

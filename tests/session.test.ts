@@ -1221,23 +1221,50 @@ describe("answer-check turn synchronization", () => {
     },
   );
 
-  it("does not let hidden output transcripts delay an approved advance", async () => {
+  it("commits and displays while long hidden output continues, then releases audio only after quiet", async () => {
     const { session, transport, evaluateAnswer } = setup(true, answering(CONFIDENT));
     vi.mocked(transport.send).mockClear();
     deliver(session, speech("One!"));
-    deliver(session, speech("Let's count this duck together", 800, true));
     await settle();
-    expect(session.snapshot.sceneIndex).toBe(0);
+    deliver(session, speech("Let's count this duck together", 800, true));
+    expect(transport.send).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - 100);
+    deliver(session, speech(" . Still counting.", 1200, true));
+    const activeQuietAt = (session as unknown as { answerResponseGate: { outputQuietAt: number } }).answerResponseGate
+      .outputQuietAt;
+    expect(activeQuietAt).toBeGreaterThan(Date.now());
+    await vi.advanceTimersByTimeAsync(100);
+    expect(session.snapshot.sceneIndex).toBe(1);
+    expect(session.events.filter(event => event.type === "advance.committed")).toHaveLength(1);
+    expect(session.events.findLast(event => event.type === "advance.released")?.detail).toMatchObject({
+      reason: "correction_window",
+    });
+    expect(session.events.filter(event => event.type === "answer.response_gate_released")).toHaveLength(0);
+    expect(transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
+    expect(transport.send).not.toHaveBeenCalled();
+
+    session.displayed(1);
+    expect(session.snapshot.sceneIndex).toBe(1);
+    expect(transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
     expect(transport.send).not.toHaveBeenCalled();
     deliver(session, speech(". There is one duck.", 1800, true));
     expect(evaluateAnswer).toHaveBeenCalledOnce();
-    expect(session.events.some(event => event.type === "transcript.sprout")).toBe(true);
-    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
-    expect(session.snapshot.sceneIndex).toBe(1);
+    const extendedQuietAt = (session as unknown as { answerResponseGate: { outputQuietAt: number } }).answerResponseGate
+      .outputQuietAt;
+    expect(extendedQuietAt).toBeGreaterThan(activeQuietAt);
     expect(transport.send).not.toHaveBeenCalled();
-    session.displayed(1);
-    session.displayed(1);
+    await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS - 1);
+    expect(transport.send).not.toHaveBeenCalled();
+    expect(transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
+    await vi.advanceTimersByTimeAsync(1);
     expect(sent(transport)).toEqual([expect.objectContaining({ content: advanceContext(sceneAt(1)) })]);
+    expect(vi.mocked(transport.send).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(transport.setOutputBlocked).mock.invocationCallOrder.at(-1)!,
+    );
+    const committed = session.events.find(event => event.type === "advance.committed");
+    const releasedGate = session.events.find(event => event.type === "answer.response_gate_released");
+    expect(committed?.at).toBeLessThan(releasedGate?.at ?? 0);
+    expect(releasedGate?.detail).toMatchObject({ decision: "ADVANCE", reason: "output_transcript_quiet" });
     expect(session.events.filter(event => event.type === "advance.deferred")).toHaveLength(1);
     expect(session.events.filter(event => event.type === "advance.released")).toHaveLength(1);
     expect(session.events.findLast(event => event.type === "advance.released")?.detail).toMatchObject({
