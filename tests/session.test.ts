@@ -419,6 +419,60 @@ describe("answer-gated scene advancement", () => {
       expect.objectContaining({ content: expect.stringContaining("say it again") }),
     );
   });
+  it("does not send a transcriptless recovery after the approved answer advances the scene", async () => {
+    const { session, transport } = setup(true, answering(CONFIDENT));
+    deliver(session, speech("Two"));
+    await settle();
+    expect(session.events.some(event => event.type === "advance.deferred")).toBe(true);
+
+    // Noise starts a new transcriptless speech epoch while the approved advance is pending.
+    mic(session, "microphone.speech_started");
+    mic(session, "microphone.speech_stopped");
+    expect(session.events.findLast(event => event.type === "answer.no_transcript_scheduled")?.detail).toMatchObject({
+      epoch: 1,
+      transcript_revision: 1,
+      scene_index: 0,
+    });
+
+    // Release the already-approved answer to exercise the scene transition with the timer pending.
+    (session as unknown as { releaseDeferredAdvance(): void }).releaseDeferredAdvance();
+    expect(session.snapshot.sceneIndex).toBe(1);
+    session.displayed(1);
+    await vi.advanceTimersByTimeAsync(SETTLE_MS);
+
+    expect(session.snapshot.sceneIndex).toBe(1);
+    expect(session.events.some(event => event.type === "answer.no_transcript")).toBe(false);
+    const sent = vi.mocked(transport.send).mock.calls.map(([command]) => command);
+    expect(sent).toContainEqual(expect.objectContaining({ content: advanceContext(sceneAt(1)) }));
+    expect(sent).not.toContainEqual(expect.objectContaining({ content: expect.stringContaining("say it again") }));
+  });
+  it("checks the scheduled scene even if cleanup is bypassed", async () => {
+    const { session } = setup();
+    (session as unknown as { scheduleNoTranscriptRecovery(epoch: number): void }).scheduleNoTranscriptRecovery(0);
+
+    // Simulate a scene change without invoking advance()'s timer cleanup.
+    session.snapshot = { ...session.snapshot, sceneIndex: 1 };
+    await vi.advanceTimersByTimeAsync(SETTLE_MS);
+
+    expect(session.snapshot.sceneIndex).toBe(1);
+    expect(session.events.some(event => event.type === "answer.no_transcript")).toBe(false);
+  });
+  it("still sends one gentle repeat when a transcriptless epoch remains in the same scene", async () => {
+    const { session, transport } = setup(true, answering(UNSURE));
+    mic(session, "microphone.speech_started");
+    deliver(session, speech("One"));
+    mic(session, "microphone.speech_stopped");
+    await settle(CORRECTION_WINDOW_MS);
+
+    mic(session, "microphone.speech_started");
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(SETTLE_MS);
+
+    expect(session.events.filter(event => event.type === "answer.no_transcript")).toHaveLength(1);
+    expect(vi.mocked(transport.send).mock.calls.map(([command]) => command)).toContainEqual(
+      expect.objectContaining({ content: expect.stringContaining("say it again") }),
+    );
+  });
   it("does not ask for a repeat when the new transcript arrives during the grace period", async () => {
     const { session } = setup(true, answering(UNSURE));
     mic(session, "microphone.speech_started");

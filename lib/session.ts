@@ -221,7 +221,7 @@ export class LessonSession {
         if (this.microphoneSpeaking || this.provisionalActivity) return;
         this.provisionalActivity = true;
         this.activityTranscriptRevision = this.transcriptRevision;
-        clearTimeout(this.noTranscriptTimer);
+        this.cancelNoTranscriptRecovery();
         this.log("answer.activity_started", {
           transcript_revision: this.transcriptRevision,
           pending_evaluation: Boolean(this.settleTimer),
@@ -248,7 +248,7 @@ export class LessonSession {
         this.microphoneSpeechStartedAt = Date.now();
         this.speechEpoch++;
         if (heardDuringActivity) this.transcriptEpoch = this.speechEpoch;
-        clearTimeout(this.noTranscriptTimer);
+        this.cancelNoTranscriptRecovery();
         this.vadDetectionMs = undefined;
         this.log("answer.speech_started", {
           epoch: this.speechEpoch,
@@ -341,7 +341,7 @@ export class LessonSession {
           previous_version: `${previous?.startMs}:${previous?.text.trim()}`,
           revised_utterance: utterance.text,
         });
-      clearTimeout(this.noTranscriptTimer);
+      this.cancelNoTranscriptRecovery();
       this.evaluation?.abort();
       this.cancelDeferredAdvance();
       this.cancelDeferredStay();
@@ -490,16 +490,36 @@ export class LessonSession {
   }
 
   private scheduleNoTranscriptRecovery(epoch: number) {
-    clearTimeout(this.noTranscriptTimer);
+    this.cancelNoTranscriptRecovery();
+    const transcriptRevision = this.transcriptRevision;
+    const sceneIndex = this.snapshot.sceneIndex;
+    this.log("answer.no_transcript_scheduled", {
+      epoch,
+      transcript_revision: transcriptRevision,
+      scene_index: sceneIndex,
+    });
     this.noTranscriptTimer = setTimeout(() => {
-      if (this.speechEpoch !== epoch || this.transcriptEpoch === epoch || !this.evaluable) return;
+      this.noTranscriptTimer = undefined;
+      if (
+        this.speechEpoch !== epoch ||
+        this.transcriptRevision !== transcriptRevision ||
+        this.snapshot.sceneIndex !== sceneIndex ||
+        this.transcriptEpoch === epoch ||
+        !this.evaluable
+      )
+        return;
       if (this.evaluation || this.deferredAdvance || this.deferredStay) return;
-      this.log("answer.no_transcript", { epoch });
+      this.log("answer.no_transcript", { epoch, transcript_revision: transcriptRevision, scene_index: sceneIndex });
       this.append(
         "session.instructions.append",
         "I could not hear the child's latest answer clearly. Gently ask them to say it again without judging the earlier count or changing the scene.",
       );
     }, TRANSCRIPT_FALLBACK_MS);
+  }
+
+  private cancelNoTranscriptRecovery() {
+    clearTimeout(this.noTranscriptTimer);
+    this.noTranscriptTimer = undefined;
   }
 
   private decide(
@@ -705,6 +725,7 @@ export class LessonSession {
     });
     if (deferred.vadGraceUntil !== undefined)
       this.log("answer.vad_grace_expired", { decision: "STAY", answer_version: deferred.answerVersion });
+    this.cancelNoTranscriptRecovery();
     this.append("session.instructions.append", deferred.content);
   }
 
@@ -761,6 +782,7 @@ export class LessonSession {
     });
     const sceneIndex = this.snapshot.sceneIndex + 1;
     this.pending = { kind: "advance", sceneIndex, answerVersion, turnEndAt: this.turnEndAt };
+    this.cancelNoTranscriptRecovery();
     this.latest = null;
     this.childSpeech = new TranscriptWindow();
     this.update({ sceneIndex });
@@ -808,6 +830,7 @@ export class LessonSession {
 
   private wrap() {
     if (this.snapshot.status !== "active") return;
+    this.cancelNoTranscriptRecovery();
     this.cancelDeferredAdvance();
     this.cancelDeferredStay();
     this.update({ status: "wrapping" });
@@ -820,6 +843,7 @@ export class LessonSession {
 
   private goodbye() {
     if (this.snapshot.status === "ended") return;
+    this.cancelNoTranscriptRecovery();
     this.cancelDeferredAdvance();
     this.cancelDeferredStay();
     this.update({ status: "goodbye" });
@@ -840,7 +864,7 @@ export class LessonSession {
     if (remaining <= 0) reason = "time_limit";
     clearTimeout(this.startupTimer);
     clearTimeout(this.settleTimer);
-    clearTimeout(this.noTranscriptTimer);
+    this.cancelNoTranscriptRecovery();
     this.provisionalActivity = false;
     this.cancelDeferredAdvance();
     this.cancelDeferredStay();
