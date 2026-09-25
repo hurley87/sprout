@@ -18,14 +18,9 @@ export type JevOutcome =
 export { answerState } from "./answer";
 
 function readNoul(body: unknown): number | null {
-  if (typeof body !== "object" || body === null) return null;
-  const answers = (body as { answers?: unknown }).answers;
-  if (typeof answers !== "object" || answers === null) return null;
-  const answer = (answers as Record<string, unknown>)[ANSWER_QUESTION_ID];
-  if (typeof answer !== "object" || answer === null) return null;
-  const noul = (answer as { noul?: unknown }).noul;
-  if (typeof noul !== "number" || !Number.isFinite(noul) || noul < 0 || noul > 1) return null;
-  return noul;
+  const response = body as { answers?: Record<string, { noul?: unknown }> } | null;
+  const noul = response?.answers?.[ANSWER_QUESTION_ID]?.noul;
+  return typeof noul === "number" && Number.isFinite(noul) && noul >= 0 && noul <= 1 ? noul : null;
 }
 
 export async function evaluateCount(scene: Scene, utterance: string, signal: AbortSignal): Promise<JevOutcome> {
