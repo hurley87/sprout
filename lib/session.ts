@@ -81,6 +81,12 @@ type DeferredStay = {
   content: string;
   vadGraceUntil?: number;
 };
+type AnswerResponseGate = {
+  sceneIndex: number;
+  transcriptRevision: number;
+  answerVersion: string;
+  startedAt: number;
+};
 
 export class LessonSession {
   snapshot: Snapshot = { status: "starting", sceneIndex: 0 };
@@ -120,6 +126,9 @@ export class LessonSession {
   // What Sprout has said since the child last spoke, to tell a held turn from
   // one it has already taken.
   private sproutReply = "";
+  // Application state is authoritative; provider transcript events continue
+  // while playback is muted and do not imply the child heard Sprout.
+  private answerResponseGate: AnswerResponseGate | null = null;
   private commands = 0;
   private closed = false;
   private ready = false;
@@ -326,7 +335,8 @@ export class LessonSession {
     });
     const speech = fromChild ? this.childSpeech : this.sproutSpeech;
     const utterance = speech.append(event.delta, event.startMs, event.endMs);
-    this.sproutReply = fromChild ? "" : this.sproutReply + event.delta;
+    if (fromChild) this.sproutReply = "";
+    else if (!this.answerResponseGate) this.sproutReply += event.delta;
     if (fromChild) {
       // A transcript can arrive before local VAD notices renewed speech.
       const previous = this.latest;
@@ -355,8 +365,15 @@ export class LessonSession {
         sceneIndex: this.snapshot.sceneIndex,
         utterance: utterance.text,
       });
-      if (requestsStop(utterance.text)) this.end("child_stop");
+      if (requestsStop(utterance.text)) {
+        this.cancelAnswerResponseGate("child_stop");
+        this.end("child_stop");
+      }
       else {
+        const answerBearing = mentionsNumber(utterance.text);
+        if (answerBearing && this.canGateAnswerResponse) this.updateAnswerResponseGate(utterance);
+        else if (answerBearing) this.cancelAnswerResponseGate("answer_not_evaluable");
+        else this.cancelAnswerResponseGate("non_answer_revision");
         // Transcript revisions are learner evidence and always get a bounded
         // evaluation attempt. A clean stop in this speech epoch lets us use
         // the short tail; otherwise keep the fallback even while VAD is active.
@@ -371,6 +388,51 @@ export class LessonSession {
     } else if (this.deferredAdvance) {
       this.scheduleDeferredRelease(true);
     }
+  }
+
+  private updateAnswerResponseGate(utterance: Utterance) {
+    const answerVersion = `${utterance.startMs}:${utterance.text.trim()}`;
+    const current = this.answerResponseGate;
+    if (!current) {
+      this.answerResponseGate = {
+        sceneIndex: this.snapshot.sceneIndex,
+        transcriptRevision: this.transcriptRevision,
+        answerVersion,
+        startedAt: Date.now(),
+      };
+      this.transport.setOutputBlocked(true);
+      this.log("answer.response_gate_started", {
+        scene_index: this.snapshot.sceneIndex,
+        transcript_revision: this.transcriptRevision,
+        answer_version: answerVersion,
+      });
+      return;
+    }
+    this.answerResponseGate = {
+      ...current,
+      sceneIndex: this.snapshot.sceneIndex,
+      transcriptRevision: this.transcriptRevision,
+      answerVersion,
+    };
+    this.log("answer.response_gate_updated", {
+      scene_index: this.snapshot.sceneIndex,
+      transcript_revision: this.transcriptRevision,
+      answer_version: answerVersion,
+    });
+  }
+
+  private cancelAnswerResponseGate(reason: string) {
+    const gate = this.answerResponseGate;
+    if (!gate) return;
+    this.answerResponseGate = null;
+    this.transport.setOutputBlocked(false);
+    this.log("answer.response_gate_cancelled", {
+      scene_index: gate.sceneIndex,
+      transcript_revision: gate.transcriptRevision,
+      answer_version: gate.answerVersion,
+      reason,
+      wait_ms: Date.now() - gate.startedAt,
+    });
   }
 
   private scheduleEvaluation(
@@ -436,6 +498,11 @@ export class LessonSession {
       }
       this.evaluate(utterance);
     }, delay);
+  }
+
+  /** Whether the app owns answer checking in the current lesson phase. */
+  private get canGateAnswerResponse() {
+    return this.snapshot.status === "active" && this.snapshot.sceneIndex < LAST_SCENE;
   }
 
   /** True while the app could act on an answer about the displayed scene. */
@@ -832,6 +899,7 @@ export class LessonSession {
 
   private wrap() {
     if (this.snapshot.status !== "active") return;
+    this.cancelAnswerResponseGate("wrap_up");
     this.cancelNoTranscriptRecovery();
     this.cancelDeferredAdvance();
     this.cancelDeferredStay();
@@ -845,6 +913,7 @@ export class LessonSession {
 
   private goodbye() {
     if (this.snapshot.status === "ended") return;
+    this.cancelAnswerResponseGate("goodbye");
     this.cancelNoTranscriptRecovery();
     this.cancelDeferredAdvance();
     this.cancelDeferredStay();
@@ -864,6 +933,7 @@ export class LessonSession {
     if (this.snapshot.status === "ended") return;
     const remaining = this.startedAt === undefined ? TIMING.hard : TIMING.hard - (Date.now() - this.startedAt);
     if (remaining <= 0) reason = "time_limit";
+    this.cancelAnswerResponseGate(reason);
     clearTimeout(this.startupTimer);
     clearTimeout(this.settleTimer);
     this.cancelNoTranscriptRecovery();
