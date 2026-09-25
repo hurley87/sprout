@@ -55,6 +55,8 @@ export type Diagnostic = { at: number; type: string; detail?: unknown };
 export interface Transport {
   start(onEvent: (event: ProviderEvent) => void, onFailure: (message: string) => void): Promise<void>;
   send(command: ClientCommand): void;
+  /** Silence provider audio without stopping playback or provider events. */
+  setOutputBlocked(blocked: boolean): void;
   stopMedia(): void;
   close(): void;
 }

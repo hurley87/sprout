@@ -46,7 +46,13 @@ const CONFIDENT = ADVANCE_THRESHOLD;
 const UNSURE = ADVANCE_THRESHOLD - 0.01;
 
 function setup(active = true, evaluateAnswer: EvaluateAnswer = answering(UNSURE)) {
-  const transport: Transport = { start: vi.fn(async () => {}), send: vi.fn(), stopMedia: vi.fn(), close: vi.fn() };
+  const transport: Transport = {
+    start: vi.fn(async () => {}),
+    send: vi.fn(),
+    setOutputBlocked: vi.fn(),
+    stopMedia: vi.fn(),
+    close: vi.fn(),
+  };
   const session = new LessonSession(transport, evaluateAnswer, vi.fn());
   void session.start();
   if (active) {

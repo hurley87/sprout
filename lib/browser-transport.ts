@@ -137,8 +137,13 @@ export class BrowserTransport implements Transport {
     this.channel.send(JSON.stringify(command));
   }
 
+  setOutputBlocked(blocked: boolean) {
+    if (!this.cancelled) this.audio.muted = blocked;
+  }
+
   stopMedia() {
     this.abort.abort();
+    this.audio.muted = false;
     this.turnDetector?.close();
     this.mic?.getTracks().forEach(track => track.stop());
     this.remote?.getTracks().forEach(track => track.stop());
