@@ -723,7 +723,17 @@ export class LessonSession {
       ? Math.max(advance.correctionReadyAt, advance.outputQuietAt)
       : stay!.correctionReadyAt;
     if (speechStartedAt >= normalReleaseAt) return;
-    const graceUntil = Math.max(normalReleaseAt, speechStartedAt + TRANSCRIPT_FALLBACK_MS);
+    const graceUntil = speechStartedAt + TRANSCRIPT_FALLBACK_MS;
+    if (graceUntil <= normalReleaseAt) {
+      this.log("answer.vad_grace_ignored", {
+        decision,
+        answer_version: answerVersion,
+        reason: "too_early",
+        candidate_release_at_ms: graceUntil - this.createdAt,
+        normal_release_at_ms: normalReleaseAt - this.createdAt,
+      });
+      return;
+    }
     if (advance) advance.vadGraceUntil = graceUntil;
     else stay!.vadGraceUntil = graceUntil;
     this.log("answer.vad_grace_started", {

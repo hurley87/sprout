@@ -826,6 +826,40 @@ describe("answer-check turn synchronization", () => {
     expect(transport.send).not.toHaveBeenCalled();
   });
 
+  it("does not let early no-op VAD consume grace needed by a later correction", async () => {
+    const { session, transport, evaluateAnswer } = setup(true, answering(CONFIDENT));
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("One"));
+    await settle();
+
+    mic(session, "microphone.speech_started");
+    mic(session, "microphone.speech_stopped");
+    expect(session.events.filter(event => event.type === "answer.vad_grace_started")).toHaveLength(0);
+    expect(session.events.findLast(event => event.type === "answer.vad_grace_ignored")?.detail).toMatchObject({
+      reason: "too_early",
+    });
+
+    const earlyIgnore = session.events.findLast(event => event.type === "answer.vad_grace_ignored");
+    const normalReleaseAt =
+      session.createdAt + (earlyIgnore?.detail as { normal_release_at_ms: number }).normal_release_at_ms;
+    await vi.advanceTimersByTimeAsync(normalReleaseAt - Date.now() - 100);
+    mic(session, "microphone.speech_started");
+    expect(session.events.filter(event => event.type === "answer.vad_grace_started")).toHaveLength(1);
+    expect(session.events.findLast(event => event.type === "answer.vad_grace_started")?.detail).toMatchObject({
+      decision: "ADVANCE",
+    });
+
+    await vi.advanceTimersByTimeAsync(500);
+    deliver(session, speech("... no, two", 600));
+    expect(session.events.filter(event => event.type === "advance.cancelled")).toHaveLength(1);
+    await settle();
+    expect(evaluateAnswer).toHaveBeenCalledTimes(2);
+    expect(evaluateAnswer).toHaveBeenLastCalledWith({ sceneIndex: 0, utterance: "One... no, two" }, expect.anything());
+    expect(session.snapshot.sceneIndex).toBe(0);
+    expect(session.events.filter(event => event.type === "advance.committed")).toHaveLength(0);
+    expect(transport.send).not.toHaveBeenCalled();
+  });
+
   it("bounds ADVANCE grace at the first confirmed speech event despite repeated VAD bursts", async () => {
     const { session } = setup(true, answering(CONFIDENT));
     deliver(session, speech("One"));
