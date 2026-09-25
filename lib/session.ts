@@ -405,8 +405,7 @@ export class LessonSession {
       if (requestsStop(utterance.text)) {
         this.cancelAnswerResponseGate("child_stop");
         this.end("child_stop");
-      }
-      else {
+      } else {
         const answerBearing = mentionsNumber(utterance.text);
         if (answerBearing && this.canGateAnswerResponse) this.updateAnswerResponseGate(utterance);
         else if (answerBearing) this.cancelAnswerResponseGate("answer_not_evaluable");
@@ -481,9 +480,9 @@ export class LessonSession {
     const gate = this.answerResponseGate;
     return Boolean(
       gate &&
-        gate.sceneIndex === identity.sceneIndex &&
-        gate.transcriptRevision === identity.transcriptRevision &&
-        gate.answerVersion === identity.answerVersion,
+      gate.sceneIndex === identity.sceneIndex &&
+      gate.transcriptRevision === identity.transcriptRevision &&
+      gate.answerVersion === identity.answerVersion,
     );
   }
 
@@ -784,6 +783,8 @@ export class LessonSession {
       })
     )
       return;
+    // This is the correction-protected application ADVANCE decision. Audible
+    // playback remains gated until the committed scene has been displayed.
     this.log("advance.released", {
       scene: sceneAt(deferred.sceneIndex).id,
       answer_version: deferred.answerVersion,
@@ -868,11 +869,12 @@ export class LessonSession {
     };
     const gate = this.answerResponseGate;
     const releaseAt = Math.max(deferred.correctionReadyAt, gate.outputQuietAt, deferred.vadGraceUntil ?? 0);
-    const reason = deferred.vadGraceUntil !== undefined && deferred.vadGraceUntil >= releaseAt
-      ? "vad_grace"
-      : gate.outputQuietAt >= deferred.correctionReadyAt && gate.outputQuietAt > 0
-        ? "output_transcript_quiet"
-        : "correction_window";
+    const reason =
+      deferred.vadGraceUntil !== undefined && deferred.vadGraceUntil >= releaseAt
+        ? "vad_grace"
+        : gate.outputQuietAt >= deferred.correctionReadyAt && gate.outputQuietAt > 0
+          ? "output_transcript_quiet"
+          : "correction_window";
     this.log("answer.release_sent", {
       answer_version: deferred.answerVersion,
       scene: sceneAt(deferred.sceneIndex).id,
@@ -945,7 +947,11 @@ export class LessonSession {
       answerVersion,
       turnEndAt: this.turnEndAt,
       gateIdentity: gate
-        ? { sceneIndex: gate.sceneIndex, transcriptRevision: gate.transcriptRevision, answerVersion: gate.answerVersion }
+        ? {
+            sceneIndex: gate.sceneIndex,
+            transcriptRevision: gate.transcriptRevision,
+            answerVersion: gate.answerVersion,
+          }
         : undefined,
     };
     this.cancelNoTranscriptRecovery();

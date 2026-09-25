@@ -251,11 +251,49 @@ describe("answer response gate", () => {
     expect(transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
   });
 
+  it("keeps playback blocked beyond the correction window while Jev is slow", async () => {
+    let complete!: (result: AnswerResult) => void;
+    const pending: EvaluateAnswer = vi.fn(() => new Promise<AnswerResult>(resolve => (complete = resolve)));
+    const { session, transport, evaluateAnswer } = setup(true, pending);
+    vi.mocked(transport.send).mockClear();
+
+    deliver(session, speech("One"));
+    await settle();
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS * 3);
+
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+    expect(session.snapshot.sceneIndex).toBe(0);
+    expect(transport.setOutputBlocked).toHaveBeenCalledExactlyOnceWith(true);
+    expect(transport.send).not.toHaveBeenCalled();
+
+    complete(evaluated(CONFIDENT));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.snapshot.sceneIndex).toBe(1);
+    expect(transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
+    session.displayed(1);
+    expect(vi.mocked(transport.send).mock.calls.map(([command]) => command)).toEqual([
+      expect.objectContaining({ content: advanceContext(sceneAt(1)) }),
+    ]);
+    expect(transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
+    expect(session.events.filter(event => event.type === "answer.response_gate_started")).toHaveLength(1);
+    expect(session.events.filter(event => event.type === "answer.response_gate_released")).toHaveLength(1);
+    expect(session.events.filter(event => event.type === "answer.response_gate_cancelled")).toHaveLength(0);
+    expect(session.events.findLast(event => event.type === "answer.response_gate_released")?.detail).toMatchObject({
+      scene_index: 0,
+      transcript_revision: 1,
+      answer_version: "0:One",
+      decision: "ADVANCE",
+      reason: "scene_displayed",
+      wait_ms: expect.any(Number),
+    });
+    expect(vi.mocked(transport.send).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(transport.setOutputBlocked).mock.invocationCallOrder[1],
+    );
+  });
+
   it("stays continuously blocked and tracks the latest self-correction revision", async () => {
     const completions: ((result: AnswerResult) => void)[] = [];
-    const pending: EvaluateAnswer = vi.fn(
-      () => new Promise<AnswerResult>(resolve => completions.push(resolve)),
-    );
+    const pending: EvaluateAnswer = vi.fn(() => new Promise<AnswerResult>(resolve => completions.push(resolve)));
     const { session, transport } = setup(true, pending);
 
     deliver(session, speech("three..."));
@@ -302,9 +340,10 @@ describe("answer response gate", () => {
   it("cancels on child stop and ignores later completion of the aborted Jev request", async () => {
     let complete: ((result: AnswerResult) => void) | undefined;
     const pending: EvaluateAnswer = vi.fn(
-      () => new Promise<AnswerResult>(resolve => {
-        complete = resolve;
-      }),
+      () =>
+        new Promise<AnswerResult>(resolve => {
+          complete = resolve;
+        }),
     );
     const { session, transport } = setup(true, pending);
     deliver(session, speech("Four"));
@@ -986,7 +1025,7 @@ describe("answer-check turn synchronization", () => {
     expect(session.events.filter(event => event.type === "answer.release_cancelled")).toHaveLength(1);
   });
 
-  it.each(["Ooh!", "Okay!"])("releases a delayed STAY after neutral acknowledgment %s", async reply => {
+  it.each(["Ooh!", "Okay!"])("uses hidden output timing for a delayed STAY after %s", async reply => {
     const { session, transport } = setup(true, answering(UNSURE));
     vi.mocked(transport.send).mockClear();
     deliver(session, speech("Five"));
@@ -1166,7 +1205,7 @@ describe("answer-check turn synchronization", () => {
   });
 
   it.each(["", "Oh!", "Ooh!", "Okay!"])(
-    "advances after the correction window with silence or neutral acknowledgment %s",
+    "advances after the correction window despite hidden output %s",
     async reply => {
       const { session, transport } = setup(true, answering(CONFIDENT));
       vi.mocked(transport.send).mockClear();
@@ -1258,13 +1297,14 @@ describe("answer-check turn synchronization", () => {
   it("asks GPT-Live to pause after a count until the app reports the scene decision", () => {
     expect(INSTRUCTIONS).toContain("when the child says a number or counts aloud, the app checks the count");
     expect(INSTRUCTIONS).toContain(
-      "Do not praise, correct, recount, count together, offer help, or ask another question until the app tells you either that the screen changed or that it has not changed.",
+      "Please stay quiet until the app tells you either that the screen changed or that it has not changed.",
     );
+    expect(INSTRUCTIONS).not.toContain("at most one or two neutral words");
     // Only counts pause; everything else is answered straight away.
     expect(INSTRUCTIONS).toContain("The pause is only for counts: reply straight away to everything else");
     // The old contract made GPT-Live reply to every answer at once.
     expect(INSTRUCTIONS).not.toContain("after the child answers, always reply");
-    expect(PROMPT_VERSION).toBe("counting-jev-3");
+    expect(PROMPT_VERSION).toBe("counting-jev-4");
   });
   it("sends nothing while the utterance settles or Jev is deciding", async () => {
     let answer!: (result: AnswerResult) => void;
@@ -1304,7 +1344,9 @@ describe("answer-check turn synchronization", () => {
     expect(evaluateAnswer).toHaveBeenCalledOnce();
     expect(session.events.filter(event => event.type === "answer.response_gate_started")).toHaveLength(1);
     expect(session.events.filter(event => event.type === "answer.response_gate_updated")).toHaveLength(0);
-    expect(session.events.findLast(event => event.type === "answer.advance_transition_transcript_ignored")?.detail).toMatchObject({
+    expect(
+      session.events.findLast(event => event.type === "answer.advance_transition_transcript_ignored")?.detail,
+    ).toMatchObject({
       scene_index: 1,
       gate_scene_index: 0,
       answer_bearing: true,
@@ -1312,9 +1354,7 @@ describe("answer-check turn synchronization", () => {
     expect(transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
 
     session.displayed(1);
-    expect(sent(transport)).toEqual([
-      expect.objectContaining({ content: advanceContext(sceneAt(1)) }),
-    ]);
+    expect(sent(transport)).toEqual([expect.objectContaining({ content: advanceContext(sceneAt(1)) })]);
     expect(transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
 
     deliver(session, speech("Three", 6000));
@@ -1345,9 +1385,7 @@ describe("answer-check turn synchronization", () => {
     expect(sent(transport)).toHaveLength(0);
 
     await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS);
-    expect(sent(transport)).toEqual([
-      expect.objectContaining({ content: advanceContext(sceneAt(1)) }),
-    ]);
+    expect(sent(transport)).toEqual([expect.objectContaining({ content: advanceContext(sceneAt(1)) })]);
     expect(transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
     expect(session.events.filter(event => event.type === "answer.response_gate_released")).toHaveLength(1);
   });

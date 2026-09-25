@@ -31,8 +31,8 @@ sequenceDiagram
     participant GPT as GPTLive
     Child->>App: transcript deltas
     Child->>GPT: number or count aloud
-    GPT-->>Child: stay silent or tiny neutral acknowledgment
-    Note over GPT,App: GPT waits for an explicit outcome before judging or scaffolding
+    GPT-->>Child: wait for the application's current answer decision
+    Note over GPT,App: transport gate enforces the wait; prompt is defense in depth
     App->>App: utterance settles (1.5 s of no new delta)
     App->>Jev: displayed scene + utterance, one Noul question
     Jev-->>App: probability
@@ -43,13 +43,9 @@ sequenceDiagram
         App->>GPT: neutral recovery; no correctness claim
         GPT-->>Child: invite a neutral retry on current scene
     else current probability >= 0.90
-        alt Sprout quiet or only neutral acknowledgment
-            App->>Screen: commit next scene
-        else Sprout substantively speaking
-            App->>App: defer approved advance
-            GPT-->>App: output transcript becomes quiet at safe boundary
-            App->>Screen: commit next scene exactly once
-        end
+        App->>App: defer approved advance through correction window
+        App->>App: wait for safe output boundary
+        App->>Screen: commit next scene exactly once
         Screen-->>App: displayed, after paint
         App->>GPT: advanceContext(new scene)
         GPT-->>Child: celebrate briefly, invite count on new scene
@@ -58,9 +54,9 @@ sequenceDiagram
     end
 ```
 
-GPT-Live no longer has a scene capability. Its `counting-jev-2` prompt says the app owns the screen and will tell it after a change. It asks Sprout to pause after a number or count until the app reports the outcome. `stayContext(...)` releases that pause after a negative result when Sprout is still holding. An unavailable result uses separate neutral-recovery wording and never implies the count was wrong or right. If Sprout has already continued, the app avoids adding a redundant non-advance instruction.
+GPT-Live no longer has a scene capability. The prompt asks Sprout to wait after a number or count until the app reports its decision, as defense in depth. The application gate enforces this independently of model cooperation. The current application decision controls semantic authority; hidden provider output is used only to find a safe audio boundary. `stayContext(...)` and unavailable recovery release the gate with current-scene context; unavailable wording never implies the count was wrong or right.
 
-For a current approved answer, the app advances immediately only when Sprout is quiet or has given a tiny neutral acknowledgment. If Sprout is substantively speaking, the app records and defers the approval until output transcript deltas have been quiet for one utterance gap, then advances once. In either case, `advanceContext(...)` follows the new scene's display. The diagnostics below include one manual observation of this deferred path.
+For a current approved answer, the app defers scene commit through the correction window, then waits for any hidden output to become quiet before commit. The new scene is displayed before `advanceContext(...)` is appended and playback is unblocked. Output transcript length never determines whether the application decision is authoritative.
 
 ### The question
 
@@ -195,7 +191,7 @@ For those 15 advances, the median time from the last learner transcript delta to
 
 This follow-up does not independently establish the original >=90% advancement or <=~2.5 s latency gates. Three of the nine `correct_once` attempts did not advance: two heard the answer but logged no completed `/api/evaluate` response, and one had no provider transcript at all. The two with speech remained on the original scene and sent `stayContext(...)`; one also attempted an unsolicited delegation, which the app refused. These attempts are excluded from the 15-advance speech classification, but remain failures of end-to-end advancement in this sample. The live-matrix cannot distinguish a timed-out/aborted request from another fetch rejection when no response is logged. They are not evidence of a mid-sentence advance.
 
-On non-advances in this historical synthetic batch, the wrong-answer run scored 0.02 and stayed on the first scene: Sprout said "Ooh!" (1 word) before `stayContext(...)`, then offered to count together. `self_corrected_to_wrong` scored 0.04 and also stayed after a one-word acknowledgment. In two `dont_know` runs, GPT-Live responded directly to "I don't know" with reassurance and counting help, and the scene stayed put; neither run logged a completed Jev response. In the progression runs, Sprout sometimes began responding to a non-count or wrong-object answer before the Jev result; `holding()` skipped release once speech exceeded its brief-word limit. One non-advance release arrived after "Ooh! Let's" (2 words), and another after "Ooh! Let's look again." (4 words); the recorded continuations were coherent. This historical sample gives no concrete reason to retune `BRIEF_ACK_WORDS`.
+The historical non-advance runs below used the superseded `counting-jev-2` brief-acknowledgment heuristic. They are retained as experiment records; their `holding()` and `BRIEF_ACK_WORDS` behavior is not part of the current implementation or its correctness contract.
 
 ## Final interactive run
 
