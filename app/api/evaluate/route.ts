@@ -13,18 +13,16 @@ type AnswerRequest = { sceneIndex: number; utterance: string };
 function parseRequest(body: unknown): AnswerRequest | null {
   if (typeof body !== "object" || body === null) return null;
   const { sceneIndex, utterance } = body as { sceneIndex?: unknown; utterance?: unknown };
-  if (!Number.isInteger(sceneIndex) || (sceneIndex as number) < 0 || (sceneIndex as number) >= SCENES.length)
+  if (typeof sceneIndex !== "number" || !Number.isInteger(sceneIndex) || sceneIndex < 0 || sceneIndex >= SCENES.length)
     return null;
   if (typeof utterance !== "string") return null;
   const trimmed = utterance.trim();
   if (!trimmed || trimmed.length > MAX_UTTERANCE_CHARS) return null;
-  return { sceneIndex: sceneIndex as number, utterance: trimmed };
+  return { sceneIndex, utterance: trimmed };
 }
 
 export async function POST(request: Request) {
   if (!isLocalRequest(request)) return json({ error: "Start Sprout from its local browser window." }, 403);
-  if (!request.headers.get("content-type")?.startsWith("application/json"))
-    return json({ error: "Invalid evaluation request." }, 415);
   const body = await readJsonBody(request, LIMIT);
   if (!body.ok) return json({ error: "Invalid evaluation request." }, body.tooLarge ? 413 : 400);
   const parsed = parseRequest(body.value);

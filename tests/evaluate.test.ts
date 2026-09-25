@@ -33,12 +33,12 @@ describe("local answer evaluation endpoint", () => {
     vi.stubGlobal("fetch", fetch);
     expect((await POST(request(ask, "https://other.test"))).status).toBe(403);
     expect((await POST(request(ask, "http://127.0.0.1:3000"))).status).toBe(403);
-    const wrongType = new Request("http://localhost:3000/api/evaluate", {
+    const malformed = new Request("http://localhost:3000/api/evaluate", {
       method: "POST",
       headers: { "Content-Type": "text/plain", origin: "http://localhost:3000", host: "localhost:3000" },
       body: "{}",
     });
-    expect((await POST(wrongType)).status).toBe(415);
+    expect((await POST(malformed)).status).toBe(400);
     expect(fetch).not.toHaveBeenCalled();
   });
   it.each([
