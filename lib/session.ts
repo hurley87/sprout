@@ -9,7 +9,6 @@ import {
 } from "./answer";
 import type { ClientCommand, ProviderEvent, TranscriptEvent } from "./events";
 import {
-  BRIEF_ACK_WORDS,
   LAST_SCENE,
   MODEL,
   PROMPT_VERSION,
@@ -62,7 +61,15 @@ export interface Transport {
 }
 
 /** What the app is waiting to see on screen before it speaks about it. */
-type PendingDisplay = { kind: "greeting" | "advance"; sceneIndex: number; answerVersion?: string; turnEndAt?: number };
+type PendingDisplay = {
+  kind: "greeting" | "advance";
+  sceneIndex: number;
+  answerVersion?: string;
+  turnEndAt?: number;
+  gateIdentity?: GateIdentity;
+};
+type GateIdentity = { sceneIndex: number; transcriptRevision: number; answerVersion: string };
+type GateDecision = "ADVANCE" | "STAY" | "UNAVAILABLE";
 type DeferredAdvance = {
   sceneIndex: number;
   answerVersion: string;
@@ -79,6 +86,7 @@ type DeferredStay = {
   transcriptRevision: number;
   correctionReadyAt: number;
   content: string;
+  decision: "STAY" | "UNAVAILABLE";
   vadGraceUntil?: number;
 };
 type AnswerResponseGate = {
@@ -86,6 +94,7 @@ type AnswerResponseGate = {
   transcriptRevision: number;
   answerVersion: string;
   startedAt: number;
+  outputQuietAt: number;
 };
 
 export class LessonSession {
@@ -100,6 +109,8 @@ export class LessonSession {
   private deferredTimer?: ReturnType<typeof setTimeout>;
   private deferredAdvance: DeferredAdvance | null = null;
   private stayTimer?: ReturnType<typeof setTimeout>;
+  private displayedReleaseTimer?: ReturnType<typeof setTimeout>;
+  private displayedRelease: { gateIdentity: GateIdentity; sceneIndex: number; displayedAt: number } | null = null;
   private deferredStay: DeferredStay | null = null;
   private seen = new Set<string>();
   private delegations = new Set<string>();
@@ -123,8 +134,8 @@ export class LessonSession {
   private noTranscriptTimer?: ReturnType<typeof setTimeout>;
   private evaluated = new Set<string>();
   private evaluation?: AbortController;
-  // What Sprout has said since the child last spoke, to tell a held turn from
-  // one it has already taken.
+  // Count provider transcript characters for diagnostics only; this is never
+  // used to decide whether a current answer result may release the gate.
   private sproutReply = "";
   // Application state is authoritative; provider transcript events continue
   // while playback is muted and do not imply the child heard Sprout.
@@ -142,6 +153,11 @@ export class LessonSession {
 
   private get scene() {
     return sceneAt(this.snapshot.sceneIndex);
+  }
+
+  /** An approved ADVANCE still owns the gate until displayed context releases it. */
+  private get advanceResponseTransitionActive() {
+    return this.pending?.kind === "advance" || this.displayedRelease !== null;
   }
 
   log(type: string, detail?: unknown) {
@@ -337,7 +353,28 @@ export class LessonSession {
     const utterance = speech.append(event.delta, event.startMs, event.endMs);
     if (fromChild) this.sproutReply = "";
     else if (!this.answerResponseGate) this.sproutReply += event.delta;
+    else {
+      this.answerResponseGate.outputQuietAt = Date.now() + UTTERANCE_GAP_MS;
+      if (this.deferredAdvance) this.scheduleDeferredRelease();
+      if (this.deferredStay) this.scheduleDeferredStayRelease();
+      if (this.displayedRelease) this.scheduleDisplayedRelease();
+    }
     if (fromChild) {
+      if (this.advanceResponseTransitionActive) {
+        if (requestsStop(utterance.text)) {
+          this.cancelAnswerResponseGate("child_stop");
+          this.end("child_stop");
+          return;
+        }
+        this.log("answer.advance_transition_transcript_ignored", {
+          scene_index: this.snapshot.sceneIndex,
+          gate_scene_index: this.answerResponseGate?.sceneIndex,
+          answer_bearing: mentionsNumber(utterance.text),
+        });
+        // Keep transition-period speech out of the next answer window too.
+        this.childSpeech = new TranscriptWindow();
+        return;
+      }
       // A transcript can arrive before local VAD notices renewed speech.
       const previous = this.latest;
       const invalidatesPendingAnswer = Boolean(
@@ -386,7 +423,7 @@ export class LessonSession {
       // transcript guard could not recognize. Not proof of playback.
       this.end("model_goodbye");
     } else if (this.deferredAdvance) {
-      this.scheduleDeferredRelease(true);
+      this.scheduleDeferredRelease();
     }
   }
 
@@ -399,6 +436,7 @@ export class LessonSession {
         transcriptRevision: this.transcriptRevision,
         answerVersion,
         startedAt: Date.now(),
+        outputQuietAt: 0,
       };
       this.transport.setOutputBlocked(true);
       this.log("answer.response_gate_started", {
@@ -413,6 +451,7 @@ export class LessonSession {
       sceneIndex: this.snapshot.sceneIndex,
       transcriptRevision: this.transcriptRevision,
       answerVersion,
+      outputQuietAt: current.outputQuietAt,
     };
     this.log("answer.response_gate_updated", {
       scene_index: this.snapshot.sceneIndex,
@@ -425,6 +464,9 @@ export class LessonSession {
     const gate = this.answerResponseGate;
     if (!gate) return;
     this.answerResponseGate = null;
+    clearTimeout(this.displayedReleaseTimer);
+    this.displayedReleaseTimer = undefined;
+    this.displayedRelease = null;
     this.transport.setOutputBlocked(false);
     this.log("answer.response_gate_cancelled", {
       scene_index: gate.sceneIndex,
@@ -433,6 +475,39 @@ export class LessonSession {
       reason,
       wait_ms: Date.now() - gate.startedAt,
     });
+  }
+
+  private gateMatches(identity: GateIdentity) {
+    const gate = this.answerResponseGate;
+    return Boolean(
+      gate &&
+        gate.sceneIndex === identity.sceneIndex &&
+        gate.transcriptRevision === identity.transcriptRevision &&
+        gate.answerVersion === identity.answerVersion,
+    );
+  }
+
+  private releaseAnswerResponseGate(
+    identity: GateIdentity,
+    decision: GateDecision,
+    reason: string,
+    sendContext: () => void,
+  ) {
+    if (!this.gateMatches(identity)) return false;
+    const gate = this.answerResponseGate!;
+    sendContext();
+    if (!this.gateMatches(identity)) return false;
+    this.answerResponseGate = null;
+    this.transport.setOutputBlocked(false);
+    this.log("answer.response_gate_released", {
+      scene_index: identity.sceneIndex,
+      transcript_revision: identity.transcriptRevision,
+      answer_version: identity.answerVersion,
+      decision,
+      reason,
+      wait_ms: Date.now() - gate.startedAt,
+    });
+    return true;
   }
 
   private scheduleEvaluation(
@@ -622,7 +697,7 @@ export class LessonSession {
     const advancing = !stale && shouldAdvance(result);
     // Stale results need no release: newer speech gets its own decision, and a
     // scene change or wrap-up tells GPT-Live itself.
-    const releasing = !stale && !advancing && this.holding(utterance);
+    const releasing = !stale && !advancing;
     this.log("answer.evaluated", {
       scene: sceneAt(sceneIndex).id,
       sceneIndex,
@@ -648,23 +723,8 @@ export class LessonSession {
         sceneIndex,
         version,
         result.status === "unavailable" ? evaluationUnavailableContext(this.scene) : stayContext(this.scene),
+        result.status === "unavailable" ? "UNAVAILABLE" : "STAY",
       );
-  }
-
-  /**
-   * Whether GPT-Live is pausing for this decision, as its prompt asks after a
-   * count. If it has already said more than a brief acknowledgment, it took its
-   * turn anyway and an instruction now would talk over it.
-   */
-  private holding(utterance: Utterance) {
-    const said = this.sproutReply.trim();
-    const words = said ? said.split(/\s+/).length : 0;
-    return mentionsNumber(utterance.text) && words <= BRIEF_ACK_WORDS;
-  }
-
-  /** Only silence or an explicitly neutral, tiny acknowledgment is safe for an immediate advance. */
-  private sproutIsHoldingForDecision() {
-    return /^(?:oh|ooh|okay)[.!?]*$/i.test(this.sproutReply.trim()) || !this.sproutReply.trim();
   }
 
   private deferAdvance(sceneIndex: number, answerVersion: string) {
@@ -676,7 +736,7 @@ export class LessonSession {
       spokenChars: this.sproutReply.length,
       transcriptRevision: this.transcriptRevision,
       correctionReadyAt: Math.max(this.turnEndAt, this.lastDeltaAt) + CORRECTION_WINDOW_MS,
-      outputQuietAt: 0,
+      outputQuietAt: this.answerResponseGate?.outputQuietAt ?? 0,
     };
     if (this.microphoneSpeaking && this.microphoneSpeechStartedAt !== undefined)
       this.startDeferredVadGrace(this.microphoneSpeechStartedAt);
@@ -690,14 +750,11 @@ export class LessonSession {
     this.scheduleDeferredRelease();
   }
 
-  private scheduleDeferredRelease(outputDelta = false) {
+  private scheduleDeferredRelease() {
     clearTimeout(this.deferredTimer);
     const deferred = this.deferredAdvance;
     if (!deferred) return;
-    // Output has no completed-turn event. A substantive reply needs one
-    // transcript gap before a scene change; each fragment extends that gap.
-    if (!this.sproutIsHoldingForDecision() && (outputDelta || deferred.outputQuietAt === 0))
-      deferred.outputQuietAt = Date.now() + UTTERANCE_GAP_MS;
+    deferred.outputQuietAt = Math.max(deferred.outputQuietAt, this.answerResponseGate?.outputQuietAt ?? 0);
     const releaseAt = this.deferredAdvanceReleaseAt(deferred);
     this.deferredTimer = setTimeout(() => this.releaseDeferredAdvance(), Math.max(0, releaseAt - Date.now()));
   }
@@ -718,7 +775,13 @@ export class LessonSession {
       this.transcriptRevision !== deferred.transcriptRevision ||
       `${this.latest?.startMs}:${this.latest?.text.trim()}` !== deferred.answerVersion ||
       this.snapshot.sceneIndex !== deferred.sceneIndex ||
-      deferred.sceneIndex >= LAST_SCENE
+      deferred.sceneIndex >= LAST_SCENE ||
+      !this.answerResponseGate ||
+      !this.gateMatches({
+        sceneIndex: deferred.sceneIndex,
+        transcriptRevision: deferred.transcriptRevision,
+        answerVersion: deferred.answerVersion,
+      })
     )
       return;
     this.log("advance.released", {
@@ -749,13 +812,15 @@ export class LessonSession {
     this.deferredAdvance = null;
   }
 
-  private deferStay(sceneIndex: number, answerVersion: string, content: string) {
+  private deferStay(sceneIndex: number, answerVersion: string, content: string, decision: "STAY" | "UNAVAILABLE") {
+    if (!this.answerResponseGate) return;
     this.deferredStay = {
       sceneIndex,
       answerVersion,
       transcriptRevision: this.transcriptRevision,
       correctionReadyAt: Math.max(this.turnEndAt, this.lastDeltaAt) + CORRECTION_WINDOW_MS,
       content,
+      decision,
     };
     if (this.microphoneSpeaking && this.microphoneSpeechStartedAt !== undefined)
       this.startDeferredVadGrace(this.microphoneSpeechStartedAt);
@@ -767,7 +832,11 @@ export class LessonSession {
     clearTimeout(this.stayTimer);
     const deferred = this.deferredStay;
     if (!deferred) return;
-    const releaseAt = Math.max(deferred.correctionReadyAt, deferred.vadGraceUntil ?? 0);
+    const releaseAt = Math.max(
+      deferred.correctionReadyAt,
+      this.answerResponseGate?.outputQuietAt ?? 0,
+      deferred.vadGraceUntil ?? 0,
+    );
     this.stayTimer = setTimeout(() => this.releaseDeferredStay(), Math.max(0, releaseAt - Date.now()));
   }
 
@@ -784,18 +853,37 @@ export class LessonSession {
       `${this.latest?.startMs}:${this.latest?.text.trim()}` !== deferred.answerVersion ||
       this.snapshot.sceneIndex !== deferred.sceneIndex ||
       !this.latest ||
-      !this.sproutIsHoldingForDecision()
+      !this.answerResponseGate ||
+      !this.gateMatches({
+        sceneIndex: deferred.sceneIndex,
+        transcriptRevision: deferred.transcriptRevision,
+        answerVersion: deferred.answerVersion,
+      })
     )
       return;
+    const identity = {
+      sceneIndex: deferred.sceneIndex,
+      transcriptRevision: deferred.transcriptRevision,
+      answerVersion: deferred.answerVersion,
+    };
+    const gate = this.answerResponseGate;
+    const releaseAt = Math.max(deferred.correctionReadyAt, gate.outputQuietAt, deferred.vadGraceUntil ?? 0);
+    const reason = deferred.vadGraceUntil !== undefined && deferred.vadGraceUntil >= releaseAt
+      ? "vad_grace"
+      : gate.outputQuietAt >= deferred.correctionReadyAt && gate.outputQuietAt > 0
+        ? "output_transcript_quiet"
+        : "correction_window";
     this.log("answer.release_sent", {
       answer_version: deferred.answerVersion,
       scene: sceneAt(deferred.sceneIndex).id,
-      reason: deferred.vadGraceUntil !== undefined ? "vad_grace" : "correction_window",
+      reason,
     });
     if (deferred.vadGraceUntil !== undefined)
-      this.log("answer.vad_grace_expired", { decision: "STAY", answer_version: deferred.answerVersion });
+      this.log("answer.vad_grace_expired", { decision: deferred.decision, answer_version: deferred.answerVersion });
     this.cancelNoTranscriptRecovery();
-    this.append("session.instructions.append", deferred.content);
+    this.releaseAnswerResponseGate(identity, deferred.decision, reason, () =>
+      this.append("session.instructions.append", deferred.content),
+    );
   }
 
   /** Confirmed renewed speech buys one fallback interval for a late transcript. */
@@ -803,7 +891,7 @@ export class LessonSession {
     const advance = this.deferredAdvance;
     const stay = this.deferredStay;
     if (!advance && !stay) return;
-    const decision = advance ? "ADVANCE" : "STAY";
+    const decision = advance ? "ADVANCE" : stay!.decision;
     const answerVersion = advance?.answerVersion ?? stay?.answerVersion;
     if (advance?.vadGraceUntil !== undefined || stay?.vadGraceUntil !== undefined) {
       this.log("answer.vad_grace_ignored", { decision, answer_version: answerVersion, reason: "already_active" });
@@ -811,7 +899,7 @@ export class LessonSession {
     }
     const normalReleaseAt = advance
       ? Math.max(advance.correctionReadyAt, advance.outputQuietAt)
-      : stay!.correctionReadyAt;
+      : Math.max(stay!.correctionReadyAt, this.answerResponseGate?.outputQuietAt ?? 0);
     if (speechStartedAt >= normalReleaseAt) return;
     const graceUntil = speechStartedAt + TRANSCRIPT_FALLBACK_MS;
     if (graceUntil <= normalReleaseAt) {
@@ -850,7 +938,16 @@ export class LessonSession {
       turn_end_to_commit_ms: Date.now() - this.turnEndAt,
     });
     const sceneIndex = this.snapshot.sceneIndex + 1;
-    this.pending = { kind: "advance", sceneIndex, answerVersion, turnEndAt: this.turnEndAt };
+    const gate = this.answerResponseGate;
+    this.pending = {
+      kind: "advance",
+      sceneIndex,
+      answerVersion,
+      turnEndAt: this.turnEndAt,
+      gateIdentity: gate
+        ? { sceneIndex: gate.sceneIndex, transcriptRevision: gate.transcriptRevision, answerVersion: gate.answerVersion }
+        : undefined,
+    };
     this.cancelNoTranscriptRecovery();
     this.latest = null;
     this.childSpeech = new TranscriptWindow();
@@ -888,13 +985,47 @@ export class LessonSession {
         );
         return;
       case "advance":
-        this.append("session.instructions.append", advanceContext(this.scene));
+        if (!pending.gateIdentity || !this.gateMatches(pending.gateIdentity)) return;
+        this.displayedRelease = {
+          gateIdentity: pending.gateIdentity,
+          sceneIndex,
+          displayedAt: Date.now(),
+        };
+        this.scheduleDisplayedRelease();
         return;
       default: {
         const unhandled: never = pending.kind;
         throw new Error(`Unhandled pending display: ${JSON.stringify(unhandled)}`);
       }
     }
+  }
+
+  private scheduleDisplayedRelease() {
+    clearTimeout(this.displayedReleaseTimer);
+    const deferred = this.displayedRelease;
+    const gate = this.answerResponseGate;
+    if (!deferred || !gate) return;
+    const releaseAt = Math.max(deferred.displayedAt, gate.outputQuietAt);
+    const release = () => {
+      if (this.expireIfOverdue()) return;
+      const current = this.displayedRelease;
+      if (
+        !current ||
+        current !== deferred ||
+        this.snapshot.status !== "active" ||
+        this.snapshot.sceneIndex !== deferred.sceneIndex ||
+        !this.gateMatches(deferred.gateIdentity)
+      )
+        return;
+      const reason = gate.outputQuietAt > deferred.displayedAt ? "output_transcript_quiet" : "scene_displayed";
+      this.displayedRelease = null;
+      this.releaseAnswerResponseGate(deferred.gateIdentity, "ADVANCE", reason, () =>
+        this.append("session.instructions.append", advanceContext(this.scene)),
+      );
+    };
+    const delay = releaseAt - Date.now();
+    if (delay <= 0) release();
+    else this.displayedReleaseTimer = setTimeout(release, delay);
   }
 
   private wrap() {

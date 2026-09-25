@@ -1007,10 +1007,21 @@ describe("answer-check turn synchronization", () => {
     deliver(session, speech("Five"));
     await settle();
     expect(sent(transport)).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - 100);
     deliver(session, speech("Let's count together.", 800, true));
-    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
-    expect(sent(transport)).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(sent(transport)).toHaveLength(0);
     expect(transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
+    await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS - 101);
+    expect(sent(transport)).toHaveLength(0);
+    expect(transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(sent(transport)).toHaveLength(1);
+    expect(transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
+    expect(session.events.findLast(event => event.type === "answer.response_gate_released")?.detail).toMatchObject({
+      decision: _decision === "unavailable" ? "UNAVAILABLE" : "STAY",
+      reason: "output_transcript_quiet",
+    });
   });
 
   it("does not treat hidden help transcripts as an audible Sprout turn", async () => {
@@ -1018,10 +1029,14 @@ describe("answer-check turn synchronization", () => {
     vi.mocked(transport.send).mockClear();
     deliver(session, speech("Five"));
     await settle();
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - 100);
     deliver(session, speech("Let's count these ducks together.", 800, true));
-    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
-    expect(released(transport)).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(released(transport)).toHaveLength(0);
     expect(transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
+    await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS);
+    expect(released(transport)).toHaveLength(1);
+    expect(transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
   });
 
   it("does not delay a pending STAY for a transcriptless microphone spike", async () => {
@@ -1277,6 +1292,118 @@ describe("answer-check turn synchronization", () => {
     ]);
     expect(released(transport)).toHaveLength(0);
   });
+  it("keeps gate ownership through ADVANCE commit and ignores learner speech before display", async () => {
+    const { session, transport, evaluateAnswer } = setup(true, answering(CONFIDENT));
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("One!"));
+    await settle();
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
+    expect(session.snapshot.sceneIndex).toBe(1);
+    deliver(session, speech("two", 1000));
+
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+    expect(session.events.filter(event => event.type === "answer.response_gate_started")).toHaveLength(1);
+    expect(session.events.filter(event => event.type === "answer.response_gate_updated")).toHaveLength(0);
+    expect(session.events.findLast(event => event.type === "answer.advance_transition_transcript_ignored")?.detail).toMatchObject({
+      scene_index: 1,
+      gate_scene_index: 0,
+      answer_bearing: true,
+    });
+    expect(transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
+
+    session.displayed(1);
+    expect(sent(transport)).toEqual([
+      expect.objectContaining({ content: advanceContext(sceneAt(1)) }),
+    ]);
+    expect(transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
+
+    deliver(session, speech("Three", 6000));
+    expect(session.events.filter(event => event.type === "answer.response_gate_started")).toHaveLength(2);
+    expect(session.events.findLast(event => event.type === "answer.response_gate_started")?.detail).toMatchObject({
+      scene_index: 1,
+      transcript_revision: 2,
+      answer_version: "6000:Three",
+    });
+    await settle();
+    expect(evaluateAnswer).toHaveBeenCalledTimes(2);
+    expect(evaluateAnswer).toHaveBeenLastCalledWith({ sceneIndex: 1, utterance: "Three" }, expect.anything());
+  });
+  it("keeps gate ownership after display while hidden output is still active", async () => {
+    const { session, transport, evaluateAnswer } = setup(true, answering(CONFIDENT));
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("One!"));
+    await settle();
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
+    deliver(session, speech("Maybe, let's count...", 800, true));
+    session.displayed(1);
+    deliver(session, speech("two", 1000));
+
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+    expect(session.events.filter(event => event.type === "answer.response_gate_updated")).toHaveLength(0);
+    expect(session.events.filter(event => event.type === "answer.response_gate_cancelled")).toHaveLength(0);
+    expect(transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
+    expect(sent(transport)).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS);
+    expect(sent(transport)).toEqual([
+      expect.objectContaining({ content: advanceContext(sceneAt(1)) }),
+    ]);
+    expect(transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
+    expect(session.events.filter(event => event.type === "answer.response_gate_released")).toHaveLength(1);
+  });
+  it("does not let non-answer speech cancel an ADVANCE gate and still honors stop requests", async () => {
+    const ordinary = setup(true, answering(CONFIDENT));
+    vi.mocked(ordinary.transport.send).mockClear();
+    deliver(ordinary.session, speech("One!"));
+    await settle();
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
+    deliver(ordinary.session, speech("Look!", 1000));
+    expect(ordinary.transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
+    expect(ordinary.session.events.filter(event => event.type === "answer.response_gate_cancelled")).toHaveLength(0);
+    ordinary.session.displayed(1);
+    expect(sent(ordinary.transport)).toContainEqual(expect.objectContaining({ content: advanceContext(sceneAt(1)) }));
+    expect(ordinary.transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
+
+    const stopping = setup(true, answering(CONFIDENT));
+    vi.mocked(stopping.transport.send).mockClear();
+    deliver(stopping.session, speech("One!"));
+    await settle();
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
+    deliver(stopping.session, speech("I want to stop", 1000));
+    expect(stopping.session.snapshot).toMatchObject({ status: "ended", reason: "child_stop" });
+    expect(stopping.transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
+    stopping.session.displayed(1);
+    expect(sent(stopping.transport)).not.toContainEqual(
+      expect.objectContaining({ content: advanceContext(sceneAt(1)) }),
+    );
+  });
+  it("waits for hidden output to become quiet after ADVANCE and display before context and unblock", async () => {
+    const { session, transport } = setup(true, answering(CONFIDENT));
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("One!"));
+    await settle();
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
+    expect(session.snapshot.sceneIndex).toBe(1);
+    deliver(session, speech("Maybe, let's count...", 800, true));
+    session.displayed(1);
+    expect(transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
+    expect(sent(transport)).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS - 1);
+    expect(sent(transport)).toHaveLength(0);
+    expect(transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(sent(transport)).toEqual([
+      expect.objectContaining({ type: "session.instructions.append", content: advanceContext(sceneAt(1)) }),
+    ]);
+    expect(transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
+    expect(vi.mocked(transport.send).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(transport.setOutputBlocked).mock.invocationCallOrder[1],
+    );
+    expect(session.events.findLast(event => event.type === "answer.response_gate_released")?.detail).toMatchObject({
+      decision: "ADVANCE",
+      reason: "output_transcript_quiet",
+    });
+  });
   it("explicitly releases GPT-Live on the current scene when the answer does not advance", async () => {
     const { session, transport } = setup(true, answering(UNSURE));
     vi.mocked(transport.send).mockClear();
@@ -1293,6 +1420,14 @@ describe("answer-check turn synchronization", () => {
       }),
     ]);
     expect(stayContext(sceneAt(0))).toContain("still shows 1 duck");
+    expect(transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
+    expect(vi.mocked(transport.send).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(transport.setOutputBlocked).mock.invocationCallOrder[1],
+    );
+    expect(session.events.findLast(e => e.type === "answer.response_gate_released")?.detail).toMatchObject({
+      decision: "STAY",
+      reason: "correction_window",
+    });
     expect(session.events.findLast(e => e.type === "answer.evaluated")).toMatchObject({
       detail: { advancing: false, releasing: true },
     });
@@ -1318,6 +1453,14 @@ describe("answer-check turn synchronization", () => {
       expect(released(transport)).toHaveLength(1);
       expect(released(transport)[0]).toMatchObject({ content: expect.stringContaining("could not verify") });
       expect(released(transport)[0]).not.toMatchObject({ content: stayContext(sceneAt(0)) });
+      expect(transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
+      expect(vi.mocked(transport.send).mock.invocationCallOrder[0]).toBeLessThan(
+        vi.mocked(transport.setOutputBlocked).mock.invocationCallOrder[1],
+      );
+      expect(session.events.findLast(e => e.type === "answer.response_gate_released")?.detail).toMatchObject({
+        decision: "UNAVAILABLE",
+        reason: "correction_window",
+      });
       expect(session.events.findLast(e => e.type === "answer.evaluated")).toMatchObject({
         detail: { unavailable: reason, latency_ms: latencyMs, stale: false, advancing: false, releasing: true },
       });
