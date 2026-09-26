@@ -92,7 +92,12 @@ describe("baseline reactive suite", () => {
       events: [
         { kind: "child-transcript", cursor: 4, text: "Two!" },
         { kind: "child-transcript", cursor: 5, text: "No, one!" },
-        { kind: "evaluation", cursor: 6, utterance: "No, one!", sceneIndex: 0 },
+        {
+          kind: "evaluation",
+          cursor: 6,
+          utterance: name === "continuation" ? "One and two" : "No, one!",
+          sceneIndex: 0,
+        },
       ],
     });
     await REACTIVE_SCENARIOS[name].run({ ...ctx, child });

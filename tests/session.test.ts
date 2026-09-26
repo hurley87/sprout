@@ -78,6 +78,18 @@ const speech = (delta: string, start_ms = 0, output = false) => ({
 });
 const mic = (session: LessonSession, type: "microphone.speech_started" | "microphone.speech_stopped") =>
   session.receive(type === "microphone.speech_stopped" ? { type, quietMs: MICROPHONE_QUIET_MS } : { type });
+
+function expectAnswerResponseHeld(session: LessonSession, transport: Transport) {
+  expect(session.events.filter(event => event.type === "answer.response_gate_released")).toHaveLength(0);
+  expect(session.events.filter(event => event.type === "answer.release_sent")).toHaveLength(0);
+  expect(session.events.filter(event => event.type === "advance.released")).toHaveLength(0);
+  expect(session.events.filter(event => event.type === "advance.committed")).toHaveLength(0);
+  expect(vi.mocked(transport.setOutputBlocked)).toHaveBeenLastCalledWith(true);
+  expect(vi.mocked(transport.setOutputBlocked)).not.toHaveBeenCalledWith(false);
+  const sent = vi.mocked(transport.send).mock.calls.map(([command]) => command);
+  expect(sent).not.toContainEqual(expect.objectContaining({ content: advanceContext(sceneAt(1)) }));
+  expect(sent).not.toContainEqual(expect.objectContaining({ content: stayContext(sceneAt(0)) }));
+}
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
@@ -321,17 +333,11 @@ describe("answer response gate", () => {
       mic(session, "microphone.speech_started");
       deliver(session, speech("Two", 0));
       mic(session, "microphone.speech_stopped");
-      await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
-      await vi.advanceTimersByTimeAsync(0);
-      expect(session.snapshot.sceneIndex).toBe(0);
-      expect(transport.setOutputBlocked).toHaveBeenCalledWith(true);
-
+      // Measure the intentional pause from detected child turn end; Jev may
+      // resolve during this pause, but must not release the earlier answer.
       await vi.advanceTimersByTimeAsync(pauseMs);
       expect(session.snapshot.sceneIndex).toBe(0);
-      expect(session.events.some(event => event.type === "advance.committed")).toBe(false);
-      expect(transport.send).not.toHaveBeenCalledWith(
-        expect.objectContaining({ content: expect.stringContaining("Great") }),
-      );
+      expectAnswerResponseHeld(session, transport);
 
       // Provider start_ms marks a new utterance independently from elapsed test time.
       mic(session, "microphone.speech_started");
@@ -343,6 +349,12 @@ describe("answer response gate", () => {
       expect(session.snapshot.sceneIndex).toBe(1);
       expect(session.events.filter(event => event.type === "advance.committed")).toHaveLength(1);
       expect(evaluateAnswer).toHaveBeenCalledTimes(2);
+      session.displayed(1);
+      expect(session.events.filter(event => event.type === "answer.response_gate_released")).toHaveLength(1);
+      expect(session.events.findLast(event => event.type === "answer.response_gate_released")?.detail).toMatchObject({
+        answer_version: "3001:No, one",
+        decision: "ADVANCE",
+      });
       expect(session.events.filter(event => event.type === "answer.evaluated").at(-1)?.detail).toMatchObject({
         utterance: "No, one",
         stale: false,
@@ -357,13 +369,11 @@ describe("answer response gate", () => {
     mic(session, "microphone.speech_started");
     deliver(session, speech("One", 0));
     mic(session, "microphone.speech_stopped");
-    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
-    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(1000);
     expect(session.events.some(event => event.type === "advance.deferred")).toBe(true);
 
-    await vi.advanceTimersByTimeAsync(1500);
+    expectAnswerResponseHeld(session, transport);
     expect(session.snapshot.sceneIndex).toBe(0);
-    expect(session.events.some(event => event.type === "advance.committed")).toBe(false);
     mic(session, "microphone.speech_started");
     deliver(session, speech("No, two", 3001));
     mic(session, "microphone.speech_stopped");
@@ -377,6 +387,11 @@ describe("answer response gate", () => {
       utterance: "No, two",
       decision: "STAY",
       stale: false,
+    });
+    expect(session.events.filter(event => event.type === "answer.response_gate_released")).toHaveLength(1);
+    expect(session.events.findLast(event => event.type === "answer.response_gate_released")?.detail).toMatchObject({
+      answer_version: "3001:No, two",
+      decision: "STAY",
     });
     expect(transport.send).not.toHaveBeenCalledWith(
       expect.objectContaining({ content: expect.stringContaining("advance") }),
@@ -411,10 +426,10 @@ describe("answer response gate", () => {
     });
   });
 
-  it("invalidates a resolved Jev result when new speech arrives before commit", async () => {
+  it("holds a 2000ms continuation when renewed speech starts before commit", async () => {
     const decisions = [evaluated(CONFIDENT), evaluated(UNSURE)];
     const evaluateAnswer: EvaluateAnswer = vi.fn(async () => decisions.shift()!);
-    const { session } = setup(true, evaluateAnswer);
+    const { session, transport } = setup(true, evaluateAnswer);
     mic(session, "microphone.speech_started");
     deliver(session, speech("One", 0));
     mic(session, "microphone.speech_stopped");
@@ -423,11 +438,15 @@ describe("answer response gate", () => {
     expect(session.events.some(event => event.type === "advance.deferred")).toBe(true);
     expect(session.snapshot.sceneIndex).toBe(0);
 
+    // The full pause is 2000 ms from turn end. Renewed speech begins at 1250 ms,
+    // before a 1500 ms candidate deadline, and extends the pending decision.
     await vi.advanceTimersByTimeAsync(1000);
     mic(session, "microphone.speech_started");
-    deliver(session, speech("No, two", 3001));
+    expectAnswerResponseHeld(session, transport);
+    await vi.advanceTimersByTimeAsync(750);
+    expectAnswerResponseHeld(session, transport);
+    deliver(session, speech("and two", 3001));
     expect(session.snapshot.sceneIndex).toBe(0);
-    expect(session.events.some(event => event.type === "advance.committed")).toBe(false);
     mic(session, "microphone.speech_stopped");
     await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
     await settle(CORRECTION_WINDOW_MS * 2);
@@ -436,9 +455,14 @@ describe("answer response gate", () => {
     expect(session.events.filter(event => event.type === "advance.committed")).toHaveLength(0);
     expect(evaluateAnswer).toHaveBeenCalledTimes(2);
     expect(session.events.filter(event => event.type === "answer.evaluated").at(-1)?.detail).toMatchObject({
-      utterance: "No, two",
+      utterance: "and two",
       decision: "STAY",
       stale: false,
+    });
+    expect(session.events.filter(event => event.type === "answer.response_gate_released")).toHaveLength(1);
+    expect(session.events.findLast(event => event.type === "answer.response_gate_released")?.detail).toMatchObject({
+      answer_version: "3001:and two",
+      decision: "STAY",
     });
   });
 

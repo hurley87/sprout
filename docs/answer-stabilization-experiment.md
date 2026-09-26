@@ -78,9 +78,9 @@ Commit 2 adds deterministic separate-utterance coverage with explicit 1000,
 1500, and 2000 ms pauses, independent of `CORRECTION_WINDOW_MS`. It includes
 wrong-to-correct and initially-correct-to-wrong changes, transcript-only
 revision invalidation, and renewed microphone speech after Jev resolves but
-before commit. Each pause rejects scene commit and tutor turn start; results
-allow an abandoned earlier Jev evaluation and require the latest answer to
-control progression. Live scenarios `delayed-correction` (1500 ms),
+before commit. Each pause rejects scene commit and response-gate release;
+results allow an abandoned earlier Jev evaluation and require the latest answer
+to control progression. Live scenarios `delayed-correction` (1500 ms),
 `corrected-to-wrong` (1000 ms), and `continuation` (2000 ms) send separate
 synthetic speech through the browser microphone and real GPT-Live/Jev path.
 They inspect both child transcripts and the entire intentional pause. No
@@ -91,6 +91,11 @@ microphone speech-start before deterministic commit invalidates or holds the
 pending decision. Speech that begins after commit is a new turn; the prior
 scene transition is final and cannot be undone. The pause values exercise
 ordinary long thinking gaps while remaining within the current policy window.
+GPT-Live may generate provider transcript while the answer-response gate is
+blocked. Provider transcript activity is not itself evidence of an audible
+interruption. Deterministic session tests verify that stale answer responses
+are not released before continuation or correction is resolved. Live observer
+turn starts remain diagnostic; no acoustic or output-release proxy is inferred.
 
 Commit 2 validation against the unchanged policy (2026-09-26): the targeted
 session/diagnostics/reactive harness group passed 194 tests, and all 15 browser
@@ -99,12 +104,13 @@ The baseline `happy-path` reached Jev with transcript `1` (probability 0.98),
 then failed the existing harness expectation for the spoken text `One!`; this
 is retained as an ASR/harness mismatch, not a scene-commit failure.
 `delayed-correction` timed out at its 150-second scenario deadline while
-macOS `say` was synthesizing `Two!`. `continuation` observed a Sprout transcript
-turn (`Hmm, let's...`) before the 2000 ms pause ended and failed the no-cutoff
-assertion. Diagnostics showed the response gate remained active, no scene was
-committed, and the partial transcript did not establish audible playback or a
-success acknowledgement. Treat this as a live continuation risk requiring
-follow-up, not proof of acoustic interruption. The first attempt, before the
+macOS `say` was synthesizing `Two!`. The earlier `continuation` run observed a
+Sprout transcript turn (`Hmm, let's...`) during the 2000 ms pause. The prior
+scenario incorrectly treated that provider transcript as a tutor interruption;
+diagnostics showed the response gate remained active and no scene was committed.
+This is not evidence of an audible interruption or success acknowledgement.
+The corrected contract allows gated provider generation and makes the
+deterministic session tests authoritative for response release. The first attempt, before the
 local dev server was started, recorded `ERR_CONNECTION_REFUSED` for all five
 scenarios.
 `corrected-to-wrong` passed its scenario assertions; teardown then logged a

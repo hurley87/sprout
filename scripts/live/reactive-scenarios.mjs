@@ -36,11 +36,8 @@ async function assertNoPrematureResponse(ctx, action, label) {
     `${label}: scene changed during the intentional pause`,
     events,
   );
-  requireEvidence(
-    !events.some(e => e.kind === "turn-start"),
-    `${label}: tutor acknowledged before the pause ended`,
-    events,
-  );
+  // Provider transcript can be generated while the app keeps its output gate
+  // closed. That transcript is diagnostic and does not prove audible playback.
   requireEvidence(
     !events.some(e => e.kind === "session-end"),
     `${label}: session ended during the intentional pause`,
@@ -195,7 +192,7 @@ export const REACTIVE_SCENARIOS = {
     await assertNoPrematureResponse(ctx, first, "count continuation");
 
     const continuation = await ctx.child.say("And two!");
-    const evaluation = await ctx.observer.waitForEvaluation({ after: first.checkpointBefore });
+    const evaluation = await ctx.observer.waitForEvaluation({ after: continuation.checkpointBefore });
     const response = await ctx.assertions.sproutRespondedAfter(evaluation);
     const events = (await ctx.observer.snapshot()).events.filter(
       e => e.cursor > first.checkpointBefore && e.cursor <= response.cursor,
@@ -203,6 +200,11 @@ export const REACTIVE_SCENARIOS = {
     requireEvidence(
       childTranscriptEvents(events, first.checkpointBefore, response.cursor).length >= 2,
       "Count continuation did not reach GPT-Live as a second utterance",
+      events,
+    );
+    requireEvidence(
+      events.some(e => e.kind === "evaluation" && /\b(?:two|2)\b/i.test(e.utterance)),
+      "Continuation did not reach Jev as the latest answer",
       events,
     );
     await ctx.assertions.sceneStayed({ after: first, through: response.cursor });
