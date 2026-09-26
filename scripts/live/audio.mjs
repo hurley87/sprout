@@ -1,4 +1,5 @@
-import { execFileSync } from "node:child_process";
+import { promisify } from "node:util";
+import { execFile, execFileSync } from "node:child_process";
 
 /** Builds the existing fixed-timeline microphone track with macOS say and ffmpeg. */
 export function buildMicTrack(dir, { seconds, lines }) {
@@ -35,4 +36,17 @@ export function buildMicTrack(dir, { seconds, lines }) {
     wav,
   ]);
   return wav;
+}
+
+const run = promisify(execFile);
+
+/** On-demand speech, in the same format as the legacy microphone track. */
+export async function synthesizeSpeech(text, outputPath, { signal } = {}) {
+  const aiff = `${outputPath}.aiff`;
+  await run("say", ["-v", "Samantha", "-r", "150", "-o", aiff, "--", text], { signal });
+  await run(
+    "ffmpeg",
+    ["-y", "-loglevel", "error", "-i", aiff, "-ac", "1", "-ar", "48000", "-c:a", "pcm_s16le", outputPath],
+    { signal },
+  );
 }

@@ -22,7 +22,11 @@ export function timeline(name, micScript, log) {
     }
     flush();
     const page = `  [page ${(e.at / 1000).toFixed(1)}s]`;
-    if (e.dir === "scene") rows.push(`${page} SCENE -> ${e.scene}`);
+    if (e.dir === "child")
+      rows.push(
+        `${page} CHILD ACTION ${e.action}${e.text ? ` "${e.text}"` : ""}${e.trackId ? ` track=${e.trackId}` : ""}`,
+      );
+    else if (e.dir === "scene") rows.push(`${page} SCENE -> ${e.scene}`);
     else if (e.dir === "evaluate")
       rows.push(
         `${page} JEV "${e.request.utterance}" @scene ${e.request.sceneIndex} -> ${e.answer?.probability ?? "no answer"} in ${e.at - e.askedAt}ms`,

@@ -5,13 +5,17 @@ import { recordLiveTraffic } from "./instrumentation.mjs";
 /**
  * Opens the real live session with caller-provided browser arguments. The driver runs
  * after Start is clicked; collection runs after the existing settling delay.
+ * setupPage runs before navigation and may return an async cleanup callback.
  * Neither callback needs to describe child actions as fixed timestamps.
  */
-export async function runLiveSession({ baseUrl, browserArgs, drive, collect }) {
+export async function runLiveSession({ baseUrl, browserArgs, setupPage, drive, collect }) {
   const browser = await chromium.launch({ args: browserArgs });
+  let cleanup;
+  let failed = false;
   try {
     const page = await (await browser.newContext({ permissions: ["microphone"] })).newPage();
     await page.addInitScript(recordLiveTraffic);
+    cleanup = await setupPage?.(page);
     await page.goto(`${baseUrl}/?debug=1`);
     const observer = createLiveObserver(page);
     await observer.checkpoint();
@@ -19,7 +23,17 @@ export async function runLiveSession({ baseUrl, browserArgs, drive, collect }) {
     await drive({ page, observer });
     await page.waitForTimeout(2000);
     return await collect({ page, browser });
+  } catch (error) {
+    failed = true;
+    throw error;
   } finally {
-    await browser.close();
+    try {
+      await cleanup?.();
+    } catch (error) {
+      // Preserve the original navigation/driver failure if page cleanup also fails.
+      if (!failed) throw error;
+    } finally {
+      await browser.close();
+    }
   }
 }

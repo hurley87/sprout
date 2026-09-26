@@ -15,7 +15,8 @@
     "test:jev": "node scripts/jev-calibration.mjs",
     "benchmark:jev": "node scripts/jev-latency.mjs",
     "test:live": "node scripts/live-matrix.mjs",
-    "typecheck": "next typegen && tsc --noEmit"
+    "typecheck": "next typegen && tsc --noEmit",
+    "test:live:reactive": "node scripts/live-reactive.mjs"
   },
   "dependencies": {
     "convex": "^1.46.0",
