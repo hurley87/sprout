@@ -1,3 +1,5 @@
+import { COUNTING_SCENES } from "./counting-scenes.mjs";
+
 export const MODEL = "gpt-live-1";
 export const PROMPT_VERSION = "counting-jev-4";
 export const TIMING = { wrap: 270_000, goodbye: 300_000, finish: 308_000, hard: 360_000, startup: 30_000 };
@@ -14,14 +16,7 @@ export const OBJECTS = {
 
 export type Scene = { id: string; object: keyof typeof OBJECTS; quantity: number };
 // One lesson, including a fresh example of the main target (three).
-export const SCENES: readonly Scene[] = [
-  { id: "hello-duck", object: "duck", quantity: 1 },
-  { id: "duck-friends", object: "duck", quantity: 2 },
-  { id: "butterfly-garden", object: "butterfly", quantity: 3 },
-  { id: "picnic", object: "strawberry", quantity: 3 },
-  { id: "pond", object: "duck", quantity: 4 },
-  { id: "garden", object: "butterfly", quantity: 5 },
-];
+export const SCENES: readonly Scene[] = COUNTING_SCENES;
 export const LAST_SCENE = SCENES.length - 1;
 
 /** Scenes are only ever reached by index, which the session keeps in range. */
