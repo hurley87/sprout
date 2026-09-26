@@ -162,6 +162,14 @@ export function createLiveObserver(page, { quietMs = SPROUT_UTTERANCE_GAP_MS, ti
   }
 
   return {
+    async snapshot() {
+      await refresh();
+      return { scene: journal.scene, cursor: journal.events.length, events: structuredClone(journal.events) };
+    },
+    async currentScene() {
+      await refresh();
+      return journal.scene;
+    },
     async checkpoint() {
       await refresh();
       return journal.events.length;
