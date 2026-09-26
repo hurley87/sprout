@@ -1,6 +1,6 @@
 # Architecture and evidence flow
 
-This document translates the [PRD](sprout-mvp-prd.md) into implementation boundaries. It describes a proposed design, not existing functionality. Product requirements live in the PRD and are linked rather than restated here; terms are defined in [CONTEXT.md](../CONTEXT.md).
+This document translates the [PRD](sprout-mvp-prd.md) into implementation boundaries. Most sections describe the proposed design; the first Convex persistence slice is identified below. Product requirements live in the PRD and are linked rather than restated here; terms are defined in [CONTEXT.md](../CONTEXT.md).
 
 ## 1. Components and authority
 
@@ -79,7 +79,15 @@ Suggested record fields:
 | Lesson plan | Target, three activity parts, themes/scenes, permitted help, rationale, reviewed-evidence references used to generate it |
 | Daily evaluation | Participation judgment, actual useful adaptation and supporting references, parent repair level and a short note, notable failures, optional ratings |
 
-This is a conceptual contract; concrete Convex schemas and provider event mappings are implementation work.
+The first persistence slice now defines `sessions` and `sessionEvents` in `convex/schema.ts`.
+Each session is one attempt, identified by its Convex document ID, with `starting → active → ended`,
+an ending reason, an optional prior-attempt link, and an optional single recording reference.
+Each event has a session-relative millisecond timestamp, a server-assigned order, a caller event key,
+and validated `utterance`, `scene_displayed`, or `support` data. `scene_displayed` means the scene
+reached the UI; the future recorder must not use it for requested transitions. The Convex API creates,
+activates, appends, finalizes, attaches recording metadata, and fetches the ordered record. Finalization
+prevents later evidence writes. The existing diagnostic JSON remains separate. Wiring live provider
+events, audio capture, inspection, and export remains future work.
 
 Record what was actually displayed, not just a requested visual action. Distinguish a spoken or interrupted prompt from text generated but never played. If delivery or scene context cannot be established, the Observer must qualify or omit the conclusion.
 
@@ -135,7 +143,7 @@ During play, a new theme can replace the original setting while preserving the o
 
 ## 7. Stack and feasibility gate
 
-Retain the proposed Next.js/React/TypeScript application and Convex persistence. The experiment runs locally on the builder's MacBook; Vercel deployment is deferred. The repository contains the slice 1 GPT-Live-1 voice prototype ([baseline findings](gpt-live-baseline.md)); persistence, Observer, and planner integrations are not implemented.
+Retain the proposed Next.js/React/TypeScript application and Convex persistence. The experiment runs locally on the builder's MacBook; Vercel deployment is deferred. The repository contains the slice 1 GPT-Live-1 voice prototype ([baseline findings](gpt-live-baseline.md)) and the standalone Convex session-record foundation; live persistence wiring, Observer, and planner integrations are not implemented.
 
 GPT-Live 1 is the initial voice candidate. OpenAI documents the model as `gpt-live-1`. Vercel documents Jev as `typesafe-ai/jev`; the prototype calls TypeSafe's own API directly and pins `jev-1.13.0`, because the advance threshold is calibrated against that version. Suitability for this child's speech is still unestablished: the results so far come from synthetic adult speech. Sources checked 2026-09-22: [GPT-Live 1](https://developers.openai.com/api/docs/models/gpt-live-1), [Jev](https://vercel.com/ai-gateway/models/jev).
 
