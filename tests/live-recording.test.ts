@@ -7,13 +7,14 @@ import { LessonSession, type EndReason, type Transport } from "../lib/session";
 import { RecordingQueue, type Evidence, type SessionRecorder } from "../lib/session-recorder";
 import { LAST_SCENE } from "../lib/lesson";
 import { UTTERANCE_GAP_MS } from "../lib/transcript";
-import { CORRECTION_WINDOW_MS, TRANSCRIPT_FALLBACK_MS } from "../lib/answer";
+import { CORRECTION_WINDOW_MS, TRANSCRIPT_FALLBACK_MS, type EvaluateAnswer } from "../lib/answer";
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
-function setup(delivery = false, retryOf?: string) {
+function setup(delivery = false, retryOf?: string, evaluator?: EvaluateAnswer) {
   const writes: (string | Evidence)[] = [];
   const recorder: SessionRecorder = {
+    appendTimeline: vi.fn(async () => {}),
     attachRecording: vi.fn(async () => {}),
     create: vi.fn(async () => {
       writes.push("create");
@@ -46,7 +47,7 @@ function setup(delivery = false, retryOf?: string) {
   };
   const session = new LessonSession(
     transport,
-    async () => ({ status: "evaluated", probability: 1, model: "test", latencyMs: 1 }),
+    evaluator ?? (async () => ({ status: "evaluated", probability: 1, model: "test", latencyMs: 1 })),
     vi.fn(),
     undefined,
     recorder,
@@ -80,6 +81,8 @@ it("excludes startup delay from canonical timestamps while retaining the diagnos
   await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS);
   await session.recordingSettled();
   expect(recorder.append).toHaveBeenNthCalledWith(2, "evidence_2", 300 + UTTERANCE_GAP_MS, {
+    firstObservedAtMs: 300,
+    lastObservedAtMs: 300,
     type: "utterance",
     speaker: "child_or_nearby_speaker",
     text: "hello",
@@ -167,6 +170,8 @@ it.each<EndReason>([
       type: "utterance",
       speaker: "child_or_nearby_speaker",
       text: "hello there",
+      firstObservedAtMs: 0,
+      lastObservedAtMs: 0,
       startMs: 0,
       endMs: 200,
       state: "interrupted",
@@ -201,7 +206,16 @@ it("records Sprout only when attributed delivery is established; omits gated out
   session.end("parent_stop");
   await session.recordingSettled();
   expect(evidence(writes).filter(e => e.type === "utterance" && e.speaker === "sprout")).toEqual([
-    { type: "utterance", speaker: "sprout", text: "Hello friend", startMs: 0, endMs: 200, state: "finalized" },
+    {
+      type: "utterance",
+      speaker: "sprout",
+      text: "Hello friend",
+      startMs: 0,
+      endMs: 200,
+      state: "finalized",
+      firstObservedAtMs: 0,
+      lastObservedAtMs: 0,
+    },
   ]);
 });
 
@@ -349,6 +363,7 @@ it.each([false, true])(
     const operations: string[] = [];
     let appends = 0;
     const recorder: SessionRecorder = {
+      appendTimeline: vi.fn(async () => {}),
       attachRecording: async () => {},
       async create() {
         operations.push("create");
@@ -578,4 +593,176 @@ it("passes retry linkage only to a fresh controller's recorder", async () => {
   expect(retry.events).not.toBe(original.events);
   retry.dispose();
   await retry.recordingSettled();
+});
+
+it("retains generated output while gated, with independent observation and provider clocks", async () => {
+  const { session, recorder, writes } = setup(true);
+  await vi.advanceTimersByTimeAsync(2000);
+  session.receive({ type: "session.started" });
+  session.displayed(0);
+  await vi.advanceTimersByTimeAsync(100);
+  say(session, "child", "one", 20);
+  say(session, "sprout", "That is ", 40);
+  await vi.advanceTimersByTimeAsync(250);
+  say(session, "sprout", "right", 120);
+  session.end("parent_stop");
+  await session.recordingSettled();
+  const timeline = vi.mocked(recorder.appendTimeline).mock.calls;
+  expect(timeline.filter(call => call[2].type === "sprout_generated_utterance").map(call => call.slice(1))).toEqual([
+    [
+      100,
+      {
+        type: "sprout_generated_utterance",
+        speaker: "sprout",
+        text: "That is right",
+        startMs: 40,
+        endMs: 220,
+        firstObservedAtMs: 100,
+        lastObservedAtMs: 350,
+        state: "interrupted",
+      },
+    ],
+  ]);
+  expect(evidence(writes).filter(e => e.type === "utterance" && e.speaker === "sprout")).toEqual([]);
+  expect(timeline.filter(call => call[2].type === "playback_gate_changed").map(call => call.slice(1))).toEqual([
+    [0, { type: "playback_gate_changed", state: "permitted", reason: "session_started" }],
+    [100, { type: "playback_gate_changed", state: "blocked", reason: "answer_evaluation" }],
+    [350, { type: "playback_gate_changed", state: "permitted", reason: "parent_stop" }],
+  ]);
+  expect(recorder.appendTimeline).toHaveBeenCalledBefore(vi.mocked(recorder.finalize));
+});
+
+it("preserves VAD, evaluation, committed advancement and actual display on one clock", async () => {
+  const { session, recorder } = setup();
+  await vi.advanceTimersByTimeAsync(900);
+  session.receive({ type: "session.started" });
+  session.displayed(0);
+  await vi.advanceTimersByTimeAsync(100);
+  session.receive({ type: "microphone.speech_started" });
+  say(session, "child", "one", 100);
+  await vi.advanceTimersByTimeAsync(1000);
+  session.receive({ type: "microphone.speech_stopped", quietMs: 900 });
+  await vi.advanceTimersByTimeAsync(250);
+  await session.recordingSettled();
+  const calls = () => vi.mocked(recorder.appendTimeline).mock.calls;
+  expect(calls().find(call => call[2].type === "microphone_speech_started")?.[1]).toBe(100);
+  expect(
+    calls()
+      .find(call => call[2].type === "microphone_speech_stopped")
+      ?.slice(1),
+  ).toEqual([1100, { type: "microphone_speech_stopped", quietMs: 900, estimatedAcousticEndAtMs: 200 }]);
+  const request = calls().find(call => call[2].type === "answer_evaluation_requested")!;
+  expect(request.slice(1)).toEqual([
+    1350,
+    {
+      type: "answer_evaluation_requested",
+      correlationKey: "0:100:one",
+      sceneIndex: 0,
+      turnSignal: "microphone_vad",
+      turnEndToRequestMs: 250,
+    },
+  ]);
+  expect(calls().find(call => call[2].type === "answer_evaluation_resolved")?.[2]).toMatchObject({
+    correlationKey: "0:100:one",
+    status: "evaluated",
+    probability: 1,
+    latencyMs: 1,
+    decision: "ADVANCE",
+  });
+  await vi.advanceTimersByTimeAsync(2250);
+  await session.recordingSettled();
+  expect(
+    calls()
+      .find(call => call[2].type === "scene_advance_committed")
+      ?.slice(1),
+  ).toEqual([3600, { type: "scene_advance_committed", fromScene: 0, toScene: 1, correlationKey: "0:100:one" }]);
+  expect(vi.mocked(recorder.append).mock.calls.filter(call => call[2].type === "scene_displayed")).toHaveLength(1);
+  await vi.advanceTimersByTimeAsync(80);
+  session.displayed(1);
+  await session.recordingSettled();
+  expect(
+    vi
+      .mocked(recorder.append)
+      .mock.calls.filter(call => call[2].type === "scene_displayed")
+      .at(-1)?.[1],
+  ).toBe(3680);
+  session.end("parent_stop");
+  await session.recordingSettled();
+});
+
+it("finalizes unknown generated speech once and separates it from verified evidence", async () => {
+  const { session, recorder, writes } = setup();
+  session.receive({ type: "session.started" });
+  say(session, "sprout", "Hello");
+  await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS);
+  session.end("parent_stop");
+  await session.recordingSettled();
+  expect(
+    vi
+      .mocked(recorder.appendTimeline)
+      .mock.calls.filter(call => call[2].type === "sprout_generated_utterance")
+      .map(call => call[2]),
+  ).toEqual([
+    {
+      type: "sprout_generated_utterance",
+      speaker: "sprout",
+      text: "Hello",
+      startMs: 0,
+      endMs: 100,
+      firstObservedAtMs: 0,
+      lastObservedAtMs: 0,
+      state: "finalized",
+    },
+  ]);
+  expect(evidence(writes)).toEqual([]);
+});
+
+it.each(["timeout", "request_failed", "cancelled"])(
+  "retains %s evaluation status without manufactured learner evidence",
+  async reason => {
+    const evaluator: EvaluateAnswer =
+      reason === "cancelled"
+        ? () => new Promise(() => {})
+        : reason === "request_failed"
+          ? async () => {
+              throw new Error("offline");
+            }
+          : async () => ({ status: "unavailable", reason, latencyMs: 40 });
+    const { session, recorder, writes } = setup(false, undefined, evaluator);
+    session.receive({ type: "session.started" });
+    session.displayed(0);
+    say(session, "child", "one");
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_FALLBACK_MS);
+    session.end("parent_stop");
+    await session.recordingSettled();
+    const timeline = vi.mocked(recorder.appendTimeline).mock.calls.map(call => call[2]);
+    expect(timeline.filter(event => event.type === "answer_evaluation_resolved")).toEqual([
+      expect.objectContaining({
+        type: "answer_evaluation_resolved",
+        correlationKey: "0:0:one",
+        status: "unavailable",
+        reason,
+        decision: reason === "cancelled" ? "STALE" : "UNAVAILABLE",
+      }),
+    ]);
+    expect(evidence(writes).map(event => event.type)).toEqual(["scene_displayed", "utterance"]);
+    expect(recorder.appendTimeline).toHaveBeenCalledBefore(vi.mocked(recorder.finalize));
+  },
+);
+
+it("marks timeline write loss incomplete and still flushes generated output and finalizes", async () => {
+  const { session, recorder } = setup();
+  vi.mocked(recorder.appendTimeline).mockRejectedValueOnce(new Error("offline"));
+  session.receive({ type: "session.started" });
+  say(session, "sprout", "Hello");
+  session.end("parent_stop");
+  await session.recordingSettled();
+  expect(recorder.markIncomplete).toHaveBeenCalledTimes(1);
+  expect(recorder.finalize).toHaveBeenCalledWith("parent_stop", true);
+  expect(recorder.appendTimeline).toHaveBeenLastCalledWith(
+    expect.any(String),
+    0,
+    expect.objectContaining({ type: "sprout_generated_utterance", text: "Hello" }),
+  );
+  expect(session.snapshot.recordingError).toBeDefined();
 });

@@ -274,3 +274,60 @@ it("inspection returns a storage playback URL only for attached audio", async ()
   expect(record?.recordingUrl).toBe(await t.run(ctx => ctx.storage.getUrl(storageId)));
   expect(record?.recordingUrl).toMatch(/^https?:/);
 });
+
+it("persists analysis separately, preserving mixed order and event-key idempotency", async () => {
+  const t = makeTest();
+  const sessionId = await t.mutation(api.sessions.create, {});
+  const generated = {
+    type: "sprout_generated_utterance" as const,
+    speaker: "sprout" as const,
+    text: "Three!",
+    startMs: 100,
+    endMs: 200,
+    firstObservedAtMs: 120,
+    lastObservedAtMs: 280,
+    state: "interrupted" as const,
+  };
+  const args = { sessionId, eventKey: "generated", atMs: 120, timeline: generated };
+  await expect(t.mutation(api.sessions.appendEvent, args)).rejects.toThrow("active session");
+  await t.mutation(api.sessions.activate, { sessionId });
+  const id = await t.mutation(api.sessions.appendEvent, args);
+  expect(await t.mutation(api.sessions.appendEvent, args)).toBe(id);
+  const learner = {
+    type: "utterance" as const,
+    speaker: "child_or_nearby_speaker" as const,
+    text: "Three",
+    state: "finalized" as const,
+    firstObservedAtMs: 400,
+    lastObservedAtMs: 450,
+  };
+  await t.mutation(api.sessions.appendEvent, { sessionId, eventKey: "child", atMs: 500, evidence: learner });
+  const record = await t.query(api.sessions.getRecord, { sessionId });
+  expect(record?.events.map(({ order, evidence, timeline }) => ({ order, evidence, timeline }))).toEqual([
+    { order: 0, evidence: undefined, timeline: generated },
+    { order: 1, evidence: learner, timeline: undefined },
+  ]);
+  await expect(
+    t.mutation(api.sessions.appendEvent, { ...args, timeline: { ...generated, text: "Other" } }),
+  ).rejects.toThrow("reused");
+  await expect(t.mutation(api.sessions.appendEvent, { ...args, evidence: learner })).rejects.toThrow("Exactly one");
+  await expect(t.mutation(api.sessions.appendEvent, { sessionId, eventKey: "empty", atMs: 0 })).rejects.toThrow(
+    "Exactly one",
+  );
+  await expect(
+    t.mutation(api.sessions.appendEvent, { ...args, timeline: { ...generated, lastObservedAtMs: 0 } }),
+  ).rejects.toThrow("lastObservedAtMs");
+  await expect(
+    t.mutation(api.sessions.appendEvent, { ...args, timeline: { ...generated, endMs: 10 } }),
+  ).rejects.toThrow("endMs");
+  await t.mutation(api.sessions.finalize, { sessionId, endingReason: "parent_stop" });
+  await expect(t.mutation(api.sessions.appendEvent, { ...args, eventKey: "late" })).rejects.toThrow("active session");
+});
+
+it("keeps the live browser start timestamp despite delayed persistence", async () => {
+  const t = makeTest();
+  const sessionId = await t.mutation(api.sessions.create, {});
+  await t.mutation(api.sessions.activate, { sessionId, startedAt: 123456 });
+  await t.mutation(api.sessions.activate, { sessionId, startedAt: 999999 });
+  expect((await t.query(api.sessions.getRecord, { sessionId }))?.session.startedAt).toBe(123456);
+});

@@ -8,6 +8,8 @@ export type Evidence =
       startMs?: number;
       endMs?: number;
       state: "finalized" | "interrupted";
+      firstObservedAtMs?: number;
+      lastObservedAtMs?: number;
     }
   | {
       type: "scene_displayed";
@@ -22,6 +24,41 @@ export type Evidence =
       mode: "spoken" | "displayed" | "other";
       description: string;
     };
+
+/** Provider generation and application control facts, never learner evidence. */
+export type TimelineEvent =
+  | {
+      type: "sprout_generated_utterance";
+      speaker: "sprout";
+      text: string;
+      startMs: number;
+      endMs: number;
+      firstObservedAtMs: number;
+      lastObservedAtMs: number;
+      state: "finalized" | "interrupted";
+    }
+  | { type: "microphone_speech_started" }
+  | { type: "microphone_speech_stopped"; quietMs: number; estimatedAcousticEndAtMs: number }
+  | { type: "playback_gate_changed"; state: "blocked" | "permitted"; reason: string }
+  | {
+      type: "answer_evaluation_requested";
+      correlationKey: string;
+      sceneIndex: number;
+      turnSignal: "microphone_vad" | "transcript_fallback";
+      turnEndToRequestMs: number;
+    }
+  | {
+      type: "answer_evaluation_resolved";
+      correlationKey: string;
+      sceneIndex: number;
+      status: "evaluated" | "unavailable";
+      latencyMs: number;
+      probability?: number;
+      model?: string;
+      reason?: string;
+      decision: "STALE" | "UNAVAILABLE" | "ADVANCE" | "STAY";
+    }
+  | { type: "scene_advance_committed"; fromScene: number; toScene: number; correlationKey: string };
 
 export type SessionAudioRecording = {
   blob: Blob;
@@ -43,7 +80,7 @@ export type InspectableSessionRecord = {
   endingReason?: EndReason;
   retryOf?: DurableSessionRef;
   recording?: { url: string; mimeType: string; startOffsetMs: number; durationMs: number };
-  events: { eventKey: string; order: number; atMs: number; evidence: Evidence }[];
+  events: { eventKey: string; order: number; atMs: number; evidence?: Evidence; timeline?: TimelineEvent }[];
 };
 
 export interface SessionRecordReader {
@@ -55,12 +92,13 @@ export function recordingOffsetSeconds(atMs: number, recording: { startOffsetMs:
   return Math.max(0, Math.min(recording.durationMs, atMs - recording.startOffsetMs)) / 1000;
 }
 
-/** Application evidence only; never accepts diagnostic/provider payloads. */
+/** Separate evidence and bounded analysis timeline writes. */
 export interface SessionRecorder {
   attachRecording(recording: SessionAudioRecording): Promise<void>;
   create(retryOf?: DurableSessionRef): Promise<DurableSessionRef>;
-  activate(): Promise<void>;
+  activate(startedAt?: number): Promise<void>;
   append(eventKey: string, atMs: number, evidence: Evidence): Promise<void>;
+  appendTimeline(eventKey: string, atMs: number, timeline: TimelineEvent): Promise<void>;
   markIncomplete(): Promise<void>;
   finalize(reason: EndReason, recordIncomplete?: boolean): Promise<void>;
 }

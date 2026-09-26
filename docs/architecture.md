@@ -250,8 +250,8 @@ The persistence queue flushes evidence, finalizes, then requests a Convex upload
 and attaches its storage ID. Media tracks, nodes, context, detector and playback are released without
 waiting for network writes. Capture or attachment failure uses the existing incomplete marker and
 warning; a startup attempt without usable audio is incomplete. Browser suspension still offers no
-unload durability guarantee. Production Sprout canonical transcripts remain omitted because delivery
-intervals cannot be verified; the gated full audio is the authoritative artifact for permitted speech.
+unload durability guarantee. Production Sprout delivered evidence remains omitted when delivery intervals cannot be verified.
+Generated transcripts are retained separately as analysis timeline events; full audio is authoritative for captured speech.
 
 ### MVP inspection and explicit retry (commit 4)
 
@@ -271,3 +271,34 @@ Retry is available only for a fetched ended durable attempt. It disposes the old
 a fresh transport, recorder, controller, and linked session (`retryOf`), preserving the original record.
 Start a new lesson creates an unlinked attempt. The ended reference and reader are held independently
 of the live controller; late updates from old controllers cannot replace the new attempt's UI.
+
+### Conversation timeline (commit 5)
+
+`sessionEvents` contains exactly one of `evidence` or `timeline`, sharing event-key idempotency,
+server write order, integrity handling, and `session.started = 0` timestamps. Existing evidence
+rows remain readable. `Evidence` retains conservative learner/nearby-speaker attribution,
+actually displayed scenes, and only delivery-verified tutor utterances. `TimelineEvent` stores
+provider generation and application control facts separately. Jev probability is only a control
+result, never mastery or learner confidence.
+
+All finalized/interrupted Sprout utterances are retained as `sprout_generated_utterance`, even
+when gated or delivery is unknown. Accumulators preserve full text, approximate provider/media
+start/end, and first/last browser observation offsets without writing every delta. Generated rows
+are positioned at first observation; their final observation and finalization state remain explicit.
+Child/nearby utterance evidence also retains both observation offsets. Activation persists the browser
+start timestamp so a queued network write does not shift the session document clock. Inspector combines events
+in timestamp order (server order breaks ties), clearly labels analysis and delivery uncertainty,
+and retains full-audio seeking.
+
+App-observed microphone start/stop events retain quiet duration and estimated acoustic end,
+which can be negative near session start and is not an exact child speech boundary. Gate state
+begins permitted and records only effective changes with reasons. Evaluation requests/results
+share a scene plus answer-version correlation key, turn signal, request delay, returned latency,
+status/reason, and deterministic decision (including stale results). Scene commits separately
+record from/to indices and the answer key; displayed evidence still requires actual display.
+
+Generated transcript = what GPT-Live produced. Playback timeline = what the app permitted or
+blocked, with no claim of per-utterance audibility. Full recording = what the capture path retained.
+Delivered evidence = only claims strong enough to represent learner experience. `audio.play()`
+resolution does not establish utterance delivery. Existing one-file gated capture stays unchanged;
+no clips, export/download workflow, naturalness score, or fake audible-start events are added.

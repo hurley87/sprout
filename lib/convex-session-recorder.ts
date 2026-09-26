@@ -3,6 +3,7 @@ import { api } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
 import type {
   Evidence,
+  TimelineEvent,
   SessionRecorder,
   SessionAudioRecording,
   DurableSessionRef,
@@ -47,7 +48,13 @@ export class ConvexSessionRecorder implements SessionRecorder, SessionRecordRead
               durationMs: session.recording.durationMs,
             }
           : undefined,
-      events: events.map(({ eventKey, order, atMs, evidence }) => ({ eventKey, order, atMs, evidence })),
+      events: events.map(({ eventKey, order, atMs, evidence, timeline }) => ({
+        eventKey,
+        order,
+        atMs,
+        evidence,
+        timeline,
+      })),
     };
   }
   private get connection() {
@@ -81,13 +88,17 @@ export class ConvexSessionRecorder implements SessionRecorder, SessionRecordRead
       durationMs: recording.durationMs,
     });
   }
-  async activate() {
+  async activate(startedAt?: number) {
     const { client, sessionId } = this.connection;
-    await client.mutation(api.sessions.activate, { sessionId });
+    await client.mutation(api.sessions.activate, { sessionId, ...(startedAt === undefined ? {} : { startedAt }) });
   }
   async append(eventKey: string, atMs: number, evidence: Evidence) {
     const { client, sessionId } = this.connection;
     await client.mutation(api.sessions.appendEvent, { sessionId, eventKey, atMs, evidence });
+  }
+  async appendTimeline(eventKey: string, atMs: number, timeline: TimelineEvent) {
+    const { client, sessionId } = this.connection;
+    await client.mutation(api.sessions.appendEvent, { sessionId, eventKey, atMs, timeline });
   }
   async markIncomplete() {
     const { client, sessionId } = this.connection;

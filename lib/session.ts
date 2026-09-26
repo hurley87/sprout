@@ -3,6 +3,7 @@ import {
   type SessionRecorder,
   type DurableSessionRef,
   type Evidence,
+  type TimelineEvent,
   type SessionAudioRecording,
 } from "./session-recorder";
 import {
@@ -159,6 +160,7 @@ export class LessonSession {
   private ready = false;
   private recordingStarted = false;
   private evidenceOrder = 0;
+  private timelineOrder = 0;
   private canonical = { child: new UtteranceAccumulator(), sprout: new UtteranceAccumulator() };
   private utteranceTimers: Partial<Record<"child" | "sprout", ReturnType<typeof setTimeout>>> = {};
   private recording = new RecordingQueue(
@@ -182,12 +184,42 @@ export class LessonSession {
     this.recording.enqueue("append", () => this.recorder!.append(eventKey, atMs, evidence));
   }
 
+  private timeline(event: TimelineEvent, atMs = this.startedAt === undefined ? 0 : Date.now() - this.startedAt) {
+    if (!this.recorder || this.startedAt === undefined || this.snapshot.status === "ended") return;
+    const eventKey = `timeline_${++this.timelineOrder}`;
+    this.recording.enqueue("appendTimeline", () => this.recorder!.appendTimeline(eventKey, atMs, event));
+  }
+
+  private outputBlocked = false;
+  private setOutputBlocked(blocked: boolean, reason: string) {
+    this.transport.setOutputBlocked(blocked);
+    if (this.outputBlocked === blocked) return;
+    this.outputBlocked = blocked;
+    this.timeline({ type: "playback_gate_changed", state: blocked ? "blocked" : "permitted", reason });
+  }
+
   private flushUtterance(
     speaker: "child" | "sprout",
     state: "finalized" | "interrupted",
     utterance = this.canonical[speaker].take(),
   ) {
-    if (!utterance?.text.trim() || !utterance.delivered) return;
+    if (!utterance?.text.trim()) return;
+    if (speaker === "sprout") {
+      this.timeline(
+        {
+          type: "sprout_generated_utterance",
+          speaker: "sprout",
+          text: utterance.text,
+          startMs: utterance.startMs,
+          endMs: utterance.endMs,
+          firstObservedAtMs: utterance.firstObservedAtMs,
+          lastObservedAtMs: utterance.lastObservedAtMs,
+          state,
+        },
+        utterance.firstObservedAtMs,
+      );
+    }
+    if (!utterance.delivered) return;
     this.record({
       type: "utterance",
       speaker: speaker === "child" ? "child_or_nearby_speaker" : "sprout",
@@ -195,6 +227,8 @@ export class LessonSession {
       startMs: utterance.startMs,
       endMs: utterance.endMs,
       state,
+      firstObservedAtMs: utterance.firstObservedAtMs,
+      lastObservedAtMs: utterance.lastObservedAtMs,
     });
   }
 
@@ -209,7 +243,13 @@ export class LessonSession {
     const delivered =
       event.speaker === "child" ||
       (!this.answerResponseGate && this.transport.delivered?.(event.startMs, event.endMs) === true);
-    const completed = this.canonical[event.speaker].append(event.delta, event.startMs, event.endMs, delivered);
+    const completed = this.canonical[event.speaker].append(
+      event.delta,
+      event.startMs,
+      event.endMs,
+      delivered,
+      Date.now() - this.startedAt!,
+    );
     if (completed) this.flushUtterance(event.speaker, "finalized", completed);
     clearTimeout(this.utteranceTimers[event.speaker]);
     this.utteranceTimers[event.speaker] = setTimeout(
@@ -357,6 +397,7 @@ export class LessonSession {
         this.provisionalActivity = false;
         this.microphoneSpeaking = true;
         this.microphoneSpeechStartedAt = Date.now();
+        this.timeline({ type: "microphone_speech_started" });
         this.speechEpoch++;
         if (heardDuringActivity) this.transcriptEpoch = this.speechEpoch;
         this.cancelNoTranscriptRecovery();
@@ -375,6 +416,11 @@ export class LessonSession {
         this.microphoneSpeechStartedAt = undefined;
         this.turnEndAt = Date.now();
         this.vadDetectionMs = event.quietMs;
+        this.timeline({
+          type: "microphone_speech_stopped",
+          quietMs: event.quietMs,
+          estimatedAcousticEndAtMs: this.turnEndAt - event.quietMs - (this.startedAt ?? this.turnEndAt),
+        });
         this.turnSignal = "microphone_vad";
         this.log("answer.turn_end", {
           signal: this.turnSignal,
@@ -411,8 +457,10 @@ export class LessonSession {
     if (this.snapshot.status !== "starting") return;
     clearTimeout(this.startupTimer);
     this.ready = true;
-    if (this.recorder) this.recording.enqueue("activate", () => this.recorder!.activate());
     this.startedAt = Date.now();
+    const startedAt = this.startedAt;
+    if (this.recorder) this.recording.enqueue("activate", () => this.recorder!.activate(startedAt));
+    this.timeline({ type: "playback_gate_changed", state: "permitted", reason: "session_started" });
     try {
       this.transport.startRecording?.();
     } catch (error) {
@@ -532,7 +580,7 @@ export class LessonSession {
         outputQuietAt: 0,
       };
       this.canonical.sprout.invalidateDelivery();
-      this.transport.setOutputBlocked(true);
+      this.setOutputBlocked(true, "answer_evaluation");
       this.log("answer.response_gate_started", {
         scene_index: this.snapshot.sceneIndex,
         transcript_revision: this.transcriptRevision,
@@ -561,7 +609,7 @@ export class LessonSession {
     clearTimeout(this.displayedReleaseTimer);
     this.displayedReleaseTimer = undefined;
     this.displayedRelease = null;
-    this.transport.setOutputBlocked(false);
+    this.setOutputBlocked(false, reason);
     this.log("answer.response_gate_cancelled", {
       scene_index: gate.sceneIndex,
       transcript_revision: gate.transcriptRevision,
@@ -592,7 +640,7 @@ export class LessonSession {
     sendContext();
     if (!this.gateMatches(identity)) return false;
     this.answerResponseGate = null;
-    this.transport.setOutputBlocked(false);
+    this.setOutputBlocked(false, decision.toLowerCase());
     this.log("answer.response_gate_released", {
       scene_index: identity.sceneIndex,
       transcript_revision: identity.transcriptRevision,
@@ -701,6 +749,15 @@ export class LessonSession {
     const finalDeltaAt = this.lastDeltaAt;
     const turnEndAt = this.turnEndAt;
     const transcriptRevision = this.transcriptRevision;
+    const correlationKey = `${sceneIndex}:${version}`;
+    const requestedAt = Date.now();
+    this.timeline({
+      type: "answer_evaluation_requested",
+      correlationKey,
+      sceneIndex,
+      turnSignal: this.turnSignal,
+      turnEndToRequestMs: requestedAt - turnEndAt,
+    });
     this.log("answer.requesting", {
       version,
       signal: this.turnSignal,
@@ -712,7 +769,8 @@ export class LessonSession {
     this.evaluation?.abort();
     const evaluation = new AbortController();
     this.evaluation = evaluation;
-    void this.evaluateAnswer({ sceneIndex, utterance: text }, evaluation.signal).then(result => {
+    let cancellationRecorded = false;
+    const finish = (result: AnswerResult) => {
       if (this.evaluation === evaluation) this.evaluation = undefined;
       this.decide(
         utterance,
@@ -723,8 +781,33 @@ export class LessonSession {
         transcriptRevision,
         evaluation.signal,
         result,
+        !cancellationRecorded,
       );
-    });
+    };
+    evaluation.signal.addEventListener(
+      "abort",
+      () => {
+        cancellationRecorded = true;
+        this.timeline({
+          type: "answer_evaluation_resolved",
+          correlationKey,
+          sceneIndex,
+          status: "unavailable",
+          reason: "cancelled",
+          latencyMs: Date.now() - requestedAt,
+          decision: "STALE",
+        });
+      },
+      { once: true },
+    );
+    void Promise.resolve()
+      .then(() => this.evaluateAnswer({ sceneIndex, utterance: text }, evaluation.signal))
+      .catch((): AnswerResult => ({
+        status: "unavailable",
+        reason: "request_failed",
+        latencyMs: Date.now() - requestedAt,
+      }))
+      .then(finish);
   }
 
   private scheduleNoTranscriptRecovery(epoch: number) {
@@ -769,6 +852,7 @@ export class LessonSession {
     transcriptRevision: number,
     evaluationSignal: AbortSignal,
     result: AnswerResult,
+    recordResult = true,
   ) {
     // The question was about a moment that may have passed: the child may have
     // said more, or the lesson may have moved on while the answer was in flight.
@@ -792,6 +876,18 @@ export class LessonSession {
     // Stale results need no release: newer speech gets its own decision, and a
     // scene change or wrap-up tells GPT-Live itself.
     const releasing = !stale && !advancing;
+    if (recordResult)
+      this.timeline({
+        type: "answer_evaluation_resolved",
+        correlationKey: `${sceneIndex}:${version}`,
+        sceneIndex,
+        status: result.status,
+        latencyMs: result.latencyMs,
+        ...(result.status === "evaluated"
+          ? { probability: result.probability, model: result.model }
+          : { reason: result.reason }),
+        decision: stale ? "STALE" : result.status === "unavailable" ? "UNAVAILABLE" : advancing ? "ADVANCE" : "STAY",
+      });
     this.log("answer.evaluated", {
       scene: sceneAt(sceneIndex).id,
       sceneIndex,
@@ -1030,6 +1126,12 @@ export class LessonSession {
       turn_end_to_commit_ms: Date.now() - this.turnEndAt,
     });
     const sceneIndex = this.snapshot.sceneIndex + 1;
+    this.timeline({
+      type: "scene_advance_committed",
+      fromScene: this.snapshot.sceneIndex,
+      toScene: sceneIndex,
+      correlationKey: `${this.snapshot.sceneIndex}:${answerVersion}`,
+    });
     const gate = this.answerResponseGate;
     this.pending = {
       kind: "advance",
@@ -1176,9 +1278,10 @@ export class LessonSession {
       this.recording.enqueue("capture", async () => {
         throw new Error("Attempt ended before live audio capture");
       });
+    this.evaluation?.abort();
+    this.cancelAnswerResponseGate(reason);
     if (this.recorder)
       this.recording.enqueue("finalize", () => this.recorder!.finalize(reason, this.recording.incomplete));
-    this.cancelAnswerResponseGate(reason);
     clearTimeout(this.startupTimer);
     clearTimeout(this.settleTimer);
     this.cancelNoTranscriptRecovery();

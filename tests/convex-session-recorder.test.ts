@@ -130,3 +130,17 @@ it("failed create returns no identity and cannot fetch an attempt", async () => 
   await expect(recorder.getRecord("unknown")).rejects.toThrow("No durable session");
   expect(query).not.toHaveBeenCalled();
 });
+
+it("passes the live start clock and separate timeline payload through the durable adapter", async () => {
+  const { recorder } = await setup();
+  await recorder.activate(123456);
+  expect(mutation).toHaveBeenLastCalledWith(api.sessions.activate, { sessionId: "session-test", startedAt: 123456 });
+  const timeline = { type: "playback_gate_changed" as const, state: "blocked" as const, reason: "answer_evaluation" };
+  await recorder.appendTimeline("timeline_1", 100, timeline);
+  expect(mutation).toHaveBeenLastCalledWith(api.sessions.appendEvent, {
+    sessionId: "session-test",
+    eventKey: "timeline_1",
+    atMs: 100,
+    timeline,
+  });
+});
