@@ -759,6 +759,7 @@ export class LessonSession {
       turnEndToRequestMs: requestedAt - turnEndAt,
     });
     this.log("answer.requesting", {
+      sceneIndex,
       version,
       signal: this.turnSignal,
       turn_end_at: turnEndAt - this.createdAt,
@@ -1122,6 +1123,7 @@ export class LessonSession {
   /** The application, not the model, commits the next deterministic scene. */
   private advance(answerVersion: string) {
     this.log("advance.committed", {
+      scene_index: this.snapshot.sceneIndex,
       answer_version: answerVersion,
       turn_end_to_commit_ms: Date.now() - this.turnEndAt,
     });
@@ -1180,6 +1182,7 @@ export class LessonSession {
     });
     if (pending.answerVersion)
       this.log("advance.displayed", {
+        scene_index: pending.sceneIndex - 1,
         answer_version: pending.answerVersion,
         turn_end_to_display_ms: Date.now() - (pending.turnEndAt ?? this.turnEndAt),
       });
