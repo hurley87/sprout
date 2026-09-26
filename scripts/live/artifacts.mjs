@@ -22,7 +22,9 @@ export function timeline(name, micScript, log) {
     }
     flush();
     const page = `  [page ${(e.at / 1000).toFixed(1)}s]`;
-    if (e.dir === "child")
+    if (e.dir === "scenario") rows.push(`${page} SCENARIO ${e.action} ${e.scenario}${e.error ? `: ${e.error}` : ""}`);
+    else if (e.dir === "ui") rows.push(`${page} SESSION ${e.live ? "live" : "ended"}`);
+    else if (e.dir === "child")
       rows.push(
         `${page} CHILD ACTION ${e.action}${e.text ? ` "${e.text}"` : ""}${e.trackId ? ` track=${e.trackId}` : ""}`,
       );
@@ -47,6 +49,11 @@ export async function exportArtifacts({ page, browser, dir, label, scenario, mic
   const text = [timeline(label, micScript, log), `metrics: ${JSON.stringify(summary)}`].join("\n");
   writeFileSync(`${dir}/log.json`, JSON.stringify({ browser: browser.version(), scenario, summary, log }, null, 2));
   writeFileSync(`${dir}/timeline.txt`, text);
+  // Always leave a diagnostics file, even when startup/download fails.
+  writeFileSync(
+    `${dir}/diagnostics.json`,
+    JSON.stringify({ unavailable: "Attempt diagnostics download not completed", summary }, null, 2),
+  );
   await page.getByText("Parent testing notes").click();
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download attempt diagnostics" }).click();

@@ -20,6 +20,9 @@ export function createSimulatedChild({ page, synthesize = synthesizeSpeech }) {
           }, text);
           const wav = join(dir, "speech.wav");
           await synthesize(text, wav, { signal: controller.signal });
+          await page.evaluate(text => {
+            window.__liveLog.push({ dir: "child", action: "synthesis-end", text, at: window.__liveNow() });
+          }, text);
           if (closed) throw new Error("Simulated child is closed");
           const bytes = Array.from(await readFile(wav));
           await page.evaluate(bytes => window.__liveMic.play(bytes), bytes);

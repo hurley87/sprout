@@ -8,12 +8,13 @@ import { recordLiveTraffic } from "./instrumentation.mjs";
  * setupPage runs before navigation and may return an async cleanup callback.
  * Neither callback needs to describe child actions as fixed timestamps.
  */
-export async function runLiveSession({ baseUrl, browserArgs, setupPage, drive, collect }) {
+export async function runLiveSession({ baseUrl, browserArgs, setupPage, drive, collect, onFailure = undefined }) {
   const browser = await chromium.launch({ args: browserArgs });
   let cleanup;
+  let page;
   let failed = false;
   try {
-    const page = await (await browser.newContext({ permissions: ["microphone"] })).newPage();
+    page = await (await browser.newContext({ permissions: ["microphone"] })).newPage();
     await page.addInitScript(recordLiveTraffic);
     cleanup = await setupPage?.(page);
     await page.goto(`${baseUrl}/?debug=1`);
@@ -25,6 +26,7 @@ export async function runLiveSession({ baseUrl, browserArgs, setupPage, drive, c
     return await collect({ page, browser });
   } catch (error) {
     failed = true;
+    if (page) await onFailure?.({ page, browser, error }).catch(() => {});
     throw error;
   } finally {
     try {

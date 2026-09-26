@@ -57,6 +57,10 @@ export class LiveEventJournal {
           this.turn.providerEndMs = Math.max(this.turn.providerEndMs ?? event.end_ms, event.end_ms);
         }
         this.turn.lastAt = event.at;
+      } else if (event.dir === "in" && event.type === "session.input_transcript.delta") {
+        this.emit("child-transcript", { at: event.at, text: event.delta, event });
+      } else if (event.dir === "child" && event.action === "playback-start") {
+        this.emit("playback-start", { at: event.at, event });
       } else if (event.dir === "scene") {
         const from = this.scene;
         this.scene = event.scene;
@@ -179,6 +183,7 @@ export function createLiveObserver(page, { quietMs = SPROUT_UTTERANCE_GAP_MS, ti
     waitForScene: (scene, options) =>
       wait("scene", event => event.to === scene, { description: `scene ${scene}`, ...options }),
     waitForSceneAdvance: options => wait("scene", event => event.from !== null && event.to !== null, options),
+    waitForChildTranscript: options => wait("child-transcript", () => true, options),
     waitForEvaluation: options => wait("evaluation", () => true, options),
     waitForSessionEnd: options => wait("session-end", () => true, options),
   };

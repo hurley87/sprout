@@ -104,6 +104,24 @@ describe("live observer", () => {
     await expect(observer.waitForEvaluation()).rejects.toThrow("Timed out waiting for evaluation");
   });
 
+  it("waits for retained child transcripts with independent consumption and explicit replay boundaries", async () => {
+    const { entries, observer } = fixture();
+    const before = await observer.checkpoint();
+    entries.push({ at: 10, dir: "in", type: "session.input_transcript.delta", delta: "I don't know." });
+    const afterFirst = await observer.checkpoint();
+    entries.push({ at: 20, dir: "in", type: "session.input_transcript.delta", delta: "Can we do more?" });
+    await observer.snapshot();
+    await expect(observer.waitForChildTranscript()).resolves.toMatchObject({
+      kind: "child-transcript",
+      text: "I don't know.",
+      at: 10,
+    });
+    await expect(observer.waitForChildTranscript()).resolves.toMatchObject({ text: "Can we do more?", at: 20 });
+    await expect(observer.waitForChildTranscript({ after: before })).resolves.toMatchObject({ at: 10 });
+    await expect(observer.waitForChildTranscript({ after: afterFirst })).resolves.toMatchObject({ at: 20 });
+    await expect(observer.waitForChildTranscript()).rejects.toThrow("Timed out waiting for child-transcript");
+  });
+
   it("supports checkpoints, scene transitions, and UI or provider session ends", async () => {
     const { entries, observer } = fixture();
     entries.push({ at: 1, dir: "scene", scene: "hello-duck" });
