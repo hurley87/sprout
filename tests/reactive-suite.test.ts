@@ -244,3 +244,26 @@ describe("baseline reactive suite", () => {
     expect(results.map(r => r.status)).toEqual(["failed", "passed"]);
   });
 });
+
+it("explicit stop waits for the post-session control and permits transport finalization", async () => {
+  const action = { checkpointBefore: 2 };
+  const end = { cursor: 5 };
+  const getByRole = vi.fn(() => ({ waitFor: vi.fn(async () => {}) }));
+  await REACTIVE_SCENARIOS["explicit-stop"].run({
+    child: { requestStop: async () => action },
+    observer: {
+      waitForSproutTurnEnd: async () => {},
+      waitForSessionEnd: async () => end,
+      snapshot: async () => ({
+        events: [
+          { kind: "scene", cursor: 4, from: "hello-duck", to: null },
+          { kind: "session-end", cursor: 5 },
+          { kind: "session-end", cursor: 6 },
+        ],
+      }),
+    },
+    assertions: { sessionEnded: async () => {} },
+    page: { getByRole },
+  });
+  expect(getByRole).toHaveBeenCalledWith("button", { name: "Start a new lesson" });
+});

@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdirSync, writeFileSync, rmSync, appendFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { runLiveSession } from "./runner.mjs";
 import { setupSyntheticMicrophone } from "./microphone.mjs";
@@ -80,12 +80,20 @@ export async function runSelected(runs, run) {
 }
 
 export async function runReactiveScenario(name, definition, { out, baseUrl, label = name }) {
+  const metadata = {
+    name,
+    label,
+    mode: "reactive",
+    startedAt: new Date().toISOString(),
+    timeoutMs: definition.timeoutMs,
+    baseUrl: new URL(baseUrl).origin,
+  };
   const dir = join(out, label);
   mkdirSync(dir, { recursive: true });
   rmSync(join(dir, "failure.txt"), { force: true });
   writeFileSync(
     join(dir, "log.json"),
-    JSON.stringify({ scenario: { name, mode: "reactive" }, log: [], unavailable: "Session not collected" }, null, 2),
+    JSON.stringify({ browser: null, scenario: metadata, log: [], unavailable: "Session not collected" }, null, 2),
   );
   writeFileSync(join(dir, "timeline.txt"), `# ${label}\nScenario setup started; session evidence not yet collected.\n`);
   writeFileSync(join(dir, "diagnostics.json"), JSON.stringify({ unavailable: "Session not collected" }, null, 2));
@@ -106,8 +114,9 @@ export async function runReactiveScenario(name, definition, { out, baseUrl, labe
       browser,
       dir,
       label,
-      scenario: { name, mode: "reactive" },
+      scenario: metadata,
       micScript: "reactive macOS say -> runtime microphone -> real GPT-Live/Jev",
+      failure: failure ? (failure.stack ?? String(failure)) : undefined,
     });
     collected = true;
     return result;
@@ -142,26 +151,39 @@ export async function runReactiveScenario(name, definition, { out, baseUrl, labe
           );
         } catch (error) {
           failure = error;
-          writeFileSync(join(dir, "failure.txt"), String(error));
-          await record(page, "assertion-failure", String(error));
+          writeFileSync(join(dir, "failure.txt"), error.stack ?? String(error));
+          await record(page, "assertion-failure", error.stack ?? String(error)).catch(() => {});
         } finally {
-          await record(page, "end", failure ? String(failure) : undefined);
-          const end = page.getByRole("button", { name: "End lesson" });
-          if (await end.isVisible()) await end.click();
+          try {
+            await record(page, "end", failure ? String(failure) : undefined);
+            const end = page.getByRole("button", { name: "End lesson" });
+            if (await end.isVisible()) await end.click();
+          } catch (error) {
+            if (!failure) throw error;
+          }
         }
       },
       collect,
       onFailure: async ({ page, browser, error }) => {
-        writeFileSync(join(dir, "failure.txt"), `Scenario ${name}: ${error}`);
-        await record(page, "runner-failure", String(error)).catch(() => {});
+        failure ??= error;
+        writeFileSync(join(dir, "failure.txt"), failure.stack ?? String(failure));
+        await record(page, "runner-failure", failure.stack ?? String(failure)).catch(() => {});
         const end = page.getByRole("button", { name: "End lesson" });
         if (await end.isVisible().catch(() => false)) await end.click().catch(() => {});
         await collect({ page, browser });
       },
     });
   } catch (error) {
-    writeFileSync(join(dir, "failure.txt"), `Scenario ${name}: ${error}`);
-    throw new Error(`Scenario ${name} failed; artifacts: ${dir}; ${error}`, { cause: error });
+    failure ??= error;
+    writeFileSync(join(dir, "failure.txt"), failure.stack ?? String(failure));
+    throw new Error(`Scenario ${name} failed; artifacts: ${dir}; ${failure}`, { cause: failure });
+  } finally {
+    if (failure) {
+      writeFileSync(join(dir, "failure.txt"), failure.stack ?? String(failure));
+      // Covers launch/setup failures and failures after collection (including cleanup).
+      if (!readFileSync(join(dir, "timeline.txt"), "utf8").includes("=== SCENARIO FAILED ==="))
+        appendFileSync(join(dir, "timeline.txt"), `\n=== SCENARIO FAILED ===\n${failure.stack ?? String(failure)}\n`);
+    }
   }
   if (failure) throw new Error(`${failure}; artifacts: ${dir}`, { cause: failure });
   return dir;

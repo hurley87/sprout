@@ -159,7 +159,7 @@ export const REACTIVE_SCENARIOS = {
       "Stop advanced the lesson",
       events,
     );
-    await ctx.page.getByRole("button", { name: "Start counting together" }).waitFor();
+    await ctx.page.getByRole("button", { name: "Start a new lesson" }).waitFor();
     const settled = await ctx.observer.snapshot();
     requireEvidence(
       !settled.events.some(e => e.kind === "turn-start" && e.cursor > end.cursor),

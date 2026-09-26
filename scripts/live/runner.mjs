@@ -33,9 +33,16 @@ export async function runLiveSession({ baseUrl, browserArgs, setupPage, drive, c
       await cleanup?.();
     } catch (error) {
       // Preserve the original navigation/driver failure if page cleanup also fails.
-      if (!failed) throw error;
+      if (!failed) {
+        failed = true;
+        throw error;
+      }
     } finally {
-      await browser.close();
+      try {
+        await browser.close();
+      } catch (error) {
+        if (!failed) throw error;
+      }
     }
   }
 }
