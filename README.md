@@ -20,6 +20,16 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Convex persistence foundation
+
+The session-record schema and functions live in `convex/`. For local MVP development, run
+`npm run convex:dev` in a second terminal and select a local deployment when prompted.
+The Convex CLI writes the deployment URL to an ignored local environment file and regenerates
+`convex/_generated/`. The CLI-generated bindings are committed so tests and typecheck work
+without a running deployment. The live lesson records lifecycle, displayed scenes, and child utterances
+through Convex. Configure `NEXT_PUBLIC_CONVEX_URL` for the browser recorder; recording failures are
+shown while the lesson continues. Sprout playback attribution and support capture are deferred.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

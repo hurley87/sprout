@@ -9,6 +9,8 @@ type TestState = {
   shownAt: Record<string, number>;
   tracks: MediaStreamTrack[];
   closed: boolean;
+  recordingsStarted: number;
+  persistence: string[];
   releaseMic?: () => void;
 };
 
@@ -26,6 +28,21 @@ async function mockEvaluate(page: Page, probability: number) {
 }
 
 async function mockLive(page: Page, pendingMic = false) {
+  await page.route("**/api/query", route => route.fulfill({ json: { status: "success", value: null } }));
+  await page.route("**/api/mutation", async route => {
+    const { path } = route.request().postDataJSON();
+    await page.evaluate(path => window.sproutTest.persistence.push(path), path);
+    const value =
+      path === "sessions:generateUploadUrl"
+        ? "https://audio-test.invalid/upload"
+        : path === "sessions:create"
+          ? "session-test"
+          : null;
+    await route.fulfill({ json: { status: "success", value } });
+  });
+  await page.route("https://audio-test.invalid/upload", route =>
+    route.fulfill({ json: { storageId: "storage-test" } }),
+  );
   await page.route("**/api/live", route =>
     route.fulfill({ json: { session: { id: "test" }, transport: { sdp: "test" } } }),
   );
@@ -34,6 +51,8 @@ async function mockLive(page: Page, pendingMic = false) {
   await page.addInitScript(
     ({ pendingMic }) => {
       const state: TestState = {
+        recordingsStarted: 0,
+        persistence: [],
         commands: [],
         shownAt: {},
         tracks: [],
@@ -42,12 +61,22 @@ async function mockLive(page: Page, pendingMic = false) {
         disconnect: () => {},
       };
       window.sproutTest = state;
+      const NativeMediaRecorder = window.MediaRecorder;
+      window.MediaRecorder = class extends NativeMediaRecorder {
+        start(timeslice?: number) {
+          state.recordingsStarted++;
+          super.start(timeslice);
+        }
+      };
       // Provider mock has a continuous fake microphone waveform, not utterances.
       // Exercise the transcript fallback here; microphone VAD is covered by session tests.
+      const NativeAudioContext = window.AudioContext;
       Object.defineProperty(window, "AudioContext", {
-        value: class {
-          constructor() {
-            throw new Error("synthetic microphone");
+        value: class extends NativeAudioContext {
+          createAnalyser(): AnalyserNode {
+            const analyser = super.createAnalyser();
+            analyser.getFloatTimeDomainData = samples => samples.fill(0);
+            return analyser;
           }
         },
       });
@@ -138,6 +167,7 @@ test("parent start, committed scene, stop, late actions, and diagnostics export"
   await mockEvaluate(page, 0.95);
   await begin(page);
   await expect(page.getByRole("heading")).toHaveCount(0);
+  expect(await page.evaluate(() => window.sproutTest.recordingsStarted)).toBe(1);
   await say(page, "One!");
   await expect(page.locator('[data-scene="duck-friends"] > span')).toHaveCount(2);
   await expect.poll(async () => (await sentContent(page)).some(text => text.includes("2 ducks"))).toBe(true);
@@ -160,6 +190,9 @@ test("parent start, committed scene, stop, late actions, and diagnostics export"
   const download = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download attempt diagnostics" }).click();
   expect((await download).suggestedFilename()).toMatch(/^sprout-attempt-/);
+  await expect.poll(() => page.evaluate(() => window.sproutTest.persistence)).toContain("sessions:attachRecording");
+  const persistence = await page.evaluate(() => window.sproutTest.persistence);
+  expect(persistence.indexOf("sessions:generateUploadUrl")).toBeGreaterThan(persistence.indexOf("sessions:finalize"));
   expect(errors).toEqual([]);
 });
 
@@ -239,7 +272,7 @@ test("connection failure preserves a retryable explanation and stops capture", a
   await mockLive(page);
   await begin(page);
   await page.evaluate(() => window.sproutTest.disconnect());
-  await expect(page.getByRole("main").getByRole("alert")).toContainText("connection was lost");
+  await expect(page.getByRole("main").getByRole("alert").filter({ hasText: "connection was lost" })).toBeVisible();
   expect(await tracksStopped(page)).toBe(true);
   await expect(page.getByRole("button", { name: "Start a new lesson" })).toBeVisible();
 });
@@ -279,6 +312,197 @@ test("missing server configuration is explained and releases real microphone tra
   );
   await page.goto("/");
   await page.getByRole("button", { name: "Start counting together" }).click();
-  await expect(page.getByRole("main").getByRole("alert")).toContainText("OPENAI_API_KEY");
+  await expect(page.getByRole("main").getByRole("alert").filter({ hasText: "OPENAI_API_KEY" })).toBeVisible();
   expect(await tracksStopped(page)).toBe(true);
+});
+
+test("inspects pending then complete canonical evidence, seeks audio, retries and starts unlinked", async ({
+  page,
+}) => {
+  await mockLive(page);
+  type DurableRecord = {
+    session: {
+      _id: string;
+      state: string;
+      recordStatus: string;
+      createdAt: number;
+      startedAt?: number;
+      endedAt?: number;
+      endingReason?: string;
+      retryOf?: string;
+      recording?: { storageId: string; mimeType: string; startOffsetMs: number; durationMs: number };
+    };
+    events: { eventKey: string; order: number; atMs: number; evidence?: object; timeline?: object }[];
+    recordingUrl: string | null;
+  };
+  const records = new Map<string, DurableRecord>();
+  const creates: { retryOf?: string }[] = [];
+  let pending = true;
+  let seekTimestamp = 12300;
+  await page.route("**/api/mutation", async route => {
+    const {
+      path,
+      args: [args],
+    } = route.request().postDataJSON();
+    const record = records.get(args.sessionId);
+    let value: string | null = null;
+    if (path === "sessions:create") {
+      creates.push(args);
+      value = `attempt-${creates.length}`;
+      records.set(value, {
+        session: {
+          _id: value,
+          state: "starting",
+          recordStatus: "pending",
+          createdAt: Date.now(),
+          retryOf: args.retryOf,
+        },
+        events: [],
+        recordingUrl: null,
+      });
+    } else if (path === "sessions:activate" && record) {
+      record.session.state = "active";
+      record.session.startedAt = args.startedAt ?? Date.now();
+    } else if (path === "sessions:appendEvent" && record) {
+      record.events.push({
+        eventKey: args.eventKey,
+        order: record.events.length,
+        atMs: args.atMs,
+        evidence: args.evidence,
+        timeline: args.timeline,
+      });
+    } else if (path === "sessions:finalize" && record) {
+      record.session.state = "ended";
+      record.session.endingReason = args.endingReason;
+      record.session.endedAt = Date.now();
+    } else if (path === "sessions:generateUploadUrl") value = "https://audio-test.invalid/upload";
+    else if (path === "sessions:attachRecording" && record) {
+      record.session.recordStatus = "complete";
+      record.session.recording = {
+        storageId: args.storageId,
+        mimeType: args.mimeType,
+        startOffsetMs: 0,
+        durationMs: 20000,
+      };
+      record.recordingUrl = "https://audio-test.invalid/full.wav";
+    }
+    await route.fulfill({ json: { status: "success", value } });
+  });
+  await page.route("**/api/query", async route => {
+    const {
+      args: [{ sessionId }],
+    } = route.request().postDataJSON();
+    const stored = records.get(sessionId);
+    const value = stored ? structuredClone(stored) : null;
+    if (pending && value) {
+      value.session.recordStatus = "pending";
+      delete value.session.recording;
+      value.recordingUrl = null;
+    }
+    // A fixture timestamp exercises the canonical seek action without a 12-second browser wait.
+    if (value?.session.recording) value.events[0].atMs = seekTimestamp;
+    await route.fulfill({ json: { status: "success", value } });
+  });
+  const wav = Buffer.alloc(44 + 8000 * 30 * 2);
+  wav.write("RIFF", 0);
+  wav.writeUInt32LE(wav.length - 8, 4);
+  wav.write("WAVEfmt ", 8);
+  wav.writeUInt32LE(16, 16);
+  wav.writeUInt16LE(1, 20);
+  wav.writeUInt16LE(1, 22);
+  wav.writeUInt32LE(8000, 24);
+  wav.writeUInt32LE(16000, 28);
+  wav.writeUInt16LE(2, 32);
+  wav.writeUInt16LE(16, 34);
+  wav.write("data", 36);
+  wav.writeUInt32LE(wav.length - 44, 40);
+  await page.route("https://audio-test.invalid/full.wav", route => {
+    const range = route
+      .request()
+      .headers()
+      ["range"]?.match(/bytes=(\d+)-(\d*)/);
+    const start = range ? Number(range[1]) : 0;
+    const end = range?.[2] ? Number(range[2]) : wav.length - 1;
+    return route.fulfill({
+      status: range ? 206 : 200,
+      contentType: "audio/wav",
+      headers: {
+        "Accept-Ranges": "bytes",
+        ...(range ? { "Content-Range": `bytes ${start}-${end}/${wav.length}` } : {}),
+      },
+      body: wav.subarray(start, end + 1),
+    });
+  });
+  await begin(page);
+  await emit(page, { type: "session.output_transcript.delta", delta: "Hello friend", start_ms: 100, end_ms: 400 });
+  await page.getByRole("button", { name: "End lesson" }).click();
+  const inspector = page.getByRole("region", { name: "Durable session record" });
+  await expect(inspector.getByText("Record still pending", { exact: true })).toBeVisible();
+  await expect(inspector.getByText("Scene actually displayed: hello-duck", { exact: false })).toBeVisible();
+  await expect(inspector.getByText("Full-session audio unavailable.")).toBeVisible();
+  await expect.poll(() => records.get("attempt-1")?.session.recordStatus).toBe("complete");
+  pending = false;
+  await inspector.getByRole("button", { name: "Refresh record" }).click();
+  await expect(inspector.getByText("Record complete", { exact: true })).toBeVisible();
+  await expect(inspector.getByText("Generated by Sprout · Delivery not established", { exact: false })).toBeVisible();
+  await expect(inspector.getByText("Sprout playback permitted", { exact: false })).toBeVisible();
+  const player = inspector.locator("audio");
+  await expect.poll(() => player.evaluate((audio: HTMLAudioElement) => audio.readyState)).toBe(4);
+  await inspector
+    .locator("li")
+    .filter({ hasText: "Event 0 ·" })
+    .getByRole("button", { name: "Play from here" })
+    .click();
+  await expect.poll(() => player.evaluate((audio: HTMLAudioElement) => audio.currentTime)).toBeGreaterThanOrEqual(12.3);
+  const position = await player.evaluate((audio: HTMLAudioElement) => {
+    audio.pause();
+    return audio.currentTime;
+  });
+  expect(position).toBeGreaterThanOrEqual(12.3);
+  expect(position).toBeLessThan(13);
+  seekTimestamp = 30000;
+  await inspector.getByRole("button", { name: "Refresh record" }).click();
+  await expect(inspector.getByText("Event 0 · 30000 ms from session.started")).toBeVisible();
+  await inspector
+    .locator("li")
+    .filter({ hasText: "Event 0 ·" })
+    .getByRole("button", { name: "Play from here" })
+    .click();
+  await expect.poll(() => player.evaluate((audio: HTMLAudioElement) => audio.currentTime)).toBeGreaterThanOrEqual(20);
+  const clampedPosition = await player.evaluate((audio: HTMLAudioElement) => {
+    audio.pause();
+    return audio.currentTime;
+  });
+  expect(clampedPosition).toBeLessThan(21);
+  await page.screenshot({ path: "test-results/session-inspector.png", fullPage: true });
+  const original = structuredClone(records.get("attempt-1"));
+  const previousTracks = await page.evaluate(() => window.sproutTest.tracks.length);
+  await inspector.getByRole("button", { name: "Retry this lesson" }).click();
+  await expect(page.locator('[data-scene="hello-duck"]')).toBeVisible();
+  expect(creates).toEqual([{}, { retryOf: "attempt-1" }]);
+  expect(records.get("attempt-2")?.session._id).not.toBe("attempt-1");
+  expect(records.get("attempt-1")).toEqual(original);
+  expect(await page.evaluate(() => window.sproutTest.recordingsStarted)).toBe(2);
+  expect(
+    await page.evaluate(() => window.sproutTest.tracks.slice(0, 2).every(track => track.readyState === "ended")),
+  ).toBe(true);
+  expect(await page.evaluate(() => window.sproutTest.tracks.length)).toBeGreaterThan(previousTracks);
+  await page.getByRole("button", { name: "End lesson" }).click();
+  await expect(inspector.getByText("Retry of attempt-1", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Start a new lesson" }).click();
+  await expect(page.locator('[data-scene="hello-duck"]')).toBeVisible();
+  expect(creates).toEqual([{}, { retryOf: "attempt-1" }, {}]);
+  expect(records.get("attempt-1")).toEqual(original);
+  await page.getByRole("button", { name: "End lesson" }).click();
+});
+
+test("failed durable creation leaves diagnostics available and offers no retry", async ({ page }) => {
+  await mockLive(page);
+  await page.route("**/api/mutation", route => route.fulfill({ json: { status: "error", errorMessage: "offline" } }));
+  await begin(page);
+  await page.getByRole("button", { name: "End lesson" }).click();
+  await expect(page.getByText("Durable session record unavailable", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Retry this lesson" })).toHaveCount(0);
+  await page.getByText("Parent testing notes", { exact: false }).click();
+  await expect(page.getByRole("button", { name: "Download attempt diagnostics" })).toBeVisible();
 });

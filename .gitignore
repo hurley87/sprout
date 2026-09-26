@@ -18,6 +18,7 @@
 # next.js
 /.next/
 /out/
+.convex/
 
 # production
 /build

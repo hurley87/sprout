@@ -1,4 +1,5 @@
 import { parseProviderEvent, parseSessionAnswer, type ClientCommand, type ProviderEvent } from "./events";
+import type { SessionAudioRecording } from "./session-recorder";
 import type { Transport } from "./session";
 import { MicrophoneTurnDetector } from "./microphone-turn";
 
@@ -12,6 +13,21 @@ export class BrowserTransport implements Transport {
   private channel?: RTCDataChannel;
   private mic?: MediaStream;
   private remote?: MediaStream;
+  private context?: AudioContext;
+  private mix?: MediaStreamAudioDestinationNode;
+  private sources: MediaStreamAudioSourceNode[] = [];
+  private remoteGain?: GainNode;
+  private remoteSource?: MediaStreamAudioSourceNode;
+  private mediaRecorder?: MediaRecorder;
+  private captureError?: Error;
+  private captureStartedAt?: number;
+  private captureDurationMs = 0;
+  private chunks: Blob[] = [];
+  private completed?: Promise<SessionAudioRecording | null>;
+  private finishCapture?: (recording: SessionAudioRecording | null) => void;
+  private playbackReady = false;
+  private outputBlocked = false;
+  private closed = false;
   private turnDetector?: MicrophoneTurnDetector;
   // The single record of "this attempt is over", set by stopMedia(). Late
   // callbacks and resolved awaits check it instead of tracking their own flags.
@@ -36,6 +52,31 @@ export class BrowserTransport implements Transport {
     }
     this.mic = stream;
     try {
+      if (typeof MediaRecorder === "undefined") throw new Error("MediaRecorder is unavailable");
+      this.context = new AudioContext();
+      this.mix = this.context.createMediaStreamDestination();
+      const source = this.context.createMediaStreamSource(stream);
+      this.sources.push(source);
+      source.connect(this.mix);
+      this.remoteGain = this.context.createGain();
+      this.remoteGain.gain.value = 0;
+      this.remoteGain.connect(this.mix);
+      await this.context.resume();
+      if (this.cancelled) {
+        this.releaseMix();
+        return;
+      }
+      if (this.context.state !== "running") throw new Error("Recording AudioContext did not start");
+      this.context.onstatechange = () => {
+        if (!this.cancelled && this.captureStartedAt !== undefined && this.context?.state !== "running")
+          this.captureError = new Error("Recording AudioContext stopped running");
+      };
+    } catch (error) {
+      this.captureError = error instanceof Error ? error : new Error("Audio mix initialization failed");
+      this.releaseMix();
+    }
+    if (this.cancelled) return;
+    try {
       this.turnDetector = new MicrophoneTurnDetector(stream, event => {
         if (!this.cancelled) onEvent(event);
       });
@@ -49,12 +90,37 @@ export class BrowserTransport implements Transport {
         track.stop();
         return;
       }
-      this.remote = new MediaStream([track]);
+      this.remoteSource?.disconnect();
+      this.remote?.getTracks().forEach(oldTrack => oldTrack.stop());
+      const remote = new MediaStream([track]);
+      this.remote = remote;
       this.audio.srcObject = this.remote;
-      void this.audio.play().catch(() => {
-        if (!this.cancelled)
-          onFailure("The browser blocked Sprout's voice playback. Allow sound for this site, then start a new lesson.");
-      });
+      this.playbackReady = false;
+      this.syncRecordingGate();
+      try {
+        if (this.context && this.remoteGain) {
+          const source = this.context.createMediaStreamSource(this.remote);
+          this.sources.push(source);
+          source.connect(this.remoteGain);
+          this.remoteSource = source;
+        }
+      } catch {
+        this.captureError = new Error("Remote audio could not join the recording mix");
+      }
+      void this.audio
+        .play()
+        .then(() => {
+          if (!this.cancelled && this.remote === remote) {
+            this.playbackReady = true;
+            this.syncRecordingGate();
+          }
+        })
+        .catch(() => {
+          if (!this.cancelled)
+            onFailure(
+              "The browser blocked Sprout's voice playback. Allow sound for this site, then start a new lesson.",
+            );
+        });
     };
     peer.onconnectionstatechange = () => {
       if (!this.cancelled && ["failed", "disconnected", "closed"].includes(peer.connectionState))
@@ -138,11 +204,97 @@ export class BrowserTransport implements Transport {
   }
 
   setOutputBlocked(blocked: boolean) {
-    if (!this.cancelled) this.audio.muted = blocked;
+    if (!this.cancelled) {
+      this.outputBlocked = blocked;
+      this.audio.muted = blocked;
+      this.syncRecordingGate();
+    }
+  }
+
+  private syncRecordingGate() {
+    if (this.remoteGain)
+      this.remoteGain.gain.value = !this.cancelled && this.playbackReady && !this.outputBlocked ? 1 : 0;
+  }
+
+  startRecording() {
+    if (this.captureStartedAt !== undefined || this.cancelled) return;
+    if (this.captureError) throw this.captureError;
+    if (!this.mix) throw new Error("Recording mix is unavailable");
+    const mimeType = ["audio/webm;codecs=opus", "audio/ogg;codecs=opus", "audio/mp4"].find(type =>
+      MediaRecorder.isTypeSupported?.(type),
+    );
+    const recorder = new MediaRecorder(this.mix.stream, mimeType ? { mimeType } : undefined);
+    this.mediaRecorder = recorder;
+    this.completed = new Promise(resolve => {
+      this.finishCapture = resolve;
+    });
+    recorder.ondataavailable = event => {
+      if (event.data.size) this.chunks.push(event.data);
+    };
+    recorder.onerror = () => {
+      this.captureError = new Error("Session audio recorder failed");
+    };
+    recorder.onstop = () => {
+      if (!this.cancelled) this.captureError = new Error("Session audio recorder stopped unexpectedly");
+      const blob = new Blob(this.chunks, { type: this.chunks[0]?.type || recorder.mimeType });
+      this.chunks = [];
+      if (!blob.size || !blob.type) this.captureError ??= new Error("Session audio recording is empty or unusable");
+      this.finishCapture?.(
+        this.captureError
+          ? null
+          : {
+              blob,
+              mimeType: blob.type,
+              startOffsetMs: 0,
+              durationMs: this.captureDurationMs,
+            },
+      );
+      recorder.ondataavailable = recorder.onerror = recorder.onstop = null;
+    };
+    this.captureStartedAt = performance.now();
+    try {
+      recorder.start();
+    } catch (error) {
+      this.captureError = error instanceof Error ? error : new Error("Recording failed to start");
+      this.finishCapture?.(null);
+      recorder.ondataavailable = recorder.onerror = recorder.onstop = null;
+      throw this.captureError;
+    }
+  }
+
+  async recording(): Promise<SessionAudioRecording | null> {
+    const recording = await this.completed;
+    if (this.captureError) throw this.captureError;
+    return recording ?? null;
+  }
+
+  private releaseMix() {
+    this.sources.forEach(source => source.disconnect());
+    this.sources = [];
+    this.remoteGain?.disconnect();
+    this.remoteGain = undefined;
+    this.mix?.disconnect();
+    this.mix?.stream.getTracks().forEach(track => track.stop());
+    this.mix = undefined;
+    if (this.context) {
+      this.context.onstatechange = null;
+      void this.context.close().catch(() => {});
+      this.context = undefined;
+    }
   }
 
   stopMedia() {
+    if (this.cancelled) return;
     this.abort.abort();
+    this.syncRecordingGate();
+    if (this.captureStartedAt !== undefined) this.captureDurationMs = performance.now() - this.captureStartedAt;
+    try {
+      if (this.mediaRecorder?.state !== "inactive") this.mediaRecorder?.stop();
+    } catch {
+      this.captureError = new Error("Session audio could not finish");
+      this.finishCapture?.(null);
+    }
+    this.releaseMix();
     this.audio.muted = false;
     this.turnDetector?.close();
     this.mic?.getTracks().forEach(track => track.stop());
@@ -153,6 +305,8 @@ export class BrowserTransport implements Transport {
 
   close() {
     this.stopMedia();
+    if (this.closed) return;
+    this.closed = true;
     this.channel?.close();
     this.peer?.close();
   }
