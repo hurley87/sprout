@@ -1,4 +1,10 @@
-import { RecordingQueue, type SessionRecorder, type Evidence, type SessionAudioRecording } from "./session-recorder";
+import {
+  RecordingQueue,
+  type SessionRecorder,
+  type DurableSessionRef,
+  type Evidence,
+  type SessionAudioRecording,
+} from "./session-recorder";
 import {
   CORRECTION_WINDOW_MS,
   MICROPHONE_QUIET_MS,
@@ -52,6 +58,7 @@ export type Snapshot = {
   reason?: EndReason;
   error?: string;
   recordingError?: string;
+  durableSessionRef?: DurableSessionRef;
 };
 export type Diagnostic = { at: number; type: string; detail?: unknown };
 
@@ -217,6 +224,7 @@ export class LessonSession {
     private changed: (snapshot: Snapshot) => void,
     private diagnosticChanged?: () => void,
     private recorder?: SessionRecorder,
+    private retryOf?: DurableSessionRef,
   ) {}
 
   private get scene() {
@@ -239,7 +247,12 @@ export class LessonSession {
   async start() {
     if (this.recordingStarted) return;
     this.recordingStarted = true;
-    if (this.recorder) this.recording.enqueue("create", () => this.recorder!.create());
+    if (this.recorder)
+      this.recording.enqueue("create", async () => {
+        const durableSessionRef = await this.recorder!.create(this.retryOf);
+        // Creation may finish after the live UI ends; preserve identity in that snapshot too.
+        this.update({ durableSessionRef });
+      });
     this.log("attempt.started", { model: MODEL, prompt: PROMPT_VERSION });
     this.changed(this.snapshot);
     this.startupTimer = setTimeout(

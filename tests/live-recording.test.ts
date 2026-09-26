@@ -11,12 +11,13 @@ import { CORRECTION_WINDOW_MS, TRANSCRIPT_FALLBACK_MS } from "../lib/answer";
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
-function setup(delivery = false) {
+function setup(delivery = false, retryOf?: string) {
   const writes: (string | Evidence)[] = [];
   const recorder: SessionRecorder = {
     attachRecording: vi.fn(async () => {}),
     create: vi.fn(async () => {
       writes.push("create");
+      return "session-test";
     }),
     activate: vi.fn(async () => {
       writes.push("active");
@@ -49,6 +50,7 @@ function setup(delivery = false) {
     vi.fn(),
     undefined,
     recorder,
+    retryOf,
   );
   void session.start();
   return { session, recorder, writes, transport };
@@ -351,6 +353,7 @@ it.each([false, true])(
       async create() {
         operations.push("create");
         sessionId = await t.mutation(api.sessions.create, {});
+        return sessionId;
       },
       async activate() {
         operations.push("activate");
@@ -482,6 +485,7 @@ function durableAudioSetup() {
   });
   vi.mocked(recorder.create).mockImplementation(async () => {
     sessionId = await t.mutation(api.sessions.create, {});
+    return sessionId;
   });
   vi.mocked(recorder.activate).mockImplementation(async () => {
     await t.mutation(api.sessions.activate, { sessionId });
@@ -522,4 +526,56 @@ it.each([false, true])("audio attachment failure attempts the durable marker (ma
     recordStatus: markerFails ? "pending" : "incomplete",
   });
   expect((await record())?.session.recording).toBeUndefined();
+});
+
+it("keeps a successfully created durable reference in the ended snapshot", async () => {
+  const { session } = setup();
+  await session.recordingSettled();
+  expect(session.snapshot.durableSessionRef).toBe("session-test");
+  session.end("parent_stop");
+  await session.recordingSettled();
+  expect(session.snapshot).toMatchObject({ status: "ended", durableSessionRef: "session-test" });
+});
+
+it("publishes late durable creation into an already ended snapshot", async () => {
+  const { session, recorder } = setup();
+  let resolve!: (ref: string) => void;
+  vi.mocked(recorder.create).mockReturnValue(
+    new Promise<string>(done => {
+      resolve = done;
+    }),
+  );
+  await Promise.resolve();
+  session.end("parent_stop");
+  expect(session.snapshot.durableSessionRef).toBeUndefined();
+  resolve("late-attempt");
+  await session.recordingSettled();
+  expect(session.snapshot).toMatchObject({ status: "ended", durableSessionRef: "late-attempt" });
+});
+
+it("failed creation leaves no inspectable durable reference", async () => {
+  const { session, recorder } = setup();
+  vi.mocked(recorder.create).mockRejectedValue(new Error("offline"));
+  session.end("parent_stop");
+  await session.recordingSettled();
+  expect(session.snapshot.durableSessionRef).toBeUndefined();
+});
+
+it("passes retry linkage only to a fresh controller's recorder", async () => {
+  const { session: original, recorder: priorRecorder, transport: priorTransport } = setup();
+  await original.recordingSettled();
+  original.end("parent_stop");
+  await original.recordingSettled();
+  const previous = original.snapshot;
+  const { session: retry, recorder, transport } = setup(false, previous.durableSessionRef);
+  vi.mocked(recorder.create).mockResolvedValue("new-attempt");
+  await retry.recordingSettled();
+  expect(transport).not.toBe(priorTransport);
+  expect(priorRecorder.create).toHaveBeenCalledWith(undefined);
+  expect(recorder.create).toHaveBeenCalledWith("session-test");
+  expect(retry.snapshot.durableSessionRef).toBe("new-attempt");
+  expect(original.snapshot).toBe(previous);
+  expect(retry.events).not.toBe(original.events);
+  retry.dispose();
+  await retry.recordingSettled();
 });

@@ -6,6 +6,8 @@ import { ConvexSessionRecorder } from "@/lib/convex-session-recorder";
 import { BrowserTransport } from "@/lib/browser-transport";
 import { OBJECTS, objectName, sceneAt } from "@/lib/lesson";
 import { LessonSession, type Diagnostic, type Snapshot } from "@/lib/session";
+import { SessionInspector } from "./session-inspector";
+import type { DurableSessionRef, SessionRecordReader } from "@/lib/session-recorder";
 import { JevDiagnostics } from "./jev-diagnostics";
 
 function Scene({ index }: { index: number }) {
@@ -24,6 +26,9 @@ function Scene({ index }: { index: number }) {
 export default function Lesson({ debug }: { debug: boolean }) {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [diagnosticEvents, setDiagnosticEvents] = useState<readonly Diagnostic[]>([]);
+  const [endedAttempt, setEndedAttempt] = useState<{ ref?: DurableSessionRef; reader: SessionRecordReader } | null>(
+    null,
+  );
   const audio = useRef<HTMLAudioElement>(null);
   const session = useRef<LessonSession | null>(null);
   const live = snapshot !== null && snapshot.status !== "ended";
@@ -55,19 +60,24 @@ export default function Lesson({ debug }: { debug: boolean }) {
     };
   }, [snapshot]);
 
-  function start() {
+  function start(retryOf?: DurableSessionRef) {
     if (!audio.current || (session.current && session.current.snapshot.status !== "ended")) return;
     session.current?.dispose();
+    const recorder = new ConvexSessionRecorder();
     const current = new LessonSession(
       new BrowserTransport(audio.current),
       fetchEvaluateAnswer,
       snapshot => {
-        if (session.current === current) setSnapshot(snapshot);
+        if (session.current === current) {
+          setSnapshot(snapshot);
+          if (snapshot.status === "ended") setEndedAttempt({ ref: snapshot.durableSessionRef, reader: recorder });
+        }
       },
       () => {
         if (session.current === current) setDiagnosticEvents([...current.events]);
       },
-      new ConvexSessionRecorder(),
+      recorder,
+      retryOf,
     );
     session.current = current;
     setDiagnosticEvents([]);
@@ -138,7 +148,7 @@ export default function Lesson({ debug }: { debug: boolean }) {
               The lesson ended because the page was hidden. Keep this window open during play.
             </p>
           )}
-          <button className="start-button" onClick={start}>
+          <button className="start-button" onClick={() => start()}>
             {snapshot ? "Start a new lesson" : "Start counting together"}
             <span aria-hidden="true">↗</span>
           </button>
@@ -149,9 +159,17 @@ export default function Lesson({ debug }: { debug: boolean }) {
               OpenAI during play and retained in Sprout’s private session record for review. You can end at any time.
             </p>
           </div>
+          {endedAttempt && (
+            <SessionInspector
+              key={endedAttempt.ref ?? "unavailable"}
+              sessionRef={endedAttempt.ref}
+              reader={endedAttempt.reader}
+              onRetry={ref => start(ref)}
+            />
+          )}
           {snapshot && (
             <details className="diagnostics">
-              <summary>Parent testing notes</summary>
+              <summary>Parent testing notes · Prototype diagnostics</summary>
               <p>
                 Ended: {snapshot.reason?.replaceAll("_", " ")}. Download approximate transcripts, displayed scenes,
                 timing, and connection events before starting again. These stay in this tab and are lost on reload. The

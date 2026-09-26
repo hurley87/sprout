@@ -86,7 +86,7 @@ Each event has a session-relative millisecond timestamp, a server-assigned order
 and validated `utterance`, `scene_displayed`, or `support` data. `scene_displayed` means the scene
 reached the UI; the live recorder does not use it for requested transitions. The Convex API creates,
 activates, appends, finalizes, attaches recording metadata, and fetches the ordered record. Finalization
-prevents later evidence writes. The existing diagnostic JSON remains separate. Full-session audio capture is implemented below; inspection and export remain future work.
+prevents later evidence writes. The existing diagnostic JSON remains separate. Full-session audio capture and MVP inspection are implemented below. Canonical records remain directly available in Convex for developer tooling; a separate manual export representation is not required for the MVP.
 
 ### Live recording (commit 2)
 
@@ -252,3 +252,22 @@ waiting for network writes. Capture or attachment failure uses the existing inco
 warning; a startup attempt without usable audio is incomplete. Browser suspension still offers no
 unload durability guarantee. Production Sprout canonical transcripts remain omitted because delivery
 intervals cannot be verified; the gated full audio is the authoritative artifact for permitted speech.
+
+### MVP inspection and explicit retry (commit 4)
+
+Ended attempts expose their durable reference through the recorder/session snapshot seam. A private
+builder inspector fetches canonical Convex data and ordered events, with explicit pending, complete,
+and incomplete wording. Partial evidence stays visible. A Refresh record button handles finalization
+and audio upload races without indefinite polling. Missing records/audio are shown honestly.
+
+One full recording uses a Convex storage playback URL; evidence buttons seek approximately to
+`(event.atMs - recording.startOffsetMs) / 1000`, clamped to the available duration. No clips are created.
+The timeline preserves persisted speaker attribution and displays utterances, actually displayed scenes,
+and any support evidence. Convex is the canonical session-record source of truth; deeper developer
+analysis can use Convex tooling such as Convex MCP / Codex. A dedicated JSON/audio export or download
+workflow is intentionally not required for the MVP. Local prototype diagnostic downloads remain separate.
+
+Retry is available only for a fetched ended durable attempt. It disposes the old runtime and creates
+a fresh transport, recorder, controller, and linked session (`retryOf`), preserving the original record.
+Start a new lesson creates an unlinked attempt. The ended reference and reader are held independently
+of the live controller; late updates from old controllers cannot replace the new attempt's UI.

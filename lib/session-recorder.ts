@@ -3,10 +3,10 @@ import type { EndReason } from "./session";
 export type Evidence =
   | {
       type: "utterance";
-      speaker: "child_or_nearby_speaker" | "sprout";
+      speaker: "child_or_nearby_speaker" | "sprout" | "unknown";
       text: string;
-      startMs: number;
-      endMs: number;
+      startMs?: number;
+      endMs?: number;
       state: "finalized" | "interrupted";
     }
   | {
@@ -31,10 +31,34 @@ export type SessionAudioRecording = {
   durationMs: number;
 };
 
+export type DurableSessionRef = string;
+
+export type InspectableSessionRecord = {
+  id: DurableSessionRef;
+  state: "starting" | "active" | "ended";
+  recordStatus: "pending" | "complete" | "incomplete";
+  createdAt: number;
+  startedAt?: number;
+  endedAt?: number;
+  endingReason?: EndReason;
+  retryOf?: DurableSessionRef;
+  recording?: { url: string; mimeType: string; startOffsetMs: number; durationMs: number };
+  events: { eventKey: string; order: number; atMs: number; evidence: Evidence }[];
+};
+
+export interface SessionRecordReader {
+  getRecord(ref: DurableSessionRef): Promise<InspectableSessionRecord | null>;
+}
+
+/** Canonical zero is session.started, not attempt creation. */
+export function recordingOffsetSeconds(atMs: number, recording: { startOffsetMs: number; durationMs: number }) {
+  return Math.max(0, Math.min(recording.durationMs, atMs - recording.startOffsetMs)) / 1000;
+}
+
 /** Application evidence only; never accepts diagnostic/provider payloads. */
 export interface SessionRecorder {
   attachRecording(recording: SessionAudioRecording): Promise<void>;
-  create(): Promise<void>;
+  create(retryOf?: DurableSessionRef): Promise<DurableSessionRef>;
   activate(): Promise<void>;
   append(eventKey: string, atMs: number, evidence: Evidence): Promise<void>;
   markIncomplete(): Promise<void>;

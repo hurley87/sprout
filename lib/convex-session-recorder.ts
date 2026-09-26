@@ -1,17 +1,54 @@
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
-import type { Evidence, SessionRecorder, SessionAudioRecording } from "./session-recorder";
+import type {
+  Evidence,
+  SessionRecorder,
+  SessionAudioRecording,
+  DurableSessionRef,
+  SessionRecordReader,
+  InspectableSessionRecord,
+} from "./session-recorder";
 import type { EndReason } from "./session";
 
-export class ConvexSessionRecorder implements SessionRecorder {
+export class ConvexSessionRecorder implements SessionRecorder, SessionRecordReader {
   private client?: ConvexHttpClient;
   private sessionId?: Id<"sessions">;
-  async create() {
+  async create(retryOf?: DurableSessionRef) {
     const url = process.env.NEXT_PUBLIC_CONVEX_URL;
     if (!url) throw new Error("NEXT_PUBLIC_CONVEX_URL is missing; durable recording is unavailable");
     this.client = new ConvexHttpClient(url);
-    this.sessionId = await this.client.mutation(api.sessions.create, {});
+    this.sessionId = await this.client.mutation(
+      api.sessions.create,
+      retryOf ? { retryOf: retryOf as Id<"sessions"> } : {},
+    );
+    return this.sessionId;
+  }
+  async getRecord(ref: DurableSessionRef): Promise<InspectableSessionRecord | null> {
+    const { client } = this.connection;
+    const record = await client.query(api.sessions.getRecord, { sessionId: ref as Id<"sessions"> });
+    if (!record) return null;
+    const { session, events, recordingUrl } = record;
+    return {
+      id: session._id,
+      state: session.state,
+      recordStatus: session.recordStatus,
+      createdAt: session.createdAt,
+      startedAt: session.startedAt,
+      endedAt: session.endedAt,
+      endingReason: session.endingReason,
+      retryOf: session.retryOf,
+      recording:
+        session.recording && recordingUrl
+          ? {
+              url: recordingUrl,
+              mimeType: session.recording.mimeType,
+              startOffsetMs: session.recording.startOffsetMs,
+              durationMs: session.recording.durationMs,
+            }
+          : undefined,
+      events: events.map(({ eventKey, order, atMs, evidence }) => ({ eventKey, order, atMs, evidence })),
+    };
   }
   private get connection() {
     if (!this.client || !this.sessionId) throw new Error("No durable session was created");

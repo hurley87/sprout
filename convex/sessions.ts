@@ -159,6 +159,10 @@ export const getRecord = query({
       .query("sessionEvents")
       .withIndex("by_session_order", q => q.eq("sessionId", sessionId))
       .collect();
-    return { session, events };
+    return {
+      session,
+      events,
+      recordingUrl: session.recording ? await ctx.storage.getUrl(session.recording.storageId) : null,
+    };
   },
 });

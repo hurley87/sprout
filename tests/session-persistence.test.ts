@@ -255,3 +255,22 @@ it.each([false, true])("audio completion and identical retries preserve integrit
     recording: { storageId },
   });
 });
+
+it("inspection returns a storage playback URL only for attached audio", async () => {
+  const t = makeTest();
+  const sessionId = await t.mutation(api.sessions.create, {});
+  const before = await t.query(api.sessions.getRecord, { sessionId });
+  expect(before?.recordingUrl).toBeNull();
+  await t.mutation(api.sessions.finalize, { sessionId, endingReason: "parent_stop" });
+  const storageId = await t.run(ctx => ctx.storage.store(new Blob(["full audio"])));
+  await t.mutation(api.sessions.attachRecording, {
+    sessionId,
+    storageId,
+    mimeType: "audio/webm",
+    startOffsetMs: 0,
+    durationMs: 2000,
+  });
+  const record = await t.query(api.sessions.getRecord, { sessionId });
+  expect(record?.recordingUrl).toBe(await t.run(ctx => ctx.storage.getUrl(storageId)));
+  expect(record?.recordingUrl).toMatch(/^https?:/);
+});

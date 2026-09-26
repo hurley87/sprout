@@ -1,0 +1,189 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import {
+  recordingOffsetSeconds,
+  type DurableSessionRef,
+  type Evidence,
+  type InspectableSessionRecord,
+  type SessionRecordReader,
+} from "@/lib/session-recorder";
+
+function EvidenceDetail({ evidence }: { evidence: Evidence }) {
+  switch (evidence.type) {
+    case "utterance":
+      return (
+        <>
+          <p>
+            {evidence.speaker} · {evidence.state}: {evidence.text}
+          </p>
+          <p>
+            Provider utterance: {evidence.startMs ?? "unknown"}–{evidence.endMs ?? "unknown"} ms
+          </p>
+        </>
+      );
+    case "scene_displayed":
+      return (
+        <>
+          <p>
+            Scene actually displayed: {evidence.sceneId} · Target quantity: {evidence.targetQuantity}
+          </p>
+          <ol>
+            {evidence.items.map((item, index) => (
+              <li key={index}>
+                {item.emoji} {item.label}
+              </li>
+            ))}
+          </ol>
+          <p>Arrangement/context: {evidence.arrangement}</p>
+        </>
+      );
+    case "support":
+      return (
+        <p>
+          Support · {evidence.source} · {evidence.mode}: {evidence.description}
+        </p>
+      );
+  }
+}
+
+const integrity = {
+  pending: [
+    "Record still pending",
+    "Durable assembly has not finished. Audio attachment or other evidence may still be missing. Refresh to check again.",
+  ],
+  incomplete: ["Record incomplete", "Some evidence may be missing. Available durable evidence is shown below."],
+  complete: [
+    "Record complete",
+    "Required MVP durable evidence, including full-session audio, was assembled successfully.",
+  ],
+};
+
+export function SessionRecordView({ record }: { record: InspectableSessionRecord }) {
+  const audio = useRef<HTMLAudioElement>(null);
+  const [playError, setPlayError] = useState(false);
+  function seek(atMs: number) {
+    const player = audio.current;
+    if (!player || !record.recording) return;
+    const offset = recordingOffsetSeconds(atMs, record.recording);
+    player.currentTime = Number.isFinite(player.duration) ? Math.min(player.duration, offset) : offset;
+    setPlayError(false);
+    void player.play().catch(error => {
+      // Pausing/seeking again can interrupt a pending play request normally.
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setPlayError(true);
+    });
+  }
+  return (
+    <>
+      <p>Session: {record.id}</p>
+      <p>
+        Lifecycle: {record.state} · Ending reason: {record.endingReason ?? "Unavailable"}
+      </p>
+      <p role="status">{integrity[record.recordStatus][0]}</p>
+      <p>{integrity[record.recordStatus][1]}</p>
+      <p>Created: {new Date(record.createdAt).toISOString()}</p>
+      <p>Started: {record.startedAt === undefined ? "Unavailable" : new Date(record.startedAt).toISOString()}</p>
+      <p>Ended: {record.endedAt === undefined ? "Unavailable" : new Date(record.endedAt).toISOString()}</p>
+      {record.retryOf && <p>Retry of {record.retryOf}</p>}
+      {record.recording ? (
+        <>
+          <p>
+            Full-session audio available · {record.recording.mimeType} · {record.recording.durationMs} ms
+          </p>
+          <audio ref={audio} controls src={record.recording.url} aria-label="Full-session recording" />
+          <p>Evidence times start at session.started = 0 ms. Playback positions are approximate.</p>
+          {playError && <p role="alert">Playback could not start. Use the audio player to try again.</p>}
+        </>
+      ) : (
+        <p>Full-session audio unavailable.</p>
+      )}
+      <h3>Canonical evidence timeline</h3>
+      {!record.events.length && <p>No durable evidence events recorded.</p>}
+      <ol>
+        {record.events.map(event => (
+          <li key={event.eventKey}>
+            <p>
+              Event {event.order} · {event.atMs} ms from session.started
+            </p>
+            <EvidenceDetail evidence={event.evidence} />
+            {record.recording && (
+              <button className="download-button" onClick={() => seek(event.atMs)}>
+                Play from here
+              </button>
+            )}
+          </li>
+        ))}
+      </ol>
+    </>
+  );
+}
+
+export function SessionInspector({
+  sessionRef,
+  reader,
+  onRetry,
+}: {
+  sessionRef?: DurableSessionRef;
+  reader: SessionRecordReader;
+  onRetry: (ref: DurableSessionRef) => void;
+}) {
+  const [record, setRecord] = useState<InspectableSessionRecord | null>(null);
+  const [loading, setLoading] = useState(Boolean(sessionRef));
+  const [error, setError] = useState(false);
+  const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    if (!sessionRef) return;
+    let cancelled = false;
+    reader
+      .getRecord(sessionRef)
+      .then(value => {
+        if (!cancelled) {
+          setRecord(value);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setError(true);
+          setLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionRef, reader, revision]);
+  return (
+    <section className="diagnostics" aria-label="Durable session record">
+      <h2>Durable session record</h2>
+      <p>Private builder/developer inspection · Canonical persisted evidence</p>
+      {loading && <p role="status">Loading durable session record…</p>}
+      {!sessionRef || (!loading && !record) ? (
+        <p>
+          Durable session record unavailable{error ? ": fetching failed" : ""}. Local prototype diagnostics may still be
+          available.
+        </p>
+      ) : null}
+      {error && record && <p role="alert">Refresh failed. Showing the previously fetched record.</p>}
+      {record && <SessionRecordView record={record} />}
+      {sessionRef && (
+        <button
+          className="download-button"
+          disabled={loading}
+          onClick={() => {
+            setLoading(true);
+            setError(false);
+            setRevision(value => value + 1);
+          }}
+        >
+          Refresh record
+        </button>
+      )}
+      {record?.state === "ended" && (
+        <button className="download-button" onClick={() => onRetry(record.id)}>
+          Retry this lesson
+        </button>
+      )}
+    </section>
+  );
+}

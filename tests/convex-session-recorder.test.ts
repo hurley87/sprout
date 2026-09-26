@@ -2,16 +2,18 @@ import { afterEach, expect, it, vi } from "vitest";
 import { getFunctionName } from "convex/server";
 import { api } from "../convex/_generated/api";
 import { ConvexSessionRecorder } from "../lib/convex-session-recorder";
-const { mutation } = vi.hoisted(() => ({ mutation: vi.fn() }));
+const { mutation, query } = vi.hoisted(() => ({ mutation: vi.fn(), query: vi.fn() }));
 vi.mock("convex/browser", () => ({
   ConvexHttpClient: class {
     mutation = mutation;
+    query = query;
   },
 }));
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
   mutation.mockReset();
+  query.mockReset();
 });
 const audio = {
   blob: new Blob(["audio"], { type: "audio/mp4" }),
@@ -68,4 +70,63 @@ it.each(["url", "upload", "id", "attach"])("propagates %s failure to the persist
   if (failure === "upload") upload.mockResolvedValue({ ok: false, json: async () => ({ storageId: "storage-test" }) });
   if (failure === "id") upload.mockResolvedValue({ ok: true, json: async () => ({ storageId: "" }) });
   await expect(recorder.attachRecording(audio)).rejects.toThrow();
+});
+
+it("returns durable identity and passes explicit retry linkage to create", async () => {
+  const { recorder } = await setup();
+  expect(await recorder.create("prior-session")).toBe("session-test");
+  expect(mutation).toHaveBeenLastCalledWith(api.sessions.create, { retryOf: "prior-session" });
+});
+it("fetches an application record by reference without exposing storage/database internals", async () => {
+  const { recorder } = await setup();
+  query.mockResolvedValue({
+    session: {
+      _id: "session-test",
+      state: "ended",
+      recordStatus: "complete",
+      createdAt: 100,
+      recording: { storageId: "secret-internal-id", mimeType: "audio/webm", startOffsetMs: 0, durationMs: 1000 },
+    },
+    recordingUrl: "https://storage.invalid/audio",
+    events: [
+      {
+        _id: "event-id",
+        sessionId: "session-test",
+        eventKey: "scene",
+        order: 0,
+        atMs: 0,
+        evidence: { type: "support", source: "parent", mode: "other", description: "help" },
+      },
+    ],
+  });
+  const record = await recorder.getRecord("session-test");
+  expect(query).toHaveBeenCalledWith(api.sessions.getRecord, { sessionId: "session-test" });
+  expect(record?.recording?.url).toBe("https://storage.invalid/audio");
+  expect(record?.events[0]).toEqual({
+    eventKey: "scene",
+    order: 0,
+    atMs: 0,
+    evidence: { type: "support", source: "parent", mode: "other", description: "help" },
+  });
+  expect(JSON.stringify(record)).not.toContain("secret-internal-id");
+  expect(JSON.stringify(record)).not.toContain("event-id");
+});
+it("does not invent a playback URL and handles a missing record", async () => {
+  const { recorder } = await setup();
+  query.mockResolvedValue({
+    session: { _id: "session-test", state: "ended", recordStatus: "pending", createdAt: 100 },
+    events: [],
+    recordingUrl: null,
+  });
+  expect((await recorder.getRecord("session-test"))?.recording).toBeUndefined();
+  query.mockResolvedValue(null);
+  expect(await recorder.getRecord("session-test")).toBeNull();
+});
+it("failed create returns no identity and cannot fetch an attempt", async () => {
+  vi.stubEnv("NEXT_PUBLIC_CONVEX_URL", "https://test.convex.cloud");
+  mutation.mockRejectedValue(new Error("offline"));
+  const recorder = new ConvexSessionRecorder();
+  await expect(recorder.create()).rejects.toThrow("offline");
+  await expect(recorder.getRecord("unknown")).rejects.toThrow("No durable session");
+  expect(query).not.toHaveBeenCalled();
 });
