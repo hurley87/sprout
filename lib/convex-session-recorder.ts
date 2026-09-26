@@ -1,7 +1,7 @@
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
-import type { Evidence, SessionRecorder } from "./session-recorder";
+import type { Evidence, SessionRecorder, SessionAudioRecording } from "./session-recorder";
 import type { EndReason } from "./session";
 
 export class ConvexSessionRecorder implements SessionRecorder {
@@ -16,6 +16,33 @@ export class ConvexSessionRecorder implements SessionRecorder {
   private get connection() {
     if (!this.client || !this.sessionId) throw new Error("No durable session was created");
     return { client: this.client, sessionId: this.sessionId };
+  }
+  async attachRecording(recording: SessionAudioRecording) {
+    const { client, sessionId } = this.connection;
+    const uploadUrl = await client.mutation(api.sessions.generateUploadUrl, { sessionId });
+    const response = await fetch(uploadUrl, {
+      method: "POST",
+      headers: { "Content-Type": recording.mimeType },
+      body: recording.blob,
+    });
+    if (!response.ok) throw new Error("Session audio upload failed");
+    const result: unknown = await response.json();
+    if (
+      !result ||
+      typeof result !== "object" ||
+      !("storageId" in result) ||
+      typeof result.storageId !== "string" ||
+      !result.storageId.trim()
+    )
+      throw new Error("Audio upload returned an invalid storage ID");
+    // Convex validates the ID and stored file before attaching it.
+    await client.mutation(api.sessions.attachRecording, {
+      sessionId,
+      storageId: result.storageId as Id<"_storage">,
+      mimeType: recording.mimeType,
+      startOffsetMs: recording.startOffsetMs,
+      durationMs: recording.durationMs,
+    });
   }
   async activate() {
     const { client, sessionId } = this.connection;

@@ -146,7 +146,7 @@ export default function Lesson({ debug }: { debug: boolean }) {
             <p>For a parent and child · About 5 minutes · Quantities 1–5</p>
             <p>
               Stay together, allow the microphone, and keep this tab visible. Sprout is an AI voice; audio is sent to
-              OpenAI during play. You can end at any time.
+              OpenAI during play and retained in Sprout’s private session record for review. You can end at any time.
             </p>
           </div>
           {snapshot && (
@@ -154,8 +154,9 @@ export default function Lesson({ debug }: { debug: boolean }) {
               <summary>Parent testing notes</summary>
               <p>
                 Ended: {snapshot.reason?.replaceAll("_", " ")}. Download approximate transcripts, displayed scenes,
-                timing, and connection events before starting again. These stay in this tab and are lost on reload. No
-                audio recording or learning assessment is saved.
+                timing, and connection events before starting again. These stay in this tab and are lost on reload. The
+                private durable session record includes full-session audio when recording succeeds. No learning
+                assessment is saved.
               </p>
               <button className="download-button" onClick={download}>
                 Download attempt diagnostics

@@ -14,6 +14,7 @@ afterEach(() => vi.useRealTimers());
 function setup(delivery = false) {
   const writes: (string | Evidence)[] = [];
   const recorder: SessionRecorder = {
+    attachRecording: vi.fn(async () => {}),
     create: vi.fn(async () => {
       writes.push("create");
     }),
@@ -34,6 +35,12 @@ function setup(delivery = false) {
     setOutputBlocked: vi.fn(),
     stopMedia: vi.fn(),
     close: vi.fn(),
+    recording: vi.fn(async () => ({
+      blob: new Blob(["audio"]),
+      mimeType: "audio/webm",
+      startOffsetMs: 0,
+      durationMs: 100,
+    })),
     delivered: () => delivery,
   };
   const session = new LessonSession(
@@ -51,6 +58,55 @@ function say(session: LessonSession, speaker: "child" | "sprout", delta: string,
 }
 const evidence = (writes: (string | Evidence)[]) =>
   writes.filter((write): write is Evidence => typeof write !== "string");
+
+it("excludes startup delay from canonical timestamps while retaining the diagnostic clock", async () => {
+  const { session, recorder, writes } = setup();
+  await vi.advanceTimersByTimeAsync(2000);
+  session.receive({ type: "session.started" });
+  await vi.advanceTimersByTimeAsync(200);
+  session.displayed(0);
+  await session.recordingSettled();
+  expect(recorder.append).toHaveBeenNthCalledWith(
+    1,
+    "evidence_1",
+    200,
+    expect.objectContaining({ type: "scene_displayed" }),
+  );
+
+  await vi.advanceTimersByTimeAsync(100);
+  say(session, "child", "hello", 250);
+  await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS);
+  await session.recordingSettled();
+  expect(recorder.append).toHaveBeenNthCalledWith(2, "evidence_2", 300 + UTTERANCE_GAP_MS, {
+    type: "utterance",
+    speaker: "child_or_nearby_speaker",
+    text: "hello",
+    startMs: 250,
+    endMs: 350,
+    state: "finalized",
+  });
+  expect(evidence(writes).map(event => event.type)).toEqual(["scene_displayed", "utterance"]);
+  const report = session.report("test");
+  expect(report.liveStartedAtMs).toBe(2000);
+  expect(report.events.find(event => event.type === "lesson.started")?.at).toBe(2000);
+  expect(report.events.find(event => event.type === "scene.displayed")?.at).toBe(2200);
+  expect(report.events.find(event => event.type === "transcript.child_or_nearby_speaker")?.at).toBe(2300);
+  session.end("parent_stop");
+  await session.recordingSettled();
+});
+
+it("rejects canonical evidence when the live start origin is unavailable", async () => {
+  const { session, recorder } = setup();
+  session.receive({ type: "session.started" });
+  const startedAt = session.startedAt;
+  session.startedAt = undefined;
+  expect(() => session.displayed(0)).toThrow("Canonical evidence requires a live session start");
+  await session.recordingSettled();
+  expect(recorder.append).not.toHaveBeenCalled();
+  session.startedAt = startedAt;
+  session.end("parent_stop");
+  await session.recordingSettled();
+});
 
 it("creates before activation; persists only confirmed displays, once", async () => {
   const { session, writes } = setup();
@@ -291,6 +347,7 @@ it.each([false, true])(
     const operations: string[] = [];
     let appends = 0;
     const recorder: SessionRecorder = {
+      attachRecording: async () => {},
       async create() {
         operations.push("create");
         sessionId = await t.mutation(api.sessions.create, {});
@@ -315,6 +372,7 @@ it.each([false, true])(
       },
     };
     const transport: Transport = {
+      recording: async () => ({ blob: new Blob(["audio"]), mimeType: "audio/webm", startOffsetMs: 0, durationMs: 100 }),
       start: async () => {},
       send: () => {},
       setOutputBlocked: () => {},
@@ -377,4 +435,91 @@ it("finalization failures are reported and attempt an incomplete marker", async 
   expect(session.events).toContainEqual(
     expect.objectContaining({ type: "recording.failed", detail: expect.objectContaining({ operation: "finalize" }) }),
   );
+});
+
+it("uploads only after evidence and finalization; releases media immediately", async () => {
+  const { session, recorder, transport, writes } = setup();
+  let finish!: () => void;
+  vi.mocked(transport.recording!).mockImplementation(
+    () =>
+      new Promise(resolve => {
+        finish = () => resolve({ blob: new Blob(["audio"]), mimeType: "audio/mp4", startOffsetMs: 0, durationMs: 123 });
+      }),
+  );
+  session.receive({ type: "session.started" });
+  say(session, "child", "hello");
+  session.end("connection_failure");
+  expect(transport.stopMedia).toHaveBeenCalledOnce();
+  for (let i = 0; i < 20; i++) await Promise.resolve();
+  expect(writes.at(-1)).toBe("connection_failure");
+  expect(recorder.attachRecording).not.toHaveBeenCalled();
+  finish();
+  await session.recordingSettled();
+  expect(recorder.attachRecording).toHaveBeenCalledWith(
+    expect.objectContaining({ durationMs: 123, mimeType: "audio/mp4" }),
+  );
+});
+
+it.each(["missing", "capture", "upload/attach"])("marks required audio %s failure incomplete", async failure => {
+  const { session, recorder, transport } = setup();
+  if (failure === "missing") vi.mocked(transport.recording!).mockResolvedValue(null);
+  if (failure === "capture") vi.mocked(transport.recording!).mockRejectedValue(new Error("capture failed"));
+  if (failure === "upload/attach") vi.mocked(recorder.attachRecording).mockRejectedValue(new Error("network failed"));
+  session.receive({ type: "session.started" });
+  session.end("parent_stop");
+  await session.recordingSettled();
+  expect(recorder.markIncomplete).toHaveBeenCalledOnce();
+  expect(session.snapshot.recordingError).toBeTruthy();
+});
+
+function durableAudioSetup() {
+  const t = convexTest(schema, import.meta.glob("../convex/**/*.ts"));
+  const { session, recorder, transport } = setup();
+  let sessionId!: Id<"sessions">;
+  let finalized!: () => void;
+  const finalization = new Promise<void>(resolve => {
+    finalized = resolve;
+  });
+  vi.mocked(recorder.create).mockImplementation(async () => {
+    sessionId = await t.mutation(api.sessions.create, {});
+  });
+  vi.mocked(recorder.activate).mockImplementation(async () => {
+    await t.mutation(api.sessions.activate, { sessionId });
+  });
+  vi.mocked(recorder.markIncomplete).mockImplementation(async () => {
+    await t.mutation(api.sessions.markIncomplete, { sessionId });
+  });
+  vi.mocked(recorder.finalize).mockImplementation(async (endingReason, recordIncomplete) => {
+    await t.mutation(api.sessions.finalize, { sessionId, endingReason, recordIncomplete });
+    finalized();
+  });
+  return { session, recorder, transport, finalization, record: () => t.query(api.sessions.getRecord, { sessionId }) };
+}
+
+it.each(["capture", "upload"])("stays ended and pending while post-finalize %s never completes", async phase => {
+  const { session, recorder, transport, finalization, record } = durableAudioSetup();
+  const stalled = new Promise<never>(() => {});
+  if (phase === "capture") vi.mocked(transport.recording!).mockReturnValue(stalled);
+  else vi.mocked(recorder.attachRecording).mockReturnValue(stalled);
+  session.receive({ type: "session.started" });
+  session.end("page_hidden");
+  await finalization;
+  expect((await record())?.session).toMatchObject({ state: "ended", recordStatus: "pending" });
+  expect((await record())?.session.recording).toBeUndefined();
+});
+
+it.each([false, true])("audio attachment failure attempts the durable marker (marker fails=%s)", async markerFails => {
+  const { session, recorder, finalization, record } = durableAudioSetup();
+  vi.mocked(recorder.attachRecording).mockRejectedValue(new Error("attachment offline"));
+  if (markerFails) vi.mocked(recorder.markIncomplete).mockRejectedValue(new Error("marker offline"));
+  session.receive({ type: "session.started" });
+  session.end("parent_stop");
+  await finalization;
+  await session.recordingSettled();
+  expect(recorder.markIncomplete).toHaveBeenCalledOnce();
+  expect((await record())?.session).toMatchObject({
+    state: "ended",
+    recordStatus: markerFails ? "pending" : "incomplete",
+  });
+  expect((await record())?.session.recording).toBeUndefined();
 });

@@ -9,6 +9,8 @@ type TestState = {
   shownAt: Record<string, number>;
   tracks: MediaStreamTrack[];
   closed: boolean;
+  recordingsStarted: number;
+  persistence: string[];
   releaseMic?: () => void;
 };
 
@@ -26,6 +28,20 @@ async function mockEvaluate(page: Page, probability: number) {
 }
 
 async function mockLive(page: Page, pendingMic = false) {
+  await page.route("**/api/mutation", async route => {
+    const { path } = route.request().postDataJSON();
+    await page.evaluate(path => window.sproutTest.persistence.push(path), path);
+    const value =
+      path === "sessions:generateUploadUrl"
+        ? "https://audio-test.invalid/upload"
+        : path === "sessions:create"
+          ? "session-test"
+          : null;
+    await route.fulfill({ json: { status: "success", value } });
+  });
+  await page.route("https://audio-test.invalid/upload", route =>
+    route.fulfill({ json: { storageId: "storage-test" } }),
+  );
   await page.route("**/api/live", route =>
     route.fulfill({ json: { session: { id: "test" }, transport: { sdp: "test" } } }),
   );
@@ -34,6 +50,8 @@ async function mockLive(page: Page, pendingMic = false) {
   await page.addInitScript(
     ({ pendingMic }) => {
       const state: TestState = {
+        recordingsStarted: 0,
+        persistence: [],
         commands: [],
         shownAt: {},
         tracks: [],
@@ -42,12 +60,22 @@ async function mockLive(page: Page, pendingMic = false) {
         disconnect: () => {},
       };
       window.sproutTest = state;
+      const NativeMediaRecorder = window.MediaRecorder;
+      window.MediaRecorder = class extends NativeMediaRecorder {
+        start(timeslice?: number) {
+          state.recordingsStarted++;
+          super.start(timeslice);
+        }
+      };
       // Provider mock has a continuous fake microphone waveform, not utterances.
       // Exercise the transcript fallback here; microphone VAD is covered by session tests.
+      const NativeAudioContext = window.AudioContext;
       Object.defineProperty(window, "AudioContext", {
-        value: class {
-          constructor() {
-            throw new Error("synthetic microphone");
+        value: class extends NativeAudioContext {
+          createAnalyser(): AnalyserNode {
+            const analyser = super.createAnalyser();
+            analyser.getFloatTimeDomainData = samples => samples.fill(0);
+            return analyser;
           }
         },
       });
@@ -138,6 +166,7 @@ test("parent start, committed scene, stop, late actions, and diagnostics export"
   await mockEvaluate(page, 0.95);
   await begin(page);
   await expect(page.getByRole("heading")).toHaveCount(0);
+  expect(await page.evaluate(() => window.sproutTest.recordingsStarted)).toBe(1);
   await say(page, "One!");
   await expect(page.locator('[data-scene="duck-friends"] > span')).toHaveCount(2);
   await expect.poll(async () => (await sentContent(page)).some(text => text.includes("2 ducks"))).toBe(true);
@@ -160,6 +189,9 @@ test("parent start, committed scene, stop, late actions, and diagnostics export"
   const download = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download attempt diagnostics" }).click();
   expect((await download).suggestedFilename()).toMatch(/^sprout-attempt-/);
+  await expect.poll(() => page.evaluate(() => window.sproutTest.persistence)).toContain("sessions:attachRecording");
+  const persistence = await page.evaluate(() => window.sproutTest.persistence);
+  expect(persistence.indexOf("sessions:generateUploadUrl")).toBeGreaterThan(persistence.indexOf("sessions:finalize"));
   expect(errors).toEqual([]);
 });
 

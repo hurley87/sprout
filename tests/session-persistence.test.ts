@@ -7,10 +7,13 @@ const modules = import.meta.glob("../convex/**/*.ts");
 const makeTest = () => convexTest(schema, modules);
 
 describe("durable session record", () => {
-  it("creates, activates, orders evidence, finalizes, and fetches a complete record", async () => {
+  it("creates, activates, orders evidence, finalizes, and fetches a pending record without audio", async () => {
     const t = makeTest();
     const sessionId = await t.mutation(api.sessions.create, {});
-    expect((await t.query(api.sessions.getRecord, { sessionId }))?.session.state).toBe("starting");
+    expect((await t.query(api.sessions.getRecord, { sessionId }))?.session).toMatchObject({
+      state: "starting",
+      recordStatus: "pending",
+    });
     await expect(
       t.mutation(api.sessions.appendEvent, {
         sessionId,
@@ -69,7 +72,8 @@ describe("durable session record", () => {
 
     await t.mutation(api.sessions.finalize, { sessionId, endingReason: "parent_stop" });
     const first = await t.query(api.sessions.getRecord, { sessionId });
-    expect(first?.session).toMatchObject({ state: "ended", endingReason: "parent_stop" });
+    expect(first?.session).toMatchObject({ state: "ended", endingReason: "parent_stop", recordStatus: "pending" });
+    expect(first?.session.recording).toBeUndefined();
     expect(first?.session.startedAt).toBeTypeOf("number");
     expect(first?.session.endedAt).toBeTypeOf("number");
     expect(first?.events.map(event => [event.order, event.eventKey])).toEqual([
@@ -138,7 +142,7 @@ describe("durable session record", () => {
     const t = makeTest();
     const sessionId = await t.mutation(api.sessions.create, {});
     const storageId = await t.run(ctx => ctx.storage.store(new Blob(["audio"], { type: "audio/webm" })));
-    const args = { sessionId, storageId, mimeType: "audio/webm", startedAt: 1000, durationMs: 5000 };
+    const args = { sessionId, storageId, mimeType: "audio/webm", startOffsetMs: 1000, durationMs: 5000 };
     await expect(t.mutation(api.sessions.attachRecording, args)).rejects.toThrow("after finalization");
     await t.mutation(api.sessions.finalize, { sessionId, endingReason: "parent_stop" });
     const missingStorageId = await t.run(async ctx => {
@@ -157,16 +161,16 @@ describe("durable session record", () => {
     expect((await t.query(api.sessions.getRecord, { sessionId }))?.session.recording).toEqual({
       storageId,
       mimeType: "audio/webm",
-      startedAt: 1000,
+      startOffsetMs: 1000,
       durationMs: 5000,
     });
   });
 });
 
-it("record completeness is optimistic, monotonic, idempotent, and survives finalization", async () => {
+it("known evidence loss is monotonic, idempotent, and survives finalization", async () => {
   const t = makeTest();
   const sessionId = await t.mutation(api.sessions.create, {});
-  expect((await t.query(api.sessions.getRecord, { sessionId }))?.session.recordStatus).toBe("complete");
+  expect((await t.query(api.sessions.getRecord, { sessionId }))?.session.recordStatus).toBe("pending");
   await t.mutation(api.sessions.markIncomplete, { sessionId });
   await t.mutation(api.sessions.markIncomplete, { sessionId });
   await t.mutation(api.sessions.activate, { sessionId });
@@ -203,5 +207,51 @@ it("finalization atomically marks known evidence loss, including repeated finali
   expect((await t.query(api.sessions.getRecord, { sessionId: other }))?.session).toMatchObject({
     endingReason: "parent_stop",
     recordStatus: "incomplete",
+  });
+});
+
+it("generates an upload URL only for an ended session without audio", async () => {
+  const t = makeTest();
+  const sessionId = await t.mutation(api.sessions.create, {});
+  await expect(t.mutation(api.sessions.generateUploadUrl, { sessionId })).rejects.toThrow("ended session");
+  await t.mutation(api.sessions.finalize, { sessionId, endingReason: "parent_stop" });
+  expect(await t.mutation(api.sessions.generateUploadUrl, { sessionId })).toMatch(/^https?:/);
+  const storageId = await t.run(ctx => ctx.storage.store(new Blob(["audio"], { type: "audio/webm" })));
+  await t.mutation(api.sessions.attachRecording, {
+    sessionId,
+    storageId,
+    mimeType: "audio/webm",
+    startOffsetMs: 0,
+    durationMs: 100,
+  });
+  expect((await t.query(api.sessions.getRecord, { sessionId }))?.session.recordStatus).toBe("complete");
+  await expect(t.mutation(api.sessions.generateUploadUrl, { sessionId })).rejects.toThrow("already attached");
+});
+
+it.each([false, true])("audio completion and identical retries preserve integrity (prior loss=%s)", async priorLoss => {
+  const t = makeTest();
+  const sessionId = await t.mutation(api.sessions.create, {});
+  await t.mutation(api.sessions.activate, { sessionId });
+  if (priorLoss) await t.mutation(api.sessions.markIncomplete, { sessionId });
+  await t.mutation(api.sessions.finalize, { sessionId, endingReason: "parent_stop", recordIncomplete: false });
+  expect(await t.mutation(api.sessions.generateUploadUrl, { sessionId })).toMatch(/^https?:/);
+  const storageId = await t.run(ctx => ctx.storage.store(new Blob(["audio"])));
+  const args = { sessionId, storageId, mimeType: "audio/webm", startOffsetMs: 0, durationMs: 100 };
+  await t.mutation(api.sessions.attachRecording, args);
+  const attached = await t.query(api.sessions.getRecord, { sessionId });
+  expect(attached?.session).toMatchObject({
+    state: "ended",
+    recordStatus: priorLoss ? "incomplete" : "complete",
+    recording: { storageId },
+  });
+  await t.mutation(api.sessions.attachRecording, args);
+  expect(await t.query(api.sessions.getRecord, { sessionId })).toEqual(attached);
+  await t.mutation(api.sessions.markIncomplete, { sessionId });
+  await t.mutation(api.sessions.attachRecording, args);
+  await t.mutation(api.sessions.finalize, { sessionId, endingReason: "connection_failure", recordIncomplete: false });
+  expect((await t.query(api.sessions.getRecord, { sessionId }))?.session).toMatchObject({
+    recordStatus: "incomplete",
+    endingReason: "parent_stop",
+    recording: { storageId },
   });
 });

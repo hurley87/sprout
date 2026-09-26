@@ -23,8 +23,17 @@ export type Evidence =
       description: string;
     };
 
+export type SessionAudioRecording = {
+  blob: Blob;
+  mimeType: string;
+  /** Offset from provider session.started, never a Unix timestamp. */
+  startOffsetMs: number;
+  durationMs: number;
+};
+
 /** Application evidence only; never accepts diagnostic/provider payloads. */
 export interface SessionRecorder {
+  attachRecording(recording: SessionAudioRecording): Promise<void>;
   create(): Promise<void>;
   activate(): Promise<void>;
   append(eventKey: string, atMs: number, evidence: Evidence): Promise<void>;

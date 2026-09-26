@@ -1,4 +1,4 @@
-import { RecordingQueue, type SessionRecorder, type Evidence } from "./session-recorder";
+import { RecordingQueue, type SessionRecorder, type Evidence, type SessionAudioRecording } from "./session-recorder";
 import {
   CORRECTION_WINDOW_MS,
   MICROPHONE_QUIET_MS,
@@ -57,6 +57,8 @@ export type Diagnostic = { at: number; type: string; detail?: unknown };
 
 export interface Transport {
   start(onEvent: (event: ProviderEvent) => void, onFailure: (message: string) => void): Promise<void>;
+  startRecording?(): void;
+  recording?(): Promise<SessionAudioRecording | null>;
   send(command: ClientCommand): void;
   /** Silence provider audio without stopping playback or provider events. */
   setOutputBlocked(blocked: boolean): void;
@@ -166,8 +168,10 @@ export class LessonSession {
 
   private record(evidence: Evidence) {
     if (!this.recorder) return;
+    if (this.startedAt === undefined) throw new Error("Canonical evidence requires a live session start");
     const eventKey = `evidence_${++this.evidenceOrder}`;
-    const atMs = Date.now() - this.createdAt;
+    // Canonical evidence shares the provider session.started origin with audio.
+    const atMs = Date.now() - this.startedAt;
     this.recording.enqueue("append", () => this.recorder!.append(eventKey, atMs, evidence));
   }
 
@@ -396,6 +400,14 @@ export class LessonSession {
     this.ready = true;
     if (this.recorder) this.recording.enqueue("activate", () => this.recorder!.activate());
     this.startedAt = Date.now();
+    try {
+      this.transport.startRecording?.();
+    } catch (error) {
+      if (this.recorder)
+        this.recording.enqueue("capture", async () => {
+          throw error;
+        });
+    }
     this.log("lesson.started");
     this.pending = { kind: "greeting", sceneIndex: 0 };
     this.update({ status: "active" });
@@ -1147,6 +1159,10 @@ export class LessonSession {
       clearTimeout(this.utteranceTimers[speaker]);
       this.flushUtterance(speaker, "interrupted");
     }
+    if (this.recorder && this.startedAt === undefined)
+      this.recording.enqueue("capture", async () => {
+        throw new Error("Attempt ended before live audio capture");
+      });
     if (this.recorder)
       this.recording.enqueue("finalize", () => this.recorder!.finalize(reason, this.recording.incomplete));
     this.cancelAnswerResponseGate(reason);
@@ -1163,6 +1179,12 @@ export class LessonSession {
     // Invalidate actions BEFORE any resource callback can fire.
     this.update({ status: "ended", reason, error });
     this.transport.stopMedia();
+    if (this.recorder)
+      this.recording.enqueue("attachRecording", async () => {
+        const audio = await this.transport.recording?.();
+        if (!audio) throw new Error("No usable full-session audio recording");
+        await this.recorder!.attachRecording(audio);
+      });
     if (
       this.ready &&
       GRACEFUL_CLOSE[reason] &&
@@ -1202,7 +1224,7 @@ export class LessonSession {
       liveStartedAtMs: this.startedAt === undefined ? null : this.startedAt - this.createdAt,
       ending: this.snapshot.reason,
       browser,
-      note: "Prototype diagnostics only. Transcript timing is approximate; speaker identity and audio delivery are unverified. No recording or learning conclusions.",
+      note: "Prototype diagnostics only. Transcript timing is approximate; speaker identity and audio delivery are unverified. This download excludes the separately retained session audio and contains no learning conclusions.",
       events: [...this.events],
     };
   }

@@ -86,7 +86,7 @@ Each event has a session-relative millisecond timestamp, a server-assigned order
 and validated `utterance`, `scene_displayed`, or `support` data. `scene_displayed` means the scene
 reached the UI; the live recorder does not use it for requested transitions. The Convex API creates,
 activates, appends, finalizes, attaches recording metadata, and fetches the ordered record. Finalization
-prevents later evidence writes. The existing diagnostic JSON remains separate. Audio capture, inspection, and export remain future work.
+prevents later evidence writes. The existing diagnostic JSON remains separate. Full-session audio capture is implemented below; inspection and export remain future work.
 
 ### Live recording (commit 2)
 
@@ -102,7 +102,8 @@ even if the incoming Sprout transcript is untrusted or gated and omitted from ev
 turn’s quiet timer is cleared. A provider timestamp gap or 2.5 seconds of transcript quiet also
 finalizes an utterance. These are approximate utterance boundaries, not provider-confirmed speech
 completion. Open useful speech flushes as interrupted before ending. Provider transcript timestamps
-are approximate; event timestamps use milliseconds from attempt creation. Child input retains
+are approximate; canonical event timestamps use milliseconds from provider session.started (zero),
+matching the recording origin. Prototype diagnostics retain the attempt-creation clock. Child input retains
 `child_or_nearby_speaker` attribution.
 
 Sprout speech requires an explicit transport delivery attribution for the whole utterance. Muting
@@ -121,10 +122,17 @@ until reliable delivery/attribution exists; the recorder and schema accept suppo
 
 Persistence failures are reported in diagnostics and a visible recording warning. The lesson continues
 with unchanged timing, answer decisions, and scene control. New durable attempts have
-`recordStatus: complete`. After a persistence failure on an existing attempt, the queue awaits an idempotent `markIncomplete` write before continuing. Marker failures
+`recordStatus: pending` while required durable evidence is being assembled. Finalization ends the
+session without promoting completeness. Valid full-audio attachment atomically promotes only pending
+records to `complete`: an ended session with all required durable MVP evidence including full audio.
+`incomplete` means known durable evidence loss and can never be promoted by later audio success.
+Future consumers may treat complete records as fully assembled; pending records remain unfinished,
+and incomplete records require explicit qualification. If the browser disappears after finalization
+before upload, the ended record safely remains pending without audio. After a persistence failure on
+an existing attempt, the queue awaits an idempotent `markIncomplete` write before continuing. Marker failures
 are reported; finalization also carries the known loss atomically, so a successful finalize leaves
 `recordStatus: incomplete` even if the earlier marker write failed. This status is monotonic and
-separate from lesson lifecycle, ending reason, and audio presence. Failed evidence writes are not
+separate from lesson lifecycle and ending reason. Failed evidence writes are not
 silently claimed as stored or retried; later writes and finalization are still attempted in order. An unavailable create
 means no durable attempt exists and subsequent adapter operations report failure. Page hide queues
 interrupted speech and finalization, but browser suspension/unload can prevent pending network writes;
@@ -222,3 +230,25 @@ Verify the following behaviors before the experiment:
 | Session reaches the limit | End by six minutes and release media resources. |
 | Parent opens an observation | The full session recording seeks to approximately the exchange's timestamp, alongside transcript and scene. |
 | Next lesson cites an observation | The observation is reviewed, and the rationale states what the lesson changed because of it. |
+
+### Full-session audio (commit 3)
+
+BrowserTransport mixes the microphone directly into a MediaStreamAudioDestinationNode and remote
+WebRTC audio through a GainNode into that same destination. No microphone signal goes to speakers.
+The existing audio element still plays Sprout; the remote recording gain is zero until play() succeeds
+and whenever setOutputBlocked(true) mutes playback. Child capture remains enabled throughout.
+One MediaRecorder starts synchronously at provider session.started and stops immediately on every
+ending, including partial attempts. Final dataavailable chunks form one Blob on stop; no utterance clips
+are created. Runtime MIME selection prefers supported Opus formats, with browser-default fallback.
+The Blob's actual MIME type, startOffsetMs (zero relative to live session start), and monotonic elapsed
+durationMs are attached to the ended session. Canonical sessionEvents.atMs uses session.started as
+zero, sharing the recording origin and provider-relative utterance startMs/endMs. Canonical evidence
+requires that live start boundary. Attempt diagnostics retain the earlier attempt-creation clock;
+liveStartedAtMs reports the startup delay on that clock.
+
+The persistence queue flushes evidence, finalizes, then requests a Convex upload URL, POSTs the Blob,
+and attaches its storage ID. Media tracks, nodes, context, detector and playback are released without
+waiting for network writes. Capture or attachment failure uses the existing incomplete marker and
+warning; a startup attempt without usable audio is incomplete. Browser suspension still offers no
+unload durability guarantee. Production Sprout canonical transcripts remain omitted because delivery
+intervals cannot be verified; the gated full audio is the authoritative artifact for permitted speech.

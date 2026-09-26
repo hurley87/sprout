@@ -14,7 +14,7 @@ export const create = mutation({
     if (prior && prior.state !== "ended") throw new Error("Retry source must be ended");
     return ctx.db.insert("sessions", {
       state: "starting",
-      recordStatus: "complete",
+      recordStatus: "pending",
       createdAt: Date.now(),
       retryOf,
       nextEventOrder: 0,
@@ -106,15 +106,25 @@ export const finalize = mutation({
   },
 });
 
+export const generateUploadUrl = mutation({
+  args: { sessionId: v.id("sessions") },
+  handler: async (ctx, { sessionId }) => {
+    const session = await ctx.db.get(sessionId);
+    if (!session || session.state !== "ended") throw new Error("Upload requires an ended session");
+    if (session.recording) throw new Error("Recording is already attached");
+    return ctx.storage.generateUploadUrl();
+  },
+});
+
 export const attachRecording = mutation({
   args: {
     sessionId: v.id("sessions"),
     storageId: v.id("_storage"),
     mimeType: v.string(),
-    startedAt: v.number(),
+    startOffsetMs: v.number(),
     durationMs: v.number(),
   },
-  handler: async (ctx, { sessionId, storageId, mimeType, startedAt, durationMs }) => {
+  handler: async (ctx, { sessionId, storageId, mimeType, startOffsetMs, durationMs }) => {
     const session = await ctx.db.get(sessionId);
     if (!session) throw new Error("Session does not exist");
     if (session.state !== "ended") throw new Error("Recording can be attached only after finalization");
@@ -122,17 +132,20 @@ export const attachRecording = mutation({
       if (
         session.recording.storageId === storageId &&
         session.recording.mimeType === mimeType &&
-        session.recording.startedAt === startedAt &&
+        session.recording.startOffsetMs === startOffsetMs &&
         session.recording.durationMs === durationMs
       )
         return sessionId;
       throw new Error("Recording is already attached");
     }
     if (!mimeType.trim()) throw new Error("mimeType is required");
-    nonnegative(startedAt, "startedAt");
+    nonnegative(startOffsetMs, "startOffsetMs");
     nonnegative(durationMs, "durationMs");
     if (!(await ctx.db.system.get("_storage", storageId))) throw new Error("Recording file does not exist");
-    await ctx.db.patch(sessionId, { recording: { storageId, mimeType, startedAt, durationMs } });
+    await ctx.db.patch(sessionId, {
+      recording: { storageId, mimeType, startOffsetMs, durationMs },
+      ...(session.recordStatus === "pending" ? { recordStatus: "complete" as const } : {}),
+    });
     return sessionId;
   },
 });

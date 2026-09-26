@@ -112,3 +112,138 @@ describe("BrowserTransport output gating", () => {
     expect(audio.muted).toBe(false);
   });
 });
+
+function captureMocks() {
+  const sources: { connect: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> }[] = [];
+  const gain = { gain: { value: 0 }, connect: vi.fn(), disconnect: vi.fn() };
+  const mix = { stream: { getTracks: () => [] }, disconnect: vi.fn() };
+  const context = {
+    state: "running",
+    resume: vi.fn(async () => {}),
+    close: vi.fn(async () => {}),
+    createMediaStreamDestination: () => mix,
+    createGain: () => gain,
+    createMediaStreamSource: vi.fn(() => {
+      const source = { connect: vi.fn(), disconnect: vi.fn() };
+      sources.push(source);
+      return source;
+    }),
+  };
+  const recorders: Recorder[] = [];
+  class Recorder {
+    static isTypeSupported = (type: string) => type === "audio/webm;codecs=opus";
+    state = "inactive";
+    mimeType = "audio/webm;codecs=opus";
+    ondataavailable?: ((event: { data: Blob }) => void) | null;
+    onstop?: (() => void) | null;
+    onerror?: (() => void) | null;
+    constructor(readonly stream: unknown) {
+      recorders.push(this);
+    }
+    start() {
+      this.state = "recording";
+    }
+    stop() {
+      this.state = "inactive";
+      queueMicrotask(() => {
+        this.ondataavailable?.({ data: new Blob(["audio"], { type: this.mimeType }) });
+        this.onstop?.();
+      });
+    }
+  }
+  vi.stubGlobal(
+    "AudioContext",
+    class {
+      constructor() {
+        return context;
+      }
+    },
+  );
+  vi.stubGlobal("MediaRecorder", Recorder);
+  return { sources, gain, mix, context, recorders };
+}
+
+it("mixes mic and permitted remote audio, starts at live boundary, and finishes once", async () => {
+  const { peer, remoteTrack, micTrack } = liveConnection();
+  const { sources, gain, mix, context, recorders } = captureMocks();
+  const audio = audioElement();
+  let play!: () => void;
+  audio.play.mockImplementation(
+    () =>
+      new Promise<void>(resolve => {
+        play = resolve;
+      }),
+  );
+  const transport = new BrowserTransport(audio as unknown as HTMLAudioElement);
+  await transport.start(vi.fn(), vi.fn());
+  expect(recorders).toHaveLength(0);
+  peer.ontrack?.({ track: remoteTrack });
+  expect(gain.gain.value).toBe(0);
+  transport.startRecording();
+  transport.startRecording();
+  expect(recorders).toHaveLength(1);
+  expect(recorders[0].stream).toBe(mix.stream);
+  expect(sources[0].connect).toHaveBeenCalledWith(mix);
+  expect(sources.at(-1)?.connect).toHaveBeenCalledWith(gain);
+  expect(gain.connect).toHaveBeenCalledWith(mix);
+  play();
+  await Promise.resolve();
+  expect(gain.gain.value).toBe(1);
+  transport.setOutputBlocked(true);
+  expect(audio.muted).toBe(true);
+  expect(gain.gain.value).toBe(0);
+  expect(sources[0].disconnect).not.toHaveBeenCalled();
+  transport.setOutputBlocked(false);
+  expect(audio.muted).toBe(false);
+  expect(gain.gain.value).toBe(1);
+  transport.stopMedia();
+  transport.stopMedia();
+  transport.close();
+  transport.close();
+  const recording = await transport.recording();
+  expect(recording).toMatchObject({ startOffsetMs: 0, mimeType: "audio/webm;codecs=opus" });
+  expect(recording?.blob.size).toBeGreaterThan(0);
+  expect(recording?.durationMs).toBeGreaterThanOrEqual(0);
+  expect(context.close).toHaveBeenCalledOnce();
+  expect(micTrack.stop).toHaveBeenCalledOnce();
+  expect(remoteTrack.stop).toHaveBeenCalledOnce();
+  expect(peer.close).toHaveBeenCalledOnce();
+});
+
+it("explicitly fails capture when unsupported without disrupting the connection", async () => {
+  liveConnection();
+  vi.stubGlobal("MediaRecorder", undefined);
+  const transport = new BrowserTransport(audioElement() as unknown as HTMLAudioElement);
+  await transport.start(vi.fn(), vi.fn());
+  expect(() => transport.startRecording()).toThrow("unavailable");
+  transport.close();
+  await expect(transport.recording()).rejects.toThrow("unavailable");
+});
+
+it("rejects unexpectedly stopped or errored capture", async () => {
+  liveConnection();
+  const { recorders } = captureMocks();
+  const transport = new BrowserTransport(audioElement() as unknown as HTMLAudioElement);
+  await transport.start(vi.fn(), vi.fn());
+  transport.startRecording();
+  recorders[0].stop();
+  await Promise.resolve();
+  transport.close();
+  await expect(transport.recording()).rejects.toThrow("unexpectedly");
+});
+
+it.each(["error", "empty"])("reports %s recording instead of claiming usable audio", async failure => {
+  liveConnection();
+  const { recorders } = captureMocks();
+  const transport = new BrowserTransport(audioElement() as unknown as HTMLAudioElement);
+  await transport.start(vi.fn(), vi.fn());
+  transport.startRecording();
+  if (failure === "error") recorders[0].onerror?.();
+  else
+    recorders[0].stop = () => {
+      recorders[0].state = "inactive";
+      queueMicrotask(() => recorders[0].onstop?.());
+    };
+  transport.close();
+  await expect(transport.recording()).rejects.toThrow(failure === "error" ? "failed" : "empty");
+});
