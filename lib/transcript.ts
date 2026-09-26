@@ -61,3 +61,27 @@ const GOODBYE = new RegExp(
 export function saidGoodbye(text: string): boolean {
   return GOODBYE.test(text);
 }
+
+export type RecordedUtterance = { text: string; startMs: number; endMs: number; delivered: boolean };
+
+/** Full canonical text is separate from the bounded diagnostic/answer window. */
+export class UtteranceAccumulator {
+  private open: RecordedUtterance | null = null;
+  append(delta: string, startMs: number, endMs: number, delivered: boolean): RecordedUtterance | null {
+    let completed: RecordedUtterance | null = null;
+    if (this.open && startMs - this.open.endMs > UTTERANCE_GAP_MS) completed = this.take();
+    if (!this.open) this.open = { text: "", startMs, endMs, delivered };
+    this.open.text += delta;
+    this.open.endMs = Math.max(this.open.endMs, endMs);
+    this.open.delivered &&= delivered;
+    return completed;
+  }
+  take() {
+    const utterance = this.open;
+    this.open = null;
+    return utterance;
+  }
+  invalidateDelivery() {
+    if (this.open) this.open.delivered = false;
+  }
+}

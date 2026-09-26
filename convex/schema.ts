@@ -38,6 +38,7 @@ export const evidence = v.union(
 export default defineSchema({
   sessions: defineTable({
     state: v.union(v.literal("starting"), v.literal("active"), v.literal("ended")),
+    recordStatus: v.union(v.literal("complete"), v.literal("incomplete")),
     createdAt: v.number(),
     startedAt: v.optional(v.number()),
     endedAt: v.optional(v.number()),

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { fetchEvaluateAnswer } from "@/lib/answer";
+import { ConvexSessionRecorder } from "@/lib/convex-session-recorder";
 import { BrowserTransport } from "@/lib/browser-transport";
 import { OBJECTS, objectName, sceneAt } from "@/lib/lesson";
 import { LessonSession, type Diagnostic, type Snapshot } from "@/lib/session";
@@ -57,8 +58,16 @@ export default function Lesson({ debug }: { debug: boolean }) {
   function start() {
     if (!audio.current || (session.current && session.current.snapshot.status !== "ended")) return;
     session.current?.dispose();
-    const current = new LessonSession(new BrowserTransport(audio.current), fetchEvaluateAnswer, setSnapshot, () =>
-      setDiagnosticEvents([...current.events]),
+    const current = new LessonSession(
+      new BrowserTransport(audio.current),
+      fetchEvaluateAnswer,
+      snapshot => {
+        if (session.current === current) setSnapshot(snapshot);
+      },
+      () => {
+        if (session.current === current) setDiagnosticEvents([...current.events]);
+      },
+      new ConvexSessionRecorder(),
     );
     session.current = current;
     setDiagnosticEvents([]);
@@ -78,6 +87,11 @@ export default function Lesson({ debug }: { debug: boolean }) {
   return (
     <main className={live ? "sprout live" : "sprout"}>
       <audio ref={audio} aria-hidden="true" />
+      {snapshot?.recordingError && (
+        <p role="alert" className="error">
+          {snapshot.recordingError}
+        </p>
+      )}
       <header className="brand">
         <span aria-hidden="true">✳</span> sprout
       </header>

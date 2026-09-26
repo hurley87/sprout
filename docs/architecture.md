@@ -55,7 +55,7 @@ Record the ending reason: ordinary wrap-up, child stop, parent stop, time limit,
 
 Session control enforces the PRD's [timing and stopping rules](sprout-mvp-prd.md#timing-and-stopping) in application code. The hard limit applies even if the model requests more time, and parent stop does not wait for a model decision.
 
-On ending, stop microphone capture and voice playback and close the live connection. Ignore late controller actions. An explicit retry is a new session linked to the same experiment day.
+On ending, stop microphone capture and voice playback and close the live connection. Ignore late controller actions. An explicit retry is a new session linked to the prior ended attempt. The current “Start a new lesson” action creates a fresh, unlinked attempt.
 
 Persist completed exchanges incrementally so a dropped connection does not erase them. Finalize the captured record before observation generation and identify missing or incomplete material.
 
@@ -69,7 +69,7 @@ Suggested record fields:
 
 | Record | Minimum information |
 | --- | --- |
-| Session | ID, experiment/day, plan ID, start/end times, ending reason, record completeness, analysis/review status, retry relationship if any |
+| Session | ID, plan ID, start/end times, ending reason, record completeness, analysis/review status, retry relationship if any |
 | Session recording | One full-session audio file (Convex file storage) and its start time |
 | Utterance | ID, speaker attribution including unknown, text, order, timestamp, whether the utterance was finalized or interrupted |
 | Displayed scene | ID, ordered emoji items and arrangement, target quantity, display order, timestamp |
@@ -84,10 +84,51 @@ Each session is one attempt, identified by its Convex document ID, with `startin
 an ending reason, an optional prior-attempt link, and an optional single recording reference.
 Each event has a session-relative millisecond timestamp, a server-assigned order, a caller event key,
 and validated `utterance`, `scene_displayed`, or `support` data. `scene_displayed` means the scene
-reached the UI; the future recorder must not use it for requested transitions. The Convex API creates,
+reached the UI; the live recorder does not use it for requested transitions. The Convex API creates,
 activates, appends, finalizes, attaches recording metadata, and fetches the ordered record. Finalization
-prevents later evidence writes. The existing diagnostic JSON remains separate. Wiring live provider
-events, audio capture, inspection, and export remains future work.
+prevents later evidence writes. The existing diagnostic JSON remains separate. Audio capture, inspection, and export remain future work.
+
+### Live recording (commit 2)
+
+`LessonSession` accepts a small `SessionRecorder` interface; the browser supplies a narrow
+`ConvexSessionRecorder` adapter. An ordered asynchronous queue creates the attempt before activation
+and evidence writes, activates at provider `session.started`, and writes all queued evidence before
+finalization. All seven application ending reasons map directly to the schema. Late callbacks and
+repeated endings cannot append evidence. Network round trips do not block conversation control.
+
+Canonical utterances use a separate full-text accumulator, rather than the bounded answer/diagnostic
+window. Same-speaker fragments combine; a speaker switch finalizes the prior canonical turn,
+even if the incoming Sprout transcript is untrusted or gated and omitted from evidence. The prior
+turn’s quiet timer is cleared. A provider timestamp gap or 2.5 seconds of transcript quiet also
+finalizes an utterance. These are approximate utterance boundaries, not provider-confirmed speech
+completion. Open useful speech flushes as interrupted before ending. Provider transcript timestamps
+are approximate; event timestamps use milliseconds from attempt creation. Child input retains
+`child_or_nearby_speaker` attribution.
+
+Sprout speech requires an explicit transport delivery attribution for the whole utterance. Muting
+invalidates the open utterance; gated fragments are never delivered evidence. BrowserTransport
+currently cannot correlate output transcript intervals to actual audible playback, so production
+Sprout utterances are deliberately omitted. An unmuted audio element or resolved `play()` alone is
+insufficient proof. Diagnostic output transcripts remain available. A future transport can implement
+`delivered(startMs, endMs)` when it has reliable interval attribution, without changing persistence.
+
+Scenes are appended only by the existing post-render `displayed()` confirmation. Consuming the pending
+display prevents duplicate effect callbacks; the payload comes from the actual lesson scene and object
+catalog, including ordered items and the wrapping row arrangement. Requested/pending transitions
+are not evidence. No support events are emitted yet: instructions to offer help do not establish
+what help was played. Model-generated hints, counting together, and parent assistance remain deferred
+until reliable delivery/attribution exists; the recorder and schema accept support events.
+
+Persistence failures are reported in diagnostics and a visible recording warning. The lesson continues
+with unchanged timing, answer decisions, and scene control. New durable attempts have
+`recordStatus: complete`. After a persistence failure on an existing attempt, the queue awaits an idempotent `markIncomplete` write before continuing. Marker failures
+are reported; finalization also carries the known loss atomically, so a successful finalize leaves
+`recordStatus: incomplete` even if the earlier marker write failed. This status is monotonic and
+separate from lesson lifecycle, ending reason, and audio presence. Failed evidence writes are not
+silently claimed as stored or retried; later writes and finalization are still attempted in order. An unavailable create
+means no durable attempt exists and subsequent adapter operations report failure. Page hide queues
+interrupted speech and finalization, but browser suspension/unload can prevent pending network writes;
+already committed evidence survives. There is no unload durability guarantee in this slice.
 
 Record what was actually displayed, not just a requested visual action. Distinguish a spoken or interrupted prompt from text generated but never played. If delivery or scene context cannot be established, the Observer must qualify or omit the conclusion.
 
@@ -143,7 +184,7 @@ During play, a new theme can replace the original setting while preserving the o
 
 ## 7. Stack and feasibility gate
 
-Retain the proposed Next.js/React/TypeScript application and Convex persistence. The experiment runs locally on the builder's MacBook; Vercel deployment is deferred. The repository contains the slice 1 GPT-Live-1 voice prototype ([baseline findings](gpt-live-baseline.md)) and the standalone Convex session-record foundation; live persistence wiring, Observer, and planner integrations are not implemented.
+Retain the proposed Next.js/React/TypeScript application and Convex persistence. The experiment runs locally on the builder's MacBook; Vercel deployment is deferred. The repository contains the slice 1 GPT-Live-1 voice prototype ([baseline findings](gpt-live-baseline.md)) and the standalone Convex session-record foundation; live evidence persistence is wired; Observer and planner integrations are not implemented.
 
 GPT-Live 1 is the initial voice candidate. OpenAI documents the model as `gpt-live-1`. Vercel documents Jev as `typesafe-ai/jev`; the prototype calls TypeSafe's own API directly and pins `jev-1.13.0`, because the advance threshold is calibrated against that version. Suitability for this child's speech is still unestablished: the results so far come from synthetic adult speech. Sources checked 2026-09-22: [GPT-Live 1](https://developers.openai.com/api/docs/models/gpt-live-1), [Jev](https://vercel.com/ai-gateway/models/jev).
 

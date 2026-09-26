@@ -14,6 +14,7 @@ export const create = mutation({
     if (prior && prior.state !== "ended") throw new Error("Retry source must be ended");
     return ctx.db.insert("sessions", {
       state: "starting",
+      recordStatus: "complete",
       createdAt: Date.now(),
       retryOf,
       nextEventOrder: 0,
@@ -80,11 +81,25 @@ export const appendEvent = mutation({
   },
 });
 
-export const finalize = mutation({
-  args: { sessionId: v.id("sessions"), endingReason },
-  handler: async (ctx, { sessionId, endingReason: reason }) => {
+/** Monotonic, including after finalization: recording integrity is not lifecycle. */
+export const markIncomplete = mutation({
+  args: { sessionId: v.id("sessions") },
+  handler: async (ctx, { sessionId }) => {
     const session = await ctx.db.get(sessionId);
     if (!session) throw new Error("Session does not exist");
+    if (session.recordStatus !== "incomplete") await ctx.db.patch(sessionId, { recordStatus: "incomplete" });
+    return sessionId;
+  },
+});
+
+export const finalize = mutation({
+  args: { sessionId: v.id("sessions"), endingReason, recordIncomplete: v.optional(v.boolean()) },
+  handler: async (ctx, { sessionId, endingReason: reason, recordIncomplete }) => {
+    const session = await ctx.db.get(sessionId);
+    if (!session) throw new Error("Session does not exist");
+    // Carry known loss atomically even if an earlier markIncomplete request failed.
+    if (recordIncomplete && session.recordStatus !== "incomplete")
+      await ctx.db.patch(sessionId, { recordStatus: "incomplete" });
     if (session.state === "ended") return sessionId;
     await ctx.db.patch(sessionId, { state: "ended", endedAt: Date.now(), endingReason: reason });
     return sessionId;

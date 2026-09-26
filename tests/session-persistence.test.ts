@@ -162,3 +162,46 @@ describe("durable session record", () => {
     });
   });
 });
+
+it("record completeness is optimistic, monotonic, idempotent, and survives finalization", async () => {
+  const t = makeTest();
+  const sessionId = await t.mutation(api.sessions.create, {});
+  expect((await t.query(api.sessions.getRecord, { sessionId }))?.session.recordStatus).toBe("complete");
+  await t.mutation(api.sessions.markIncomplete, { sessionId });
+  await t.mutation(api.sessions.markIncomplete, { sessionId });
+  await t.mutation(api.sessions.activate, { sessionId });
+  await t.mutation(api.sessions.appendEvent, {
+    sessionId,
+    eventKey: "ok",
+    atMs: 0,
+    evidence: { type: "support", source: "sprout", mode: "spoken", description: "help" },
+  });
+  await t.mutation(api.sessions.finalize, { sessionId, endingReason: "parent_stop", recordIncomplete: false });
+  await t.mutation(api.sessions.finalize, { sessionId, endingReason: "parent_stop", recordIncomplete: false });
+  await t.mutation(api.sessions.markIncomplete, { sessionId });
+  expect((await t.query(api.sessions.getRecord, { sessionId }))?.session).toMatchObject({
+    state: "ended",
+    recordStatus: "incomplete",
+  });
+});
+
+it("finalization atomically marks known evidence loss, including repeated finalization", async () => {
+  const t = makeTest();
+  const sessionId = await t.mutation(api.sessions.create, {});
+  await t.mutation(api.sessions.finalize, { sessionId, endingReason: "parent_stop", recordIncomplete: true });
+  expect((await t.query(api.sessions.getRecord, { sessionId }))?.session).toMatchObject({
+    state: "ended",
+    recordStatus: "incomplete",
+  });
+  const other = await t.mutation(api.sessions.create, {});
+  await t.mutation(api.sessions.finalize, { sessionId: other, endingReason: "parent_stop" });
+  await t.mutation(api.sessions.finalize, {
+    sessionId: other,
+    endingReason: "connection_failure",
+    recordIncomplete: true,
+  });
+  expect((await t.query(api.sessions.getRecord, { sessionId: other }))?.session).toMatchObject({
+    endingReason: "parent_stop",
+    recordStatus: "incomplete",
+  });
+});

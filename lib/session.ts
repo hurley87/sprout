@@ -1,3 +1,4 @@
+import { RecordingQueue, type SessionRecorder, type Evidence } from "./session-recorder";
 import {
   CORRECTION_WINDOW_MS,
   MICROPHONE_QUIET_MS,
@@ -10,6 +11,7 @@ import {
 import type { ClientCommand, ProviderEvent, TranscriptEvent } from "./events";
 import {
   LAST_SCENE,
+  OBJECTS,
   MODEL,
   PROMPT_VERSION,
   TIMING,
@@ -21,6 +23,7 @@ import {
 } from "./lesson";
 import {
   TranscriptWindow,
+  UtteranceAccumulator,
   UTTERANCE_GAP_MS,
   mentionsNumber,
   requestsStop,
@@ -48,6 +51,7 @@ export type Snapshot = {
   sceneIndex: number;
   reason?: EndReason;
   error?: string;
+  recordingError?: string;
 };
 export type Diagnostic = { at: number; type: string; detail?: unknown };
 
@@ -56,6 +60,8 @@ export interface Transport {
   send(command: ClientCommand): void;
   /** Silence provider audio without stopping playback or provider events. */
   setOutputBlocked(blocked: boolean): void;
+  /** True only with a trustworthy delivery attribution for this transcript interval. */
+  delivered?(startMs: number, endMs: number): boolean;
   stopMedia(): void;
   close(): void;
 }
@@ -142,12 +148,71 @@ export class LessonSession {
   private commands = 0;
   private closed = false;
   private ready = false;
+  private recordingStarted = false;
+  private evidenceOrder = 0;
+  private canonical = { child: new UtteranceAccumulator(), sprout: new UtteranceAccumulator() };
+  private utteranceTimers: Partial<Record<"child" | "sprout", ReturnType<typeof setTimeout>>> = {};
+  private recording = new RecordingQueue(
+    (operation, error) => {
+      this.log("recording.failed", { operation, message: error instanceof Error ? error.message : "Recording failed" });
+      this.update({ recordingError: "Durable recording is incomplete or unavailable. The lesson can continue." });
+    },
+    () => this.recorder!.markIncomplete(),
+  );
+
+  recordingSettled() {
+    return this.recording.drain();
+  }
+
+  private record(evidence: Evidence) {
+    if (!this.recorder) return;
+    const eventKey = `evidence_${++this.evidenceOrder}`;
+    const atMs = Date.now() - this.createdAt;
+    this.recording.enqueue("append", () => this.recorder!.append(eventKey, atMs, evidence));
+  }
+
+  private flushUtterance(
+    speaker: "child" | "sprout",
+    state: "finalized" | "interrupted",
+    utterance = this.canonical[speaker].take(),
+  ) {
+    if (!utterance?.text.trim() || !utterance.delivered) return;
+    this.record({
+      type: "utterance",
+      speaker: speaker === "child" ? "child_or_nearby_speaker" : "sprout",
+      text: utterance.text,
+      startMs: utterance.startMs,
+      endMs: utterance.endMs,
+      state,
+    });
+  }
+
+  private captureTranscript(event: TranscriptEvent) {
+    if (!this.ready) return;
+    // A transcript from either speaker ends the other speaker's canonical turn,
+    // even when the incoming Sprout speech cannot be recorded as delivered.
+    const priorSpeaker = event.speaker === "child" ? "sprout" : "child";
+    clearTimeout(this.utteranceTimers[priorSpeaker]);
+    delete this.utteranceTimers[priorSpeaker];
+    this.flushUtterance(priorSpeaker, "finalized");
+    const delivered =
+      event.speaker === "child" ||
+      (!this.answerResponseGate && this.transport.delivered?.(event.startMs, event.endMs) === true);
+    const completed = this.canonical[event.speaker].append(event.delta, event.startMs, event.endMs, delivered);
+    if (completed) this.flushUtterance(event.speaker, "finalized", completed);
+    clearTimeout(this.utteranceTimers[event.speaker]);
+    this.utteranceTimers[event.speaker] = setTimeout(
+      () => this.flushUtterance(event.speaker, "finalized"),
+      UTTERANCE_GAP_MS,
+    );
+  }
 
   constructor(
     private transport: Transport,
     private evaluateAnswer: EvaluateAnswer,
     private changed: (snapshot: Snapshot) => void,
     private diagnosticChanged?: () => void,
+    private recorder?: SessionRecorder,
   ) {}
 
   private get scene() {
@@ -168,6 +233,9 @@ export class LessonSession {
   }
 
   async start() {
+    if (this.recordingStarted) return;
+    this.recordingStarted = true;
+    if (this.recorder) this.recording.enqueue("create", () => this.recorder!.create());
     this.log("attempt.started", { model: MODEL, prompt: PROMPT_VERSION });
     this.changed(this.snapshot);
     this.startupTimer = setTimeout(
@@ -326,6 +394,7 @@ export class LessonSession {
     if (this.snapshot.status !== "starting") return;
     clearTimeout(this.startupTimer);
     this.ready = true;
+    if (this.recorder) this.recording.enqueue("activate", () => this.recorder!.activate());
     this.startedAt = Date.now();
     this.log("lesson.started");
     this.pending = { kind: "greeting", sceneIndex: 0 };
@@ -340,6 +409,7 @@ export class LessonSession {
   }
 
   private heard(event: TranscriptEvent) {
+    this.captureTranscript(event);
     const fromChild = event.speaker === "child";
     this.log(fromChild ? "transcript.child_or_nearby_speaker" : "transcript.sprout", {
       delta: event.delta,
@@ -436,6 +506,7 @@ export class LessonSession {
         startedAt: Date.now(),
         outputQuietAt: 0,
       };
+      this.canonical.sprout.invalidateDelivery();
       this.transport.setOutputBlocked(true);
       this.log("answer.response_gate_started", {
         scene_index: this.snapshot.sceneIndex,
@@ -972,6 +1043,14 @@ export class LessonSession {
     if (!pending || pending.sceneIndex !== sceneIndex) return;
     this.pending = null;
     this.log("scene.displayed", this.scene);
+    const object = OBJECTS[this.scene.object];
+    this.record({
+      type: "scene_displayed",
+      sceneId: this.scene.id,
+      targetQuantity: this.scene.quantity,
+      items: Array.from({ length: this.scene.quantity }, () => ({ emoji: object.emoji, label: object.singular })),
+      arrangement: "Centered flex row, wrapping in display order",
+    });
     if (pending.answerVersion)
       this.log("advance.displayed", {
         answer_version: pending.answerVersion,
@@ -1064,6 +1143,12 @@ export class LessonSession {
     if (this.snapshot.status === "ended") return;
     const remaining = this.startedAt === undefined ? TIMING.hard : TIMING.hard - (Date.now() - this.startedAt);
     if (remaining <= 0) reason = "time_limit";
+    for (const speaker of ["child", "sprout"] as const) {
+      clearTimeout(this.utteranceTimers[speaker]);
+      this.flushUtterance(speaker, "interrupted");
+    }
+    if (this.recorder)
+      this.recording.enqueue("finalize", () => this.recorder!.finalize(reason, this.recording.incomplete));
     this.cancelAnswerResponseGate(reason);
     clearTimeout(this.startupTimer);
     clearTimeout(this.settleTimer);

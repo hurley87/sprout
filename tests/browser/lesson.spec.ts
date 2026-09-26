@@ -239,7 +239,7 @@ test("connection failure preserves a retryable explanation and stops capture", a
   await mockLive(page);
   await begin(page);
   await page.evaluate(() => window.sproutTest.disconnect());
-  await expect(page.getByRole("main").getByRole("alert")).toContainText("connection was lost");
+  await expect(page.getByRole("main").getByRole("alert").filter({ hasText: "connection was lost" })).toBeVisible();
   expect(await tracksStopped(page)).toBe(true);
   await expect(page.getByRole("button", { name: "Start a new lesson" })).toBeVisible();
 });
@@ -279,6 +279,6 @@ test("missing server configuration is explained and releases real microphone tra
   );
   await page.goto("/");
   await page.getByRole("button", { name: "Start counting together" }).click();
-  await expect(page.getByRole("main").getByRole("alert")).toContainText("OPENAI_API_KEY");
+  await expect(page.getByRole("main").getByRole("alert").filter({ hasText: "OPENAI_API_KEY" })).toBeVisible();
   expect(await tracksStopped(page)).toBe(true);
 });
