@@ -131,3 +131,33 @@ are separate fields. The browser/provider clock fields remain in their
 existing browser summary and timeline.
 Joined response timing is bounded to the current answer and will not consume a
 Sprout transcript occurring after the next child answer begins.
+
+## Commit 3 candidate: 1500 ms
+
+The first candidate changes only `CORRECTION_WINDOW_MS` from 2500 to 1500 ms;
+there is no environment or runtime configuration. Focused session tests ran
+first. **139 passed and 2 failed** (141 total). The explicit 1000 ms
+correct-to-wrong correction passed. The explicit 1500 ms wrong-to-correct
+case failed because the scene had already committed when the pause ended. The
+2000 ms no-activity correction case also committed at 1500 ms; speech after that
+commit is a new turn and cannot reverse the scene transition. The separate
+2000 ms continuation case passed when microphone speech began at 1250 ms,
+before the 1500 ms deadline, and the `and two` transcript arrived at 2000 ms.
+Same-utterance correction, stale-result invalidation, exact-once advancement,
+and the other focused session cases passed.
+
+The explicit deadline probe models the correction event and commit timer due at
+the same millisecond. The commit timer was registered first, so commit won and
+the following transcript was recorded as transition-period speech and ignored.
+This implementation therefore does not include equality: its supported
+correction contract at this candidate is strictly before 1500 ms. The requested
+1500 ms delayed-correction case fails that contract, so the candidate did not
+qualify for the billed live subset; no 1500 ms live scenarios were run and no
+candidate latency measurements are available. Use the existing 2500 ms live
+baseline table above for comparison; do not infer candidate timings from it.
+
+The evidence does not support lowering the window to 1000 ms. A 1500 ms fixed
+window protects the 2000 ms continuation only when renewed microphone activity
+arrives before commit. If the product requirement includes corrections after
+1500 ms of silence, retain the baseline or investigate an adaptive policy
+before another candidate.

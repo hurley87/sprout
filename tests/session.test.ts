@@ -362,6 +362,32 @@ describe("answer response gate", () => {
     },
   );
 
+  it("treats a correction at the commit deadline as post-commit when the timer runs first", async () => {
+    const { session, evaluateAnswer } = setup(true, answering(CONFIDENT));
+    mic(session, "microphone.speech_started");
+    deliver(session, speech("Two", 0));
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+    expect(session.snapshot.sceneIndex).toBe(0);
+
+    let sceneAtCorrection: number | undefined;
+    const remainingToDeadline = CORRECTION_WINDOW_MS - TRANSCRIPT_TAIL_MS;
+    setTimeout(() => {
+      mic(session, "microphone.speech_started");
+      deliver(session, speech("No, one", 3001));
+      sceneAtCorrection = session.snapshot.sceneIndex;
+    }, remainingToDeadline);
+    await vi.advanceTimersByTimeAsync(remainingToDeadline);
+
+    expect(sceneAtCorrection).toBe(1);
+    expect(session.snapshot.sceneIndex).toBe(1);
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+    expect(session.events.filter(event => event.type === "advance.committed")).toHaveLength(1);
+    expect(session.events.some(event => event.type === "answer.advance_transition_transcript_ignored")).toBe(true);
+  });
+
   it("does not let an initially correct answer commit before a separate wrong correction", async () => {
     const decisions = [evaluated(CONFIDENT), evaluated(UNSURE)];
     const evaluateAnswer: EvaluateAnswer = vi.fn(async () => decisions.shift()!);
@@ -753,7 +779,7 @@ describe("answer-gated scene advancement", () => {
   it("holds an in-flight Jev result through a microphone spike without losing the answer", async () => {
     let resolve!: (result: AnswerResult) => void;
     const evaluateAnswer: EvaluateAnswer = vi.fn(() => new Promise<AnswerResult>(r => (resolve = r)));
-    const { session } = setup(true, evaluateAnswer);
+    const { session, transport } = setup(true, evaluateAnswer);
     mic(session, "microphone.speech_started");
     deliver(session, speech("One"));
     mic(session, "microphone.speech_stopped");
@@ -763,11 +789,17 @@ describe("answer-gated scene advancement", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(session.snapshot.sceneIndex).toBe(0);
     session.receive({ type: "microphone.activity_discarded" });
-    await vi.advanceTimersByTimeAsync(SETTLE_MS);
+    const releaseDelayFromNow = CORRECTION_WINDOW_MS - TRANSCRIPT_TAIL_MS;
+    await vi.advanceTimersByTimeAsync(releaseDelayFromNow - 1);
     expect(session.snapshot.sceneIndex).toBe(0);
-    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - TRANSCRIPT_TAIL_MS - SETTLE_MS);
+    expectAnswerResponseHeld(session, transport);
+    await vi.advanceTimersByTimeAsync(1);
     expect(session.snapshot.sceneIndex).toBe(1);
     expect(evaluateAnswer).toHaveBeenCalledOnce();
+    expect(session.events.filter(event => event.type === "advance.committed")).toHaveLength(1);
+    expect(session.events.filter(event => event.type === "answer.response_gate_released")).toHaveLength(0);
+    session.displayed(1);
+    expect(session.events.filter(event => event.type === "answer.response_gate_released")).toHaveLength(1);
   });
   it("resumes an approved answer after confirmed transcriptless microphone activity without asking for a repeat", async () => {
     const { session, transport } = setup(true, answering(CONFIDENT));
@@ -903,14 +935,21 @@ describe("answer-gated scene advancement", () => {
     mic(session, "microphone.speech_stopped");
     await vi.advanceTimersByTimeAsync(SETTLE_MS - 1);
     expect(session.snapshot.sceneIndex).toBe(0);
-    await vi.advanceTimersByTimeAsync(1);
-    expect(session.snapshot.sceneIndex).toBe(0);
-    expect(session.events.findLast(e => e.type === "answer.evaluated")?.detail).toMatchObject({
-      decision: "ADVANCE",
-      stale: false,
-    });
-    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
+    const releaseAtMs = Math.max(CORRECTION_WINDOW_MS, TRANSCRIPT_TAIL_MS + SETTLE_MS);
+    const timeAfterStart = SETTLE_MS - 1;
+    // Confirmed renewed speech extends the candidate's 1500 ms deadline to
+    // speech-start + TRANSCRIPT_FALLBACK_MS. The ordinary 2500 ms policy may
+    // still be the later deadline.
+    const remainingToRelease = releaseAtMs - TRANSCRIPT_TAIL_MS - timeAfterStart;
+    expect(remainingToRelease).toBeGreaterThan(0);
+    await vi.advanceTimersByTimeAsync(remainingToRelease);
     expect(session.snapshot.sceneIndex).toBe(1);
+    expect(session.events.findLast(e => e.type === "advance.released")?.detail).toMatchObject({
+      reason: releaseAtMs === TRANSCRIPT_TAIL_MS + SETTLE_MS ? "vad_grace" : "correction_window",
+    });
+    expect(session.events.filter(e => e.type === "answer.response_gate_released")).toHaveLength(0);
+    session.displayed(1);
+    expect(session.events.filter(e => e.type === "answer.response_gate_released")).toHaveLength(1);
     expect(evaluateAnswer).toHaveBeenCalledOnce();
     expect(session.events.filter(e => e.type === "advance.committed")).toHaveLength(1);
     expect(session.events.some(e => e.type === "answer.no_transcript")).toBe(false);
@@ -1183,7 +1222,8 @@ describe("answer-check turn synchronization", () => {
     deliver(session, speech("Five"));
     await settle();
     deliver(session, speech(reply, 800, true));
-    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - 1);
+    const releaseWait = Math.max(CORRECTION_WINDOW_MS, UTTERANCE_GAP_MS);
+    await vi.advanceTimersByTimeAsync(releaseWait - 1);
     expect(released(transport)).toHaveLength(0);
     await vi.advanceTimersByTimeAsync(1);
     expect(released(transport)).toHaveLength(1);
