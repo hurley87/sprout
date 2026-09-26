@@ -4,6 +4,7 @@ export function recordLiveTraffic() {
   const t0 = performance.now();
   const at = () => Math.round(performance.now() - t0);
   window.__liveLog = log;
+  window.__liveNow = at;
   const nativeFetch = window.fetch.bind(window);
   window.fetch = async (input, init) => {
     const url = typeof input === "string" ? input : (input?.url ?? "");
@@ -36,7 +37,13 @@ export function recordLiveTraffic() {
       return channel;
     }
   };
+  let wasLive = false;
   new MutationObserver(() => {
+    const live = [...document.querySelectorAll("button")].some(button => button.textContent?.trim() === "End lesson");
+    if (live !== wasLive) {
+      log.push({ at: at(), dir: "ui", live });
+      wasLive = live;
+    }
     const scene = document.querySelector("[data-scene]")?.getAttribute("data-scene") ?? null;
     if (log.findLast(e => e.dir === "scene")?.scene !== scene) log.push({ at: at(), dir: "scene", scene });
   }).observe(document, { subtree: true, childList: true, attributes: true });

@@ -16,7 +16,7 @@ export async function runFixedTimeline(name, scenario, { out, baseUrl, label = n
       `--use-file-for-fake-audio-capture=${wav}%noloop`,
       "--autoplay-policy=no-user-gesture-required",
     ],
-    drive: async page => {
+    drive: async ({ page }) => {
       const endButton = page.getByRole("button", { name: "End lesson" });
       const deadline = Date.now() + scenario.seconds * 1000;
       while (Date.now() < deadline && (await endButton.isVisible())) await page.waitForTimeout(500);
