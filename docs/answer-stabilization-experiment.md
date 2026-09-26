@@ -74,6 +74,48 @@ null/unavailable, never inferred from neighboring events.
   displayed scene. The live `self-correction` scenario checks one settled
   transcript reaches Jev and that no earlier tutor turn triggers progression.
 
+Commit 2 adds deterministic separate-utterance coverage with explicit 1000,
+1500, and 2000 ms pauses, independent of `CORRECTION_WINDOW_MS`. It includes
+wrong-to-correct and initially-correct-to-wrong changes, transcript-only
+revision invalidation, and renewed microphone speech after Jev resolves but
+before commit. Each pause rejects scene commit and tutor turn start; results
+allow an abandoned earlier Jev evaluation and require the latest answer to
+control progression. Live scenarios `delayed-correction` (1500 ms),
+`corrected-to-wrong` (1000 ms), and `continuation` (2000 ms) send separate
+synthetic speech through the browser microphone and real GPT-Live/Jev path.
+They inspect both child transcripts and the entire intentional pause. No
+production stabilization or response policy changed.
+
+The safety boundary remains pre-finalization: newly transcribed speech or a
+microphone speech-start before deterministic commit invalidates or holds the
+pending decision. Speech that begins after commit is a new turn; the prior
+scene transition is final and cannot be undone. The pause values exercise
+ordinary long thinking gaps while remaining within the current policy window.
+
+Commit 2 validation against the unchanged policy (2026-09-26): the targeted
+session/diagnostics/reactive harness group passed 194 tests, and all 15 browser
+tests passed. The billed retry passed `self-correction` and `corrected-to-wrong`.
+The baseline `happy-path` reached Jev with transcript `1` (probability 0.98),
+then failed the existing harness expectation for the spoken text `One!`; this
+is retained as an ASR/harness mismatch, not a scene-commit failure.
+`delayed-correction` timed out at its 150-second scenario deadline while
+macOS `say` was synthesizing `Two!`. `continuation` observed a Sprout transcript
+turn (`Hmm, let's...`) before the 2000 ms pause ended and failed the no-cutoff
+assertion. Diagnostics showed the response gate remained active, no scene was
+committed, and the partial transcript did not establish audible playback or a
+success acknowledgement. Treat this as a live continuation risk requiring
+follow-up, not proof of acoustic interruption. The first attempt, before the
+local dev server was started, recorded `ERR_CONNECTION_REFUSED` for all five
+scenarios.
+`corrected-to-wrong` passed its scenario assertions; teardown then logged a
+GPT-Live `context_injection_incomplete` error after the session was stopped.
+
+Artifacts are preserved under `test-results/issue-34-commit2-baseline-20260926/`
+(initial connection failures),
+`test-results/issue-34-commit2-baseline-retry-20260926/` (configured retry),
+and `test-results/issue-34-commit2-continuation-20260926/` (isolated continuation
+attempt). No live artifact is part of the commit.
+
 The reactive artifact summary now adds version-and-scene-correlated diagnostic
 timelines for child transcript, evaluation request/completion, deterministic
 commit, displayed scene, application response release, and first subsequent

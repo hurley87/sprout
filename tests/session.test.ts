@@ -314,6 +314,134 @@ describe("answer response gate", () => {
     expect(transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
   });
 
+  it.each([1000, 1500, 2000])(
+    "keeps a separate-utterance correction safe across an explicit %ims pause",
+    async pauseMs => {
+      const { session, transport, evaluateAnswer } = setup(true, answering(CONFIDENT));
+      mic(session, "microphone.speech_started");
+      deliver(session, speech("Two", 0));
+      mic(session, "microphone.speech_stopped");
+      await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(session.snapshot.sceneIndex).toBe(0);
+      expect(transport.setOutputBlocked).toHaveBeenCalledWith(true);
+
+      await vi.advanceTimersByTimeAsync(pauseMs);
+      expect(session.snapshot.sceneIndex).toBe(0);
+      expect(session.events.some(event => event.type === "advance.committed")).toBe(false);
+      expect(transport.send).not.toHaveBeenCalledWith(
+        expect.objectContaining({ content: expect.stringContaining("Great") }),
+      );
+
+      // Provider start_ms marks a new utterance independently from elapsed test time.
+      mic(session, "microphone.speech_started");
+      deliver(session, speech("No, one", 3001));
+      mic(session, "microphone.speech_stopped");
+      await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
+      await settle(CORRECTION_WINDOW_MS);
+
+      expect(session.snapshot.sceneIndex).toBe(1);
+      expect(session.events.filter(event => event.type === "advance.committed")).toHaveLength(1);
+      expect(evaluateAnswer).toHaveBeenCalledTimes(2);
+      expect(session.events.filter(event => event.type === "answer.evaluated").at(-1)?.detail).toMatchObject({
+        utterance: "No, one",
+        stale: false,
+      });
+    },
+  );
+
+  it("does not let an initially correct answer commit before a separate wrong correction", async () => {
+    const decisions = [evaluated(CONFIDENT), evaluated(UNSURE)];
+    const evaluateAnswer: EvaluateAnswer = vi.fn(async () => decisions.shift()!);
+    const { session, transport } = setup(true, evaluateAnswer);
+    mic(session, "microphone.speech_started");
+    deliver(session, speech("One", 0));
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.events.some(event => event.type === "advance.deferred")).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(session.snapshot.sceneIndex).toBe(0);
+    expect(session.events.some(event => event.type === "advance.committed")).toBe(false);
+    mic(session, "microphone.speech_started");
+    deliver(session, speech("No, two", 3001));
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
+    await settle(CORRECTION_WINDOW_MS * 2);
+
+    expect(session.snapshot.sceneIndex).toBe(0);
+    expect(session.events.some(event => event.type === "advance.committed")).toBe(false);
+    expect(evaluateAnswer).toHaveBeenCalledTimes(2);
+    expect(session.events.filter(event => event.type === "answer.evaluated").at(-1)?.detail).toMatchObject({
+      utterance: "No, two",
+      decision: "STAY",
+      stale: false,
+    });
+    expect(transport.send).not.toHaveBeenCalledWith(
+      expect.objectContaining({ content: expect.stringContaining("advance") }),
+    );
+  });
+
+  it("invalidates an approved Jev result on transcript-only correction", async () => {
+    const completions: ((result: AnswerResult) => void)[] = [];
+    const evaluateAnswer: EvaluateAnswer = vi.fn(() => new Promise<AnswerResult>(resolve => completions.push(resolve)));
+    const { session } = setup(true, evaluateAnswer);
+    deliver(session, speech("One", 0));
+    await settle();
+    expect(completions).toHaveLength(1);
+    completions[0](evaluated(CONFIDENT));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.events.some(event => event.type === "advance.deferred")).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(1000);
+    deliver(session, speech("No, two", 3001));
+    await settle();
+    expect(completions).toHaveLength(2);
+    completions[1](evaluated(UNSURE));
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS * 2);
+
+    expect(session.snapshot.sceneIndex).toBe(0);
+    expect(session.events.filter(event => event.type === "advance.committed")).toHaveLength(0);
+    expect(session.events.some(event => event.type === "answer.semantic_answer_invalidated")).toBe(true);
+    expect(session.events.findLast(event => event.type === "answer.evaluated")?.detail).toMatchObject({
+      utterance: "No, two",
+      stale: false,
+      decision: "STAY",
+    });
+  });
+
+  it("invalidates a resolved Jev result when new speech arrives before commit", async () => {
+    const decisions = [evaluated(CONFIDENT), evaluated(UNSURE)];
+    const evaluateAnswer: EvaluateAnswer = vi.fn(async () => decisions.shift()!);
+    const { session } = setup(true, evaluateAnswer);
+    mic(session, "microphone.speech_started");
+    deliver(session, speech("One", 0));
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.events.some(event => event.type === "advance.deferred")).toBe(true);
+    expect(session.snapshot.sceneIndex).toBe(0);
+
+    await vi.advanceTimersByTimeAsync(1000);
+    mic(session, "microphone.speech_started");
+    deliver(session, speech("No, two", 3001));
+    expect(session.snapshot.sceneIndex).toBe(0);
+    expect(session.events.some(event => event.type === "advance.committed")).toBe(false);
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
+    await settle(CORRECTION_WINDOW_MS * 2);
+
+    expect(session.snapshot.sceneIndex).toBe(0);
+    expect(session.events.filter(event => event.type === "advance.committed")).toHaveLength(0);
+    expect(evaluateAnswer).toHaveBeenCalledTimes(2);
+    expect(session.events.filter(event => event.type === "answer.evaluated").at(-1)?.detail).toMatchObject({
+      utterance: "No, two",
+      decision: "STAY",
+      stale: false,
+    });
+  });
+
   it.each(["What's your name?", "I don't know"])("does not gate non-answer speech: %s", text => {
     const { session, transport } = setup();
     deliver(session, speech(text));

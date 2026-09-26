@@ -50,7 +50,7 @@ function context() {
 
 describe("baseline reactive suite", () => {
   it("selects one, subset, all, repeat and rejects invalid input", () => {
-    expect(selectScenarios([], REACTIVE_SCENARIOS)).toHaveLength(10);
+    expect(selectScenarios([], REACTIVE_SCENARIOS)).toHaveLength(13);
     expect(selectScenarios(["happy-path"], REACTIVE_SCENARIOS).map(r => r.name)).toEqual(["happy-path"]);
     expect(selectScenarios(["silence", "interruption", "--repeat", "2"], REACTIVE_SCENARIOS).map(r => r.label)).toEqual(
       ["silence-1", "silence-2", "interruption-1", "interruption-2"],
@@ -69,6 +69,35 @@ describe("baseline reactive suite", () => {
     });
     expect(ctx.assertions.sproutRespondedAfter).toHaveBeenCalledWith({ cursor: 5 });
     expect(ctx.assertions.sceneAdvancedExactlyOnce).toHaveBeenCalledWith(expect.objectContaining({ through: 10 }));
+  });
+  it.each([
+    ["delayed-correction", 1500],
+    ["corrected-to-wrong", 1000],
+    ["continuation", 2000],
+  ] as const)("keeps the %s pause explicit at %ims and checks before proceeding", async (name, pauseMs) => {
+    const ctx = context();
+    const action = { checkpointBefore: 2, scene: "hello-duck", text: "One!", answer: 1, sceneIndex: 0 };
+    let nextCheckpoint = 2;
+    const child = {
+      ...ctx.child,
+      say: vi.fn(async () => ({ ...action, checkpointBefore: nextCheckpoint++ })),
+      wait: vi.fn(async ms => {
+        expect(ms).toBe(pauseMs);
+      }),
+    };
+    ctx.observer.currentScene = vi.fn(async () => "hello-duck");
+    ctx.observer.snapshot.mockResolvedValueOnce({ scene: "hello-duck", cursor: 3, events: [] }).mockResolvedValue({
+      scene: "hello-duck",
+      cursor: 10,
+      events: [
+        { kind: "child-transcript", cursor: 4, text: "Two!" },
+        { kind: "child-transcript", cursor: 5, text: "No, one!" },
+        { kind: "evaluation", cursor: 6, utterance: "No, one!", sceneIndex: 0 },
+      ],
+    });
+    await REACTIVE_SCENARIOS[name].run({ ...ctx, child });
+    expect(child.wait).toHaveBeenCalledWith(pauseMs);
+    expect(child.say).toHaveBeenCalledTimes(2);
   });
   it("waits for start for interruption and rejects audio arriving after that same turn", async () => {
     const ctx = context();

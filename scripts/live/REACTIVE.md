@@ -33,7 +33,7 @@ npm run test:live:reactive incorrect-then-correct off-topic interruption
 npm run test:live:reactive
 ```
 
-All ten run sequentially. The CLI continues after failures and exits nonzero if
+All thirteen run sequentially. The CLI continues after failures and exits nonzero if
 any run fails. The full suite is billed; choose a subset for routine validation.
 
 ## Repeating scenarios
@@ -68,6 +68,13 @@ npm run test:live quick_answer
 The live suite supplements deterministic tests. It cannot replace them or prove
 preschool speech recognition quality.
 
+Delayed-correction pauses are intentional waits and do not read
+`CORRECTION_WINDOW_MS`; a candidate value change cannot silently shorten these
+input gaps. Explicit 1000, 1500 and 2000 ms values are covered in deterministic
+session tests too. The supported guarantee is limited to new transcript or
+speech evidence arriving before deferred commit. Speech that begins after scene
+commit is a new turn and cannot retroactively undo that commit.
+
 ## Scenario catalog
 
 | Scenario | Child behavior | Key contract |
@@ -76,6 +83,9 @@ preschool speech recognition quality.
 | `incorrect-then-correct` | Wrong numeric answer, then correct | Jev STAY, no premature advance, support opportunity, recovery and one advance. |
 | `incorrect-dont-know-correct` | Wrong, “I don't know,” then correct | Numeric evaluation, conversational non-answer without Jev/progression, recovery. |
 | `self-correction` | Wrong word followed by “no” and correct answer | One settled correction reaches Jev, one advance, no earlier tutor turn. |
+| `delayed-correction` | Wrong answer, explicit 1500 ms pause, then correction | Both utterances reach the live path; no tutor acknowledgement or scene commit during the pause; corrected count advances once. |
+| `corrected-to-wrong` | Initially correct answer, explicit 1000 ms pause, then wrong correction | A resolved initial Jev approval cannot acknowledge or advance before correction; final scene stays put. |
+| `continuation` | “One!”, explicit 2000 ms pause, then “And two!” | No advance or tutor acknowledgement during the pause; continuation is transcribed and the current scene remains. |
 | `long-pause` | Silent for 12 seconds, then correct | Bounded autonomous support opportunity, no fabricated answer, recovery. |
 | `off-topic` | Dinosaur comment, then correct | Transcript and conversational response without Jev/advance, recovery. |
 | `interruption` | Says “Wait!” during an observed tutor turn | Observable playback overlap, actual child transcript, no evaluation/advance/end, recovery. |
@@ -175,7 +185,7 @@ evaluation and `data-scene` events. `observer.mjs` projects reusable wait signal
 `reactive-child.mjs` serializes `say`, `correctAnswer`, `wrongAnswer`, `dontKnow`,
 `requestStop`, `requestMore`, `wait` and `staySilent` actions. The injected counting
 adapter reads the production typed fixture; unknown scenes fail rather than guess.
-`reactive-scenarios.mjs` holds the ten bodies; `assertions.mjs` provides bounded
+`reactive-scenarios.mjs` holds the scenario bodies; `assertions.mjs` provides bounded
 scene/evaluation/session/tutor checks. `reactive-runner.mjs` owns deadlines,
 selection, cleanup and artifacts. No new provider/model layer is needed.
 
