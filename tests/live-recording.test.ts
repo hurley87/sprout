@@ -7,7 +7,7 @@ import { LessonSession, type EndReason, type Transport } from "../lib/session";
 import { RecordingQueue, type Evidence, type SessionRecorder } from "../lib/session-recorder";
 import { LAST_SCENE } from "../lib/lesson";
 import { UTTERANCE_GAP_MS } from "../lib/transcript";
-import { CORRECTION_WINDOW_MS, TRANSCRIPT_FALLBACK_MS, type EvaluateAnswer } from "../lib/answer";
+import { CORRECTION_WINDOW_MS, TRANSCRIPT_FALLBACK_MS, TRANSCRIPT_TAIL_MS, type EvaluateAnswer } from "../lib/answer";
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
@@ -669,14 +669,14 @@ it("preserves VAD, evaluation, committed advancement and actual display on one c
     latencyMs: 1,
     decision: "ADVANCE",
   });
-  await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - 250);
+  await vi.advanceTimersByTimeAsync(Math.max(0, CORRECTION_WINDOW_MS - TRANSCRIPT_TAIL_MS));
   await session.recordingSettled();
   expect(
     calls()
       .find(call => call[2].type === "scene_advance_committed")
       ?.slice(1),
   ).toEqual([
-    1100 + CORRECTION_WINDOW_MS,
+    1100 + Math.max(CORRECTION_WINDOW_MS, TRANSCRIPT_TAIL_MS),
     { type: "scene_advance_committed", fromScene: 0, toScene: 1, correlationKey: "0:100:one" },
   ]);
   expect(vi.mocked(recorder.append).mock.calls.filter(call => call[2].type === "scene_displayed")).toHaveLength(1);
@@ -688,7 +688,7 @@ it("preserves VAD, evaluation, committed advancement and actual display on one c
       .mocked(recorder.append)
       .mock.calls.filter(call => call[2].type === "scene_displayed")
       .at(-1)?.[1],
-  ).toBe(1180 + CORRECTION_WINDOW_MS);
+  ).toBe(1180 + Math.max(CORRECTION_WINDOW_MS, TRANSCRIPT_TAIL_MS));
   session.end("parent_stop");
   await session.recordingSettled();
 });

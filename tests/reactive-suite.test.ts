@@ -3,10 +3,23 @@ import { REACTIVE_SCENARIOS, spokenNonAnswer, silentOpportunity } from "../scrip
 import { createScenarioAssertions } from "../scripts/live/assertions.mjs";
 import { executeScenario, selectScenarios, runSelected } from "../scripts/live/reactive-runner.mjs";
 
+type FixtureEvent = {
+  kind: string;
+  cursor: number;
+  at?: number;
+  text?: string;
+  utterance?: string;
+  sceneIndex?: number;
+  from?: string | null;
+  to?: string | null;
+};
+type FixtureSnapshot = { events: FixtureEvent[]; scene?: string | null; cursor?: number };
+
 function context() {
   const calls: string[] = [];
   const action = { checkpointBefore: 2, scene: "one", text: "One!" };
   const observer = {
+    currentScene: vi.fn(async () => "hello-duck"),
     waitForSproutTurnEnd: vi.fn(async () => {
       calls.push("end");
       return { cursor: 10, at: 100 };
@@ -18,7 +31,7 @@ function context() {
     waitForChildTranscript: vi.fn(async () => ({ kind: "child-transcript", cursor: 4, text: "I don't know." })),
     waitForEvaluation: vi.fn(async () => ({ cursor: 5 })),
     waitForSceneAdvance: vi.fn(async () => ({ cursor: 6 })),
-    snapshot: vi.fn(async (): Promise<{ events: { kind: string; cursor: number; at?: number; text?: string }[] }> => ({
+    snapshot: vi.fn(async (): Promise<FixtureSnapshot> => ({
       events: [
         { kind: "playback-start", cursor: 3, at: 50 },
         { kind: "child-transcript", cursor: 4, text: "Wait!" },
@@ -45,7 +58,13 @@ function context() {
     sceneAdvancedExactlyOnce: vi.fn(async () => {}),
     sproutRespondedAfter: vi.fn(async () => ({ cursor: 10 })),
   };
-  return { observer, child, assertions, calls };
+  return {
+    observer,
+    child,
+    assertions,
+    calls,
+    page: { evaluate: vi.fn<(fn: unknown, boundary: unknown) => Promise<void>>(async () => {}) },
+  };
 }
 
 describe("baseline reactive suite", () => {
@@ -85,12 +104,19 @@ describe("baseline reactive suite", () => {
         expect(ms).toBe(pauseMs);
       }),
     };
-    ctx.observer.currentScene = vi.fn(async () => "hello-duck");
+    ctx.observer.waitForChildTranscript.mockResolvedValue({ kind: "child-transcript", cursor: 5, text: "No, two!" });
+    const evaluation = {
+      cursor: 6,
+      sceneIndex: 0,
+      utterance: name === "delayed-correction" ? "No, one" : "One, no, two",
+    };
+    const observer = { ...ctx.observer, waitForEvaluation: vi.fn(async () => evaluation) };
     ctx.observer.snapshot.mockResolvedValueOnce({ scene: "hello-duck", cursor: 3, events: [] }).mockResolvedValue({
       scene: "hello-duck",
       cursor: 10,
       events: [
-        { kind: "child-transcript", cursor: 4, text: "Two!" },
+        { kind: "playback-start", cursor: 4, at: 200 },
+        { kind: "child-transcript", cursor: 3, text: "One!" },
         { kind: "child-transcript", cursor: 5, text: "No, one!" },
         {
           kind: "evaluation",
@@ -100,10 +126,94 @@ describe("baseline reactive suite", () => {
         },
       ],
     });
-    await REACTIVE_SCENARIOS[name].run({ ...ctx, child });
+    await REACTIVE_SCENARIOS[name].run({ ...ctx, observer, child });
     expect(child.wait).toHaveBeenCalledWith(pauseMs);
     expect(child.say).toHaveBeenCalledTimes(2);
   });
+  function delayedContext(postCommit: boolean, changes: FixtureEvent[] = []) {
+    const ctx = context();
+    let checkpoint = 2;
+    const child = {
+      ...ctx.child,
+      say: vi.fn(async () => ({ checkpointBefore: checkpoint++ === 2 ? 2 : 10, scene: "hello-duck", text: "One!" })),
+      wait: vi.fn<(ms: number) => Promise<void>>(async () => {}),
+    };
+    const events: FixtureEvent[] = [
+      { kind: "scene", cursor: 1, from: null, to: "hello-duck" },
+      { kind: "child-transcript", cursor: 3, text: "One!" },
+      { kind: "evaluation", cursor: 4, sceneIndex: 0, utterance: "One" },
+      ...(postCommit ? [{ kind: "scene", cursor: 5, from: "hello-duck", to: "duck-friends" }] : []),
+      { kind: "playback-start", cursor: 11, at: 1000 },
+      { kind: "child-transcript", cursor: 12, text: "No, two!" },
+      { kind: "evaluation", cursor: 14, sceneIndex: postCommit ? 1 : 0, utterance: "No, two" },
+      ...changes,
+    ];
+    const snapshot = async () => ({ cursor: 20, scene: postCommit ? "duck-friends" : "hello-duck", events });
+    const observer = {
+      ...ctx.observer,
+      snapshot: vi.fn(snapshot),
+      waitForChildTranscript: vi.fn(async () => ({ cursor: 12 })),
+      waitForEvaluation: vi.fn(async () => ({ cursor: 14, sceneIndex: postCommit ? 1 : 0, utterance: "No, two" })),
+    };
+    const assertions = {
+      ...createScenarioAssertions(observer),
+      sproutRespondedAfter: vi.fn(async () => ({ cursor: 20 })),
+    };
+    return { ...ctx, child, observer, assertions };
+  }
+
+  it.each(["corrected-to-wrong", "continuation"] as const)(
+    "%s exercises and records both sides of commit",
+    async name => {
+      for (const postCommit of [false, true]) {
+        const ctx = delayedContext(postCommit);
+        await REACTIVE_SCENARIOS[name].run(ctx);
+        expect(ctx.child.say).toHaveBeenCalledTimes(2);
+        expect(ctx.observer.waitForChildTranscript).toHaveBeenCalledWith({ after: 10 });
+        expect(ctx.page.evaluate).toHaveBeenCalledWith(
+          expect.any(Function),
+          expect.objectContaining({
+            branch: postCommit ? "post-commit-new-turn" : "pre-commit-continuation",
+          }),
+        );
+      }
+    },
+  );
+  it.each(["corrected-to-wrong", "continuation"] as const)(
+    "%s rejects stale pre-commit release and advancement",
+    async name => {
+      for (const event of [
+        { kind: "answer-release", cursor: 13 },
+        { kind: "scene", cursor: 15, from: "hello-duck", to: "duck-friends" },
+      ]) {
+        const ctx = delayedContext(false, [event]);
+        await expect(REACTIVE_SCENARIOS[name].run(ctx)).rejects.toThrow();
+        expect(ctx.child.say).toHaveBeenCalledTimes(2);
+      }
+    },
+  );
+  it.each(["corrected-to-wrong", "continuation"] as const)(
+    "%s allows a legitimate new-scene answer but rejects retroactive advancement",
+    async name => {
+      const valid = delayedContext(true, [{ kind: "scene", cursor: 15, from: "duck-friends", to: "butterfly-garden" }]);
+      await REACTIVE_SCENARIOS[name].run(valid);
+      const invalid = delayedContext(true, [{ kind: "scene", cursor: 15, from: "hello-duck", to: "duck-friends" }]);
+      await expect(REACTIVE_SCENARIOS[name].run(invalid)).rejects.toThrow("Duplicate or retroactive");
+    },
+  );
+  it("classifies a commit during synthesis using playback evidence rather than the earlier snapshot", async () => {
+    const ctx = delayedContext(true);
+    ctx.observer.snapshot.mockResolvedValueOnce({ scene: "hello-duck", cursor: 4, events: [] });
+    await REACTIVE_SCENARIOS.continuation.run(ctx);
+    expect(ctx.page.evaluate).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({
+        sceneBeforePauseEnded: "hello-duck",
+        branch: "post-commit-new-turn",
+      }),
+    );
+  });
+
   it("waits for start for interruption and rejects audio arriving after that same turn", async () => {
     const ctx = context();
     await REACTIVE_SCENARIOS.interruption.run(ctx);

@@ -345,3 +345,54 @@ known limitation. No fixture typing or unrelated production behavior was changed
 The local live dev server was stopped after the subset completed. Artifacts
 remain local under `test-results/correction-window-750/`; no push, deployment,
 250 ms test, or 0 ms test is included.
+
+## Cleanup before the next candidate
+
+The prior TypeScript fixture errors were branch-local errors, not failures on
+main; describing them earlier as pre-existing only meant present before that
+individual run. They are fixed here with typed event/snapshot fixtures,
+`observer.currentScene`, and explicit evaluation utterance/scene fields.
+No type suppression or `any` was added.
+
+`corrected-to-wrong` and `continuation` now always send the second utterance.
+They inspect the observer snapshot at the end of the pause and retained scene
+transitions at second playback onset. A commit during synthesis is classified
+from playback ordering, not from the earlier snapshot. The branch and its
+checkpoints/transition are recorded as `stabilization.pre-commit-continuation`
+or `stabilization.post-commit-new-turn` in the timeline and raw log, before
+waiting for second transcription/evaluation so later failures retain evidence.
+These observer transitions reflect displayed scenes; playback is a conservative
+speech-onset boundary, not a replacement for precise detector/application
+commit timestamps. Deterministic session tests remain authoritative for the
+1 ms provisional-activity race.
+
+Pre-commit paths require second transcription/evaluation in the original scene,
+no application answer release before the revised evaluation, and the original
+scene remaining active through the response. Gated provider transcript is still
+permitted. Post-commit paths require transcription and evaluation in the new
+scene, reject duplicate/retroactive transitions, and allow at most one legitimate
+advance from that scene after its evaluation. In particular, the original
+"wrong" correction can be correct for the new two-duck scene; it is not forced
+to stay or roll back. Both branches reject unexpected session end.
+
+Tests use actual scene/assertion windows to cover both branches, stale release,
+stale advancement, valid new-scene advancement, retroactive advancement, and
+commit during synthesis. The observer now projects application answer-instruction
+release separately from provider transcript turn-start; it does not infer audio.
+No billed rerun was needed for this harness cleanup; the previous live failures
+and artifacts above remain unchanged.
+
+Timing tests derive normal release from diagnostic turn-end/transcript times
+and evaluation completion. Evaluation promises can be flushed without executing
+the queued release callback. If correction is already due (including a zero
+window), "before release" means delivering the event before that callback in
+the same scheduling turn, not advancing a negative duration. The opposite order
+is explicitly tested as final commit winning. Transcript revision before release
+uses the same deadline helper. Recording/diagnostic display expectations include
+an evaluation that outlives the correction window. No production timing or
+production test hooks changed, and lower candidate policies were not executed.
+
+Validation at **750 ms unchanged**: 355 unit tests, 15 provider-free browser
+tests, lint, typecheck and production build passed. Changed-file formatting and
+`git diff --check` passed. This is one cleanup commit on top of `2d10c7b`;
+the branch is ready to begin a separately authorized 250 ms experiment.
