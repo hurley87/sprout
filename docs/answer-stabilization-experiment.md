@@ -396,3 +396,90 @@ Validation at **750 ms unchanged**: 355 unit tests, 15 provider-free browser
 tests, lint, typecheck and production build passed. Changed-file formatting and
 `git diff --check` passed. This is one cleanup commit on top of `2d10c7b`;
 the branch is ready to begin a separately authorized 250 ms experiment.
+
+
+## 250 ms candidate — deterministic qualification stopped (2026-09-26)
+
+Evaluated on `feat/answer-stabilization-latency`, parent `31ea631`, by changing
+only `CORRECTION_WINDOW_MS` from 750 to 250. All microphone thresholds,
+transcript tail/fallback, Jev thresholds, prompting and VAD behavior were unchanged.
+No 0 ms candidate was tested.
+
+**Result: not qualified.** The targeted session, microphone, diagnostics,
+recording, reactive-harness, inspector and persistence run passed 263 of 266
+tests across nine files. Three tests failed:
+
+- `does not commit an incomplete slow phrase during a speech pause`;
+- `preserves an in-flight approval through confirmed microphone activity without a new transcript`;
+- `preserves VAD, evaluation, committed advancement and actual display on one clock`.
+
+The slow-phrase and recording failures were test scheduling assumptions at the
+250 ms transcript-tail boundary: an evaluation resolving at the current fake
+clock schedules a zero-delay release callback that needs another timer tick.
+A temporary diagnostic rerun advanced one extra millisecond after the actual
+release deadline (and adjusted the recording timestamp expectations by that
+millisecond); both passed. This does not add a policy delay or change production
+scheduling. Those temporary test edits were removed.
+
+The in-flight approval failure is a **real scheduling/VAD race**, not a promise
+to undo post-commit corrections. It also reproduces when the complete detector
+sequence `microphone.activity_started → microphone.speech_started` is injected
+before resolving the pending evaluation. Expected scene index is 0; actual index
+is 1 while confirmed microphone speech is still active. The original test itself
+is the minimal executable reproducer:
+
+```bash
+# With lib/answer.ts temporarily set to 250:
+npx vitest run tests/session.test.ts -t 'preserves an in-flight approval through confirmed microphone activity without a new transcript'
+```
+
+For the detector-shaped variant, insert this line immediately before the second
+`mic(session, "microphone.speech_started")` in that test:
+
+```ts
+session.receive({ type: "microphone.activity_started" });
+```
+
+The reproduced order, relative to the initial transcript/turn end, is:
+
+```text
+0 ms:   initial transcript, microphone speech stops
+250 ms: transcript tail expires; evaluation starts and remains pending
+250 ms: microphone activity starts, then confirms as speech
+250 ms: evaluation resolves ADVANCE; release callback runs
+        scene commits while microphone speech remains active
+```
+
+At speech confirmation there is no deferred decision yet, so
+`startDeferredVadGrace` returns without retaining the provisional classification.
+When evaluation resolves, `deferAdvance` sees active speech and calls the grace
+helper again, but the default `classifiedProvisional = false` and
+`speechStartedAt >= normalReleaseAt` guard reject grace. At 250 ms the ordinary
+correction deadline equals the transcript tail, so this event order reaches that
+guard even though speech began before the actual release callback. This is a
+latent deadline-versus-callback race exposed by the smaller policy; the
+experiment does not establish that 250 ms is inherently unsafe after a fix.
+
+The diagnostic rerun passed 190 of 191 session/recording tests; only this race
+remained. The existing pending-decision activity holds, noise-discard resumption,
+provisional-to-VAD handoff, pre-release transcript revisions, same-utterance
+correction, stale-result and exactly-once checks passed in the initial targeted
+run. These passes do not override the confirmed-speech failure.
+
+**Live scenarios run: none.** Billed `happy-path`, `self-correction`,
+`corrected-to-wrong` and `continuation` were withheld after deterministic failure.
+Historical 1000/1500/2000 ms silent corrections were not treated as disqualifiers.
+There are no 250 ms per-answer measurements, ranges or means to report.
+
+| Observed mean metric | 2500 ms baseline | 750 ms candidate | 250 ms candidate |
+| --- | ---: | ---: | --- |
+| Final transcript → commit | ~2659 ms | ~812 ms | Not measured |
+| Final transcript → observed Sprout response | ~3775 ms | ~1661 ms | Not measured |
+| Evaluation complete → commit | Not recorded here | ~244 ms | Not measured |
+| Response gate release → observed Sprout transcript | Not recorded here | Not recomputed | Not measured |
+
+No claim can be made about further latency improvement or the dominant remaining
+component at 250 ms. Fix and deterministically qualify this race before a fresh
+250 ms live experiment; testing 0 ms is premature while this boundary is unresolved.
+The candidate constant was restored to **750 ms**, and no production race fix
+was included in this experiment. Historical results above are unchanged.
