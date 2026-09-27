@@ -22,6 +22,20 @@ describe("live observer", () => {
     expect(SPROUT_UTTERANCE_GAP_MS).toBe(UTTERANCE_GAP_MS);
   });
 
+  it("distinguishes gated provider transcript from application answer release", () => {
+    const journal = new LiveEventJournal();
+    journal.ingest(
+      [
+        { ...delta(100), delta: "Oh!" },
+        { at: 200, dir: "out", type: "session.instructions.append", content: "The screen has not changed." },
+      ],
+      200,
+    );
+    expect(journal.events.filter(event => event.kind === "answer-release")).toHaveLength(1);
+    expect(journal.events.find(event => event.kind === "answer-release")).toMatchObject({ at: 200 });
+    expect(journal.events.find(event => event.kind === "turn-start")).toMatchObject({ at: 100 });
+  });
+
   it("keeps a 1000ms arrival pause in one turn and resets the quiet fallback", () => {
     const journal = new LiveEventJournal();
     journal.ingest([delta(0)], 1000);

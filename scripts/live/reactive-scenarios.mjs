@@ -7,16 +7,17 @@ function requireEvidence(condition, message, evidence) {
 async function correct(ctx) {
   const action = await ctx.child.correctAnswer();
   const evaluation = await ctx.observer.waitForEvaluation({ after: action.checkpointBefore });
-  await ctx.assertions.evaluated({ after: action, through: evaluation.cursor });
-  await ctx.observer.waitForSceneAdvance({ after: evaluation.cursor });
-  const response = await ctx.assertions.sproutRespondedAfter(evaluation);
+  await ctx.assertions.evaluated({ after: action, numericAnswer: action.answer, through: evaluation.cursor });
+  requireEvidence(evaluation.result?.probability >= 0.9, "Correct answer did not evaluate as advancing", evaluation);
+  const commit = await ctx.observer.waitForSceneAdvance({ after: evaluation.cursor });
+  const response = await ctx.assertions.sproutRespondedAfter(commit);
   await ctx.assertions.sceneAdvancedExactlyOnce({ after: action, from: action.scene, through: response.cursor });
 }
 
 async function wrong(ctx) {
   const action = await ctx.child.wrongAnswer();
   const evaluation = await ctx.observer.waitForEvaluation({ after: action.checkpointBefore });
-  await ctx.assertions.evaluated({ after: action, through: evaluation.cursor });
+  await ctx.assertions.evaluated({ after: action, numericAnswer: action.answer, through: evaluation.cursor });
   const response = await ctx.assertions.sproutRespondedAfter(evaluation);
   await ctx.assertions.sceneStayed({ after: action, through: response.cursor });
 }
@@ -27,6 +28,26 @@ async function actionWindow(ctx, action, response) {
   );
   requireEvidence(!events.some(e => e.kind === "session-end"), "Session ended before recovery", events);
   return events;
+}
+
+async function assertNoPrematureResponse(ctx, action, label) {
+  const events = (await ctx.observer.snapshot()).events.filter(e => e.cursor > action.checkpointBefore);
+  requireEvidence(
+    !events.some(e => e.kind === "scene" && e.from !== null && e.to !== null),
+    `${label}: scene changed during the intentional pause`,
+    events,
+  );
+  // Provider transcript can be generated while the app keeps its output gate
+  // closed. That transcript is diagnostic and does not prove audible playback.
+  requireEvidence(
+    !events.some(e => e.kind === "session-end"),
+    `${label}: session ended during the intentional pause`,
+    events,
+  );
+}
+
+function childTranscriptEvents(events, after, through) {
+  return events.filter(e => e.kind === "child-transcript" && e.cursor > after && e.cursor <= through);
 }
 
 export async function spokenNonAnswer(ctx, action) {
@@ -53,6 +74,94 @@ export async function silentOpportunity(ctx, action) {
     "Fabricated child transcript during silence",
     events,
   );
+}
+
+/** Scene evidence is inspected again at playback onset: synthesis may cross commit.
+ * Playback is a conservative onset boundary, not a claim about VAD/audio timestamps.
+ * Provider output transcripts alone never prove that application output released.
+ */
+async function delayedSecondTurn(ctx, first, text, answer) {
+  const before = await ctx.observer.snapshot();
+  const second = await ctx.child.say(text);
+  const onsetSnapshot = await ctx.observer.snapshot();
+  let events = onsetSnapshot.events.filter(e => e.cursor > first.checkpointBefore);
+  const playback = events.find(e => e.kind === "playback-start" && e.cursor > second.checkpointBefore);
+  requireEvidence(playback, "Second utterance has no playback onset evidence", events);
+  let transitions = events.filter(e => e.kind === "scene" && e.from !== null && e.to !== null);
+  const prior = transitions.filter(e => e.cursor < playback.cursor);
+  requireEvidence(
+    prior.length <= 1 && prior.every(e => e.from === first.scene),
+    "Duplicate advance before the second turn",
+    events,
+  );
+  const committed = prior.length === 1;
+  const scene = committed ? prior[0].to : first.scene;
+  const boundary = {
+    scenario: text.startsWith("No,") ? "corrected-to-wrong" : "continuation",
+    branch: committed ? "post-commit-new-turn" : "pre-commit-continuation",
+    sceneBeforePauseEnded: before.scene,
+    sceneAtSecondPlayback: scene,
+    firstCheckpoint: first.checkpointBefore,
+    secondCheckpoint: second.checkpointBefore,
+    playbackCursor: playback.cursor,
+    priorTransition: prior[0] ?? null,
+  };
+  await ctx.page.evaluate(boundary => {
+    window.__liveLog.push({
+      dir: "scenario",
+      action: `stabilization.${boundary.branch}`,
+      ...boundary,
+      at: window.__liveNow(),
+    });
+  }, boundary);
+  const transcript = await ctx.observer.waitForChildTranscript({ after: second.checkpointBefore });
+  const evaluation = await ctx.observer.waitForEvaluation({ after: transcript.cursor });
+  const response = await ctx.assertions.sproutRespondedAfter(evaluation);
+  const snapshot = await ctx.observer.snapshot();
+  events = snapshot.events.filter(e => e.cursor > first.checkpointBefore && e.cursor <= response.cursor);
+  transitions = events.filter(e => e.kind === "scene" && e.from !== null && e.to !== null);
+  requireEvidence(
+    second.checkpointBefore > first.checkpointBefore,
+    "Second action was not separately recorded",
+    events,
+  );
+  requireEvidence(!events.some(e => e.kind === "session-end"), "Session ended during the second turn", events);
+  requireEvidence(
+    childTranscriptEvents(events, second.checkpointBefore, response.cursor).length > 0,
+    "Second utterance was not transcribed",
+    events,
+  );
+  const expected = countingBehavior.correctAnswer({ sceneId: scene });
+  requireEvidence(
+    evaluation.sceneIndex === expected.sceneIndex &&
+      new RegExp(`\\b(?:${["", "one", "two", "three", "four", "five"][answer]}|${answer})\\b`, "i").test(
+        evaluation.utterance,
+      ),
+    "Latest answer did not reach Jev in the current scene",
+    events,
+  );
+  const afterOnset = transitions.filter(e => e.cursor > playback.cursor);
+  requireEvidence(
+    committed ||
+      !events.some(e => e.kind === "answer-release" && e.cursor > playback.cursor && e.cursor < evaluation.cursor),
+    "Stale answer released before the revised evaluation",
+    events,
+  );
+  if (!committed) {
+    // Both second utterances are wrong for the original one-duck scene.
+    await ctx.assertions.sceneStayed({ after: first, through: response.cursor });
+  } else {
+    // A valid evaluation in the new scene may advance it, but cannot repeat or undo the old transition.
+    requireEvidence(
+      afterOnset.length <= 1 &&
+        afterOnset.every(e => e.from === scene && e.to !== first.scene && e.cursor > evaluation.cursor),
+      "Duplicate or retroactive advance after commit",
+      events,
+    );
+    if (afterOnset.length)
+      await ctx.assertions.sceneAdvancedExactlyOnce({ after: playback, from: scene, through: response.cursor });
+    else await ctx.assertions.sceneStayed({ after: playback, scene, through: response.cursor });
+  }
 }
 
 const scenario = (run, timeoutMs = 120000) => ({ run, timeoutMs });
@@ -101,6 +210,54 @@ export const REACTIVE_SCENARIOS = {
     );
     await ctx.assertions.sceneAdvancedExactlyOnce({ after: action, from: action.scene, through: response.cursor });
   }),
+  "delayed-correction": scenario(async ctx => {
+    await ctx.observer.waitForSproutTurnEnd();
+    const state = { sceneId: await ctx.observer.currentScene() };
+    const wrong = countingBehavior.wrongAnswer(state);
+    const right = countingBehavior.correctAnswer(state);
+    const first = await ctx.child.say(wrong.text);
+    await ctx.child.wait(1500);
+    await assertNoPrematureResponse(ctx, first, "delayed correction");
+
+    const correction = await ctx.child.say(`No, ${right.text}`);
+    const evaluation = await ctx.observer.waitForEvaluation({ after: first.checkpointBefore });
+    const response = await ctx.assertions.sproutRespondedAfter(evaluation);
+    const events = (await ctx.observer.snapshot()).events.filter(
+      e => e.cursor > first.checkpointBefore && e.cursor <= response.cursor,
+    );
+    const transcripts = childTranscriptEvents(events, first.checkpointBefore, response.cursor);
+    const expectedWord = right.text.replace(/[.!?]/g, "").trim().toLowerCase();
+    requireEvidence(transcripts.length >= 2, "Delayed correction did not produce both child utterances", events);
+    requireEvidence(
+      events.some(
+        e => e.kind === "evaluation" && new RegExp(`\\b(?:${expectedWord}|${right.answer})\\b`).test(e.utterance),
+      ),
+      "Corrected answer never reached Jev",
+      events,
+    );
+    await ctx.assertions.sceneAdvancedExactlyOnce({ after: first, from: first.scene, through: response.cursor });
+    requireEvidence(
+      correction.checkpointBefore > first.checkpointBefore,
+      "Correction action was not separately recorded",
+      events,
+    );
+  }, 150000),
+  "corrected-to-wrong": scenario(async ctx => {
+    await ctx.observer.waitForSproutTurnEnd();
+    const state = { sceneId: await ctx.observer.currentScene() };
+    const right = countingBehavior.correctAnswer(state);
+    const wrong = countingBehavior.wrongAnswer(state);
+    const first = await ctx.child.say(right.text);
+    await ctx.observer.waitForEvaluation({ after: first.checkpointBefore });
+    await ctx.child.wait(1000);
+    await delayedSecondTurn(ctx, first, `No, ${wrong.text}`, wrong.answer);
+  }, 150000),
+  continuation: scenario(async ctx => {
+    await ctx.observer.waitForSproutTurnEnd();
+    const first = await ctx.child.say("One!");
+    await ctx.child.wait(2000);
+    await delayedSecondTurn(ctx, first, "And two!", 2);
+  }, 150000),
   "long-pause": scenario(async ctx => {
     await ctx.observer.waitForSproutTurnEnd();
     await silentOpportunity(ctx, await ctx.child.staySilent(12000));

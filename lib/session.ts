@@ -392,6 +392,7 @@ export class LessonSession {
       }
       case "microphone.speech_started":
         if (this.microphoneSpeaking) return;
+        const wasProvisional = this.provisionalActivity;
         const heardDuringActivity =
           this.provisionalActivity && this.transcriptRevision !== this.activityTranscriptRevision;
         this.provisionalActivity = false;
@@ -408,7 +409,10 @@ export class LessonSession {
           pending_evaluation: Boolean(this.settleTimer),
           decision_preserved: Boolean(this.evaluation || this.deferredAdvance),
         });
-        this.startDeferredVadGrace(this.microphoneSpeechStartedAt);
+        this.startDeferredVadGrace(
+          this.microphoneSpeechStartedAt,
+          wasProvisional ? "provisional_confirmation" : "confirmed_speech",
+        );
         return;
       case "microphone.speech_stopped":
         if (!this.microphoneSpeaking) return;
@@ -759,6 +763,7 @@ export class LessonSession {
       turnEndToRequestMs: requestedAt - turnEndAt,
     });
     this.log("answer.requesting", {
+      sceneIndex,
       version,
       signal: this.turnSignal,
       turn_end_at: turnEndAt - this.createdAt,
@@ -928,7 +933,7 @@ export class LessonSession {
       correctionReadyAt: Math.max(this.turnEndAt, this.lastDeltaAt) + CORRECTION_WINDOW_MS,
     };
     if (this.microphoneSpeaking && this.microphoneSpeechStartedAt !== undefined)
-      this.startDeferredVadGrace(this.microphoneSpeechStartedAt);
+      this.startDeferredVadGrace(this.microphoneSpeechStartedAt, "active_speech_at_decision");
     this.log("advance.deferred", {
       answer_version: answerVersion,
       scene: sceneAt(sceneIndex).id,
@@ -942,7 +947,7 @@ export class LessonSession {
   private scheduleDeferredRelease() {
     clearTimeout(this.deferredTimer);
     const deferred = this.deferredAdvance;
-    if (!deferred) return;
+    if (!deferred || this.provisionalActivity) return;
     const releaseAt = this.deferredAdvanceReleaseAt(deferred);
     this.deferredTimer = setTimeout(() => this.releaseDeferredAdvance(), Math.max(0, releaseAt - Date.now()));
   }
@@ -953,7 +958,7 @@ export class LessonSession {
 
   private releaseDeferredAdvance() {
     const deferred = this.deferredAdvance;
-    if (!deferred) return;
+    if (!deferred || this.provisionalActivity) return;
     this.deferredAdvance = null;
     clearTimeout(this.deferredTimer);
     if (
@@ -1010,7 +1015,7 @@ export class LessonSession {
       decision,
     };
     if (this.microphoneSpeaking && this.microphoneSpeechStartedAt !== undefined)
-      this.startDeferredVadGrace(this.microphoneSpeechStartedAt);
+      this.startDeferredVadGrace(this.microphoneSpeechStartedAt, "active_speech_at_decision");
     this.log("answer.release_deferred", { answer_version: answerVersion, scene: sceneAt(sceneIndex).id });
     this.scheduleDeferredStayRelease();
   }
@@ -1018,7 +1023,7 @@ export class LessonSession {
   private scheduleDeferredStayRelease() {
     clearTimeout(this.stayTimer);
     const deferred = this.deferredStay;
-    if (!deferred) return;
+    if (!deferred || this.provisionalActivity) return;
     const releaseAt = Math.max(
       deferred.correctionReadyAt,
       this.answerResponseGate?.outputQuietAt ?? 0,
@@ -1029,7 +1034,7 @@ export class LessonSession {
 
   private releaseDeferredStay() {
     const deferred = this.deferredStay;
-    if (!deferred) return;
+    if (!deferred || this.provisionalActivity) return;
     this.deferredStay = null;
     clearTimeout(this.stayTimer);
     if (
@@ -1075,7 +1080,10 @@ export class LessonSession {
   }
 
   /** Confirmed renewed speech buys one fallback interval for a late transcript. */
-  private startDeferredVadGrace(speechStartedAt: number) {
+  private startDeferredVadGrace(
+    speechStartedAt: number,
+    reason: "confirmed_speech" | "provisional_confirmation" | "active_speech_at_decision",
+  ) {
     const advance = this.deferredAdvance;
     const stay = this.deferredStay;
     if (!advance && !stay) return;
@@ -1088,7 +1096,9 @@ export class LessonSession {
     const normalReleaseAt = advance
       ? advance.correctionReadyAt
       : Math.max(stay!.correctionReadyAt, this.answerResponseGate?.outputQuietAt ?? 0);
-    if (speechStartedAt >= normalReleaseAt) return;
+    // Release consumes the deferred object before committing or opening the gate.
+    // Its presence, rather than the nominal deadline, protects speech that began
+    // before the actual release callback (including while evaluation was pending).
     const graceUntil = speechStartedAt + TRANSCRIPT_FALLBACK_MS;
     if (graceUntil <= normalReleaseAt) {
       this.log("answer.vad_grace_ignored", {
@@ -1103,6 +1113,7 @@ export class LessonSession {
     if (advance) advance.vadGraceUntil = graceUntil;
     else stay!.vadGraceUntil = graceUntil;
     this.log("answer.vad_grace_started", {
+      reason,
       decision,
       answer_version: answerVersion,
       grace_ms: TRANSCRIPT_FALLBACK_MS,
@@ -1122,6 +1133,7 @@ export class LessonSession {
   /** The application, not the model, commits the next deterministic scene. */
   private advance(answerVersion: string) {
     this.log("advance.committed", {
+      scene_index: this.snapshot.sceneIndex,
       answer_version: answerVersion,
       turn_end_to_commit_ms: Date.now() - this.turnEndAt,
     });
@@ -1180,6 +1192,7 @@ export class LessonSession {
     });
     if (pending.answerVersion)
       this.log("advance.displayed", {
+        scene_index: pending.sceneIndex - 1,
         answer_version: pending.answerVersion,
         turn_end_to_display_ms: Date.now() - (pending.turnEndAt ?? this.turnEndAt),
       });

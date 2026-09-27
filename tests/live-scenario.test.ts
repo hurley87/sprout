@@ -221,6 +221,62 @@ describe("scenario assertions", () => {
     });
   });
 
+  it.each([
+    ["One!", 1],
+    ["one", 1],
+    ["1", 1],
+    ["  ONE!  ", 1],
+    ["TWO.", 2],
+    ["2", 2],
+    ["three", 3],
+    ["3", 3],
+    ["four", 4],
+    ["4", 4],
+    ["five", 5],
+    ["5", 5],
+  ])("matches counting token %s as %i only when opted in", async (utterance, numericAnswer) => {
+    const f = fixture();
+    const action = await f.child.correctAnswer();
+    f.entries.push({
+      dir: "evaluate",
+      at: 5,
+      askedAt: 2,
+      request: { utterance, sceneIndex: 0 },
+      answer: { probability: 0.99 },
+    });
+    await expect(f.assertions.evaluated({ after: action, numericAnswer })).resolves.toMatchObject({ utterance });
+    await expect(f.assertions.evaluated({ after: action, numericAnswer: numericAnswer === 1 ? 2 : 1 })).rejects.toThrow(
+      "Expected evaluation",
+    );
+    if (utterance !== "One!")
+      await expect(f.assertions.evaluated({ after: action, numericAnswer, exactUtterance: true })).rejects.toThrow(
+        "Expected evaluation",
+      );
+    if (utterance === "1")
+      await expect(f.assertions.evaluated({ after: action })).rejects.toThrow("Expected evaluation");
+  });
+
+  it.each(["someone", "one two", "I don't know", "10", "one maybe", "done", "six", "6"])(
+    "rejects non-counting token %s for numeric assertions",
+    async utterance => {
+      const f = fixture();
+      const action = await f.child.correctAnswer();
+      f.entries.push({
+        dir: "evaluate",
+        at: 5,
+        askedAt: 2,
+        request: { utterance, sceneIndex: 0 },
+        answer: { probability: 0.99 },
+      });
+      await expect(f.assertions.evaluated({ after: action, numericAnswer: 1 })).rejects.toThrow("Expected evaluation");
+    },
+  );
+
+  it.each([0, 6, 1.5, "1"])("rejects unsupported numericAnswer %s", async numericAnswer => {
+    const f = fixture();
+    await expect(f.assertions.evaluated({ after: 0, numericAnswer })).rejects.toThrow("supported counting value");
+  });
+
   it("collapses repeated whitespace without accepting different words", async () => {
     const f = fixture();
     const action = await f.child.say("I don't know.");

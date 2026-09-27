@@ -99,6 +99,21 @@ describe("microphone turn timing", () => {
     detector.close();
   });
 
+  it("bounds unresolved alternating noise with the onset plus quiet thresholds", () => {
+    const { frame, quiet, loud, emit, detector } = harness();
+    frame(0);
+    for (let at = 20; at <= 240; at += 20) {
+      if (at % 40) quiet();
+      else loud();
+      frame(at);
+    }
+    expect(emit.mock.calls.map(([event]) => event.type)).toEqual([
+      "microphone.activity_started",
+      "microphone.activity_discarded",
+    ]);
+    detector.close();
+  });
+
   it("confirms sustained speech when animation frames are slow", () => {
     const { frame, emit, detector } = harness();
     frame(0);

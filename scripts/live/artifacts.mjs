@@ -90,21 +90,12 @@ export async function exportArtifacts({ page, browser, dir, label, scenario, mic
   } catch (error) {
     unavailable = `Browser evidence unavailable: ${error}`;
   }
-  const summary = metrics(log);
-  const evidenceSummary = [...(unavailable ? [unavailable] : []), `metrics: ${JSON.stringify(summary)}`].join("\n");
   let text = timeline(label, micScript, log, failure);
-  text = text.includes("=== SCENARIO FAILED ===")
-    ? text.replace("=== SCENARIO FAILED ===", `${evidenceSummary}\n=== SCENARIO FAILED ===`)
-    : `${text}\n${evidenceSummary}`;
-  writeFileSync(
-    `${dir}/log.json`,
-    JSON.stringify({ browser: browser.version(), scenario, summary, log, unavailable }, null, 2),
-  );
-  writeFileSync(`${dir}/timeline.txt`, text);
+  let diagnostics = null;
   // Always leave a diagnostics file, even when startup/download fails.
   writeFileSync(
     `${dir}/diagnostics.json`,
-    JSON.stringify({ unavailable: "Attempt diagnostics download not completed", summary }, null, 2),
+    JSON.stringify({ unavailable: "Attempt diagnostics download not completed" }, null, 2),
   );
   try {
     await page.getByText("Parent testing notes").click();
@@ -113,7 +104,7 @@ export async function exportArtifacts({ page, browser, dir, label, scenario, mic
       page.getByRole("button", { name: "Download attempt diagnostics" }).click(),
     ]);
     copyFileSync(await download.path(), `${dir}/diagnostics.json`);
-    const diagnostics = JSON.parse(readFileSync(`${dir}/diagnostics.json`, "utf8"));
+    diagnostics = JSON.parse(readFileSync(`${dir}/diagnostics.json`, "utf8"));
     if (typeof diagnostics.ending === "string") {
       const ending = `APPLICATION SESSION END reason=${diagnostics.ending} (diagnostics; no browser timestamp)`;
       text = text.includes("=== SCENARIO FAILED ===")
@@ -124,8 +115,23 @@ export async function exportArtifacts({ page, browser, dir, label, scenario, mic
   } catch (error) {
     writeFileSync(
       `${dir}/diagnostics.json`,
-      JSON.stringify({ unavailable: `UI diagnostics export failed: ${error}`, summary }, null, 2),
+      JSON.stringify({ unavailable: `UI diagnostics export failed: ${error}` }, null, 2),
     );
+    diagnostics = { unavailable: `UI diagnostics export failed: ${error}` };
   }
+  const summary = metrics(log, diagnostics);
+  const evidenceSummary = [
+    ...(unavailable ? [unavailable] : []),
+    ...(diagnostics?.unavailable ? [`diagnostics unavailable: ${diagnostics.unavailable}`] : []),
+    `metrics: ${JSON.stringify(summary)}`,
+  ].join("\n");
+  text = text.includes("=== SCENARIO FAILED ===")
+    ? text.replace("=== SCENARIO FAILED ===", `${evidenceSummary}\n=== SCENARIO FAILED ===`)
+    : `${text}\n${evidenceSummary}`;
+  writeFileSync(
+    `${dir}/log.json`,
+    JSON.stringify({ browser: browser.version(), scenario, summary, log, unavailable }, null, 2),
+  );
+  writeFileSync(`${dir}/timeline.txt`, text);
   return text;
 }
