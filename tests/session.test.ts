@@ -739,8 +739,8 @@ describe("answer-gated scene advancement", () => {
     expect(session.snapshot.sceneIndex).toBe(0);
     expect(session.events.some(event => event.type === "advance.cancelled")).toBe(true);
   });
-  // Known violation of issue #34: activity_started does not hold deferred commit.
-  it.fails("holds a pending advance when provisional microphone activity begins before commit", async () => {
+  // Candidate onset one millisecond before release must win arbitration.
+  it("holds a pending advance when provisional microphone activity begins before commit", async () => {
     const { session, transport } = setup(true, answering(CONFIDENT));
     mic(session, "microphone.speech_started");
     deliver(session, speech("One"));
@@ -753,21 +753,61 @@ describe("answer-gated scene advancement", () => {
     expect(session.snapshot.sceneIndex).toBe(0);
   });
 
-  it("does not delay an approved advance for a transcriptless microphone spike", async () => {
-    const { session, evaluateAnswer } = setup(true, answering(CONFIDENT));
+  it("resumes an approved advance promptly after a transcriptless microphone spike is discarded", async () => {
+    const { session, transport, evaluateAnswer } = setup(true, answering(CONFIDENT));
     mic(session, "microphone.speech_started");
     deliver(session, speech("One"));
     mic(session, "microphone.speech_stopped");
-    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
-    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - TRANSCRIPT_TAIL_MS - 1);
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - 1);
     session.receive({ type: "microphone.activity_started" });
+    await vi.advanceTimersByTimeAsync(151);
+    expectAnswerResponseHeld(session, transport);
+    session.receive({ type: "microphone.activity_discarded" });
     await vi.advanceTimersByTimeAsync(1);
     expect(session.snapshot.sceneIndex).toBe(1);
     expect(session.events.filter(event => event.type === "advance.committed")).toHaveLength(1);
-    session.receive({ type: "microphone.activity_discarded" });
     expect(evaluateAnswer).toHaveBeenCalledOnce();
     expect(session.events.some(event => event.type === "advance.cancelled")).toBe(false);
   });
+  it.each(["ADVANCE", "STAY"])(
+    "hands provisional %s to VAD grace after the deadline and invalidates it on revision",
+    async decision => {
+      const evaluateAnswer = vi
+        .fn<EvaluateAnswer>()
+        .mockResolvedValueOnce(evaluated(decision === "ADVANCE" ? CONFIDENT : UNSURE))
+        .mockResolvedValue(evaluated(UNSURE));
+      const { session, transport } = setup(true, evaluateAnswer);
+      vi.mocked(transport.send).mockClear();
+      mic(session, "microphone.speech_started");
+      deliver(session, speech("One"));
+      mic(session, "microphone.speech_stopped");
+      await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - 1);
+      session.receive({ type: "microphone.activity_started" });
+      await vi.advanceTimersByTimeAsync(80);
+      expectAnswerResponseHeld(session, transport);
+      mic(session, "microphone.speech_started");
+      expect(session.events.filter(event => event.type === "answer.vad_grace_started")).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(100);
+      expectAnswerResponseHeld(session, transport);
+      deliver(session, speech("... no, two", 600));
+      expect(
+        session.events.some(
+          event => event.type === (decision === "ADVANCE" ? "advance.cancelled" : "answer.release_cancelled"),
+        ),
+      ).toBe(true);
+      expectAnswerResponseHeld(session, transport);
+      mic(session, "microphone.speech_stopped");
+      await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
+      expect(evaluateAnswer).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS + SETTLE_MS);
+      expect(session.events.filter(event => event.type === "advance.committed")).toHaveLength(0);
+      expect(session.events.filter(event => event.type === "answer.response_gate_released")).toHaveLength(1);
+      expect(session.events.findLast(event => event.type === "answer.response_gate_released")?.detail).toMatchObject({
+        answer_version: "0:One... no, two",
+      });
+    },
+  );
+
   it("evaluates a transcript once despite repeated background VAD and advances once", async () => {
     const { session, evaluateAnswer } = setup(true, answering(CONFIDENT));
     mic(session, "microphone.speech_started");
@@ -1301,7 +1341,7 @@ describe("answer-check turn synchronization", () => {
     expect(transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
   });
 
-  it("does not delay a pending STAY for a transcriptless microphone spike", async () => {
+  it("resumes a pending STAY promptly after a transcriptless microphone spike is discarded", async () => {
     const { session, transport } = setup(true, answering(UNSURE));
     vi.mocked(transport.send).mockClear();
     mic(session, "microphone.speech_started");
@@ -1309,9 +1349,10 @@ describe("answer-check turn synchronization", () => {
     mic(session, "microphone.speech_stopped");
     await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - 1);
     session.receive({ type: "microphone.activity_started" });
-    await vi.advanceTimersByTimeAsync(1);
-    expect(released(transport)).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(151);
+    expectAnswerResponseHeld(session, transport);
     session.receive({ type: "microphone.activity_discarded" });
+    await vi.advanceTimersByTimeAsync(1);
     expect(released(transport)).toHaveLength(1);
   });
 

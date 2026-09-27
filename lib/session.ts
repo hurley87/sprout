@@ -392,6 +392,7 @@ export class LessonSession {
       }
       case "microphone.speech_started":
         if (this.microphoneSpeaking) return;
+        const wasProvisional = this.provisionalActivity;
         const heardDuringActivity =
           this.provisionalActivity && this.transcriptRevision !== this.activityTranscriptRevision;
         this.provisionalActivity = false;
@@ -408,7 +409,7 @@ export class LessonSession {
           pending_evaluation: Boolean(this.settleTimer),
           decision_preserved: Boolean(this.evaluation || this.deferredAdvance),
         });
-        this.startDeferredVadGrace(this.microphoneSpeechStartedAt);
+        this.startDeferredVadGrace(this.microphoneSpeechStartedAt, wasProvisional);
         return;
       case "microphone.speech_stopped":
         if (!this.microphoneSpeaking) return;
@@ -943,7 +944,7 @@ export class LessonSession {
   private scheduleDeferredRelease() {
     clearTimeout(this.deferredTimer);
     const deferred = this.deferredAdvance;
-    if (!deferred) return;
+    if (!deferred || this.provisionalActivity) return;
     const releaseAt = this.deferredAdvanceReleaseAt(deferred);
     this.deferredTimer = setTimeout(() => this.releaseDeferredAdvance(), Math.max(0, releaseAt - Date.now()));
   }
@@ -954,7 +955,7 @@ export class LessonSession {
 
   private releaseDeferredAdvance() {
     const deferred = this.deferredAdvance;
-    if (!deferred) return;
+    if (!deferred || this.provisionalActivity) return;
     this.deferredAdvance = null;
     clearTimeout(this.deferredTimer);
     if (
@@ -1019,7 +1020,7 @@ export class LessonSession {
   private scheduleDeferredStayRelease() {
     clearTimeout(this.stayTimer);
     const deferred = this.deferredStay;
-    if (!deferred) return;
+    if (!deferred || this.provisionalActivity) return;
     const releaseAt = Math.max(
       deferred.correctionReadyAt,
       this.answerResponseGate?.outputQuietAt ?? 0,
@@ -1030,7 +1031,7 @@ export class LessonSession {
 
   private releaseDeferredStay() {
     const deferred = this.deferredStay;
-    if (!deferred) return;
+    if (!deferred || this.provisionalActivity) return;
     this.deferredStay = null;
     clearTimeout(this.stayTimer);
     if (
@@ -1076,7 +1077,7 @@ export class LessonSession {
   }
 
   /** Confirmed renewed speech buys one fallback interval for a late transcript. */
-  private startDeferredVadGrace(speechStartedAt: number) {
+  private startDeferredVadGrace(speechStartedAt: number, classifiedProvisional = false) {
     const advance = this.deferredAdvance;
     const stay = this.deferredStay;
     if (!advance && !stay) return;
@@ -1089,7 +1090,8 @@ export class LessonSession {
     const normalReleaseAt = advance
       ? advance.correctionReadyAt
       : Math.max(stay!.correctionReadyAt, this.answerResponseGate?.outputQuietAt ?? 0);
-    if (speechStartedAt >= normalReleaseAt) return;
+    // A candidate that held release may be confirmed after the original deadline.
+    if (speechStartedAt >= normalReleaseAt && !classifiedProvisional) return;
     const graceUntil = speechStartedAt + TRANSCRIPT_FALLBACK_MS;
     if (graceUntil <= normalReleaseAt) {
       this.log("answer.vad_grace_ignored", {

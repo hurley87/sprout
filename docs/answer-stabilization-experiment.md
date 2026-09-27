@@ -248,3 +248,28 @@ in `tests/reactive-suite.test.ts:88,89,98` (missing `currentScene`, `scene`,
 and `utterance`). These failures are outside this contract/investigation diff.
 
 All 15 provider-free browser tests passed after the candidate was reverted.
+
+## Provisional activity fix and 750 ms retest
+
+The historical reproducer above is retained as evidence of the defect and is
+now a passing regression. Both ADVANCE and STAY scheduling/release check
+`provisionalActivity` before consuming a pending decision. Discard reschedules
+against the original deadlines; no correction window or fallback is restarted.
+Confirmation clears provisional state and uses the existing VAD grace, including
+when classification completes after the original release deadline. Revisions
+still cancel the old decision and keep output gated for the new answer.
+
+Inspection confirmed ordinary onset at 80 ms sustained voice and discard after
+150 ms quiet. It also disproved the claimed unconditional bound: alternating
+short bursts reset both intervals forever. The detector now discards an unresolved
+candidate after onset + quiet (230 ms), on the next animation frame, while giving
+confirmed sustained speech priority. This adds no long session watchdog; frame
+suspension can still defer detector resolution until the browser resumes frames.
+
+At the retained 1500 ms value, 152 focused session/detector/diagnostics tests
+passed. Coverage includes activity 1 ms before ADVANCE/STAY release, 150 ms of
+unresolved noise followed by release within 1 ms of discard, confirmation after
+the deadline followed by grace/revision invalidation, and alternating noise.
+The full unit suite reported 343 passes and the same pre-existing hard-coded
+3600 ms recording expectation failure (actual 2600 ms). Lint passed; typecheck
+still reports the three existing reactive-suite fixture errors recorded above.

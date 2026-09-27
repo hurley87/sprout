@@ -11,6 +11,7 @@ export class MicrophoneTurnDetector {
   private frame = 0;
   private active = false;
   private candidate = false;
+  private candidateStartedAt = 0;
   private voicedMs = 0;
   private lastVoicedAt?: number;
   private candidateQuietSince = 0;
@@ -42,6 +43,7 @@ export class MicrophoneTurnDetector {
       this.quietSince = 0;
       if (!this.active && !this.candidate) {
         this.candidate = true;
+        this.candidateStartedAt = now;
         this.voicedMs = 0;
         this.emit({ type: "microphone.activity_started" });
       } else if (this.candidate && this.lastVoicedAt !== undefined) {
@@ -76,6 +78,14 @@ export class MicrophoneTurnDetector {
       }
     } else {
       this.noiseFloor = this.noiseFloor * 0.98 + rms * 0.02;
+    }
+    // Intermittent bursts can satisfy neither sustained onset nor sustained quiet.
+    // Bound arbitration with the existing detector thresholds, without a session delay.
+    if (this.candidate && now - this.candidateStartedAt >= MICROPHONE_ONSET_MS + MICROPHONE_ONSET_QUIET_MS) {
+      this.candidate = false;
+      this.voicedMs = 0;
+      this.lastVoicedAt = undefined;
+      this.emit({ type: "microphone.activity_discarded" });
     }
     this.frame = requestAnimationFrame(this.tick);
   };
