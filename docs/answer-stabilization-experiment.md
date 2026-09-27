@@ -1,3 +1,32 @@
+## Revised product contract (2026-09-26)
+
+Protect speech still active or already resuming before deterministic commit.
+Once the child has clearly stopped and the current answer has been evaluated,
+respond promptly. A correction beginning after commit may be a new turn.
+The historical 1000/1500/2000 ms silent-pause cases below are boundary
+characterization, not candidate rejection criteria. Their timing stays fixed.
+
+Required invariants:
+
+- Same-utterance self-correction remains safe.
+- Transcript revisions before commit invalidate stale decisions.
+- Microphone activity before commit holds or invalidates the pending decision.
+- Stale Jev results cannot release.
+- Final incorrect answers do not advance.
+- Exactly one scene advance occurs.
+- Explicit child stop wins.
+- Output from an invalidated answer is not released.
+
+Evaluate 750, then 250, then 0 ms, with deterministic safety tests before
+any billed live subset (happy-path, self-correction, corrected-to-wrong,
+continuation). Stop at the first real safety failure and investigate. Do not
+change other timing constants to compensate or reject a candidate for a
+post-commit change of mind. Select the smallest safe value; 0 ms would remove
+the product delay while retaining necessary scheduling semantics.
+
+The sections below preserve historical observations and the former contract;
+this revised contract supersedes their long-silence acceptance conclusions.
+
 # Answer stabilization latency experiment
 
 ## Commit 1: current-policy baseline
