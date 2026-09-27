@@ -409,7 +409,10 @@ export class LessonSession {
           pending_evaluation: Boolean(this.settleTimer),
           decision_preserved: Boolean(this.evaluation || this.deferredAdvance),
         });
-        this.startDeferredVadGrace(this.microphoneSpeechStartedAt, wasProvisional);
+        this.startDeferredVadGrace(
+          this.microphoneSpeechStartedAt,
+          wasProvisional ? "provisional_confirmation" : "confirmed_speech",
+        );
         return;
       case "microphone.speech_stopped":
         if (!this.microphoneSpeaking) return;
@@ -930,7 +933,7 @@ export class LessonSession {
       correctionReadyAt: Math.max(this.turnEndAt, this.lastDeltaAt) + CORRECTION_WINDOW_MS,
     };
     if (this.microphoneSpeaking && this.microphoneSpeechStartedAt !== undefined)
-      this.startDeferredVadGrace(this.microphoneSpeechStartedAt);
+      this.startDeferredVadGrace(this.microphoneSpeechStartedAt, "active_speech_at_decision");
     this.log("advance.deferred", {
       answer_version: answerVersion,
       scene: sceneAt(sceneIndex).id,
@@ -1012,7 +1015,7 @@ export class LessonSession {
       decision,
     };
     if (this.microphoneSpeaking && this.microphoneSpeechStartedAt !== undefined)
-      this.startDeferredVadGrace(this.microphoneSpeechStartedAt);
+      this.startDeferredVadGrace(this.microphoneSpeechStartedAt, "active_speech_at_decision");
     this.log("answer.release_deferred", { answer_version: answerVersion, scene: sceneAt(sceneIndex).id });
     this.scheduleDeferredStayRelease();
   }
@@ -1077,7 +1080,10 @@ export class LessonSession {
   }
 
   /** Confirmed renewed speech buys one fallback interval for a late transcript. */
-  private startDeferredVadGrace(speechStartedAt: number, classifiedProvisional = false) {
+  private startDeferredVadGrace(
+    speechStartedAt: number,
+    reason: "confirmed_speech" | "provisional_confirmation" | "active_speech_at_decision",
+  ) {
     const advance = this.deferredAdvance;
     const stay = this.deferredStay;
     if (!advance && !stay) return;
@@ -1090,8 +1096,9 @@ export class LessonSession {
     const normalReleaseAt = advance
       ? advance.correctionReadyAt
       : Math.max(stay!.correctionReadyAt, this.answerResponseGate?.outputQuietAt ?? 0);
-    // A candidate that held release may be confirmed after the original deadline.
-    if (speechStartedAt >= normalReleaseAt && !classifiedProvisional) return;
+    // Release consumes the deferred object before committing or opening the gate.
+    // Its presence, rather than the nominal deadline, protects speech that began
+    // before the actual release callback (including while evaluation was pending).
     const graceUntil = speechStartedAt + TRANSCRIPT_FALLBACK_MS;
     if (graceUntil <= normalReleaseAt) {
       this.log("answer.vad_grace_ignored", {
@@ -1106,6 +1113,7 @@ export class LessonSession {
     if (advance) advance.vadGraceUntil = graceUntil;
     else stay!.vadGraceUntil = graceUntil;
     this.log("answer.vad_grace_started", {
+      reason,
       decision,
       answer_version: answerVersion,
       grace_ms: TRANSCRIPT_FALLBACK_MS,

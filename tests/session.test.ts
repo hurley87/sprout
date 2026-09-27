@@ -1058,6 +1058,59 @@ describe("answer-gated scene advancement", () => {
     await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
     expect(session.snapshot.sceneIndex).toBe(0);
   });
+  it.each(["ADVANCE", "STAY"])(
+    "protects %s when confirmed speech starts before deferred decision creation",
+    async decision => {
+      let resolve!: (result: AnswerResult) => void;
+      const evaluateAnswer = vi
+        .fn<EvaluateAnswer>()
+        .mockImplementationOnce(() => new Promise(r => (resolve = r)))
+        .mockResolvedValue(evaluated(UNSURE));
+      const { session, transport } = setup(true, evaluateAnswer);
+      mic(session, "microphone.speech_started");
+      deliver(session, speech("One"));
+      mic(session, "microphone.speech_stopped");
+      await vi.advanceTimersByTimeAsync(Math.max(CORRECTION_WINDOW_MS, TRANSCRIPT_TAIL_MS));
+      session.receive({ type: "microphone.activity_started" });
+      mic(session, "microphone.speech_started");
+      resolve(evaluated(decision === "ADVANCE" ? CONFIDENT : UNSURE));
+      await vi.advanceTimersByTimeAsync(1);
+      expectAnswerResponseHeld(session, transport);
+      expect(session.events.findLast(e => e.type === "answer.vad_grace_started")?.detail).toMatchObject({
+        decision,
+        reason: "active_speech_at_decision",
+      });
+      deliver(session, speech("... no, two", 600));
+      mic(session, "microphone.speech_stopped");
+      await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
+      await vi.advanceTimersByTimeAsync(decisionReleaseDelay(session) + 1);
+      expect(evaluateAnswer).toHaveBeenCalledTimes(2);
+      expect(session.events.filter(e => e.type === "advance.committed")).toHaveLength(0);
+      expect(session.events.filter(e => e.type === "advance.released")).toHaveLength(0);
+      expect(session.events.filter(e => e.type === "answer.release_sent")).toHaveLength(1);
+      expect(session.events.findLast(e => e.type === "answer.response_gate_released")?.detail).toMatchObject({
+        answer_version: "0:One... no, two",
+      });
+    },
+  );
+
+  it.each(["ADVANCE", "STAY"])("keeps released %s final when confirmed speech starts afterward", async decision => {
+    const { session } = setup(true, answering(decision === "ADVANCE" ? CONFIDENT : UNSURE));
+    mic(session, "microphone.speech_started");
+    deliver(session, speech("One"));
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(Math.max(CORRECTION_WINDOW_MS, TRANSCRIPT_TAIL_MS) + 1);
+    if (decision === "ADVANCE") session.displayed(1);
+    expect(session.events.filter(e => e.type === "answer.response_gate_released")).toHaveLength(1);
+    session.receive({ type: "microphone.activity_started" });
+    mic(session, "microphone.speech_started");
+    await vi.advanceTimersByTimeAsync(SETTLE_MS + 1);
+    expect(session.events.filter(e => e.type === "answer.vad_grace_started")).toHaveLength(0);
+    expect(session.events.filter(e => e.type === "answer.response_gate_released")).toHaveLength(1);
+    expect(session.events.filter(e => e.type === "advance.committed")).toHaveLength(decision === "ADVANCE" ? 1 : 0);
+    expect(session.snapshot.sceneIndex).toBe(decision === "ADVANCE" ? 1 : 0);
+  });
+
   it("preserves an in-flight approval through confirmed microphone activity without a new transcript", async () => {
     let resolve!: (result: AnswerResult) => void;
     const evaluateAnswer: EvaluateAnswer = vi.fn(() => new Promise<AnswerResult>(r => (resolve = r)));
