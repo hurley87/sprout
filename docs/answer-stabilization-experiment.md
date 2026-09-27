@@ -483,3 +483,140 @@ component at 250 ms. Fix and deterministically qualify this race before a fresh
 250 ms live experiment; testing 0 ms is premature while this boundary is unresolved.
 The candidate constant was restored to **750 ms**, and no production race fix
 was included in this experiment. Historical results above are unchanged.
+
+
+## Race fix and 250 ms retry (2026-09-26)
+
+The race fix is isolated in `83b3200`, parent `62d85b7`, with the policy still
+at 750 ms. `releaseDeferredAdvance` and `releaseDeferredStay` consume their
+deferred objects before committing or releasing the response gate. An existing
+deferred object therefore identifies an unreleased decision. VAD grace now uses
+that lifecycle boundary instead of rejecting speech onset at/after the nominal
+correction deadline. No deferred object means there is no old decision to reopen.
+The existing one-grace limit, fallback duration and too-early-grace check remain.
+No fixed delay, microphone threshold, transcript timing, Jev threshold or prompt
+was changed by the fix.
+
+Both decision creation paths establish grace from `microphoneSpeechStartedAt`
+when confirmed speech is already active. Diagnostics distinguish
+`active_speech_at_decision`, `provisional_confirmation` and `confirmed_speech`.
+The new ADVANCE and STAY regressions keep evaluation pending until the nominal
+window has elapsed, inject activity and confirmed speech before resolving it,
+require the response gate held, and then invalidate the old decision with
+`... no, two`. Only the revised STAY releases. Two opposite-boundary regressions
+prove confirmed speech after actual release does not reopen or roll back the
+old decision. Existing provisional hold/discard/grace, stale revision,
+exactly-once and explicit-stop coverage remains passing.
+
+At **750 ms**, all 359 unit tests, all 15 provider-free browser tests, lint,
+typecheck, production build, changed-file formatting and diff checks passed
+before changing the candidate. At **250 ms**, all 359 unit tests pass, including
+the original in-flight approval reproducer and the new ADVANCE/STAY regressions.
+The previously documented recording/slow-phrase failures were corrected as test
+callback-flushing assumptions: recording now derives the actual release deadline
+from turn-end, transcript and evaluation diagnostics and flushes an already-due
+callback on the next timer tick. No negative delay or additive transcript-tail
+policy was introduced.
+
+Final browser validation also exposed a stale ordering assumption in the
+old-scene/output test: its mocked immediate evaluation consumed the quiet
+interval and allowed commit before its old-scene assertion. The test now holds
+the evaluation response until a fresh output fragment arrives, then verifies
+one scene commit and no response instruction until output transcript quiet.
+This preserves the existing output gate contract without assuming spare time
+between evaluation and commit. A browser invocation while the live dev server
+was running was rejected by Next.js's single-dev-server lock; the server was
+stopped before final browser validation. Neither issue required a production
+output/VAD timing change.
+
+### Live subset and retained evidence
+
+Ran exactly this billed subset once, sequentially:
+
+```bash
+LIVE_OUT=test-results/correction-window-250 npm run test:live:reactive happy-path self-correction corrected-to-wrong continuation
+```
+
+- `happy-path`: failed its first evaluation assertion because ASR returned `1`
+  while the harness expected `One!`. The application evaluated `1` at 0.98 and
+  committed scene 0 → 1 once. The scenario aborted before the remaining two
+  answers or a response measurement. This is an ASR/harness assertion mismatch,
+  not evidence of stale advancement, and is not counted as a passing full run.
+- `self-correction`: passed; `2. No. 1` was the settled evaluated answer, with
+  one advance and a subsequent observed response.
+- `corrected-to-wrong`: passed on `post-commit-new-turn`; the second utterance
+  `No Two` was evaluated as STAY in scene 1. The original commit remained final.
+- `continuation`: passed on `post-commit-new-turn`; `And two` was evaluated in
+  scene 1 and legitimately advanced once to scene 2, without rollback or a
+  duplicate old-scene transition.
+
+The command exited nonzero with **3 passes / 1 failure**. It was not rerun to
+turn the failed assertion green. Live pre-commit second speech was not observed
+in these delayed scenarios; deterministic tests supply that protection evidence.
+Raw logs, diagnostics, timelines and failure evidence remain local under
+`test-results/correction-window-250/{scenario}/` and are not committed.
+
+### Joined application-clock timing
+
+All numbers below are milliseconds from the existing `answerTimelines` join of
+application session-relative diagnostics. Provider and harness clocks were not
+subtracted from application timestamps. Every evaluated answer is listed;
+partial unevaluated transcript revisions are omitted. A dash denotes no commit
+(STAY) or missing response observation after scenario abort.
+
+| Scenario / answer (scene) | Transcript → evaluation complete | Evaluation complete → commit | Transcript → commit | Response release → observed Sprout transcript | Transcript → observed Sprout transcript |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| happy-path / `1` (0, aborted harness) | 577 | 0 | 577 | — | — |
+| self-correction / `2. No. 1` (0) | 543 | 0 | 543 | 1162 | 1732 |
+| corrected-to-wrong / `One` (0) | 591 | 1 | 592 | 1277 | 1906 |
+| corrected-to-wrong / `No Two` (1, STAY) | 608 | — | — | 1721 | 7418 |
+| continuation / `One` (0) | 583 | 0 | 583 | 1278 | 1898 |
+| continuation / `And two` (1) | 422 | 0 | 422 | 1115 | 5982 |
+
+Across five committed answers, transcript → commit is **422–592 ms**, mean
+**543.4 ms**; evaluation complete → commit is **0–1 ms**, mean **0.2 ms**.
+Across five observed responses (including STAY), release → observed transcript
+is **1115–1721 ms**, mean **1310.6 ms**. Transcript → observed response is
+**1732–7418 ms**, mean **3787.2 ms**; the longer new-turn rows include output
+quiet gating and should not be pooled as common-case latency evidence.
+
+For comparison with the earlier initial-answer measurements, the four initial
+answers in this run have mean transcript → commit **573.8 ms** (543–592), and
+mean evaluation → commit **0.25 ms**. Three initial answers have a measured
+response: mean transcript → observed response **1845.3 ms** (1732–1906), with
+mean release → observed transcript **1239 ms** (1162–1278). Happy-path lacks its
+response and remaining two answers, so these are different samples from the
+historical three-answer happy-path means:
+
+| Mean metric | 2500 ms baseline | 750 ms candidate | 250 ms retry, initial answers |
+| --- | ---: | ---: | ---: |
+| Transcript → commit | ~2659 | ~812 | ~574 (n=4, includes aborted first answer) |
+| Transcript → observed response | ~3775 | ~1661 | ~1845 (n=3) |
+| Evaluation complete → commit | ~2020 | ~244 | ~0.25 (n=4) |
+
+The observed initial-answer commit improvement over 750 ms is about **238 ms**,
+rather than the full 500 ms policy reduction. End-to-end response improvement
+was **not demonstrated**: measured initial responses were about 184 ms slower
+on average than the older 750 ms sample. Single runs, unequal scenario samples
+and provider/network variation prevent a precise causal claim.
+
+The remaining common-case delay is predominantly outside stabilization:
+evaluation completes 422–608 ms after transcript, commit adds 0–1 ms, and
+response release → observed transcript still takes 1.1–1.7 seconds. On the new
+turns, `output_transcript_quiet` adds another **5089 ms** from STAY evaluation
+to response-gate release, or **4445 ms** from continuation commit to gate release.
+Those unchanged gates explain the 7.4/6.0-second response rows; they are separate
+from the correction policy and were not tuned here. Transcript observation does
+not establish the time audio was first audible.
+
+**250 ms passes deterministic safety qualification**, with the live coverage
+limitations above. Leave the candidate at 250 ms for review. Testing 0 ms would
+be a separate authorized boundary experiment; these live rows already have
+almost no post-evaluation stabilization wait, so they offer little evidence of
+further common-case gain from 0 ms. No 0 ms candidate was run.
+
+Final validation at 250 ms: 359 unit tests, 15 provider-free browser tests,
+lint (no warnings), typecheck, production build, changed-file Prettier and
+`git diff --check` passed. The live dev server was stopped. The experiment
+commit contains only the candidate constant, deadline/order-sensitive test
+updates and this appended evidence; the production race fix remains separate.

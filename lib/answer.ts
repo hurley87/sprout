@@ -51,7 +51,7 @@ export const MICROPHONE_ONSET_QUIET_MS = 150;
 /** Allow the final transcript fragment to arrive after microphone speech stops. */
 export const TRANSCRIPT_TAIL_MS = 250;
 /** Time after detected turn end or the latest transcript to allow a correction before committing a scene. */
-export const CORRECTION_WINDOW_MS = 750;
+export const CORRECTION_WINDOW_MS = 250;
 
 /** An evaluation that outlives its usefulness must never reach the lesson. */
 export const EVALUATION_TIMEOUT_MS = 4000;

@@ -734,7 +734,7 @@ describe("answer-gated scene advancement", () => {
     mic(session, "microphone.speech_stopped");
     await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
     expect(evaluateAnswer).toHaveBeenCalledWith({ sceneIndex: 0, utterance: "There are one duck" }, expect.anything());
-    await vi.advanceTimersByTimeAsync(decisionReleaseDelay(session));
+    await vi.advanceTimersByTimeAsync(decisionReleaseDelay(session) + 1);
     expect(session.snapshot.sceneIndex).toBe(1);
   });
   it("does not commit a correct partial count before a later correction", async () => {

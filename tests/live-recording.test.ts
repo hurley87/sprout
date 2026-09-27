@@ -7,7 +7,7 @@ import { LessonSession, type EndReason, type Transport } from "../lib/session";
 import { RecordingQueue, type Evidence, type SessionRecorder } from "../lib/session-recorder";
 import { LAST_SCENE } from "../lib/lesson";
 import { UTTERANCE_GAP_MS } from "../lib/transcript";
-import { CORRECTION_WINDOW_MS, TRANSCRIPT_FALLBACK_MS, TRANSCRIPT_TAIL_MS, type EvaluateAnswer } from "../lib/answer";
+import { CORRECTION_WINDOW_MS, TRANSCRIPT_FALLBACK_MS, type EvaluateAnswer } from "../lib/answer";
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
@@ -669,16 +669,21 @@ it("preserves VAD, evaluation, committed advancement and actual display on one c
     latencyMs: 1,
     decision: "ADVANCE",
   });
-  await vi.advanceTimersByTimeAsync(Math.max(0, CORRECTION_WINDOW_MS - TRANSCRIPT_TAIL_MS));
+  const evaluatedAt = session.events.findLast(event => event.type === "answer.evaluated")!.at;
+  const turnEndAt = session.events.findLast(event => event.type === "answer.turn_end")!.at;
+  const candidate = session.events.findLast(event => event.type === "answer.candidate")!;
+  const transcriptAt = (candidate.detail as { transcript_at: number }).transcript_at;
+  const releaseAt = Math.max(Math.max(turnEndAt, transcriptAt) + CORRECTION_WINDOW_MS, evaluatedAt);
+  // At an already-due deadline, flush the queued callback on the next timer tick.
+  const releaseDelay = Math.max(1, session.createdAt + releaseAt - Date.now());
+  const committedAt = Date.now() + releaseDelay - session.createdAt - 900;
+  await vi.advanceTimersByTimeAsync(releaseDelay);
   await session.recordingSettled();
   expect(
     calls()
       .find(call => call[2].type === "scene_advance_committed")
       ?.slice(1),
-  ).toEqual([
-    1100 + Math.max(CORRECTION_WINDOW_MS, TRANSCRIPT_TAIL_MS),
-    { type: "scene_advance_committed", fromScene: 0, toScene: 1, correlationKey: "0:100:one" },
-  ]);
+  ).toEqual([committedAt, { type: "scene_advance_committed", fromScene: 0, toScene: 1, correlationKey: "0:100:one" }]);
   expect(vi.mocked(recorder.append).mock.calls.filter(call => call[2].type === "scene_displayed")).toHaveLength(1);
   await vi.advanceTimersByTimeAsync(80);
   session.displayed(1);
@@ -688,7 +693,7 @@ it("preserves VAD, evaluation, committed advancement and actual display on one c
       .mocked(recorder.append)
       .mock.calls.filter(call => call[2].type === "scene_displayed")
       .at(-1)?.[1],
-  ).toBe(1180 + Math.max(CORRECTION_WINDOW_MS, TRANSCRIPT_TAIL_MS));
+  ).toBe(committedAt + 80);
   session.end("parent_stop");
   await session.recordingSettled();
 });

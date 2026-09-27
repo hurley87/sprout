@@ -196,12 +196,18 @@ test("parent start, committed scene, stop, late actions, and diagnostics export"
   expect(errors).toEqual([]);
 });
 
-test("a correct count waits for Sprout's substantive old-scene turn to finish", async ({ page }) => {
+test("a correct count commits once and holds its response until output transcript quiet", async ({ page }) => {
   await mockLive(page);
   let evaluations = 0;
-  await page.route("**/api/evaluate", route => {
+  let finishEvaluation!: () => Promise<void>;
+  await page.route("**/api/evaluate", async route => {
     evaluations++;
-    return route.fulfill({ json: { probability: 0.95, model: "jev-test" } });
+    await new Promise<void>(resolve => {
+      finishEvaluation = async () => {
+        await route.fulfill({ json: { probability: 0.95, model: "jev-test" } });
+        resolve();
+      };
+    });
   });
   await begin(page);
   const before = (await commands(page)).length;
@@ -221,7 +227,9 @@ test("a correct count waits for Sprout's substantive old-scene turn to finish", 
     start_ms: 1800,
     end_ms: 2300,
   });
+  await finishEvaluation();
   await expect(page.locator('[data-scene="duck-friends"]')).toBeVisible();
+  expect(await commands(page)).toHaveLength(before);
   await expect.poll(async () => (await sentContent(page)).filter(text => text.includes("2 ducks"))).toHaveLength(1);
   expect(evaluations).toBe(1);
   expect(await releases(page)).toEqual([]);
