@@ -441,14 +441,16 @@ describe("answer response gate", () => {
     const completions: ((result: AnswerResult) => void)[] = [];
     const evaluateAnswer: EvaluateAnswer = vi.fn(() => new Promise<AnswerResult>(resolve => completions.push(resolve)));
     const { session } = setup(true, evaluateAnswer);
+    mic(session, "microphone.speech_started");
     deliver(session, speech("One", 0));
-    await settle();
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
     expect(completions).toHaveLength(1);
     completions[0](evaluated(CONFIDENT));
     await vi.advanceTimersByTimeAsync(0);
     expect(session.events.some(event => event.type === "advance.deferred")).toBe(true);
 
-    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - TRANSCRIPT_TAIL_MS - 1);
     deliver(session, speech("No, two", 3001));
     await settle();
     expect(completions).toHaveLength(2);
@@ -1261,7 +1263,7 @@ describe("answer-check turn synchronization", () => {
     });
     expect(sent(transport)).toHaveLength(0);
 
-    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - TRANSCRIPT_TAIL_MS - 1);
     mic(session, "microphone.speech_started");
     deliver(session, speech("... two", 11_000));
     mic(session, "microphone.speech_stopped");
@@ -1383,20 +1385,25 @@ describe("answer-check turn synchronization", () => {
 
     mic(session, "microphone.speech_started");
     mic(session, "microphone.speech_stopped");
-    expect(session.events.filter(event => event.type === "answer.vad_grace_started")).toHaveLength(0);
-    expect(session.events.findLast(event => event.type === "answer.vad_grace_ignored")?.detail).toMatchObject({
-      reason: "too_early",
-    });
-
-    const earlyIgnore = session.events.findLast(event => event.type === "answer.vad_grace_ignored");
-    const normalReleaseAt =
-      session.createdAt + (earlyIgnore?.detail as { normal_release_at_ms: number }).normal_release_at_ms;
-    await vi.advanceTimersByTimeAsync(normalReleaseAt - Date.now() - 100);
+    const graceIsTooEarly = SETTLE_MS * 2 <= CORRECTION_WINDOW_MS;
+    expect(session.events.filter(event => event.type === "answer.vad_grace_started")).toHaveLength(
+      graceIsTooEarly ? 0 : 1,
+    );
+    if (graceIsTooEarly) {
+      expect(session.events.findLast(event => event.type === "answer.vad_grace_ignored")?.detail).toMatchObject({
+        reason: "too_early",
+      });
+      const earlyIgnore = session.events.findLast(event => event.type === "answer.vad_grace_ignored");
+      const normalReleaseAt =
+        session.createdAt + (earlyIgnore?.detail as { normal_release_at_ms: number }).normal_release_at_ms;
+      await vi.advanceTimersByTimeAsync(normalReleaseAt - Date.now() - 100);
+    }
     mic(session, "microphone.speech_started");
     expect(session.events.filter(event => event.type === "answer.vad_grace_started")).toHaveLength(1);
-    expect(session.events.findLast(event => event.type === "answer.vad_grace_started")?.detail).toMatchObject({
-      decision: "ADVANCE",
-    });
+    if (!graceIsTooEarly)
+      expect(session.events.findLast(event => event.type === "answer.vad_grace_ignored")?.detail).toMatchObject({
+        reason: "already_active",
+      });
 
     await vi.advanceTimersByTimeAsync(500);
     deliver(session, speech("... no, two", 600));
@@ -1481,6 +1488,9 @@ describe("answer-check turn synchronization", () => {
       expect(session.snapshot.sceneIndex).toBe(1);
       expect(transport.send).not.toHaveBeenCalled();
       session.displayed(1);
+      if (reply) {
+        await vi.advanceTimersByTimeAsync(Math.max(0, UTTERANCE_GAP_MS - SETTLE_MS - CORRECTION_WINDOW_MS));
+      }
       expect(sent(transport)).toEqual([expect.objectContaining({ content: advanceContext(sceneAt(1)) })]);
     },
   );
@@ -1827,7 +1837,7 @@ describe("answer-check turn synchronization", () => {
     deliver(session, speech("Three!", 10_000));
     deliver(session, speech("Ooh!", 10_800, true));
     await settle();
-    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
+    await vi.advanceTimersByTimeAsync(Math.max(CORRECTION_WINDOW_MS, UTTERANCE_GAP_MS - SETTLE_MS));
     expect(released(transport)).toHaveLength(1);
   });
   it("does not release a stale result; the newer speech gets its own decision", async () => {

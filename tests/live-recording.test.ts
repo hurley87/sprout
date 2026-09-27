@@ -669,13 +669,16 @@ it("preserves VAD, evaluation, committed advancement and actual display on one c
     latencyMs: 1,
     decision: "ADVANCE",
   });
-  await vi.advanceTimersByTimeAsync(2250);
+  await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS - 250);
   await session.recordingSettled();
   expect(
     calls()
       .find(call => call[2].type === "scene_advance_committed")
       ?.slice(1),
-  ).toEqual([3600, { type: "scene_advance_committed", fromScene: 0, toScene: 1, correlationKey: "0:100:one" }]);
+  ).toEqual([
+    1100 + CORRECTION_WINDOW_MS,
+    { type: "scene_advance_committed", fromScene: 0, toScene: 1, correlationKey: "0:100:one" },
+  ]);
   expect(vi.mocked(recorder.append).mock.calls.filter(call => call[2].type === "scene_displayed")).toHaveLength(1);
   await vi.advanceTimersByTimeAsync(80);
   session.displayed(1);
@@ -685,7 +688,7 @@ it("preserves VAD, evaluation, committed advancement and actual display on one c
       .mocked(recorder.append)
       .mock.calls.filter(call => call[2].type === "scene_displayed")
       .at(-1)?.[1],
-  ).toBe(3680);
+  ).toBe(1180 + CORRECTION_WINDOW_MS);
   session.end("parent_stop");
   await session.recordingSettled();
 });

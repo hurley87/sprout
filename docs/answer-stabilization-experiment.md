@@ -273,3 +273,75 @@ the deadline followed by grace/revision invalidation, and alternating noise.
 The full unit suite reported 343 passes and the same pre-existing hard-coded
 3600 ms recording expectation failure (actual 2600 ms). Lint passed; typecheck
 still reports the three existing reactive-suite fixture errors recorded above.
+
+### Deterministic 750 ms qualification
+
+152 focused tests and all 344 unit tests pass at 750 ms. The seven initial
+focused failures were test setup assumptions, not unresolved activity failures:
+pre-commit revision tests now use microphone turn-end/tail and inject revision
+1 ms before the configured deadline; the early VAD case checks either ignored
+or already-active grace according to whether a fallback interval fits before
+commit; output tests honor the unchanged output-quiet deadline independently
+of scene commit. Fixed long-silence characterization probes retain their timing.
+The recording test now derives commit/display timestamps from the configured
+window rather than expecting the old 2500 ms commit time.
+
+### Live joined timing observations
+
+Executed the requested subset once with
+`LIVE_OUT=test-results/correction-window-750 npm run test:live:reactive happy-path self-correction corrected-to-wrong continuation`.
+Happy-path and self-correction passed. Measurements below use application
+session-relative milliseconds, joined by answer version and scene. Older
+baseline commit events lack a scene field; for the three baseline happy-path
+answers their unique answer versions identify the commits unambiguously.
+The reconstructed baseline is retained as `baseline-joined.json` in the output
+directory. These are transcript observations, not acoustic playback latency.
+
+| Run/answer | Final transcript → evaluation done | Evaluation done → commit | Final transcript → commit | Release → first Sprout transcript | Final transcript → first Sprout transcript |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 2500 baseline / One | 683 | 1966 | 2649 | 1419 | 4099 |
+| 2500 baseline / Two | 663 | 2059 | 2722 | 1164 | 3919 |
+| 2500 baseline / Three | 571 | 2034 | 2605 | 669 | 3306 |
+| 750 / One | 658 | 207 | 865 | 1019 | 1916 |
+| 750 / Two | 495 | 258 | 753 | 753 | 1530 |
+| 750 / Three | 551 | 267 | 818 | 689 | 1536 |
+| 750 / Two, no, one | 456 | 294 | 750 | 946 | 1726 |
+
+Happy-path mean stabilization wait decreased from 2020 to 244 ms (1776 ms).
+Mean final-transcript-to-commit decreased from 2659 to 812 ms (1847 ms).
+Mean final-transcript-to-first-observed-response decreased from 3775 to 1661 ms
+(2114 ms). Single sequential runs include VAD, ASR, network and provider
+variation; these differences are observations, not a controlled causal estimate.
+Baseline self-correction did not advance, so it has no comparable commit row.
+
+The live command ended with **2 passes / 2 failures**. `corrected-to-wrong`
+failed its old scene-stayed assertion during the 1000 ms silent pause;
+`continuation` failed the same assertion during its 2000 ms silent pause.
+Both stopped before synthesizing/sending their second utterance. Diagnostics
+show only the first utterance's activity/confirmed speech, with no renewed
+activity before commit. These runs characterize post-commit silence boundaries,
+not a remaining provisional-activity race. They do not validate live pre-commit
+continuation/correction; deterministic tests supply that evidence. No assertion
+was removed or rerun to turn these live failures green.
+
+| Failed scenario's first answer | Transcript → evaluation | Evaluation → commit | Transcript → commit | Release → Sprout | Transcript → Sprout |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| corrected-to-wrong / One | 569 | 271 | 840 | unavailable | unavailable |
+| continuation / One | 536 | 276 | 812 | 291 | 1137 |
+
+750 ms qualifies against the deterministic revised-contract invariants, with
+live happy-path/self-correction evidence and the above live coverage limitation.
+250 ms is worth a separate deterministic experiment: most remaining 750 ms
+stabilization waits are 207–294 ms. Slower evaluation will already consume a
+250 ms window, while VAD quiet/tail/output quiet and provider response remain
+unchanged. This does not establish 250 ms safety or promise another 500 ms of
+end-to-end gain. Stop here for review; neither 250 nor 0 was tested.
+
+Final candidate checks: all 344 unit tests and all 15 provider-free browser
+tests passed; lint, changed-code Prettier checks and `git diff --check` passed.
+Production build compiled, then failed TypeScript on the same three unchanged
+`tests/reactive-suite.test.ts:88,89,98` fixture errors. Typecheck has that same
+known limitation. No fixture typing or unrelated production behavior was changed.
+The local live dev server was stopped after the subset completed. Artifacts
+remain local under `test-results/correction-window-750/`; no push, deployment,
+250 ms test, or 0 ms test is included.
