@@ -17,7 +17,7 @@ type FixtureSnapshot = { events: FixtureEvent[]; scene?: string | null; cursor?:
 
 function context() {
   const calls: string[] = [];
-  const action = { checkpointBefore: 2, scene: "one", text: "One!" };
+  const action = { checkpointBefore: 2, scene: "one", text: "One!", answer: 1 };
   const observer = {
     currentScene: vi.fn(async () => "hello-duck"),
     waitForSproutTurnEnd: vi.fn(async () => {
@@ -29,7 +29,7 @@ function context() {
       return { cursor: 1, at: 0 };
     }),
     waitForChildTranscript: vi.fn(async () => ({ kind: "child-transcript", cursor: 4, text: "I don't know." })),
-    waitForEvaluation: vi.fn(async () => ({ cursor: 5 })),
+    waitForEvaluation: vi.fn(async () => ({ cursor: 5, result: { probability: 0.99 } })),
     waitForSceneAdvance: vi.fn(async () => ({ cursor: 6 })),
     snapshot: vi.fn(async (): Promise<FixtureSnapshot> => ({
       events: [
@@ -86,9 +86,26 @@ describe("baseline reactive suite", () => {
       after: expect.objectContaining({ checkpointBefore: 2 }),
       through: 10,
     });
-    expect(ctx.assertions.sproutRespondedAfter).toHaveBeenCalledWith({ cursor: 5 });
+    expect(ctx.assertions.sproutRespondedAfter).toHaveBeenCalledWith(expect.objectContaining({ cursor: 5 }));
     expect(ctx.assertions.sceneAdvancedExactlyOnce).toHaveBeenCalledWith(expect.objectContaining({ through: 10 }));
   });
+  it("uses explicit numeric answers and observes happy-path responses after commits", async () => {
+    const ctx = context();
+    await REACTIVE_SCENARIOS["happy-path"].run(ctx);
+    expect(ctx.assertions.evaluated).toHaveBeenCalledTimes(3);
+    expect(ctx.assertions.evaluated).toHaveBeenCalledWith(expect.objectContaining({ numericAnswer: 1 }));
+    expect(ctx.assertions.sproutRespondedAfter).toHaveBeenCalledTimes(3);
+    expect(ctx.assertions.sproutRespondedAfter).toHaveBeenCalledWith({ cursor: 6 });
+    expect(ctx.assertions.sceneAdvancedExactlyOnce).toHaveBeenCalledTimes(3);
+  });
+
+  it("rejects a happy-path evaluation below the advancing threshold", async () => {
+    const ctx = context();
+    ctx.observer.waitForEvaluation.mockResolvedValue({ cursor: 5, result: { probability: 0.89 } });
+    await expect(REACTIVE_SCENARIOS["happy-path"].run(ctx)).rejects.toThrow("did not evaluate as advancing");
+    expect(ctx.observer.waitForSceneAdvance).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["delayed-correction", 1500],
     ["corrected-to-wrong", 1000],

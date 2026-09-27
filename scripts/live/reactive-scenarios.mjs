@@ -7,16 +7,17 @@ function requireEvidence(condition, message, evidence) {
 async function correct(ctx) {
   const action = await ctx.child.correctAnswer();
   const evaluation = await ctx.observer.waitForEvaluation({ after: action.checkpointBefore });
-  await ctx.assertions.evaluated({ after: action, through: evaluation.cursor });
-  await ctx.observer.waitForSceneAdvance({ after: evaluation.cursor });
-  const response = await ctx.assertions.sproutRespondedAfter(evaluation);
+  await ctx.assertions.evaluated({ after: action, numericAnswer: action.answer, through: evaluation.cursor });
+  requireEvidence(evaluation.result?.probability >= 0.9, "Correct answer did not evaluate as advancing", evaluation);
+  const commit = await ctx.observer.waitForSceneAdvance({ after: evaluation.cursor });
+  const response = await ctx.assertions.sproutRespondedAfter(commit);
   await ctx.assertions.sceneAdvancedExactlyOnce({ after: action, from: action.scene, through: response.cursor });
 }
 
 async function wrong(ctx) {
   const action = await ctx.child.wrongAnswer();
   const evaluation = await ctx.observer.waitForEvaluation({ after: action.checkpointBefore });
-  await ctx.assertions.evaluated({ after: action, through: evaluation.cursor });
+  await ctx.assertions.evaluated({ after: action, numericAnswer: action.answer, through: evaluation.cursor });
   const response = await ctx.assertions.sproutRespondedAfter(evaluation);
   await ctx.assertions.sceneStayed({ after: action, through: response.cursor });
 }

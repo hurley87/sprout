@@ -620,3 +620,66 @@ lint (no warnings), typecheck, production build, changed-file Prettier and
 `git diff --check` passed. The live dev server was stopped. The experiment
 commit contains only the candidate constant, deadline/order-sensitive test
 updates and this appended evidence; the production race fix remains separate.
+
+## Completed 250 ms happy-path validation with numeric ASR assertions
+
+The harness now opts into `evaluated({ numericAnswer })` for standalone
+counting answers, using the behavior's explicit answer value. After the existing
+case/whitespace/terminal-punctuation normalization, only complete tokens
+`one`–`five` and `1`–`5` match. Unsupported numeric values are rejected;
+`exactUtterance` retains literal matching. Existing nonnumeric and generic
+utterance matching is unchanged. Focused tests cover all five values, ASR
+variants, wrong values, phrases/substrings and out-of-domain tokens. Correct
+answers also require the advancing probability threshold and observe the tutor
+response after the scene commit.
+
+`LIVE_OUT=test-results/correction-window-250-happy-path npm run test:live:reactive happy-path`
+**passed** a complete three-answer run: Jev received `One`, `Two`, `Three` in
+scenes 0/1/2, scoring 0.98/0.98/0.99. Each scene advanced exactly once, each
+response followed commit, and no provider errors or delegations were recorded.
+The policy remains **250 ms**; production evaluation and prompts are unchanged.
+An earlier attempt in this pass aborted on an added harness check for a `status`
+field that the retained provider result does not contain. That check was fixed
+to inspect probability; its artifacts are preserved separately under
+`test-results/correction-window-250-happy-path-status-assertion-failed/` and its
+partial sample is excluded. The historical failed run above remains unchanged.
+
+All timings below use the existing application-clock `answerTimelines` join;
+observed transcripts do not establish audible playback onset. Artifacts remain
+local under `test-results/correction-window-250-happy-path/happy-path/`.
+
+| Answer (scene) | Transcript → evaluation complete | Evaluation complete → commit | Transcript → commit | Response release → first observed Sprout transcript | Transcript → first observed Sprout transcript |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| One (0) | 455 | 1 | 456 | 1281 | 1761 |
+| Two (1) | 579 | 0 | 579 | 1111 | 1724 |
+| Three (2) | 561 | 0 | 561 | 562 | 1149 |
+| Full-run mean (ms, n=3) | 531.7 | 0.3 | 532.0 | 984.7 | 1544.7 |
+
+Comparison uses only the full three-answer happy-path runs, excluding every
+previous partial/mixed-scenario 250 ms sample:
+
+| Mean metric (ms, n=3 each) | 2500 ms baseline | 750 ms | 250 ms completed happy-path |
+| --- | ---: | ---: | ---: |
+| Transcript → evaluation complete | 639.0 | 568.0 | 531.7 |
+| Evaluation complete → commit | 2019.7 | 244.0 | 0.3 |
+| Transcript → commit | 2658.7 | 812.0 | 532.0 |
+| Response release → observed transcript | 1084.0 | 820.3 | 984.7 |
+| Transcript → observed transcript | 3774.7 | 1660.7 | 1544.7 |
+
+Commit latency improved by **280 ms** versus 750 and **2126.7 ms** versus the
+baseline. Observed response latency improved by **116 ms** and **2230 ms**,
+respectively, despite release-to-transcript being 164.3 ms slower than the 750
+sample. These are single-run observations with provider/network variation,
+not controlled causal estimates. Stabilization is effectively out of the
+post-evaluation critical path; issue #34's stabilization experiment is complete
+at 250 ms with the previously documented deterministic safety qualification.
+The next investigation is response-gate release → observed Sprout response,
+especially `output_transcript_quiet` on continuation/new-turn paths. No quiet
+hold was recorded in this happy-path run; the longer holds in the earlier
+mixed-scenario evidence remain relevant. No response gates were optimized and
+no 0 ms policy was tested.
+
+Validation: all **385 unit tests**, **15 provider-free browser tests**, lint,
+typecheck, production build, changed-file Prettier and `git diff --check` passed.
+The live dev server was stopped. This commit contains only harness assertions,
+focused tests and this appended validation record; no production timing change.
