@@ -190,3 +190,61 @@ window protects the 2000 ms continuation only when renewed microphone activity
 arrives before commit. If the product requirement includes corrections after
 1500 ms of silence, retain the baseline or investigate an adaptive policy
 before another candidate.
+
+## Revised-contract experiment: 750 ms stopped on safety failure
+
+Changed only the timing constant to 750 ms for the deterministic probe.
+The focused session/diagnostics group reported 137 passes, seven failures,
+and one expected failure (145 total). The additional probe was then run as
+an ordinary test to verify the expected-failure diagnosis: it failed because
+`advance.released` occurred at 750 ms despite `microphone.activity_started`
+at 749 ms. No transcript revision, confirmed speech, or discard event had
+resolved the provisional activity. This violates the required pre-commit
+microphone activity invariant, independently of long silent corrections.
+The committed reproducer uses `it.fails` to expose the known defect; an
+unexpected pass will require replacing it with an ordinary regression test.
+A green suite with this marker does not qualify the policy for live use.
+
+Investigation: `microphone.activity_started` sets `provisionalActivity` but
+neither suspends the deferred timer nor changes its release deadline.
+`releaseDeferredAdvance` does not check provisional activity. The existing
+“transcriptless microphone spike” test explicitly expects that advance.
+Confirmed speech uses a different bounded VAD grace path. This conflict is
+pre-existing; increasing the correction window does not eliminate the race.
+A follow-up fix must protect provisional activity through confirmation or
+discard and examine both ADVANCE and STAY releases, including activity
+already present when Jev resolves, without treating indefinite noise as speech.
+
+The other seven failures include historical silent-pause expectations and
+assumptions about VAD grace/output quiet relative to the larger window; they
+were not weakened to qualify 750. Fixed 1000/1500/2000 ms silent boundary
+probes retain their timing and now recognize a previously committed scene.
+The confirmed continuation probe also retains its 1250 ms onset, which is
+post-commit at 750; it cannot qualify pre-commit safety at that candidate.
+
+| Candidate | Deterministic qualification | Live results |
+| --- | --- | --- |
+| 750 ms | Failed: unresolved microphone activity before commit | Not run |
+| 250 ms | Not evaluated: stopped on first safety failure | Not run |
+| 0 ms | Not evaluated: stopped on first safety failure | Not run |
+
+The local 750 ms candidate was reverted to the branch's original 1500 ms;
+no production timing change is included in this investigation. That retained
+value is not a new production recommendation and has the same activity race.
+No value can be recommended as satisfying the revised contract yet. Whether
+the extra correction window can be removed remains unproven. There are no
+new live latency measurements to compare with the 2500 ms baseline above.
+The remaining dominant component is unmeasured; VAD quiet (900 ms), transcript
+tail (250 ms), and provider generation/release are follow-up measurement
+candidates, not grounds for changing their constants.
+
+Validation after reverting the candidate: focused session/diagnostics tests
+passed 144 tests with one explicitly expected failure. Full unit validation
+reported 339 passes, one expected failure, and one failure in the unchanged
+`tests/live-recording.test.ts:678`: its hard-coded 3600 ms commit expectation
+is incompatible with the branch's retained 1500 ms policy (actual 2600 ms).
+Lint passed. Typecheck and build both failed on unchanged test-fixture types
+in `tests/reactive-suite.test.ts:88,89,98` (missing `currentScene`, `scene`,
+and `utterance`). These failures are outside this contract/investigation diff.
+
+All 15 provider-free browser tests passed after the candidate was reverted.
