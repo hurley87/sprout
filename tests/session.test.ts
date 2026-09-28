@@ -1444,7 +1444,17 @@ describe("answer-check turn synchronization", () => {
     expect(session.events.findLast(event => event.type === "answer.response_gate_released")?.detail).toMatchObject({
       decision: _decision === "unavailable" ? "UNAVAILABLE" : "STAY",
       reason: "output_transcript_quiet",
+      eligible_at: expect.any(Number),
     });
+    expect(session.events.some(event => event.type === "answer.response_gate_deadline_updated")).toBe(true);
+    expect(session.events.filter(event => event.type === "answer.response_gate_observed")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          detail: expect.objectContaining({ trigger: "blocked_provider_transcript", blocked_output_activity: true }),
+        }),
+        expect.objectContaining({ detail: expect.objectContaining({ trigger: "released", output_blocked: false }) }),
+      ]),
+    );
   });
 
   it("does not treat hidden help transcripts as an audible Sprout turn", async () => {
@@ -1658,6 +1668,17 @@ describe("answer-check turn synchronization", () => {
     const releasedGate = session.events.find(event => event.type === "answer.response_gate_released");
     expect(committed?.at).toBeLessThan(releasedGate?.at ?? 0);
     expect(releasedGate?.detail).toMatchObject({ decision: "ADVANCE", reason: "output_transcript_quiet" });
+    expect(session.events.find(event => event.type === "answer.response_gate_deadline_updated")?.detail).toMatchObject({
+      condition: "output_transcript_quiet",
+      extension_ms: expect.any(Number),
+    });
+    expect(
+      session.events
+        .filter(event => event.type === "answer.response_gate_observed")
+        .map(event => (event.detail as { trigger: string }).trigger),
+    ).toEqual(
+      expect.arrayContaining(["scene_committed", "scene_displayed", "blocked_provider_transcript", "released"]),
+    );
     expect(session.events.filter(event => event.type === "advance.deferred")).toHaveLength(1);
     expect(session.events.filter(event => event.type === "advance.released")).toHaveLength(1);
     expect(session.events.findLast(event => event.type === "advance.released")?.detail).toMatchObject({

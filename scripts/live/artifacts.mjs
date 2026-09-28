@@ -120,9 +120,31 @@ export async function exportArtifacts({ page, browser, dir, label, scenario, mic
     diagnostics = { unavailable: `UI diagnostics export failed: ${error}` };
   }
   const summary = metrics(log, diagnostics);
+  const gateTimeline = (summary.answerTimelines ?? [])
+    .filter(
+      row =>
+        row.gateObservations?.length ||
+        row.applicationResponseReleasedAtMs !== undefined ||
+        row.gateCancelledAtMs !== undefined,
+    )
+    .map(row => {
+      const conditions = Object.entries(row.conditionDurationMs ?? {})
+        .map(([condition, value]) => `${condition}=${value.durationMs}ms`)
+        .join(", ");
+      const terminal =
+        row.applicationResponseReleasedAtMs !== undefined
+          ? `released ${row.gateDecision ?? "decision unknown"}/${row.gateReleaseReason ?? "reason unknown"} at ${row.applicationResponseReleasedAtMs}ms; context sent ${row.gateContextSentAtMs ?? "unknown"}ms`
+          : row.gateCancelledAtMs !== undefined
+            ? `cancelled ${row.gateCancellationReason ?? "reason unknown"} at ${row.gateCancelledAtMs}ms`
+            : row.gateSupersededAtMs !== undefined
+              ? `identity superseded at ${row.gateSupersededAtMs}ms; output remained blocked for the revised answer`
+              : "terminal gate evidence missing";
+      return `response gate scene=${row.sceneIndex} revision=${row.transcriptRevision ?? "unknown"} answer=${JSON.stringify(row.answerVersion)}; ${conditions || "condition durations unavailable"}; blocked union=${row.observedBlockedUnionMs ?? "unknown"}ms (condition intervals may overlap); ${terminal}; output quiet deadline updates=${row.outputQuietDeadlineUpdates?.length ?? 0}; blocked provider transcript observations=${row.blockedProviderOutputActivityCount ?? 0}; audible onset/provider completion unobserved`;
+    });
   const evidenceSummary = [
     ...(unavailable ? [unavailable] : []),
     ...(diagnostics?.unavailable ? [`diagnostics unavailable: ${diagnostics.unavailable}`] : []),
+    ...(gateTimeline.length ? ["Response gate timeline (application session-relative clock):", ...gateTimeline] : []),
     `metrics: ${JSON.stringify(summary)}`,
   ].join("\n");
   text = text.includes("=== SCENARIO FAILED ===")

@@ -133,4 +133,140 @@ describe("reactive answer timing metrics", () => {
     expect(summary.timingClock).toBeNull();
     expect(summary.answerTimelines).toBeNull();
   });
+
+  it("derives overlapping condition intervals, deadline changes, revision identity, and missing terminal evidence", () => {
+    const rows = diagnosticsTimelines([
+      { at: 10, type: "answer.candidate", detail: { sceneIndex: 0, revision: 1, version: "10:One", transcript_at: 9 } },
+      {
+        at: 20,
+        type: "answer.response_gate_observed",
+        detail: {
+          scene_index: 0,
+          transcript_revision: 1,
+          answer_version: "10:One",
+          conditions: ["correction_window", "output_transcript_quiet"],
+          output_blocked: true,
+          correction_ready_at: 30,
+          output_quiet_at: 80,
+          trigger: "decision",
+        },
+      },
+      {
+        at: 30,
+        type: "answer.response_gate_deadline_updated",
+        detail: {
+          scene_index: 0,
+          transcript_revision: 1,
+          answer_version: "10:One",
+          previous_deadline_at: 80,
+          deadline_at: 100,
+          extension_ms: 20,
+        },
+      },
+      {
+        at: 30,
+        type: "answer.response_gate_observed",
+        detail: {
+          scene_index: 0,
+          transcript_revision: 1,
+          answer_version: "10:One",
+          conditions: ["output_transcript_quiet"],
+          output_blocked: true,
+          correction_ready_at: 30,
+          output_quiet_at: 100,
+          trigger: "deadline_updated",
+        },
+      },
+      {
+        at: 40,
+        type: "answer.response_gate_observed",
+        detail: {
+          scene_index: 0,
+          transcript_revision: 1,
+          answer_version: "10:One",
+          conditions: ["output_transcript_quiet"],
+          output_blocked: true,
+          output_quiet_at: 100,
+          blocked_output_activity: true,
+          trigger: "blocked_provider_transcript",
+        },
+      },
+      {
+        at: 60,
+        type: "answer.response_gate_observed",
+        detail: {
+          scene_index: 0,
+          transcript_revision: 1,
+          answer_version: "10:One",
+          conditions: [],
+          output_blocked: false,
+          output_quiet_at: 100,
+          trigger: "released",
+        },
+      },
+      {
+        at: 60,
+        type: "answer.response_gate_released",
+        detail: {
+          scene_index: 0,
+          transcript_revision: 1,
+          answer_version: "10:One",
+          decision: "STAY",
+          reason: "correction_window",
+          context_sent_at: 60,
+          eligible_at: 50,
+        },
+      },
+      {
+        at: 70,
+        type: "answer.response_gate_observed",
+        detail: {
+          scene_index: 0,
+          transcript_revision: 1,
+          answer_version: "10:One",
+          conditions: [],
+          output_blocked: false,
+          trigger: "identity_superseded",
+          superseded_by_transcript_revision: 2,
+        },
+      },
+      {
+        at: 70,
+        type: "answer.response_gate_observed",
+        detail: {
+          scene_index: 0,
+          transcript_revision: 2,
+          answer_version: "10:One",
+          conditions: ["answer_evaluation"],
+          output_blocked: true,
+          trigger: "identity_updated",
+        },
+      },
+    ]);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({
+      transcriptRevision: 1,
+      conditionDurationMs: {
+        correction_window: { durationMs: 10 },
+        output_transcript_quiet: { durationMs: 40 },
+      },
+      observedBlockedUnionMs: 40,
+      blockedProviderOutputActivityCount: 1,
+      outputQuietDeadlineUpdates: [{ previousDeadlineAtMs: 80, deadlineAtMs: 100, extensionMs: 20 }],
+      gateReleaseReason: "correction_window",
+      gateDecision: "STAY",
+      gateContextSentAtMs: 60,
+      providerOutputCompletionAtMs: null,
+      audibleOnsetAtMs: null,
+      conditionDurationsAreOverlapping: true,
+      gateSupersededAtMs: 70,
+    });
+    expect(rows[0].conditionDurationMs.correction_window.intervals[0]).toMatchObject({
+      startAtMs: 20,
+      endAtMs: 30,
+      durationMs: 10,
+    });
+    expect(rows[1]).toMatchObject({ transcriptRevision: 2, gateObservations: expect.any(Array) });
+    expect(rows[1]).not.toHaveProperty("applicationResponseReleasedAtMs");
+  });
 });

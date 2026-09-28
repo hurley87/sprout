@@ -80,17 +80,19 @@ export function metrics(log, diagnostics = null) {
 /** Correlate only events carrying the same scene and answer version. */
 export function diagnosticsTimelines(events) {
   const keyed = new Map();
-  const rowFor = (sceneIndex, version) => {
+  const rowFor = (sceneIndex, version, revision = null) => {
     if (!Number.isInteger(sceneIndex) || typeof version !== "string") return null;
-    const key = `${sceneIndex}:${version}`;
-    if (!keyed.has(key)) keyed.set(key, { sceneIndex, answerVersion: version });
+    const key = `${sceneIndex}:${revision ?? "?"}:${version}`;
+    if (!keyed.has(key)) keyed.set(key, { sceneIndex, transcriptRevision: revision, answerVersion: version });
     return keyed.get(key);
   };
   for (const event of events) {
     const detail = event.detail ?? {};
     const version = detail.version ?? detail.answer_version;
     const sceneIndex = Number.isInteger(detail.sceneIndex) ? detail.sceneIndex : detail.scene_index;
-    const row = rowFor(sceneIndex, version);
+    const candidateRevision = Number.isInteger(detail.revision) ? detail.revision : detail.transcript_revision;
+    const revision = Number.isInteger(candidateRevision) ? candidateRevision : null;
+    const row = rowFor(sceneIndex, version, revision);
     if (!row) continue;
     if (event.type === "answer.candidate") {
       row.candidateRecordedAtMs = event.at;
@@ -100,7 +102,65 @@ export function diagnosticsTimelines(events) {
     else if (event.type === "answer.evaluated") row.evaluationCompletedAtMs = event.at;
     else if (event.type === "advance.committed") row.sceneCommitAtMs = event.at;
     else if (event.type === "advance.displayed") row.sceneDisplayedAtMs = event.at;
-    else if (event.type === "answer.response_gate_released") row.applicationResponseReleasedAtMs = event.at;
+    else if (event.type === "answer.response_gate_released") {
+      row.applicationResponseReleasedAtMs = event.at;
+      row.gateReleaseReason = detail.reason ?? null;
+      row.gateDecision = detail.decision ?? row.gateDecision ?? null;
+      row.gateContextSentAtMs = Number.isFinite(detail.context_sent_at) ? detail.context_sent_at : null;
+      row.gateEligibleAtMs = Number.isFinite(detail.eligible_at) ? detail.eligible_at : null;
+    } else if (event.type === "answer.response_gate_cancelled") {
+      row.gateCancelledAtMs = event.at;
+      row.gateCancellationReason = detail.reason ?? null;
+    } else if (event.type === "answer.response_gate_observed") {
+      row.gateObservations ??= [];
+      row.conditionDurationMs ??= {};
+      row.observedBlockedUnionMs ??= 0;
+      const prior = row.gateObservations.at(-1);
+      if (prior) {
+        const duration = Math.max(0, event.at - prior.at);
+        for (const condition of prior.conditions) {
+          const deadline =
+            condition === "output_transcript_quiet"
+              ? prior.outputQuietAtMs
+              : condition === "correction_window"
+                ? prior.correctionReadyAtMs
+                : condition === "vad_grace"
+                  ? prior.vadGraceUntilMs
+                  : undefined;
+          const endAtMs = Number.isFinite(deadline) ? Math.min(event.at, deadline) : event.at;
+          const conditionDuration = Math.max(0, endAtMs - prior.at);
+          const entry = row.conditionDurationMs[condition] ?? { durationMs: 0, intervals: [] };
+          entry.durationMs += conditionDuration;
+          entry.intervals.push({ startAtMs: prior.at, endAtMs, durationMs: conditionDuration });
+          row.conditionDurationMs[condition] = entry;
+        }
+        if (prior.outputBlocked) row.observedBlockedUnionMs += duration;
+      }
+      row.gateObservations.push({
+        at: event.at,
+        trigger: detail.trigger ?? null,
+        conditions: detail.conditions ?? [],
+        outputBlocked: detail.output_blocked === true,
+        outputQuietAtMs: detail.output_quiet_at,
+        correctionReadyAtMs: detail.correction_ready_at,
+        vadGraceUntilMs: detail.vad_grace_until,
+      });
+      if (detail.decision) row.gateDecision = detail.decision;
+      row.gateIdentity = { sceneIndex, transcriptRevision: revision, answerVersion: version };
+      if (Number.isFinite(detail.output_quiet_at)) row.outputQuietAtMs = detail.output_quiet_at;
+      if (Number.isFinite(detail.eligible_at)) row.gateEligibleAtMs = detail.eligible_at;
+      if (detail.blocked_output_activity)
+        row.blockedProviderOutputActivityCount = (row.blockedProviderOutputActivityCount ?? 0) + 1;
+      if (detail.trigger === "identity_superseded") row.gateSupersededAtMs = event.at;
+    } else if (event.type === "answer.response_gate_deadline_updated") {
+      row.outputQuietDeadlineUpdates ??= [];
+      row.outputQuietDeadlineUpdates.push({
+        atMs: event.at,
+        previousDeadlineAtMs: detail.previous_deadline_at ?? null,
+        deadlineAtMs: detail.deadline_at,
+        extensionMs: detail.extension_ms ?? null,
+      });
+    }
   }
   const answerStartAt = row =>
     row.finalChildTranscriptAtMs ?? row.candidateRecordedAtMs ?? row.evaluationRequestedAtMs ?? Infinity;
@@ -118,6 +178,11 @@ export function diagnosticsTimelines(events) {
             event => event.at > release && (nextAnswerBoundary === undefined || event.at < nextAnswerBoundary),
           );
     row.firstObservedSproutResponseAtMs = next?.at ?? null;
+    row.firstObservedSproutResponseClock = next ? "application session-relative" : null;
+    // No provider completion or acoustic onset signal exists in this harness.
+    row.providerOutputCompletionAtMs = null;
+    row.audibleOnsetAtMs = null;
+    row.conditionDurationsAreOverlapping = true;
     row.stabilizationWaitAfterEvaluationMs =
       row.sceneCommitAtMs === undefined || row.evaluationCompletedAtMs === undefined
         ? null
