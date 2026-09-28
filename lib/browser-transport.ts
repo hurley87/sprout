@@ -2,6 +2,7 @@ import { parseProviderEvent, parseSessionAnswer, type ClientCommand, type Provid
 import type { SessionAudioRecording } from "./session-recorder";
 import type { Transport } from "./session";
 import { MicrophoneTurnDetector } from "./microphone-turn";
+import { OutputActivityObserver } from "./output-activity";
 
 const serverError = (body: unknown) =>
   typeof body === "object" && body !== null && "error" in body && typeof body.error === "string"
@@ -29,6 +30,7 @@ export class BrowserTransport implements Transport {
   private outputBlocked = false;
   private closed = false;
   private turnDetector?: MicrophoneTurnDetector;
+  private outputObserver?: OutputActivityObserver;
   // The single record of "this attempt is over", set by stopMedia(). Late
   // callbacks and resolved awaits check it instead of tracking their own flags.
   private abort = new AbortController();
@@ -85,7 +87,16 @@ export class BrowserTransport implements Transport {
     }
     const peer = new RTCPeerConnection();
     this.peer = peer;
+    onEvent({ type: "output.activity", state: "unavailable" });
+    if (this.cancelled) return;
     peer.ontrack = ({ track }) => {
+      if (this.cancelled) {
+        track.stop();
+        return;
+      }
+      this.outputObserver?.close();
+      this.outputObserver = undefined;
+      onEvent({ type: "output.activity", state: "unavailable" });
       if (this.cancelled) {
         track.stop();
         return;
@@ -94,6 +105,15 @@ export class BrowserTransport implements Transport {
       this.remote?.getTracks().forEach(oldTrack => oldTrack.stop());
       const remote = new MediaStream([track]);
       this.remote = remote;
+      try {
+        this.outputObserver = new OutputActivityObserver(remote, event => {
+          if (!this.cancelled && this.remote === remote) onEvent(event);
+        });
+      } catch {
+        // Observation failure never qualifies playback recovery.
+        onEvent({ type: "output.activity", state: "unavailable" });
+      }
+      if (this.cancelled) return;
       this.audio.srcObject = this.remote;
       this.playbackReady = false;
       this.syncRecordingGate();
@@ -206,6 +226,8 @@ export class BrowserTransport implements Transport {
   setOutputBlocked(blocked: boolean) {
     if (!this.cancelled) {
       this.outputBlocked = blocked;
+      // Muting does not clear the receiver's jitter/decoder buffers, nor
+      // isolate the next provider response. The track stays live.
       this.audio.muted = blocked;
       this.syncRecordingGate();
     }
@@ -286,6 +308,10 @@ export class BrowserTransport implements Transport {
   stopMedia() {
     if (this.cancelled) return;
     this.abort.abort();
+    this.audio.muted = true;
+    this.audio.pause();
+    this.audio.srcObject = null;
+    this.outputObserver?.close();
     this.syncRecordingGate();
     if (this.captureStartedAt !== undefined) this.captureDurationMs = performance.now() - this.captureStartedAt;
     try {
@@ -295,12 +321,10 @@ export class BrowserTransport implements Transport {
       this.finishCapture?.(null);
     }
     this.releaseMix();
-    this.audio.muted = false;
     this.turnDetector?.close();
     this.mic?.getTracks().forEach(track => track.stop());
     this.remote?.getTracks().forEach(track => track.stop());
-    this.audio.pause();
-    this.audio.srcObject = null;
+    this.audio.muted = false;
   }
 
   close() {

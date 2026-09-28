@@ -16,6 +16,7 @@ import {
   type EvaluateAnswer,
 } from "./answer";
 import type { ClientCommand, ProviderEvent, TranscriptEvent } from "./events";
+
 import {
   LAST_SCENE,
   OBJECTS,
@@ -37,6 +38,10 @@ import {
   saidGoodbye,
   type Utterance,
 } from "./transcript";
+
+// Recovery budget, not a silence/completion threshold. On expiry stop media;
+// never open playback to recover a stalled gate. Revisions cannot renew it.
+export const RESPONSE_GATE_RECOVERY_MS = 15_000;
 
 export type EndReason =
   "parent_stop" | "child_stop" | "model_goodbye" | "wrap_up" | "time_limit" | "connection_failure" | "page_hidden";
@@ -159,8 +164,11 @@ export class LessonSession {
   // Application state is authoritative; provider transcript events continue
   // while playback is muted and do not imply the child heard Sprout.
   private answerResponseGate: AnswerResponseGate | null = null;
+  private responseGateRecoveryTimer?: ReturnType<typeof setTimeout>;
+  private outputActivity: "active" | "quiet" | "unavailable" = "unavailable";
   private commands = 0;
   private closed = false;
+  private ending = false;
   private ready = false;
   private recordingStarted = false;
   private evidenceOrder = 0;
@@ -339,6 +347,8 @@ export class LessonSession {
       eligible_at: sessionTime(gate.eligibleAt),
       eligibility_basis: gate.eligibleAt === undefined ? null : "observed_all_blockers_clear",
       output_blocked: this.outputBlocked,
+      output_media_activity: this.outputActivity,
+      output_media_is_release_barrier: false,
       ...extra,
     });
   }
@@ -395,6 +405,7 @@ export class LessonSession {
 
   /** Guards the entry points where late external input can still arrive. */
   private expireIfOverdue() {
+    if (this.ending) return true;
     if (this.startedAt !== undefined && Date.now() - this.startedAt >= TIMING.hard) {
       this.end("time_limit");
       return true;
@@ -417,6 +428,12 @@ export class LessonSession {
       this.seen.add(event.eventId);
     }
     switch (event.type) {
+      case "output.activity":
+        if (this.outputActivity === event.state) return;
+        this.outputActivity = event.state;
+        this.log("output.media_activity", { state: event.state, output_blocked: this.outputBlocked });
+        this.observeResponseGate("output_media_activity");
+        return;
       case "session.started":
         this.begin();
         return;
@@ -662,6 +679,15 @@ export class LessonSession {
       };
       this.canonical.sprout.invalidateDelivery();
       this.setOutputBlocked(true, "answer_evaluation");
+      this.responseGateRecoveryTimer = setTimeout(() => {
+        if (!this.answerResponseGate || this.expireIfOverdue()) return;
+        this.observeResponseGate("recovery_budget_exhausted");
+        this.log("answer.response_gate_recovery_failed", {
+          wait_ms: Date.now() - this.answerResponseGate.startedAt,
+          output_media_activity: this.outputActivity,
+        });
+        this.fail("Sprout could not safely resume its voice. This attempt has ended; you can start a new lesson.");
+      }, RESPONSE_GATE_RECOVERY_MS);
       this.log("answer.response_gate_started", {
         scene_index: this.snapshot.sceneIndex,
         transcript_revision: this.transcriptRevision,
@@ -704,6 +730,7 @@ export class LessonSession {
     const gate = this.answerResponseGate;
     if (!gate) return;
     this.answerResponseGate = null;
+    clearTimeout(this.responseGateRecoveryTimer);
     clearTimeout(this.displayedReleaseTimer);
     this.displayedReleaseTimer = undefined;
     this.displayedRelease = null;
@@ -752,6 +779,7 @@ export class LessonSession {
     sendContext();
     if (!this.gateMatches(identity)) return false;
     this.answerResponseGate = null;
+    clearTimeout(this.responseGateRecoveryTimer);
     this.setOutputBlocked(false, decision.toLowerCase());
     this.log("answer.response_gate_released", {
       scene_index: identity.sceneIndex,
@@ -1425,7 +1453,10 @@ export class LessonSession {
   }
 
   end(reason: EndReason, error?: string) {
-    if (this.snapshot.status === "ended") return;
+    if (this.snapshot.status === "ended" || this.ending) return;
+    this.ending = true;
+    // Stop physical media before gate cancellation can request an unmute.
+    this.transport.stopMedia();
     const remaining = this.startedAt === undefined ? TIMING.hard : TIMING.hard - (Date.now() - this.startedAt);
     if (remaining <= 0) reason = "time_limit";
     for (const speaker of ["child", "sprout"] as const) {
@@ -1450,9 +1481,8 @@ export class LessonSession {
     this.evaluation?.abort();
     this.pending = null;
     this.log("lesson.ended", { reason });
-    // Invalidate actions BEFORE any resource callback can fire.
+    // External input was invalidated before stopping media; now publish the ending.
     this.update({ status: "ended", reason, error });
-    this.transport.stopMedia();
     if (this.recorder)
       this.recording.enqueue("attachRecording", async () => {
         const audio = await this.transport.recording?.();

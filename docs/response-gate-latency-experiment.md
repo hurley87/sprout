@@ -49,12 +49,12 @@ LIVE_OUT=test-results/issue-36-baseline-db01d46-20260928 npm run test:live:react
 LIVE_OUT=test-results/issue-36-baseline-continuation-retry-db01d46-20260928 npm run test:live:reactive continuation
 ```
 
-| Run | Started at (UTC, harness) | Outcome and observed coverage |
-| --- | --- | --- |
-| Happy path | 19:34:49.804 | Passed all three correct answers and exactly-once scene advances; second answer had the long quiet hold. |
-| Continuation | 19:35:50.636 | Passed the pre-commit branch; only “And two” was transcribed/evaluated, STAY on scene 0. Initial “One!” playback produced no child transcript. This does not validate a two-transcript continuation. |
-| Corrected-to-wrong | 19:36:22.672 | Passed the post-commit new-turn branch: “One” advanced scene 0, then “No Two” produced STAY on scene 1. No retroactive rollback is expected. |
-| Continuation retry | 19:37:46.857 | Failed the tutor-turn observer wait after both “One” and “And two” reached Jev and advanced scenes 0 and 1. Raw transcripts were observed after the second release. Retained as diagnostic evidence; excluded from successful-scenario summaries. |
+| Run                | Started at (UTC, harness) | Outcome and observed coverage                                                                                                                                                                                                                     |
+| ------------------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Happy path         | 19:34:49.804              | Passed all three correct answers and exactly-once scene advances; second answer had the long quiet hold.                                                                                                                                          |
+| Continuation       | 19:35:50.636              | Passed the pre-commit branch; only “And two” was transcribed/evaluated, STAY on scene 0. Initial “One!” playback produced no child transcript. This does not validate a two-transcript continuation.                                              |
+| Corrected-to-wrong | 19:36:22.672              | Passed the post-commit new-turn branch: “One” advanced scene 0, then “No Two” produced STAY on scene 1. No retroactive rollback is expected.                                                                                                      |
+| Continuation retry | 19:37:46.857              | Failed the tutor-turn observer wait after both “One” and “And two” reached Jev and advanced scenes 0 and 1. Raw transcripts were observed after the second release. Retained as diagnostic evidence; excluded from successful-scenario summaries. |
 
 Every attempt ended through parent cleanup, with application `parent_stop`.
 Artifacts remain local under the two ignored `test-results/` directories above:
@@ -64,11 +64,11 @@ gate observations/deadline updates or all raw transcript fragments.
 
 Diagnostic file SHA-256 values pin the evidence used in the tables:
 
-| Directory / scenario | `diagnostics.json` SHA-256 |
-| --- | --- |
-| Baseline / happy-path | `aa4f017787ebac45b300bde12a2308d90d59b19b6896e9180b46bada3c24ab68` |
-| Baseline / continuation | `e5d7e02f215bb39c31b1d63fcb8ce7afbfc87cc4f275989241f39ed3a2f939ee` |
-| Baseline / corrected-to-wrong | `8d2df76f9d5b8268fc54ef7bd622b1a1d69cb669705bdd439b10731811aff69d` |
+| Directory / scenario              | `diagnostics.json` SHA-256                                         |
+| --------------------------------- | ------------------------------------------------------------------ |
+| Baseline / happy-path             | `aa4f017787ebac45b300bde12a2308d90d59b19b6896e9180b46bada3c24ab68` |
+| Baseline / continuation           | `e5d7e02f215bb39c31b1d63fcb8ce7afbfc87cc4f275989241f39ed3a2f939ee` |
+| Baseline / corrected-to-wrong     | `8d2df76f9d5b8268fc54ef7bd622b1a1d69cb669705bdd439b10731811aff69d` |
 | Continuation retry / continuation | `124336448e046bac25032f62622512fca282ec28dfc2e68410fee699c3dc0da1` |
 
 ## Clocks and interpretation
@@ -100,22 +100,22 @@ change. All ADVANCE rows release after commit and confirmed scene display.
 STAY releases the existing scene instruction without a commit.
 
 | Run / scene / revision / answer version | Decision | Final transcript | Evaluation requested → complete | Commit → display | Observed eligibility → release | First observed Sprout fragment |
-| --- | --- | ---: | --- | --- | --- | ---: |
-| Happy / 0 / 1 / `13600:One` | ADVANCE | 15,600 | 16,007 → 16,282 | 16,283 → 16,322 | 16,322 → 16,322 | 16,656 |
-| Happy / 1 / 2 / `26200:Two` | ADVANCE | 27,989 | 28,323 → 28,548 | 28,548 → 28,572 | 37,602 → 37,602 | 39,097 |
-| Happy / 2 / 3 / `49000:Three` | ADVANCE | 49,249 | 49,501 → 49,797 | 49,798 → 49,835 | 49,835 → 49,835 | 49,949 |
-| Continuation / 0 / 2 / `15800:And two` | STAY | 17,969 | 18,349 → 18,601 | — | 18,601 → 18,603 | 19,858 |
-| Corrected / 0 / 1 / `13000:One` | ADVANCE | 12,909 | 13,162 → 13,372 | 13,373 → 13,397 | 13,397 → 13,397 | 13,520 |
-| Corrected / 1 / 3 / `16800:No Two` | STAY | 17,301 | 17,553 → 17,830 | — | 17,831 → 17,831 | 18,510 |
+| --------------------------------------- | -------- | ---------------: | ------------------------------- | ---------------- | ------------------------------ | -----------------------------: |
+| Happy / 0 / 1 / `13600:One`             | ADVANCE  |           15,600 | 16,007 → 16,282                 | 16,283 → 16,322  | 16,322 → 16,322                |                         16,656 |
+| Happy / 1 / 2 / `26200:Two`             | ADVANCE  |           27,989 | 28,323 → 28,548                 | 28,548 → 28,572  | 37,602 → 37,602                |                         39,097 |
+| Happy / 2 / 3 / `49000:Three`           | ADVANCE  |           49,249 | 49,501 → 49,797                 | 49,798 → 49,835  | 49,835 → 49,835                |                         49,949 |
+| Continuation / 0 / 2 / `15800:And two`  | STAY     |           17,969 | 18,349 → 18,601                 | —                | 18,601 → 18,603                |                         19,858 |
+| Corrected / 0 / 1 / `13000:One`         | ADVANCE  |           12,909 | 13,162 → 13,372                 | 13,373 → 13,397  | 13,397 → 13,397                |                         13,520 |
+| Corrected / 1 / 3 / `16800:No Two`      | STAY     |           17,301 | 17,553 → 17,830                 | —                | 17,831 → 17,831                |                         18,510 |
 
-| Answer | Transcript → evaluation | Evaluation → response release | Release → first observed fragment | Transcript → first observed fragment | Release reason |
-| --- | ---: | ---: | ---: | ---: | --- |
-| Happy One | 682 | 40 | 334 | 1,056 | `scene_displayed` |
-| Happy Two | 559 | **9,054** | 1,495 | **11,108** | `output_transcript_quiet` |
-| Happy Three | 548 | 38 | 114 | 700 | `scene_displayed` |
-| Continuation And two | 632 | 2 | 1,255 | 1,889 | `correction_window` |
-| Corrected One | 463 | 25 | 123 | 611 | `scene_displayed` |
-| Corrected No Two | 529 | 1 | 679 | 1,209 | `correction_window` |
+| Answer               | Transcript → evaluation | Evaluation → response release | Release → first observed fragment | Transcript → first observed fragment | Release reason            |
+| -------------------- | ----------------------: | ----------------------------: | --------------------------------: | -----------------------------------: | ------------------------- |
+| Happy One            |                     682 |                            40 |                               334 |                                1,056 | `scene_displayed`         |
+| Happy Two            |                     559 |                     **9,054** |                             1,495 |                           **11,108** | `output_transcript_quiet` |
+| Happy Three          |                     548 |                            38 |                               114 |                                  700 | `scene_displayed`         |
+| Continuation And two |                     632 |                             2 |                             1,255 |                                1,889 | `correction_window`       |
+| Corrected One        |                     463 |                            25 |                               123 |                                  611 | `scene_displayed`         |
+| Corrected No Two     |                     529 |                             1 |                               679 |                                1,209 | `correction_window`       |
 
 The two non-stalled happy answers have release-to-first-fragment times of
 114–334 ms. This is **not** evidence of faster answer delivery than issue #34's
@@ -140,15 +140,15 @@ acknowledges success before receiving the outcome instruction and references
 ducks while the application has displayed butterflies. The output gate remained blocked; the
 transcript does not show that this stale speech was audible.
 
-| Milestone | Application time (ms) | Interpretation |
-| --- | ---: | --- |
-| First blocked output | 28,517 | Begins observed output-quiet condition. |
-| Commit / display | 28,548 / 28,572 | Ready scene; context instruction is still withheld. |
-| Last blocked output | 35,101 | Deadline update sets `outputQuietAt` to 37,601. |
-| Scheduled quiet deadline | 37,601 | 2,500 ms after the last deadline-update event. |
-| Observed eligibility / context sent / release | 37,602 | All conditions clear; 1 ms after deadline. |
-| Matching instruction acknowledgment (`sprout_5`) | 38,131 | Acceptance/injection evidence, not a playback barrier. |
-| First post-release fragment | 39,097 | “You did”; provider interval 38,400–38,600 ms. |
+| Milestone                                        | Application time (ms) | Interpretation                                         |
+| ------------------------------------------------ | --------------------: | ------------------------------------------------------ |
+| First blocked output                             |                28,517 | Begins observed output-quiet condition.                |
+| Commit / display                                 |       28,548 / 28,572 | Ready scene; context instruction is still withheld.    |
+| Last blocked output                              |                35,101 | Deadline update sets `outputQuietAt` to 37,601.        |
+| Scheduled quiet deadline                         |                37,601 | 2,500 ms after the last deadline-update event.         |
+| Observed eligibility / context sent / release    |                37,602 | All conditions clear; 1 ms after deadline.             |
+| Matching instruction acknowledgment (`sprout_5`) |                38,131 | Acceptance/injection evidence, not a playback barrier. |
+| First post-release fragment                      |                39,097 | “You did”; provider interval 38,400–38,600 ms.         |
 
 Display-to-release is **9,030 ms**: 6,529 ms from display to the last blocked
 fragment, then 2,500 ms of quiet policy and 1 ms of callback delay. Measured
@@ -276,3 +276,116 @@ directory/settings and changing only `baseURL` and disabling managed server
 startup. This avoided a second Next dev process competing for the checkout's
 dev lock. The original port-3000 server remains running. Unit/browser checks do
 not invoke billed models; only the four explicitly listed live attempts did.
+
+## Commit 3: media investigation and bounded fallback
+
+The direct WebRTC player cannot establish a safe response boundary. Commit 3
+therefore **retains the conservative transcript-quiet release policy**. It does
+not reduce the 2,500 ms tail, implement early outcome steering, or claim reduced
+latency. `CORRECTION_WINDOW_MS` remains 250 ms and `UTTERANCE_GAP_MS` remains
+2,500 ms. Jev, curriculum and Convex recording are unchanged.
+
+### Transport evidence
+
+`BrowserTransport` assigns the provider track to an `HTMLAudioElement` and keeps
+it playing while blocked. Blocking changes `audio.muted` and the remote recording
+gain. It does not discard a response, reset the receiver, clear the browser's
+jitter/decoder buffers, or associate PCM with a deterministic answer. Disconnecting
+a Web Audio source, detaching `srcObject`, or replacing an analyser would not
+identify late RTP from that same provider generation. Stopping the track or closing
+the peer ends reception; it does not supply a fresh response on the existing track.
+
+The new provider-free browser fixture negotiates real local WebRTC offer/answer,
+RTP and data channels, using the production transport with synthesized PCM. It
+shows remote energy while the audio element is muted, a quiet pause exceeding
+2,500 ms followed by resumed energy on the **same source**, and no source isolation
+when the transport is unmuted. Seventeen transcript fragments and an instruction
+acknowledgment do not change that source. The acknowledgment is fixture data,
+not a test of provider interruption semantics. Decoding actual MediaRecorder
+output confirms blocked remote PCM remains silent in the mix; a separate positive
+control records permitted PCM with RMS above 0.01. Physical speaker acoustics and
+provider-specific buffer delays are not measured by these tests.
+
+The standards describe receiver jitter-buffer tuning rather than a response-aware
+flush operation, and analyser data measures the current audio graph:
+[WebRTC specification](https://www.w3.org/TR/webrtc/),
+[Web Audio specification](https://www.w3.org/TR/webaudio/).
+Provider steering can interrupt ongoing speech, but application playback recovery
+remains separate:
+[GPT-Live server-side controls](https://developers.openai.com/api/docs/guides/voice-server-controls?api=live#control-playback-when-needed).
+
+### Output activity and recovery
+
+`OutputActivityObserver` samples decoded remote PCM every 50 ms, before playback
+muting and independently of the recording graph and transcript accumulator. A
+separate inaudible Web Audio branch reports transitions among `active`, `quiet`
+and `unavailable`; samples are not retained. Its fixed 0.005 RMS energy floor is
+an observation threshold, not a speech or completion detector. Suspended contexts,
+muted/ended tracks and failed reads report unavailable. Replacement and teardown
+disconnect the observer and suppress late callbacks. Provider JSON cannot fabricate
+these local signals.
+
+Diagnostics include `output.media_activity`, `output_media_activity` and
+`output_media_is_release_barrier: false`. No media observation reschedules or
+shortens the retained transcript deadline. Quiet can mean a speech pause, and
+active PCM cannot identify its response. A separate observer can fail without
+changing capture or the existing release policy. Timer scheduling/background
+throttling, subthreshold energy and decoded-media delay limit these observations;
+they are not proof of delivered or completed speech.
+
+A fixed **15,000 ms recovery budget** starts when an answer gate first blocks.
+Fragments, duplicate media states, revised STAY answers and scene display cannot
+renew it. If still blocked at expiry, the attempt ends with a retry explanation;
+media stops before gate cancellation can request an unmute. It never recovers by
+opening playback. This is an operational fail-stop limit, not a measured safe
+silence interval or a guarantee of retry success. It bounds unresolved evaluation,
+display, child-activity and output holds; browser event-loop suspension can delay
+the callback. Existing successful gate releases clear it.
+
+### Why early steering is deferred
+
+An ADVANCE outcome could supersede context after deterministic commit **and
+confirmed display**. STAY/UNAVAILABLE could supersede context only after the current
+answer's correction window and child-activity arbitration settle. A revised STAY
+must invalidate the earlier identity and context. Those are necessary application
+conditions, but none labels the resulting PCM. Sending context at those points
+while muted would change generation without giving the player a safe reopening
+boundary. A failed send can stop the attempt; a missing acknowledgment can time
+out; a successful acknowledgment still cannot qualify playback. Commit 3 leaves
+outcome sends at the existing release points until isolation is available.
+
+The required change is a source-level response/generation boundary plus a player
+that can discard queued PCM and reject all late frames from superseded generations.
+A relay with tagged, cancellable output could provide this only if the provider
+supplies an authoritative generation/cancellation boundary. Tagging arbitrary
+arrival times or waiting for silence at a relay cannot invent one. Alternatively,
+a fresh isolated provider connection for each authoritative outcome could reject
+all old-connection audio, but requires conversation reconstruction and lifecycle,
+cost and timing validation. Neither is implemented here. Clearing a local player
+queue alone would still admit late old-generation frames.
+
+The retained policy is a compatibility fallback, **not a newly proved acoustic
+safety barrier**: it still cannot rule out stale speech resuming after its quiet
+interval. This limitation blocks claiming the requested latency optimization or
+complete acoustic safety. The new code does prove fail-stop recovery does not
+expose gated media and makes decoded output observable for the transport redesign.
+
+### Commit 3 verification
+
+Deterministic tests cover fragmented output, quiet/resumed energy, unavailable
+signals, duplicate local states, revised STAY, missing evaluation/display,
+child activity, failed steering, fixed-budget expiry, late tracks/play promises
+and teardown. Existing correction/display/stop tests remain in place. Browser
+tests exercise actual WebRTC and decoded recording PCM, plus application scene
+ordering, revised STAY, failed steering and a 17-fragment recovery timeout.
+No billed live experiment runs in this slice. Live latency comparison remains a
+subsequent validation slice after a safe transport boundary is available.
+
+Validation passed: **404 unit tests**, **21 provider-free browser tests**, lint,
+typecheck, production build, changed-file Prettier and `git diff --check`.
+The existing Vite native-config and Playwright color-environment warnings remain.
+Browser verification used the existing port-3000 dev server with an ignored
+`test-results/commit3-playwright.config.ts` importing the repository config and
+changing only server startup, base URL and explicit directory resolution. The
+port-3000 server remains running. The real transport tests serve compiled fixture
+modules from the current source; application tests exercise the dev bundle.

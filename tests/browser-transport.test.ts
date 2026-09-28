@@ -151,11 +151,13 @@ function captureMocks() {
       });
     }
   }
+  let contexts = 0;
   vi.stubGlobal(
     "AudioContext",
     class {
       constructor() {
-        return context;
+        // Recording, microphone VAD and remote observation own separate contexts.
+        return contexts++ === 0 ? context : { ...context, close: vi.fn(async () => {}) };
       }
     },
   );
@@ -246,4 +248,30 @@ it.each(["error", "empty"])("reports %s recording instead of claiming usable aud
     };
   transport.close();
   await expect(transport.recording()).rejects.toThrow(failure === "error" ? "failed" : "empty");
+});
+
+it("late remote tracks and play resolution cannot restore output after stop", async () => {
+  const { peer, remoteTrack } = liveConnection();
+  const audio = audioElement();
+  let finishPlay!: () => void;
+  audio.play.mockImplementation(
+    () =>
+      new Promise<void>(resolve => {
+        finishPlay = resolve;
+      }),
+  );
+  const transport = new BrowserTransport(audio as unknown as HTMLAudioElement);
+  transport.setOutputBlocked(true);
+  await transport.start(vi.fn(), vi.fn());
+  peer.ontrack?.({ track: remoteTrack });
+  transport.stopMedia();
+  finishPlay();
+  await Promise.resolve();
+  const late = { stop: vi.fn() } as unknown as MediaStreamTrack;
+  peer.ontrack?.({ track: late });
+  expect(late.stop).toHaveBeenCalledOnce();
+  expect(audio.srcObject).toBeNull();
+  expect(audio.pause).toHaveBeenCalledOnce();
+  expect(audio.play).toHaveBeenCalledOnce();
+  transport.close();
 });
