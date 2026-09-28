@@ -171,16 +171,24 @@ describe("baseline reactive suite", () => {
       { kind: "answer-release", cursor: 15 },
       { kind: "sprout-transcript-fragment", cursor: 16, text: "Good!" },
       ...changes,
+      { kind: "turn-end", cursor: 21 },
     ];
-    const snapshot = async () => ({ cursor: 20, scene: postCommit ? "duck-friends" : "hello-duck", events });
+    const snapshot = async () => ({ cursor: 21, scene: postCommit ? "duck-friends" : "hello-duck", events });
     const observer = {
       ...ctx.observer,
       snapshot: vi.fn(snapshot),
+      waitForSproutTranscriptAfterRelease: vi.fn(async () => ({ cursor: 16, kind: "sprout-transcript-fragment" })),
+      waitForSproutTurnEnd: vi.fn(async () => {
+        const end = events.find(event => event.kind === "turn-end" && event.cursor > 6);
+        return end ?? { kind: "turn-end", cursor: 21 };
+      }),
       waitForChildTranscript: vi.fn(async () => ({ cursor: 12 })),
       waitForEvaluation: vi.fn(async () => ({ cursor: 14, sceneIndex: postCommit ? 1 : 0, utterance: "No, two" })),
     };
+    const scenarioAssertions = createScenarioAssertions(observer);
     const assertions = {
-      ...createScenarioAssertions(observer),
+      ...scenarioAssertions,
+      sceneStayed: vi.fn((options: { after?: unknown; through?: number }) => scenarioAssertions.sceneStayed(options)),
       sproutRespondedAfter: vi.fn(async () => ({ cursor: 20 })),
     };
     return { ...ctx, child, observer, assertions };
@@ -204,11 +212,11 @@ describe("baseline reactive suite", () => {
     },
   );
   it.each(["corrected-to-wrong", "continuation"] as const)(
-    "%s rejects stale pre-commit release and advancement",
+    "%s rejects stale pre-commit release and advancement through grouped turn end",
     async name => {
       for (const event of [
-        { kind: "answer-release", cursor: 13 },
-        { kind: "scene", cursor: 15, from: "hello-duck", to: "duck-friends" },
+        { kind: "scene", cursor: 18, from: "hello-duck", to: "duck-friends" },
+        { kind: "session-end", cursor: 18 },
       ]) {
         const ctx = delayedContext(false, [event]);
         await expect(REACTIVE_SCENARIOS[name].run(ctx)).rejects.toThrow();
@@ -217,12 +225,28 @@ describe("baseline reactive suite", () => {
     },
   );
   it.each(["corrected-to-wrong", "continuation"] as const)(
-    "%s allows a legitimate new-scene answer but rejects retroactive advancement",
+    "%s allows a legitimate new-scene answer but rejects retroactive advancement after the first fragment",
     async name => {
-      const valid = delayedContext(true, [{ kind: "scene", cursor: 15, from: "duck-friends", to: "butterfly-garden" }]);
+      const valid = delayedContext(true, [{ kind: "scene", cursor: 18, from: "duck-friends", to: "butterfly-garden" }]);
       await REACTIVE_SCENARIOS[name].run(valid);
-      const invalid = delayedContext(true, [{ kind: "scene", cursor: 15, from: "hello-duck", to: "duck-friends" }]);
+      const invalid = delayedContext(true, [{ kind: "scene", cursor: 18, from: "hello-duck", to: "duck-friends" }]);
       await expect(REACTIVE_SCENARIOS[name].run(invalid)).rejects.toThrow("Duplicate or retroactive");
+      const duplicate = delayedContext(true, [
+        { kind: "scene", cursor: 18, from: "duck-friends", to: "butterfly-garden" },
+        { kind: "scene", cursor: 19, from: "butterfly-garden", to: "strawberry-patch" },
+      ]);
+      await expect(REACTIVE_SCENARIOS[name].run(duplicate)).rejects.toThrow("Duplicate or retroactive");
+    },
+  );
+
+  it.each(["corrected-to-wrong", "continuation"] as const)(
+    "%s uses an already-retained grouped turn end without waiting for a new turn start",
+    async name => {
+      const ctx = delayedContext(false, [{ kind: "turn-end", cursor: 17 }]);
+      await REACTIVE_SCENARIOS[name].run(ctx);
+      expect(ctx.observer.waitForSproutTurnEnd).toHaveBeenCalledWith({ after: 16 });
+      expect(ctx.assertions.sceneStayed).toHaveBeenCalledWith({ after: expect.anything(), through: 17 });
+      expect(ctx.observer.waitForSproutTurnStart).not.toHaveBeenCalled();
     },
   );
   it("classifies a commit during synthesis using playback evidence rather than the earlier snapshot", async () => {

@@ -102,13 +102,14 @@ progression. Nonnumeric answers wait for an actual child transcript and a tutor
 response after it. Negative/exactly-once assertions describe only the observed
 window, not future behavior.
 
-The continuation/correction reactive check also waits for a **transcript
+The continuation/correction reactive check first waits for a **transcript
 fragment after the answer's evaluation and application outcome instruction**.
-This fragment-level arrival signal is independent of grouped tutor-turn starts,
-so fragments that remain inside the previous 2,500 ms provider-timed turn are
-still observable. It does not prove a new authoritative response, current-answer
-generation, audible delivery, or completion. Other scenario turn assertions
-retain their grouped-turn semantics.
+This arrival signal is independent of grouped tutor-turn starts, so fragments
+inside an existing 2,500 ms provider-timed turn are still observable. It then
+waits for the corresponding grouped turn end and checks scene/session safety
+through the later of fragment arrival and turn end, including a turn end already
+retained when the fragment arrives. The turn end is a conservative transcript
+boundary; neither boundary proves audible delivery or physical audio completion.
 
 Turn-end uses a conservative transcript boundary: provider gaps and an arrival
 quiet fallback (2.5 seconds). It does not confirm physical audio completion.
