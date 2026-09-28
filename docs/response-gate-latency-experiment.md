@@ -468,8 +468,8 @@ not proof that the current answer caused it. Media state is the decoded-media
 activity observation, not acoustic onset.
 
 | Run / scene / revision / answer version | Final child transcript; Jev | Eval request → complete; decision | Commit → display | Eligibility → release; reason | Blocker durations; blocked union | Blocked output fragments / deadline updates | Media at release → first post-release active; first Sprout transcript |
-| --- | --- | --- | --- | --- | --- | --- |
-| Happy / 0 / 1 / `13000:1` | `1` @ 14,837; ADVANCE | 15,088 → 15,510; ADVANCE | 15,511 → 15,546 | 17,561 → 17,563; `output_transcript_quiet` | evaluation 673, output-quiet 2,716, scene display 35 ms (overlap); union 2,725 ms | 2 fragments; deadline 14,845 → 17,345 (+2,500), then 15,061 → 17,561 (+216) | quiet at 17,563 → active 19,413 (+1,850); first transcript 19,024 (+1,461) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Happy / 0 / 1 / `13000:1` | `1` @ 14,837; ADVANCE | 15,088 → 15,510; ADVANCE | 15,511 → 15,546 | 17,563 → 17,563; `output_transcript_quiet` | evaluation 673, output-quiet 2,716, scene display 35 ms (overlap); union 2,725 ms | 2 fragments; deadline 14,845 → 17,345 (+2,500), then 15,061 → 17,561 (+216) | quiet at 17,563 → active 19,413 (+1,850); first transcript 19,024 (+1,461) |
 | Happy / 1 / 2 / `27800:2` | `2` @ 29,335; ADVANCE | 29,696 → 29,903; ADVANCE | 29,903 → 29,928 | 29,928 → 29,928; `scene_displayed` | evaluation 567, mic 109, scene display 25 ms (overlap); union 592 ms | 0; none | quiet at 29,928 → active 31,314 (+1,386); first transcript 31,044 (+1,116) |
 | Happy / 2 / 3 / `39800:3` | `3` @ 41,203; ADVANCE | 41,528 → 41,723; ADVANCE | 41,723 → 41,761 | 41,761 → 41,761; `scene_displayed` | evaluation 520, mic 75, scene display 38 ms (overlap); union 558 ms | 0; none | quiet at 41,761 → active 42,564 (+803); first transcript 42,294 (+533) |
 | Continuation / 0 / 1 / `12400:One` | `One` @ 13,629; ADVANCE | 14,015 → 14,277; ADVANCE | 14,277 → 14,314 | 14,314 → 14,314; `scene_displayed` | evaluation 648, mic 135, scene display 37 ms (overlap); union 685 ms | 0; none | quiet at 14,314 → active 15,583 (+1,269); first transcript 15,322 (+1,008) |
@@ -478,8 +478,9 @@ activity observation, not acoustic onset.
 | Corrected / 1 / 3 / `18400:No. Two` | `No. Two` @ 19,699; ADVANCE | 19,980 → 20,204; ADVANCE | 20,205 → 20,246 | 20,246 → 20,246; `scene_displayed` | evaluation 505, mic 30, commit 1, display 41 ms (overlap); union 547 ms | 0; none | quiet at 20,246 → active 20,901 (+655); first transcript 20,576 (+330) |
 
 Each release had zero eligibility-to-release delay except the continuation STAY,
-which released 1 ms after eligibility, and happy scene 0, which released 2 ms
-after the quiet deadline. At release, all seven answer gates reported decoded
+which released 1 ms after eligibility. Happy scene 0's observed eligibility and
+release were both 17,563 ms, 2 ms after its scheduled quiet deadline of 17,561 ms.
+At release, all seven answer gates reported decoded
 media **quiet**; each had a later active transition as listed. No case was already
 active at release. The application observed no `responseGateRecoveryFailed`
 event. For all seven answer gates, provider output completion and acoustic onset
@@ -504,16 +505,20 @@ at 17,563 ms (**2,053 ms** later), after two blocked fragments and a 2,500 ms
 quiet deadline. These are different answer positions and different observed
 branches; this comparison does not estimate an improvement or show that the
 retained release policy reduced latency. The remaining fresh happy answers
-released at scene display, 0 ms after evaluation completion. The historical
+released at scene display, 25 ms and 38 ms after evaluation completion,
+respectively. The historical
 9,054 ms stalled answer remains the relevant ordinary-case regression target.
 
 The historical continuation baseline transcribed only “And two” and did not
 transcribe/evaluate its initial “One!”; a later retry failed its grouped tutor-turn
-observer after both “One” and “And two” had been transcribed and evaluated. Fresh
-continuation exercised `post-commit-new-turn`, not the pre-commit continuation
-branch: it confirmed both transcripts and a STAY on the second/current scene.
-Thus it is useful branch evidence but cannot be treated as a matched rerun of the
-historical pre-commit retry or its observer failure.
+observer after both “One” and “And two” had been transcribed and evaluated. Both
+that retry and fresh continuation exercised `post-commit-new-turn`, with scene 1
+displayed before second-utterance playback. The retry advanced scenes 0 and 1;
+the fresh run confirmed both transcripts but produced STAY on the second/current
+scene. The fresh run therefore provides evidence for the same logical branch,
+with a different decision outcome; it is not a matched reproduction of the
+retry's grouped-turn observer failure. Neither run exercised pre-commit
+continuation.
 
 The historical corrected-to-wrong baseline exercised a post-commit new turn and
 ended STAY on scene 1 for “No Two”. Fresh corrected-to-wrong again exercised the
