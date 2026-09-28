@@ -51,6 +51,8 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 
 ## Live lesson regression testing
 
+For the no-key pull-request checks and local commands, see [Testing Sprout](docs/testing.md).
+
 See [Reactive simulated-child E2E](scripts/live/REACTIVE.md) for requirements,
 scenarios, artifacts and measurement limits. With the local app configured and
 running, `npm run test:live:reactive happy-path` runs one scenario;
