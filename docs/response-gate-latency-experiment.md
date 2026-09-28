@@ -420,3 +420,137 @@ this slice. No billed scenario or live model was used. Latency optimization and
 safe source isolation remain unresolved. Transcript or decoded-media activity
 does not establish acoustic delivery or a safe boundary for releasing stale
 output.
+
+
+## Fresh targeted live validation (2026-09-28)
+
+Executed exactly one attempt of each authorized scenario, sequentially, against
+measured source SHA `dacf4dba25182a61de9ed46660332c46bde89327` (the expected parent
+for the documentation results commit). The checkout was clean on
+`codex/response-gate-latency` before the runs. Existing local Next dev server PID
+`47041` served this checkout from
+`/Users/davidhurley/Desktop/sprout`; its `next dev` process used this checkout's
+`node_modules/next` and the successful diagnostics contain the response-gate and
+media events from the measured source. It was already running and was reused.
+The app used `http://127.0.0.1:3000`, Playwright Chromium `153.0.8010.12`, model
+`gpt-live-1`, and evaluator `jev-1.13.0`. Credentials/configuration were not
+changed. Scenario timestamps below are the harness start timestamps in UTC.
+
+Commands were run one at a time, with a shared fresh ignored evidence root:
+
+```sh
+LIVE_OUT=test-results/issue-36-live-validation-20260928 npm run test:live:reactive happy-path
+LIVE_OUT=test-results/issue-36-live-validation-20260928 npm run test:live:reactive continuation
+LIVE_OUT=test-results/issue-36-live-validation-20260928 npm run test:live:reactive corrected-to-wrong
+```
+
+| Attempt | Harness start (UTC) | Result | Branch and verified coverage |
+| --- | --- | --- | --- |
+| `happy-path` | `2026-09-28T20:40:56.086Z` | Passed | Three numeric child transcripts (`1`, `2`, `3`), three Jev ADVANCE decisions, three scene transitions. First gate used `output_transcript_quiet`; the next two used `scene_displayed`. |
+| `continuation` | `2026-09-28T20:41:51.667Z` | Passed | `post-commit-new-turn`: “One!” was transcribed/evaluated on scene 0 and committed to scene 1 before “And two!” playback. Both intended child utterances were transcribed; the second final transcript was “And 2” (revision 3), Jev STAY on scene 1. |
+| `corrected-to-wrong` | `2026-09-28T20:42:28.547Z` | Passed | `post-commit-new-turn`: initial “One” advanced scene 0 to 1 before the delayed “No, Two” utterance. Both intended utterances were transcribed. The correction arrived as revisions 2 (“No”) and 3 (“No. Two”), was evaluated against the *current scene 1*, and Jev ADVANCE moved scene 1 to 2. This is a new-turn interpretation after commit, not a retroactive correction or rollback. |
+
+All three attempt endings were `parent_stop` during harness cleanup; no response
+gate recovery failure was recorded. These are ordinary outcomes for this measured
+slice; the 2026-09-28 stalled case below is separated from them. The transcript
+and harness checks establish the exercised logical branches, not acoustic delivery.
+
+### Per-answer gate and media evidence
+
+Times in this table are application session-relative milliseconds, read from
+`diagnostics.json` and `log.json`. Evaluation requested/completed, deterministic
+decision, scene commit/display, release and media state use this clock. The
+harness browser-arrival clock and provider transcript interval clock have
+independent origins and are deliberately not combined with it. `eligible →
+release` is shown where useful; blocker durations may overlap and are not
+additive. “First transcript” is the first post-release Sprout fragment observed,
+not proof that the current answer caused it. Media state is the decoded-media
+activity observation, not acoustic onset.
+
+| Run / scene / revision / answer version | Final child transcript; Jev | Eval request → complete; decision | Commit → display | Eligibility → release; reason | Blocker durations; blocked union | Blocked output fragments / deadline updates | Media at release → first post-release active; first Sprout transcript |
+| --- | --- | --- | --- | --- | --- | --- |
+| Happy / 0 / 1 / `13000:1` | `1` @ 14,837; ADVANCE | 15,088 → 15,510; ADVANCE | 15,511 → 15,546 | 17,561 → 17,563; `output_transcript_quiet` | evaluation 673, output-quiet 2,716, scene display 35 ms (overlap); union 2,725 ms | 2 fragments; deadline 14,845 → 17,345 (+2,500), then 15,061 → 17,561 (+216) | quiet at 17,563 → active 19,413 (+1,850); first transcript 19,024 (+1,461) |
+| Happy / 1 / 2 / `27800:2` | `2` @ 29,335; ADVANCE | 29,696 → 29,903; ADVANCE | 29,903 → 29,928 | 29,928 → 29,928; `scene_displayed` | evaluation 567, mic 109, scene display 25 ms (overlap); union 592 ms | 0; none | quiet at 29,928 → active 31,314 (+1,386); first transcript 31,044 (+1,116) |
+| Happy / 2 / 3 / `39800:3` | `3` @ 41,203; ADVANCE | 41,528 → 41,723; ADVANCE | 41,723 → 41,761 | 41,761 → 41,761; `scene_displayed` | evaluation 520, mic 75, scene display 38 ms (overlap); union 558 ms | 0; none | quiet at 41,761 → active 42,564 (+803); first transcript 42,294 (+533) |
+| Continuation / 0 / 1 / `12400:One` | `One` @ 13,629; ADVANCE | 14,015 → 14,277; ADVANCE | 14,277 → 14,314 | 14,314 → 14,314; `scene_displayed` | evaluation 648, mic 135, scene display 37 ms (overlap); union 685 ms | 0; none | quiet at 14,314 → active 15,583 (+1,269); first transcript 15,322 (+1,008) |
+| Continuation / 1 / 3 / `15600:And 2` | `And 2` @ 16,990; STAY | 17,314 → 17,474; STAY | — | 17,474 → 17,475; `correction_window` | evaluation 484, mic 73 ms (overlap); union 485 ms | 0; none | quiet at 17,475 → active 18,983 (+1,508); first transcript 18,652 (+1,177) |
+| Corrected / 0 / 1 / `13400:One` | `One` @ 14,861; ADVANCE | 15,197 → 15,866; ADVANCE | 15,867 → 15,896 | 15,896 → 15,896; `scene_displayed` | evaluation 1,004, mic 84, commit 1, display 29 ms (overlap); union 1,034 ms | 0; none | quiet at 15,896 → active 16,703 (+807); first transcript 16,385 (+489) |
+| Corrected / 1 / 3 / `18400:No. Two` | `No. Two` @ 19,699; ADVANCE | 19,980 → 20,204; ADVANCE | 20,205 → 20,246 | 20,246 → 20,246; `scene_displayed` | evaluation 505, mic 30, commit 1, display 41 ms (overlap); union 547 ms | 0; none | quiet at 20,246 → active 20,901 (+655); first transcript 20,576 (+330) |
+
+Each release had zero eligibility-to-release delay except the continuation STAY,
+which released 1 ms after eligibility, and happy scene 0, which released 2 ms
+after the quiet deadline. At release, all seven answer gates reported decoded
+media **quiet**; each had a later active transition as listed. No case was already
+active at release. The application observed no `responseGateRecoveryFailed`
+event. For all seven answer gates, provider output completion and acoustic onset
+remain unobserved. Media transitions have no answer identity; activity following
+release cannot be joined to the current answer or taken as delivered speech.
+
+The only fresh blocked generated output was on happy scene 0: two transcript
+fragments extended the transcript-quiet deadline. The 2,725 ms blocked union
+includes a 2,716 ms `output_transcript_quiet` interval that overlapped the
+673 ms answer-evaluation interval and 35 ms scene-display interval. The other six
+answer gates had no blocked provider output fragments or output-quiet deadlines;
+their blocker unions were 485–1,034 ms. These ordinary runs did not exercise the
+fixed 15-second fail-stop recovery path.
+
+### Historical comparison and interpretation
+
+The historical `db01d46` happy-path baseline held its second answer from
+28,548 ms evaluation completion to 37,602 ms release: **9,054 ms**, with
+transcript-quiet as the release reason. The fresh happy-path's only output-quiet
+release was its first answer: evaluation completed at 15,510 ms and it released
+at 17,563 ms (**2,053 ms** later), after two blocked fragments and a 2,500 ms
+quiet deadline. These are different answer positions and different observed
+branches; this comparison does not estimate an improvement or show that the
+retained release policy reduced latency. The remaining fresh happy answers
+released at scene display, 0 ms after evaluation completion. The historical
+9,054 ms stalled answer remains the relevant ordinary-case regression target.
+
+The historical continuation baseline transcribed only “And two” and did not
+transcribe/evaluate its initial “One!”; a later retry failed its grouped tutor-turn
+observer after both “One” and “And two” had been transcribed and evaluated. Fresh
+continuation exercised `post-commit-new-turn`, not the pre-commit continuation
+branch: it confirmed both transcripts and a STAY on the second/current scene.
+Thus it is useful branch evidence but cannot be treated as a matched rerun of the
+historical pre-commit retry or its observer failure.
+
+The historical corrected-to-wrong baseline exercised a post-commit new turn and
+ended STAY on scene 1 for “No Two”. Fresh corrected-to-wrong again exercised the
+post-commit branch and transcribed both “One” and “No. Two”, but Jev accepted the
+latter against scene 1 and advanced to scene 2. The branch therefore verified
+post-commit interpretation without rollback, while its final Jev outcome differs
+from the historical run. Keep those outcomes separate; neither one-attempt result
+establishes correction quality or comparative safety.
+
+Happy-path and both post-commit cases completed their intended harness assertions.
+They are **ordinary**, not recovery-ended, attempts. The single 2.7-second
+transcript-quiet gate is a shorter observed hold than the historical 9.054-second
+stall, but there is no matched answer/branch, repeat sample, or policy change to
+attribute that difference to a latency improvement. Decoded-media observation
+here is descriptive only; it was not a release barrier. Transcript arrival,
+grouped tutor-turn end, instruction acknowledgment and decoded-media energy do
+not establish current-answer generation, acoustic delivery, response completion
+or safe stale-audio isolation. Passing these targeted runs does not establish
+complete acoustic safety.
+
+### Evidence retained locally
+
+All evidence remains ignored/local under
+`test-results/issue-36-live-validation-20260928/<scenario>/`; only documentation is
+included in the results commit. Each directory contains `log.json`,
+`diagnostics.json`, and `timeline.txt`. SHA-256 hashes pin the correlated evidence:
+
+| Scenario | `log.json` | `diagnostics.json` | `timeline.txt` |
+| --- | --- | --- | --- |
+| `happy-path` | `ca025fc2e5f5b7059388475d1206f1118f09b725696ceb80fc0eb25dcc518b1f` | `06e3d1b46044a915ce30eea4f889332d9f01f4d09c8bfa2733dee35faa37fc6f` | `ab46084f8c41cecc0d88695923a5584d931a2b4ac173b76e528ea565d2515c5f` |
+| `continuation` | `8343a8eac775b25c2f3a66496c0908a3d531b9305bc70c42cbc6bf3587485bd0` | `b59d2267b4359b90ea02656b2973ef62ae6fafceabf1bc563cd5a91dd7152e36` | `6dd01d1f5b9e3bfbe8c4099641e6cef95072152d0901116743d18229b2247612` |
+| `corrected-to-wrong` | `7b003bafb52ac53a8d2e230f46811870c954a365fe49caefa8a22c03bf9af6c5` | `5dccc1f90057539d676c76a240456c9ed7ce30650e15c616b1e4a7fd9e7b12d8` | `9f0e2621a00a8318fb0cb5076c9a24b2789cf35f6b6fa0e63fc4a481b19e0b78` |
+
+No audio recordings or private data were added to the repository. This targeted
+slice does not resolve the safe source-level boundary for stale audio or whether
+output-media observation can safely shorten hidden-generation waits. The next
+architecture decision remains the one above: establish reliable output-media
+activity and controllable flushing/suppression semantics at the player or media
+relay boundary, with a bounded recovery path that fails closed, before considering
+an event-driven release policy. Do not infer end-to-end safety from this sample.
