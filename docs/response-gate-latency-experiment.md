@@ -389,3 +389,34 @@ Browser verification used the existing port-3000 dev server with an ignored
 changing only server startup, base URL and explicit directory resolution. The
 port-3000 server remains running. The real transport tests serve compiled fixture
 modules from the current source; application tests exercise the dev bundle.
+
+## Commit 4: trustworthy live observation preparation
+
+The retained continuation retry remains a historical failure. Its raw log shows
+the answer's outcome instruction at browser-arrival time 18,017 ms followed by
+“Nice counting!” at 19,011 ms and subsequent transcript fragments. Provider
+intervals for these fragments remained within the prior grouped turn under the
+unchanged 2,500 ms gap, so the harness's wait for a new tutor-turn start timed
+out despite observing post-release transcript arrival. This change adds a
+separate fragment-level wait that requires the current answer's evaluation
+checkpoint and a following application outcome instruction. Existing provider
+turn grouping and scenario scene/advance assertions remain intact.
+
+The fragment wait means only that a transcript fragment was observed after the
+answer's outcome instruction. It does not prove a new grouped turn, response
+identity, that output was generated for the current answer, acoustic delivery,
+or response completion. First transcript observed after release and first
+decoded-media activity after release are reported as separate application-clock
+observations. If decoded media was already active at release, that is recorded
+explicitly rather than counted as a new transition. Missing/unavailable signals,
+cancelled gates, revised answer identities and recovery-failed events remain
+distinguishable in answer timelines. A 15-second recovery failure is reported
+against the active scene, transcript revision and answer version.
+
+The earlier live baseline tables and outcomes above are historical evidence and
+are not rewritten by this observer change. The next targeted live validation
+commands are documented in `scripts/live/REACTIVE.md`; they have not been run in
+this slice. No billed scenario or live model was used. Latency optimization and
+safe source isolation remain unresolved. Transcript or decoded-media activity
+does not establish acoustic delivery or a safe boundary for releasing stale
+output.

@@ -431,7 +431,17 @@ export class LessonSession {
       case "output.activity":
         if (this.outputActivity === event.state) return;
         this.outputActivity = event.state;
-        this.log("output.media_activity", { state: event.state, output_blocked: this.outputBlocked });
+        this.log("output.media_activity", {
+          state: event.state,
+          output_blocked: this.outputBlocked,
+          ...(this.answerResponseGate
+            ? {
+                scene_index: this.answerResponseGate.sceneIndex,
+                transcript_revision: this.answerResponseGate.transcriptRevision,
+                answer_version: this.answerResponseGate.answerVersion,
+              }
+            : {}),
+        });
         this.observeResponseGate("output_media_activity");
         return;
       case "session.started":
@@ -680,10 +690,14 @@ export class LessonSession {
       this.canonical.sprout.invalidateDelivery();
       this.setOutputBlocked(true, "answer_evaluation");
       this.responseGateRecoveryTimer = setTimeout(() => {
-        if (!this.answerResponseGate || this.expireIfOverdue()) return;
+        const gate = this.answerResponseGate;
+        if (!gate || this.expireIfOverdue()) return;
         this.observeResponseGate("recovery_budget_exhausted");
         this.log("answer.response_gate_recovery_failed", {
-          wait_ms: Date.now() - this.answerResponseGate.startedAt,
+          scene_index: gate.sceneIndex,
+          transcript_revision: gate.transcriptRevision,
+          answer_version: gate.answerVersion,
+          wait_ms: Date.now() - gate.startedAt,
           output_media_activity: this.outputActivity,
         });
         this.fail("Sprout could not safely resume its voice. This attempt has ended; you can start a new lesson.");

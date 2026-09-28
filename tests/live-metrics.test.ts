@@ -16,9 +16,9 @@ describe("reactive answer timing metrics", () => {
     ]);
     expect(rows[0]).toMatchObject({
       answerVersion: "10:One",
-      firstObservedSproutResponseAtMs: 2950,
-      tutorResponseDelayAfterReleaseMs: 50,
-      finalTranscriptToFirstObservedResponseMs: 1050,
+      firstTranscriptObservedAfterReleaseAtMs: 2950,
+      releaseToFirstTranscriptObservedMs: 50,
+      finalTranscriptToFirstTranscriptObservedMs: 1050,
     });
   });
 
@@ -35,9 +35,9 @@ describe("reactive answer timing metrics", () => {
     ]);
     expect(rows[0]).toMatchObject({
       answerVersion: "10:One",
-      firstObservedSproutResponseAtMs: null,
-      tutorResponseDelayAfterReleaseMs: null,
-      finalTranscriptToFirstObservedResponseMs: null,
+      firstTranscriptObservedAfterReleaseAtMs: null,
+      releaseToFirstTranscriptObservedMs: null,
+      finalTranscriptToFirstTranscriptObservedMs: null,
     });
   });
 
@@ -59,15 +59,15 @@ describe("reactive answer timing metrics", () => {
     ]);
     expect(rows[0]).toMatchObject({
       answerVersion: "10:One",
-      firstObservedSproutResponseAtMs: null,
-      tutorResponseDelayAfterReleaseMs: null,
-      finalTranscriptToFirstObservedResponseMs: null,
+      firstTranscriptObservedAfterReleaseAtMs: null,
+      releaseToFirstTranscriptObservedMs: null,
+      finalTranscriptToFirstTranscriptObservedMs: null,
     });
     expect(rows[1]).toMatchObject({
       answerVersion: "20:Two",
-      firstObservedSproutResponseAtMs: 3500,
-      tutorResponseDelayAfterReleaseMs: 100,
-      finalTranscriptToFirstObservedResponseMs: 500,
+      firstTranscriptObservedAfterReleaseAtMs: 3500,
+      releaseToFirstTranscriptObservedMs: 100,
+      finalTranscriptToFirstTranscriptObservedMs: 500,
     });
   });
 
@@ -94,13 +94,13 @@ describe("reactive answer timing metrics", () => {
       sceneCommitAtMs: 2800,
       sceneDisplayedAtMs: 2820,
       applicationResponseReleasedAtMs: 2900,
-      firstObservedSproutResponseAtMs: 3050,
+      firstTranscriptObservedAfterReleaseAtMs: 3050,
       stabilizationWaitAfterEvaluationMs: 2500,
-      tutorResponseDelayAfterReleaseMs: 150,
+      releaseToFirstTranscriptObservedMs: 150,
       finalTranscriptToEvaluationRequestMs: 25,
       finalTranscriptToEvaluationCompletionMs: 205,
       finalTranscriptToSceneCommitMs: 2705,
-      finalTranscriptToFirstObservedResponseMs: 2955,
+      finalTranscriptToFirstTranscriptObservedMs: 2955,
     });
   });
 
@@ -118,9 +118,9 @@ describe("reactive answer timing metrics", () => {
     expect(rows[0]).not.toHaveProperty("sceneDisplayedAtMs");
     expect(rows[0]).not.toHaveProperty("applicationResponseReleasedAtMs");
     expect(rows[0]).toMatchObject({
-      firstObservedSproutResponseAtMs: null,
+      firstTranscriptObservedAfterReleaseAtMs: null,
       stabilizationWaitAfterEvaluationMs: null,
-      tutorResponseDelayAfterReleaseMs: null,
+      releaseToFirstTranscriptObservedMs: null,
       finalTranscriptToSceneCommitMs: null,
     });
     expect(rows[1]).toMatchObject({ sceneIndex: 1, answerVersion: "10:One" });
@@ -296,7 +296,83 @@ describe("reactive answer timing metrics", () => {
       evaluationRequestedAtMs: 120,
       sceneCommitAtMs: 400,
       sceneDisplayedAtMs: 410,
-      finalTranscriptToFirstObservedResponseMs: 360,
+      finalTranscriptToFirstTranscriptObservedMs: 360,
+    });
+  });
+
+  it("separates release-correlated transcript and decoded-media observations and retains recovery identity", () => {
+    const rows = diagnosticsTimelines([
+      { at: 10, type: "answer.candidate", detail: { sceneIndex: 0, revision: 1, version: "10:One", transcript_at: 9 } },
+      {
+        at: 20,
+        type: "answer.response_gate_released",
+        detail: { scene_index: 0, transcript_revision: 1, answer_version: "10:One" },
+      },
+      { at: 25, type: "output.media_activity", detail: { state: "active", output_blocked: false } },
+      { at: 26, type: "transcript.sprout", detail: { delta: "Great!" } },
+      {
+        at: 30,
+        type: "answer.candidate",
+        detail: { sceneIndex: 0, revision: 2, version: "30:Two", transcript_at: 29 },
+      },
+      {
+        at: 35,
+        type: "answer.response_gate_started",
+        detail: { scene_index: 0, transcript_revision: 2, answer_version: "30:Two" },
+      },
+      {
+        at: 40,
+        type: "answer.response_gate_recovery_failed",
+        detail: {
+          scene_index: 0,
+          transcript_revision: 2,
+          answer_version: "30:Two",
+          wait_ms: 15000,
+          output_media_activity: "quiet",
+        },
+      },
+      { at: 45, type: "output.media_activity", detail: { state: "unavailable", output_blocked: true } },
+    ]);
+    expect(rows[0]).toMatchObject({
+      sceneIndex: 0,
+      transcriptRevision: 1,
+      firstTranscriptObservedAfterReleaseAtMs: 26,
+      firstDecodedMediaActivityAfterReleaseAtMs: 25,
+      mediaAlreadyActiveAtRelease: false,
+      mediaActivityStateAtRelease: "unobserved",
+      audibleOnsetAtMs: null,
+      providerOutputCompletionAtMs: null,
+    });
+    expect(rows[1]).toMatchObject({
+      transcriptRevision: 2,
+      firstTranscriptObservedAfterReleaseAtMs: null,
+      firstDecodedMediaActivityAfterReleaseAtMs: null,
+      responseGateRecoveryFailed: { at: 40, detail: { answer_version: "30:Two" } },
+      mediaActivitySignalStatus: "unavailable_observed",
+    });
+  });
+
+  it("marks media active at release, unavailable media, and cancelled gates without inventing post-release activity", () => {
+    const rows = diagnosticsTimelines([
+      { at: 10, type: "answer.candidate", detail: { sceneIndex: 0, revision: 1, version: "10:One" } },
+      { at: 15, type: "output.media_activity", detail: { state: "active", output_blocked: true } },
+      {
+        at: 20,
+        type: "answer.response_gate_released",
+        detail: { scene_index: 0, transcript_revision: 1, answer_version: "10:One" },
+      },
+      {
+        at: 25,
+        type: "answer.response_gate_cancelled",
+        detail: { scene_index: 0, transcript_revision: 1, answer_version: "10:One", reason: "attempt_ended" },
+      },
+    ]);
+    expect(rows[0]).toMatchObject({
+      mediaAlreadyActiveAtRelease: true,
+      mediaActivityStateAtRelease: "active",
+      firstDecodedMediaActivityAfterReleaseAtMs: null,
+      gateCancelledAtMs: 25,
+      firstTranscriptObservedAfterReleaseAtMs: null,
     });
   });
 

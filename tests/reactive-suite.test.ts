@@ -29,6 +29,11 @@ function context() {
       return { cursor: 1, at: 0 };
     }),
     waitForChildTranscript: vi.fn(async () => ({ kind: "child-transcript", cursor: 4, text: "I don't know." })),
+    waitForSproutTranscriptAfterRelease: vi.fn(async () => ({
+      kind: "sprout-transcript-fragment",
+      cursor: 17,
+      text: "Good!",
+    })),
     waitForEvaluation: vi.fn(async () => ({ cursor: 5, result: { probability: 0.99 } })),
     waitForSceneAdvance: vi.fn(async () => ({ cursor: 6 })),
     snapshot: vi.fn(async (): Promise<FixtureSnapshot> => ({
@@ -163,6 +168,8 @@ describe("baseline reactive suite", () => {
       { kind: "playback-start", cursor: 11, at: 1000 },
       { kind: "child-transcript", cursor: 12, text: "No, two!" },
       { kind: "evaluation", cursor: 14, sceneIndex: postCommit ? 1 : 0, utterance: "No, two" },
+      { kind: "answer-release", cursor: 15 },
+      { kind: "sprout-transcript-fragment", cursor: 16, text: "Good!" },
       ...changes,
     ];
     const snapshot = async () => ({ cursor: 20, scene: postCommit ? "duck-friends" : "hello-duck", events });

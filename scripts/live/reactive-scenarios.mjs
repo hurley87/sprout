@@ -116,7 +116,10 @@ async function delayedSecondTurn(ctx, first, text, answer) {
   }, boundary);
   const transcript = await ctx.observer.waitForChildTranscript({ after: second.checkpointBefore });
   const evaluation = await ctx.observer.waitForEvaluation({ after: transcript.cursor });
-  const response = await ctx.assertions.sproutRespondedAfter(evaluation);
+  // A grouped tutor turn can include transcript fragments emitted after this
+  // answer's release. Observe arrival separately; this does not prove a new
+  // authoritative or audible response.
+  const response = await ctx.observer.waitForSproutTranscriptAfterRelease({ after: evaluation.cursor });
   const snapshot = await ctx.observer.snapshot();
   events = snapshot.events.filter(e => e.cursor > first.checkpointBefore && e.cursor <= response.cursor);
   transitions = events.filter(e => e.kind === "scene" && e.from !== null && e.to !== null);

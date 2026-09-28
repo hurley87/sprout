@@ -199,6 +199,7 @@ export function diagnosticsTimelines(events) {
     row.finalChildTranscriptAtMs ?? row.candidateRecordedAtMs ?? row.evaluationRequestedAtMs ?? Infinity;
   const rows = [...keyed.values()].sort((a, b) => answerStartAt(a) - answerStartAt(b));
   const sprout = events.filter(event => event.type === "transcript.sprout");
+  const mediaActivity = events.filter(event => event.type === "output.media_activity");
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     const release = row.applicationResponseReleasedAtMs;
@@ -210,8 +211,43 @@ export function diagnosticsTimelines(events) {
         : sprout.find(
             event => event.at > release && (nextAnswerBoundary === undefined || event.at < nextAnswerBoundary),
           );
-    row.firstObservedSproutResponseAtMs = next?.at ?? null;
-    row.firstObservedSproutResponseClock = next ? "application session-relative" : null;
+    row.firstTranscriptObservedAfterReleaseAtMs = next?.at ?? null;
+    row.firstTranscriptObservedAfterReleaseClock = next ? "application session-relative" : null;
+    const mediaBeforeRelease = release === undefined ? undefined : mediaActivity.findLast(event => event.at <= release);
+    const mediaAfterRelease =
+      release === undefined
+        ? undefined
+        : mediaActivity.find(
+            event =>
+              event.at > release &&
+              (nextAnswerBoundary === undefined || event.at < nextAnswerBoundary) &&
+              event.detail?.state === "active",
+          );
+    row.mediaActivityStateAtRelease = mediaBeforeRelease?.detail?.state ?? "unobserved";
+    row.mediaAlreadyActiveAtRelease = mediaBeforeRelease?.detail?.state === "active";
+    row.firstDecodedMediaActivityAfterReleaseAtMs = mediaAfterRelease?.at ?? null;
+    row.firstDecodedMediaActivityAfterReleaseClock = mediaAfterRelease ? "application session-relative" : null;
+    row.mediaActivitySignalStatus =
+      row.mediaActivityStateAtRelease === "unavailable"
+        ? "unavailable_at_release"
+        : row.mediaActivityStateAtRelease !== "unobserved"
+          ? "observed_at_release"
+          : mediaActivity.some(event => event.detail?.state === "unavailable")
+            ? "unavailable_observed"
+            : mediaActivity.length
+              ? "observed_outside_release_window"
+              : "unobserved";
+    row.responseGateRecoveryFailed =
+      events
+        .filter(event => event.type === "answer.response_gate_recovery_failed")
+        .find(
+          event =>
+            event.detail?.scene_index === row.sceneIndex &&
+            event.detail?.answer_version === row.answerVersion &&
+            (row.transcriptRevision === null
+              ? row.revisionCorrelation !== "ambiguous_revision"
+              : event.detail?.transcript_revision === row.transcriptRevision),
+        ) ?? null;
     // No provider completion or acoustic onset signal exists in this harness.
     row.providerOutputCompletionAtMs = null;
     row.audibleOnsetAtMs = null;
@@ -220,7 +256,7 @@ export function diagnosticsTimelines(events) {
       row.sceneCommitAtMs === undefined || row.evaluationCompletedAtMs === undefined
         ? null
         : row.sceneCommitAtMs - row.evaluationCompletedAtMs;
-    row.tutorResponseDelayAfterReleaseMs = next && release !== undefined ? next.at - release : null;
+    row.releaseToFirstTranscriptObservedMs = next && release !== undefined ? next.at - release : null;
     row.finalTranscriptToEvaluationRequestMs =
       row.finalChildTranscriptAtMs === undefined || row.evaluationRequestedAtMs === undefined
         ? null
@@ -233,7 +269,7 @@ export function diagnosticsTimelines(events) {
       row.finalChildTranscriptAtMs === undefined || row.sceneCommitAtMs === undefined
         ? null
         : row.sceneCommitAtMs - row.finalChildTranscriptAtMs;
-    row.finalTranscriptToFirstObservedResponseMs =
+    row.finalTranscriptToFirstTranscriptObservedMs =
       row.finalChildTranscriptAtMs === undefined || !next ? null : next.at - row.finalChildTranscriptAtMs;
   }
   return rows;

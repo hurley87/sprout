@@ -34,17 +34,70 @@ describe("live observer", () => {
     expect(journal.events.filter(event => event.kind === "answer-release")).toHaveLength(1);
     expect(journal.events.find(event => event.kind === "answer-release")).toMatchObject({ at: 200 });
     expect(journal.events.find(event => event.kind === "turn-start")).toMatchObject({ at: 100 });
+    expect(journal.events.find(event => event.kind === "sprout-transcript-fragment")).toMatchObject({
+      at: 100,
+      text: "Oh!",
+    });
+  });
+
+  it("observes continuation retry fragments after release even while provider timing keeps one grouped turn", async () => {
+    const { entries, observer } = fixture();
+    entries.push(
+      { at: 15842, dir: "in", type: "session.output_transcript.delta", start_ms: 13600, end_ms: 13800, delta: " Yay!" },
+      { at: 16455, dir: "in", type: "session.output_transcript.delta", start_ms: 14200, end_ms: 14400, delta: " You" },
+      { at: 17016, dir: "in", type: "session.output_transcript.delta", start_ms: 14800, end_ms: 15000, delta: " it!" },
+    );
+    await observer.snapshot();
+    entries.push({ at: 17988, dir: "evaluate", askedAt: 17600, request: { utterance: "And two", sceneIndex: 1 } });
+    const evaluation = await observer.waitForEvaluation();
+    entries.push({
+      at: 18017,
+      dir: "out",
+      type: "session.instructions.append",
+      content: "The child's count was right, so the app has just changed the screen.",
+    });
+    entries.push(
+      {
+        at: 19011,
+        dir: "in",
+        type: "session.output_transcript.delta",
+        start_ms: 16800,
+        end_ms: 17000,
+        delta: " Nice counting",
+      },
+      { at: 19169, dir: "in", type: "session.output_transcript.delta", start_ms: 17000, end_ms: 17200, delta: "!" },
+      {
+        at: 20793,
+        dir: "in",
+        type: "session.output_transcript.delta",
+        start_ms: 18600,
+        end_ms: 18800,
+        delta: " Now we",
+      },
+    );
+    await expect(observer.waitForSproutTranscriptAfterRelease({ after: evaluation.cursor })).resolves.toMatchObject({
+      at: 19011,
+      text: " Nice counting",
+    });
+    const events = (await observer.snapshot()).events;
+    expect(events.filter(event => event.kind === "turn-start")).toHaveLength(1);
+    expect(events.some(event => event.kind === "turn-start" && event.cursor > evaluation.cursor)).toBe(false);
+    expect(events.filter(event => event.kind === "sprout-transcript-fragment")).toHaveLength(6);
   });
 
   it("keeps a 1000ms arrival pause in one turn and resets the quiet fallback", () => {
     const journal = new LiveEventJournal();
     journal.ingest([delta(0)], 1000);
-    expect(journal.events.map(e => e.kind)).toEqual(["turn-start"]);
+    expect(journal.events.filter(e => e.kind.startsWith("turn")).map(e => e.kind)).toEqual(["turn-start"]);
     journal.ingest([delta(1000)], 3499);
-    expect(journal.events.map(e => e.kind)).toEqual(["turn-start"]);
+    expect(journal.events.filter(e => e.kind.startsWith("turn")).map(e => e.kind)).toEqual(["turn-start"]);
     expect(journal.turn?.lastAt).toBe(1000);
     journal.ingest([], 3500);
-    expect(journal.events[1]).toMatchObject({ kind: "turn-end", at: 3500, reason: "quiet-fallback" });
+    expect(journal.events.filter(e => e.kind === "turn-end")[0]).toMatchObject({
+      kind: "turn-end",
+      at: 3500,
+      reason: "quiet-fallback",
+    });
   });
 
   it("groups uneven delivery by provider timing, including the exact gap boundary", () => {
@@ -72,8 +125,9 @@ describe("live observer", () => {
       ],
       2599,
     );
-    expect(journal.events.map(e => e.kind)).toEqual(["turn-start", "turn-end", "turn-start"]);
-    expect(journal.events[1]).toMatchObject({
+    const turns = journal.events.filter(e => e.kind.startsWith("turn"));
+    expect(turns.map(e => e.kind)).toEqual(["turn-start", "turn-end", "turn-start"]);
+    expect(turns[1]).toMatchObject({
       providerStartMs: 0,
       providerEndMs: 1000,
       at: 100,
@@ -88,9 +142,13 @@ describe("live observer", () => {
     journal.ingest([{ ...delta(0), start_ms: 10, end_ms: 5 }], 2999);
     expect(journal.turn).toMatchObject({ providerStartMs: null, providerEndMs: null });
     journal.ingest([delta(3000)], 5999);
-    expect(journal.events.map(e => e.kind)).toEqual(["turn-start", "turn-end", "turn-start"]);
+    expect(journal.events.filter(e => e.kind.startsWith("turn")).map(e => e.kind)).toEqual([
+      "turn-start",
+      "turn-end",
+      "turn-start",
+    ]);
     journal.ingest([], 6000);
-    expect(journal.events.at(-1)).toMatchObject({ kind: "turn-end", at: 6000 });
+    expect(journal.events.filter(e => e.kind === "turn-end").at(-1)).toMatchObject({ kind: "turn-end", at: 6000 });
   });
 
   it("retains events between waits without consuming another kind's events", async () => {
@@ -163,8 +221,8 @@ describe("live observer", () => {
     const evaluate = vi.fn(async () => ({ entries: [delta(1)], now: 2501 }));
     const observer = createLiveObserver({ evaluate });
     const [start, end] = await Promise.all([observer.waitForSproutTurnStart(), observer.waitForSproutTurnEnd()]);
-    expect(start.cursor).toBe(1);
-    expect(end.cursor).toBe(2);
+    expect(start.cursor).toBe(2);
+    expect(end.cursor).toBe(3);
     expect(evaluate).toHaveBeenCalledTimes(1);
   });
 });
