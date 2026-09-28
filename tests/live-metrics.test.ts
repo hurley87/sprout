@@ -269,4 +269,57 @@ describe("reactive answer timing metrics", () => {
     expect(rows[1]).toMatchObject({ transcriptRevision: 2, gateObservations: expect.any(Array) });
     expect(rows[1]).not.toHaveProperty("applicationResponseReleasedAtMs");
   });
+
+  it("joins historical revisionless stages only when revision evidence is unique", () => {
+    const rows = diagnosticsTimelines([
+      { at: 100, type: "answer.candidate", detail: { sceneIndex: 0, version: "10:One", transcript_at: 90 } },
+      { at: 120, type: "answer.requesting", detail: { sceneIndex: 0, version: "10:One" } },
+      { at: 300, type: "answer.evaluated", detail: { sceneIndex: 0, revision: 1, version: "10:One" } },
+      { at: 400, type: "advance.committed", detail: { scene_index: 0, answer_version: "10:One" } },
+      { at: 410, type: "advance.displayed", detail: { scene_index: 0, answer_version: "10:One" } },
+      {
+        at: 420,
+        type: "answer.response_gate_observed",
+        detail: { scene_index: 0, transcript_revision: 1, answer_version: "10:One", conditions: [] },
+      },
+      {
+        at: 430,
+        type: "answer.response_gate_released",
+        detail: { scene_index: 0, transcript_revision: 1, answer_version: "10:One" },
+      },
+      { at: 450, type: "transcript.sprout", detail: { delta: "Great" } },
+    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      transcriptRevision: 1,
+      revisionCorrelation: "inferred_unique_revision",
+      evaluationRequestedAtMs: 120,
+      sceneCommitAtMs: 400,
+      sceneDisplayedAtMs: 410,
+      finalTranscriptToFirstObservedResponseMs: 360,
+    });
+  });
+
+  it("keeps revisionless evidence unknown when a repeated answer version has multiple revisions", () => {
+    const rows = diagnosticsTimelines([
+      { at: 10, type: "answer.candidate", detail: { sceneIndex: 0, version: "10:One" } },
+      { at: 20, type: "answer.requesting", detail: { sceneIndex: 0, version: "10:One" } },
+      { at: 30, type: "answer.candidate", detail: { sceneIndex: 0, revision: 1, version: "10:One" } },
+      {
+        at: 40,
+        type: "answer.response_gate_observed",
+        detail: { scene_index: 0, transcript_revision: 1, answer_version: "10:One", conditions: [] },
+      },
+      {
+        at: 50,
+        type: "answer.response_gate_observed",
+        detail: { scene_index: 0, transcript_revision: 2, answer_version: "10:One", conditions: [] },
+      },
+    ]);
+    expect(rows).toHaveLength(3);
+    expect(rows.find(row => row.revisionCorrelation === "ambiguous_revision")).toMatchObject({
+      transcriptRevision: null,
+      evaluationRequestedAtMs: 20,
+    });
+  });
 });

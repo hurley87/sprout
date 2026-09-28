@@ -80,11 +80,44 @@ export function metrics(log, diagnostics = null) {
 /** Correlate only events carrying the same scene and answer version. */
 export function diagnosticsTimelines(events) {
   const keyed = new Map();
+  // Older releases omitted revision on candidate/request/evaluation/advance
+  // events. Infer it only when the complete artifact has exactly one known
+  // revision for that scene+answer; repeated versions with multiple revisions
+  // remain explicitly ambiguous.
+  const revisionsByAnswer = new Map();
+  for (const event of events) {
+    const detail = event.detail ?? {};
+    const version = detail.version ?? detail.answer_version;
+    const sceneIndex = Number.isInteger(detail.sceneIndex) ? detail.sceneIndex : detail.scene_index;
+    const candidateRevision = Number.isInteger(detail.revision) ? detail.revision : detail.transcript_revision;
+    if (!Number.isInteger(sceneIndex) || typeof version !== "string" || !Number.isInteger(candidateRevision)) continue;
+    const identity = `${sceneIndex}:${version}`;
+    const revisions = revisionsByAnswer.get(identity) ?? new Set();
+    revisions.add(candidateRevision);
+    revisionsByAnswer.set(identity, revisions);
+  }
   const rowFor = (sceneIndex, version, revision = null) => {
     if (!Number.isInteger(sceneIndex) || typeof version !== "string") return null;
-    const key = `${sceneIndex}:${revision ?? "?"}:${version}`;
-    if (!keyed.has(key)) keyed.set(key, { sceneIndex, transcriptRevision: revision, answerVersion: version });
-    return keyed.get(key);
+    let resolvedRevision = revision;
+    let revisionCorrelation;
+    if (!Number.isInteger(revision)) {
+      const known = revisionsByAnswer.get(`${sceneIndex}:${version}`);
+      if (known?.size === 1) {
+        resolvedRevision = [...known][0];
+        revisionCorrelation = "inferred_unique_revision";
+      } else if (known && known.size > 1) revisionCorrelation = "ambiguous_revision";
+    }
+    const key = `${sceneIndex}:${resolvedRevision ?? "?"}:${version}`;
+    if (!keyed.has(key))
+      keyed.set(key, {
+        sceneIndex,
+        transcriptRevision: resolvedRevision ?? null,
+        answerVersion: version,
+        ...(revisionCorrelation ? { revisionCorrelation } : {}),
+      });
+    const row = keyed.get(key);
+    if (revisionCorrelation) row.revisionCorrelation = revisionCorrelation;
+    return row;
   };
   for (const event of events) {
     const detail = event.detail ?? {};

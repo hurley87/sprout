@@ -11,6 +11,7 @@ import {
 } from "../lib/answer";
 import { parseProviderEvent } from "../lib/events";
 import { LessonSession, type Transport } from "../lib/session";
+import { diagnosticsTimelines } from "../scripts/live/metrics.mjs";
 import {
   GOODBYE_PHRASE,
   INSTRUCTIONS,
@@ -241,6 +242,31 @@ describe("application lifecycle", () => {
 });
 
 describe("answer response gate", () => {
+  it("exports gate deadlines on the session clock and metrics consume session-produced events", async () => {
+    vi.setSystemTime(1_700_000_000_000);
+    const { session } = setup(true, answering(UNSURE));
+    deliver(session, speech("Five", 100));
+    deliver(session, speech("Okay, let's look", 900, true));
+    await settle();
+    const observed = session.events.find(
+      event =>
+        event.type === "answer.response_gate_observed" &&
+        (event.detail as { trigger?: string }).trigger === "decision_deferred",
+    );
+    expect(observed?.at).toBeLessThan(10_000);
+    expect((observed?.detail as { correction_ready_at?: number }).correction_ready_at).toBeLessThan(10_000);
+    expect(
+      (
+        session.events.find(event => event.type === "answer.response_gate_deadline_updated")?.detail as {
+          deadline_at?: number;
+        }
+      ).deadline_at,
+    ).toBeLessThan(10_000);
+    const timelines = diagnosticsTimelines(session.events);
+    expect(timelines).toHaveLength(1);
+    expect(timelines[0].transcriptRevision).toBe(1);
+  });
+
   it("blocks output immediately for an answer-bearing transcript before Jev runs", () => {
     const { session, transport, evaluateAnswer } = setup();
 
@@ -309,6 +335,9 @@ describe("answer response gate", () => {
     expect(session.snapshot.sceneIndex).toBe(0);
     expect(transport.setOutputBlocked).toHaveBeenCalledExactlyOnceWith(true);
     expect(transport.send).not.toHaveBeenCalled();
+    expect(session.events.filter(event => event.type === "answer.response_gate_observed").at(-1)?.detail).toMatchObject(
+      { eligible_at: null, conditions: expect.arrayContaining(["answer_evaluation"]) },
+    );
 
     complete(evaluated(CONFIDENT));
     await vi.advanceTimersByTimeAsync(0);
@@ -329,6 +358,8 @@ describe("answer response gate", () => {
       decision: "ADVANCE",
       reason: "scene_displayed",
       wait_ms: expect.any(Number),
+      eligible_at: expect.any(Number),
+      eligibility_basis: "observed_all_blockers_clear",
     });
     expect(vi.mocked(transport.send).mock.invocationCallOrder[0]).toBeLessThan(
       vi.mocked(transport.setOutputBlocked).mock.invocationCallOrder[1],

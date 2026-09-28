@@ -297,14 +297,12 @@ export class LessonSession {
     const stayReadyAt = this.deferredStay?.correctionReadyAt;
     const correctionReadyAt = advanceReadyAt ?? stayReadyAt;
     const vadGraceUntil = this.deferredAdvance?.vadGraceUntil ?? this.deferredStay?.vadGraceUntil;
-    const eligibilityAt = Math.max(
-      gate.eligibleAt ?? 0,
+    const scheduledEligibilityAt = Math.max(
       correctionReadyAt ?? 0,
       gate.outputQuietAt,
       vadGraceUntil ?? 0,
       gate.sceneDisplayedAt ?? 0,
     );
-    if (eligibilityAt > 0) gate.eligibleAt = eligibilityAt;
     const conditions: string[] = [];
     if (!gate.decision) conditions.push("answer_evaluation");
     if (correctionReadyAt !== undefined && correctionReadyAt > now) conditions.push("correction_window");
@@ -315,6 +313,13 @@ export class LessonSession {
     if (gate.decision === "ADVANCE" && gate.sceneCommittedAt === undefined) conditions.push("scene_commit");
     if (gate.decision === "ADVANCE" && gate.sceneCommittedAt !== undefined && gate.sceneDisplayedAt === undefined)
       conditions.push("scene_display");
+    // This timestamp is the first observation where every known release
+    // blocker is clear. It is deliberately not the maximum of deadlines:
+    // evaluation and provisional activity can outlast those deadlines.
+    const unresolvedBlockers = conditions.filter(condition => condition !== "microphone_speaking");
+    if (unresolvedBlockers.length === 0 && gate.eligibleAt === undefined) gate.eligibleAt = now;
+    if (unresolvedBlockers.length > 0) gate.eligibleAt = undefined;
+    const sessionTime = (at: number | undefined) => (at === undefined ? null : at - this.createdAt);
     this.log("answer.response_gate_observed", {
       scene_index: gate.sceneIndex,
       transcript_revision: gate.transcriptRevision,
@@ -325,12 +330,14 @@ export class LessonSession {
       microphone_speaking: this.microphoneSpeaking,
       provisional_vad: this.provisionalActivity,
       blocked_output_activity: extra.blocked_output_activity ?? false,
-      output_quiet_at: gate.outputQuietAt || null,
-      correction_ready_at: correctionReadyAt ?? null,
-      vad_grace_until: vadGraceUntil ?? null,
-      scene_committed_at: gate.sceneCommittedAt ?? null,
-      scene_displayed_at: gate.sceneDisplayedAt ?? null,
-      eligible_at: eligibilityAt || null,
+      output_quiet_at: sessionTime(gate.outputQuietAt || undefined),
+      correction_ready_at: sessionTime(correctionReadyAt),
+      vad_grace_until: sessionTime(vadGraceUntil),
+      scene_committed_at: sessionTime(gate.sceneCommittedAt),
+      scene_displayed_at: sessionTime(gate.sceneDisplayedAt),
+      scheduled_eligible_at: sessionTime(scheduledEligibilityAt || undefined),
+      eligible_at: sessionTime(gate.eligibleAt),
+      eligibility_basis: gate.eligibleAt === undefined ? null : "observed_all_blockers_clear",
       output_blocked: this.outputBlocked,
       ...extra,
     });
@@ -563,8 +570,8 @@ export class LessonSession {
         transcript_revision: this.answerResponseGate.transcriptRevision,
         answer_version: this.answerResponseGate.answerVersion,
         condition: "output_transcript_quiet",
-        previous_deadline_at: previousOutputQuietAt || null,
-        deadline_at: this.answerResponseGate.outputQuietAt,
+        previous_deadline_at: previousOutputQuietAt ? previousOutputQuietAt - this.createdAt : null,
+        deadline_at: this.answerResponseGate.outputQuietAt - this.createdAt,
         extension_ms: Math.max(0, this.answerResponseGate.outputQuietAt - Math.max(Date.now(), previousOutputQuietAt)),
         provider_transcript_start_ms: event.startMs,
         provider_transcript_end_ms: event.endMs,
@@ -671,7 +678,7 @@ export class LessonSession {
       decision: current.decision ?? null,
       conditions: [],
       output_blocked: false,
-      output_quiet_at: current.outputQuietAt || null,
+      output_quiet_at: current.outputQuietAt ? current.outputQuietAt - this.createdAt : null,
       superseded_by_transcript_revision: this.transcriptRevision,
     });
     this.answerResponseGate = {
@@ -716,7 +723,7 @@ export class LessonSession {
       decision: gate.decision ?? null,
       conditions: [],
       output_blocked: false,
-      output_quiet_at: gate.outputQuietAt || null,
+      output_quiet_at: gate.outputQuietAt ? gate.outputQuietAt - this.createdAt : null,
       cancellation_reason: reason,
       cancelled: true,
     });
@@ -740,6 +747,8 @@ export class LessonSession {
   ) {
     if (!this.gateMatches(identity)) return false;
     const gate = this.answerResponseGate!;
+    this.observeResponseGate("release_eligibility_check");
+    const contextSentAt = Date.now() - this.createdAt;
     sendContext();
     if (!this.gateMatches(identity)) return false;
     this.answerResponseGate = null;
@@ -751,9 +760,10 @@ export class LessonSession {
       decision,
       reason,
       wait_ms: Date.now() - gate.startedAt,
-      context_sent_at: Date.now(),
-      output_quiet_at: gate.outputQuietAt || null,
-      eligible_at: gate.eligibleAt ?? null,
+      context_sent_at: contextSentAt,
+      output_quiet_at: gate.outputQuietAt ? gate.outputQuietAt - this.createdAt : null,
+      eligible_at: gate.eligibleAt === undefined ? null : gate.eligibleAt - this.createdAt,
+      eligibility_basis: gate.eligibleAt === undefined ? null : "observed_all_blockers_clear",
     });
     this.log("answer.response_gate_observed", {
       scene_index: identity.sceneIndex,
@@ -763,7 +773,7 @@ export class LessonSession {
       decision,
       conditions: [],
       output_blocked: false,
-      output_quiet_at: gate.outputQuietAt || null,
+      output_quiet_at: gate.outputQuietAt ? gate.outputQuietAt - this.createdAt : null,
       release_reason: reason,
       released: true,
     });
