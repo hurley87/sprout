@@ -619,3 +619,78 @@ for (const activity of ["transcript", "non_answer", "microphone.activity_started
     );
   });
 }
+
+for (const action of ["non_answer", "wrap"] as const) {
+  test(`integrated stale STAY ${action} never permits A by cancelling B`, async ({ page }) => {
+    await fixture(page);
+    await page.evaluate(`(() => {
+      window.sourceA = window.transport.current;
+      window.commandsA = [];
+      window.providers[0].channel.onmessage = ({data}) => window.commandsA.push(JSON.parse(data));
+      window.session = new window.LessonSession(window.transport, async () => ({status: 'evaluated', probability: 0, model: 'test', latencyMs: 1}), () => {});
+      window.transport.onEvent = event => window.session.receive(event);
+      window.session.receive({type: 'session.started'}); window.session.displayed(0);
+      window.commandsA.length = 0;
+      window.session.receive({type: 'microphone.speech_started'});
+      window.session.receive({type: 'transcript', speaker: 'child', delta: 'One', startMs: 1000, endMs: 1100});
+      window.session.receive({type: 'microphone.speech_stopped', quietMs: 900});
+      window.hidden = setInterval(() => window.providers[0].channel.send(JSON.stringify({type: 'session.output_transcript.delta', delta: 'old ', start_ms: 0, end_ms: 100})), 100);
+    })()`);
+    await expect
+      .poll(() => page.evaluate("window.transport.pending?.channel?.readyState"), { timeout: 8000 })
+      .toBe("open");
+    await page.evaluate(`(() => {
+      window.sourceB = window.transport.pending;
+      window.lateB = window.sourceB.channel.onmessage;
+      window.commandsA.length = 0;
+      window.session.${action === "wrap" ? "wrap()" : "receive({type: 'transcript', speaker: 'child', delta: 'what?', startMs: 4000, endMs: 4100})"};
+      window.lateB({data: JSON.stringify({type: 'session.started'})});
+      clearInterval(window.hidden);
+    })()`);
+    expect(await page.evaluate("window.sourceB.retired && window.sourceB.peer.connectionState === 'closed'")).toBe(
+      true,
+    );
+    expect(await page.evaluate("window.session.events.some(event => event.type === 'replacement.promoted')")).toBe(
+      false,
+    );
+    expect(await page.evaluate("window.commandsA.length")).toBe(0);
+    if (action === "non_answer") {
+      expect(
+        await page.evaluate(
+          "window.transport.current === window.sourceA && window.sourceA.peer.connectionState === 'connected'",
+        ),
+      ).toBe(true);
+      expect(
+        await page.evaluate("document.querySelector('audio').muted && window.transport.remoteGain.gain.value === 0"),
+      ).toBe(true);
+      expect(
+        await page.evaluate(
+          "window.session.events.some(event => event.type === 'answer.response_gate_released' || event.type === 'answer.response_gate_cancelled')",
+        ),
+      ).toBe(false);
+      await page.waitForTimeout(350);
+      const blockedRms = await page.evaluate<number>(`(async () => {
+        window.transport.stopMedia(); const recording = await window.transport.recording();
+        const decoded = await window.context.decodeAudioData(await recording.blob.arrayBuffer());
+        const pcm = decoded.getChannelData(0); const samples = pcm.slice(-decoded.sampleRate * 0.2);
+        return Math.sqrt(samples.reduce((sum, x) => sum + x*x, 0) / samples.length);
+      })()`);
+      expect(blockedRms).toBeLessThan(0.001);
+    } else {
+      expect(await page.evaluate("window.session.snapshot.reason")).toBe("connection_failure");
+      expect(
+        await page.evaluate(
+          "window.sourceA.retired && window.sourceA.peer.connectionState === 'closed' && document.querySelector('audio').srcObject === null",
+        ),
+      ).toBe(true);
+      expect(
+        await page.evaluate(
+          "window.session.events.some(event => event.type === 'answer.response_gate_cancelled' && event.detail.preserved_output_block === true)",
+        ),
+      ).toBe(true);
+    }
+    await page.evaluate(
+      "window.transport.close(); window.providers.forEach(source => { source.peer.close(); source.tone.stop(); }); window.context.close()",
+    );
+  });
+}

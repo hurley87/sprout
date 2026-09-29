@@ -211,7 +211,7 @@ it("promotion failure fails closed without permitting media", async () => {
   expect(f.session.snapshot.reason).toBe("connection_failure");
   expect(f.transport.send).not.toHaveBeenCalled();
   expect(event(f.session, "answer.response_gate_released")).toHaveLength(0);
-  expect(f.order.indexOf("permitted")).toBeGreaterThan(f.order.indexOf("blocked")); // End cancels only after physical stop.
+  expect(f.order).not.toContain("permitted");
   expect(f.transport.stopMedia).toHaveBeenCalledOnce();
   expect(f.transport.retireSource).toHaveBeenCalledWith(2);
 });
@@ -373,4 +373,153 @@ describe("replacement child interruption after displayed ADVANCE", () => {
     expect(f.transport.retireSource).toHaveBeenCalledWith(2);
     expect(f.transport.activateSource).not.toHaveBeenCalled();
   });
+});
+
+describe.each(["STAY", "UNAVAILABLE"] as const)("%s stale-source cancellation", decision => {
+  it("marks A unsafe only when the stale threshold triggers", async () => {
+    const f = await held(decision);
+    expect(event(f.session, "answer.source_isolation_required")).toHaveLength(0);
+    await trigger();
+    expect(event(f.session, "answer.source_isolation_required")).toHaveLength(1);
+    expect(event(f.session, "answer.source_isolation_required")[0].detail).toMatchObject({
+      reason: "stale_output_threshold",
+      active_source_id: 1,
+      output_blocked: true,
+    });
+  });
+
+  it("non-answer transcript retires B while A stays blocked under the original recovery deadline", async () => {
+    const f = await held(decision);
+    await trigger();
+    f.transcript("child", "what?", 4000);
+    expect(event(f.session, "replacement.cancelled")[0].detail).toMatchObject({ reason: "newer_transcript" });
+    expect(event(f.session, "answer.response_gate_preserved").at(-1)?.detail).toMatchObject({
+      reason: "non_answer_child_interruption",
+      source_isolation_required: true,
+      output_blocked: true,
+    });
+    expect(event(f.session, "answer.response_gate_cancelled")).toHaveLength(0);
+    expect(event(f.session, "answer.response_gate_released")).toHaveLength(0);
+    expect(f.transport.send).not.toHaveBeenCalled();
+    expect(f.transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
+    expect(event(f.session, "transcript.child_or_nearby_speaker").at(-1)?.detail).toMatchObject({ delta: "what?" });
+    f.ready();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(f.transport.retireSource).toHaveBeenCalledWith(2);
+    expect(f.transport.activateSource).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(RESPONSE_GATE_RECOVERY_MS - 251 - STALE_OUTPUT_REPLACEMENT_MS - 2);
+    expect(f.session.snapshot.status).toBe("active");
+    await vi.advanceTimersByTimeAsync(1);
+    expect(f.session.snapshot.reason).toBe("connection_failure");
+    expect(f.transport.prepareReplacement).toHaveBeenCalledOnce();
+  });
+
+  it("child stop retires B and stops media without permitting stale A", async () => {
+    const f = await held(decision);
+    await trigger();
+    f.transcript("child", "stop", 4000);
+    expect(f.session.snapshot.reason).toBe("child_stop");
+    expect(event(f.session, "lesson.ended")).toHaveLength(1);
+    expect(f.transport.stopMedia).toHaveBeenCalledOnce();
+    expect(f.transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
+    expect(f.transport.send).not.toHaveBeenCalledWith(expect.objectContaining({ type: "session.instructions.append" }));
+    expect(event(f.session, "replacement.cancelled")[0].detail).toMatchObject({ reason: "newer_transcript" });
+    f.ready();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(f.transport.retireSource).toHaveBeenCalledWith(2);
+    expect(f.transport.activateSource).not.toHaveBeenCalled();
+  });
+
+  it("A quiet fallback explicitly sends the authoritative outcome once and then permits A", async () => {
+    const f = await held(decision);
+    await trigger();
+    clearInterval(f.hidden);
+    await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS + 1);
+    const expected = decision === "STAY" ? stayContext(sceneAt(0)) : evaluationUnavailableContext(sceneAt(0));
+    expect(f.transport.send).toHaveBeenCalledOnce();
+    expect(f.transport.send).toHaveBeenCalledWith(expect.objectContaining({ content: expected }));
+    expect(event(f.session, "answer.response_gate_released")[0].detail).toMatchObject({
+      reason: "output_transcript_quiet",
+      decision,
+    });
+    expect(f.order.indexOf("instruction")).toBeLessThan(f.order.indexOf("permitted"));
+    expect(event(f.session, "replacement.cancelled")[0].detail).toMatchObject({ reason: "gate_released" });
+    f.ready();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(f.transport.retireSource).toHaveBeenCalledWith(2);
+    expect(f.transport.activateSource).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(f.transport.send).toHaveBeenCalledOnce();
+  });
+});
+
+describe.each(["wrap", "goodbye", "end", "dispose"] as const)("%s during stale replacement", transition => {
+  it("stops media and B without permitting A or sending an unsafe lifecycle instruction", async () => {
+    const f = await held("STAY");
+    await trigger();
+    const session = f.session as unknown as {
+      wrap(): void;
+      goodbye(): void;
+      end(reason: "parent_stop"): void;
+      dispose(): void;
+    };
+    if (transition === "end") session.end("parent_stop");
+    else session[transition]();
+    expect(f.transport.stopMedia).toHaveBeenCalledOnce();
+    expect(f.transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
+    expect(f.transport.send).not.toHaveBeenCalledWith(expect.objectContaining({ type: "session.instructions.append" }));
+    expect(event(f.session, "replacement.cancelled")[0].detail).toMatchObject({ reason: "lesson_end" });
+    expect(event(f.session, "answer.response_gate_cancelled")[0].detail).toMatchObject({
+      source_isolation_required: true,
+      preserved_output_block: true,
+    });
+    expect(f.session.snapshot.status).toBe("ended");
+    expect(f.session.snapshot.reason).toBe(
+      transition === "wrap" || transition === "goodbye"
+        ? "connection_failure"
+        : transition === "end"
+          ? "parent_stop"
+          : "page_hidden",
+    );
+    f.ready();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(f.transport.retireSource).toHaveBeenCalledWith(2);
+    expect(f.transport.activateSource).not.toHaveBeenCalled();
+  });
+});
+
+it("new numeric answer keeps stale-source classification and original recovery budget", async () => {
+  const f = await held("STAY");
+  await trigger();
+  f.transcript("child", "Two", 4000);
+  expect(event(f.session, "answer.response_gate_observed").at(-1)?.detail).toMatchObject({
+    trigger: "gate_identity_updated",
+    source_isolation_required: true,
+    output_blocked: true,
+  });
+  expect(f.transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
+  f.ready();
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(f.transport.activateSource).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(RESPONSE_GATE_RECOVERY_MS - 251 - STALE_OUTPUT_REPLACEMENT_MS - 1);
+  expect(f.session.snapshot.reason).toBe("connection_failure");
+  expect(f.transport.stopMedia).toHaveBeenCalledOnce();
+});
+
+it("unexpected generic cancellation of a protected gate fails closed instead of removing its deadline", async () => {
+  const f = await held("UNAVAILABLE");
+  await trigger();
+  (f.session as unknown as { cancelAnswerResponseGate(reason: string): void }).cancelAnswerResponseGate("unexpected");
+  expect(event(f.session, "answer.unsafe_gate_cancellation")[0].detail).toMatchObject({
+    reason: "unexpected",
+    output_blocked: true,
+  });
+  expect(f.session.snapshot.reason).toBe("connection_failure");
+  expect(f.transport.stopMedia).toHaveBeenCalledOnce();
+  expect(f.transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
 });

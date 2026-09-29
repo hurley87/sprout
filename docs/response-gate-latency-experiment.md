@@ -926,3 +926,29 @@ provider-free coverage verifies that B closes while A remains current and
 muted, blocked A PCM stays out of the recording, and provisional discard can
 release through the original A fallback. The earlier Live measurements above
 are historical; this correctness fix has no new billed Live timing claim.
+
+### Decision-agnostic stale-source cancellation — 2026-09-29
+
+The gate now records `sourceIsolationRequired` when the 2,500 ms provider-only
+hold actually triggers replacement, for ADVANCE, STAY, and UNAVAILABLE alike.
+It is not set merely because a gate exists. The flag survives a newer answer
+revision while the same A source remains current; that revision inherits the
+original 15-second recovery deadline. Retiring or failing B does not erase
+A's stale classification. Generic gate cancellation cannot permit A. Only
+an explicit outcome release after A's genuine transcript-quiet deadline, or
+a successful promotion that permanently retires A, can permit speech. An
+unexpected protected cancellation fails closed rather than clearing the gate's
+recovery deadline and leaving output blocked indefinitely.
+
+Non-answer child transcripts during protected STAY/UNAVAILABLE gates remain
+learner evidence while the original outcome and A quiet fallback stay pending.
+A child stop uses `end()` to stop media before gate cleanup for all three
+decisions. If wrap or goodbye arrives with a protected gate still on A, the
+lesson fails closed: it retires B and A, sends no wrap/goodbye instruction over
+stale A, and reports a retryable connection failure. Ordinary unprotected
+gates retain their prior wrap/goodbye behavior. Parent stop, failure, and
+disposal also stop physical media before protected-gate cleanup. Successful
+fallback to A and successful B promotion retain their existing instruction-
+then-permit ordering. No trigger threshold, Jev, seed, correction timer, or
+transport-source mechanic changed. The earlier billed Live observations were
+not rerun for this correctness fix.

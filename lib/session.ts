@@ -126,7 +126,9 @@ type AnswerResponseGate = {
   outputQuietAt: number;
   childUtterance: string;
   replacementAttempted?: boolean;
-  replacementInterrupted?: boolean;
+  /** The stale A source may be permitted only by an explicit safe release. */
+  sourceIsolationRequired?: boolean;
+  sourceIsolationRequiredAt?: number;
   eligibleAt?: number;
   decision?: GateDecision;
   sceneCommittedAt?: number;
@@ -363,6 +365,7 @@ export class LessonSession {
       eligible_at: sessionTime(gate.eligibleAt),
       eligibility_basis: gate.eligibleAt === undefined ? null : "observed_all_blockers_clear",
       output_blocked: this.outputBlocked,
+      source_isolation_required: gate.sourceIsolationRequired === true,
       output_media_activity: this.outputActivity,
       output_media_is_release_barrier: false,
       ...extra,
@@ -482,7 +485,7 @@ export class LessonSession {
           pending_evaluation: Boolean(this.settleTimer),
         });
         this.observeResponseGate("provisional_vad_started");
-        if (this.answerResponseGate?.replacementInterrupted) this.scheduleDisplayedRelease();
+        if (this.answerResponseGate?.sourceIsolationRequired) this.scheduleDisplayedRelease();
         return;
       case "microphone.activity_discarded": {
         if (!this.provisionalActivity) return;
@@ -490,7 +493,7 @@ export class LessonSession {
         const heardNewTranscript = this.transcriptRevision !== this.activityTranscriptRevision;
         this.log("answer.activity_discarded", { heard_new_transcript: heardNewTranscript });
         this.observeResponseGate("provisional_vad_discarded");
-        if (this.answerResponseGate?.replacementInterrupted) this.scheduleDisplayedRelease();
+        if (this.answerResponseGate?.sourceIsolationRequired) this.scheduleDisplayedRelease();
         if (heardNewTranscript) {
           this.evaluation?.abort();
           if (this.latest) this.scheduleEvaluation(this.latest, TRANSCRIPT_FALLBACK_MS, "transcript_revision");
@@ -519,7 +522,7 @@ export class LessonSession {
           decision_preserved: Boolean(this.evaluation || this.deferredAdvance),
         });
         this.observeResponseGate("microphone_speech_started");
-        if (this.answerResponseGate?.replacementInterrupted) this.scheduleDisplayedRelease();
+        if (this.answerResponseGate?.sourceIsolationRequired) this.scheduleDisplayedRelease();
         this.startDeferredVadGrace(
           this.microphoneSpeechStartedAt,
           wasProvisional ? "provisional_confirmation" : "confirmed_speech",
@@ -544,7 +547,7 @@ export class LessonSession {
           estimated_acoustic_end_at: this.turnEndAt - event.quietMs - this.createdAt,
         });
         this.observeResponseGate("microphone_speech_stopped");
-        if (this.answerResponseGate?.replacementInterrupted) this.scheduleDisplayedRelease();
+        if (this.answerResponseGate?.sourceIsolationRequired) this.scheduleDisplayedRelease();
         if (this.latest && this.transcriptEpoch === this.speechEpoch)
           this.scheduleEvaluation(this.latest, TRANSCRIPT_TAIL_MS, "microphone_vad");
         else if (this.latest) this.scheduleNoTranscriptRecovery(this.speechEpoch);
@@ -633,15 +636,19 @@ export class LessonSession {
     }
     if (fromChild) {
       this.cancelReplacementForChild("newer_transcript");
+      const sourceIsolationRequired = this.answerResponseGate?.sourceIsolationRequired === true;
+      if (sourceIsolationRequired && requestsStop(utterance.text)) {
+        // end() retires both sources before any gate cleanup.
+        this.end("child_stop");
+        return;
+      }
       if (this.advanceResponseTransitionActive) {
         if (requestsStop(utterance.text)) {
-          // A replacement-interrupted gate still owns stale A. End stops media
-          // before gate cleanup, so the stop request cannot expose A.
-          if (!this.answerResponseGate?.replacementInterrupted) this.cancelAnswerResponseGate("child_stop");
+          this.cancelAnswerResponseGate("child_stop");
           this.end("child_stop");
           return;
         }
-        if (this.answerResponseGate?.replacementInterrupted) {
+        if (sourceIsolationRequired) {
           if (mentionsNumber(utterance.text)) {
             // The committed new scene owns this answer. The new gate inherits
             // the original recovery deadline and keeps A blocked.
@@ -654,18 +661,7 @@ export class LessonSession {
               output_blocked: this.outputBlocked,
             });
           } else {
-            // Keep the displayed ADVANCE context as the neutral response path.
-            // It may release only after A's existing transcript quiet and VAD
-            // protections clear; the non-answer remains learner evidence.
-            this.latest = utterance;
-            this.lastDeltaAt = Date.now();
-            this.transcriptEpoch = this.speechEpoch;
-            this.log("answer.response_gate_preserved", {
-              reason: "non_answer_child_interruption",
-              scene_index: this.snapshot.sceneIndex,
-              output_blocked: this.outputBlocked,
-            });
-            this.scheduleDisplayedRelease();
+            this.preserveNonAnswerOnStaleSource();
             return;
           }
         } else {
@@ -678,6 +674,10 @@ export class LessonSession {
           this.childSpeech = new TranscriptWindow();
           return;
         }
+      }
+      if (sourceIsolationRequired && !mentionsNumber(utterance.text)) {
+        this.preserveNonAnswerOnStaleSource();
+        return;
       }
       // A transcript can arrive before local VAD notices renewed speech.
       const previous = this.latest;
@@ -729,6 +729,18 @@ export class LessonSession {
     } else if (this.deferredAdvance) {
       this.scheduleDeferredRelease();
     }
+  }
+
+  /** Keep the old authoritative outcome and its A quiet fallback intact. */
+  private preserveNonAnswerOnStaleSource() {
+    this.log("answer.response_gate_preserved", {
+      reason: "non_answer_child_interruption",
+      scene_index: this.snapshot.sceneIndex,
+      output_blocked: this.outputBlocked,
+      source_isolation_required: true,
+    });
+    if (this.displayedRelease) this.scheduleDisplayedRelease();
+    if (this.deferredStay) this.scheduleDeferredStayRelease();
   }
 
   private updateAnswerResponseGate(utterance: Utterance) {
@@ -783,7 +795,10 @@ export class LessonSession {
       ...current,
       childUtterance: utterance.text.trim(),
       replacementAttempted: undefined,
-      replacementInterrupted: undefined,
+      // A is still the same stale source. A new answer does not clear this
+      // classification or renew the original 15-second recovery budget.
+      sourceIsolationRequired: current.sourceIsolationRequired,
+      sourceIsolationRequiredAt: current.sourceIsolationRequiredAt,
       sceneIndex: this.snapshot.sceneIndex,
       transcriptRevision: this.transcriptRevision,
       answerVersion,
@@ -802,6 +817,20 @@ export class LessonSession {
   }
 
   private cancelAnswerResponseGate(reason: string) {
+    const protectedGate = this.answerResponseGate;
+    if (protectedGate?.sourceIsolationRequired && !this.ending) {
+      // No ordinary cancellation path can establish A's quiet or B authority.
+      // If a caller cannot preserve the explicit fallback, stop every source
+      // before clearing the gate instead of stranding it without a deadline.
+      this.log("answer.unsafe_gate_cancellation", {
+        ...this.replacementIdentity(protectedGate),
+        reason,
+        active_source_id: this.transport.activeSourceId ?? null,
+        output_blocked: this.outputBlocked,
+      });
+      this.fail("Sprout could not safely resume its voice. This attempt has ended; you can start a new lesson.");
+      return;
+    }
     this.cancelReplacement(this.ending ? "lesson_end" : "gate_replaced");
     const gate = this.answerResponseGate;
     if (!gate) return;
@@ -810,15 +839,18 @@ export class LessonSession {
     clearTimeout(this.displayedReleaseTimer);
     this.displayedReleaseTimer = undefined;
     this.displayedRelease = null;
-    // On an interrupted replacement, end() already stopped A and B. Keep the
-    // stale-source gate logically blocked through teardown as well.
-    if (!(this.ending && gate.replacementInterrupted)) this.setOutputBlocked(false, reason);
+    // Only explicit outcome release can establish A quiet or B promotion.
+    // Generic cancellation does not prove that stale A is safe to hear.
+    if (!gate.sourceIsolationRequired) this.setOutputBlocked(false, reason);
     this.log("answer.response_gate_cancelled", {
       scene_index: gate.sceneIndex,
       transcript_revision: gate.transcriptRevision,
       answer_version: gate.answerVersion,
       reason,
       wait_ms: Date.now() - gate.startedAt,
+      source_isolation_required: gate.sourceIsolationRequired === true,
+      preserved_output_block: gate.sourceIsolationRequired === true && this.outputBlocked,
+      active_source_id: this.transport.activeSourceId ?? null,
     });
     this.log("answer.response_gate_observed", {
       scene_index: gate.sceneIndex,
@@ -942,6 +974,17 @@ export class LessonSession {
       this.replacementTimer = setTimeout(() => this.scheduleReplacement(), delay);
       return;
     }
+    if (!gate.sourceIsolationRequired) {
+      gate.sourceIsolationRequired = true;
+      gate.sourceIsolationRequiredAt = Date.now();
+      this.log("answer.source_isolation_required", {
+        ...this.replacementIdentity(gate),
+        reason: "stale_output_threshold",
+        at: gate.sourceIsolationRequiredAt - this.createdAt,
+        active_source_id: this.transport.activeSourceId ?? null,
+        output_blocked: this.outputBlocked,
+      });
+    }
     gate.replacementAttempted = true; // At most one paid attempt per answer identity.
     const owner = { gate, abort: new AbortController(), startedAt: Date.now(), id: undefined as number | undefined };
     this.replacement = owner;
@@ -957,6 +1000,7 @@ export class LessonSession {
       provider_only_hold_ms: Date.now() - this.providerOnlySince,
       remaining_output_quiet_ms: gate.outputQuietAt - Date.now(),
       threshold_ms: STALE_OUTPUT_REPLACEMENT_MS,
+      source_isolation_required: true,
     });
     void this.prepareGateReplacement(owner, seed);
   }
@@ -984,16 +1028,15 @@ export class LessonSession {
     const owner = this.replacement;
     if (!owner) return;
     this.cancelReplacement(reason);
-    if (owner.gate.decision === "ADVANCE") {
-      // Replacement and gate ownership differ. Retiring B does not make stale
-      // A safe, or erase the displayed scene's transcript-quiet fallback.
-      owner.gate.replacementInterrupted = true;
-      this.log("answer.response_gate_preserved", {
-        reason,
-        scene_index: this.snapshot.sceneIndex,
-        output_blocked: this.outputBlocked,
-      });
-    }
+    // The stale classification was made at the trigger. Retiring B cannot
+    // remove the answer gate or make A safe for any decision.
+    this.log("answer.response_gate_preserved", {
+      reason,
+      decision: owner.gate.decision,
+      scene_index: this.snapshot.sceneIndex,
+      output_blocked: this.outputBlocked,
+      source_isolation_required: owner.gate.sourceIsolationRequired === true,
+    });
   }
 
   private async prepareGateReplacement(owner: NonNullable<LessonSession["replacement"]>, seed: ReplacementSeed) {
@@ -1450,7 +1493,7 @@ export class LessonSession {
     if (
       !deferred ||
       this.provisionalActivity ||
-      (this.answerResponseGate?.replacementAttempted && this.microphoneSpeaking)
+      (this.answerResponseGate?.sourceIsolationRequired && this.microphoneSpeaking)
     )
       return;
     this.deferredStay = null;
@@ -1654,7 +1697,7 @@ export class LessonSession {
     const deferred = this.displayedRelease;
     const gate = this.answerResponseGate;
     if (!deferred || !gate) return;
-    if (gate.replacementInterrupted && (this.provisionalActivity || this.microphoneSpeaking)) return;
+    if (gate.sourceIsolationRequired && (this.provisionalActivity || this.microphoneSpeaking)) return;
     const releaseAt = Math.max(deferred.displayedAt, gate.outputQuietAt);
     const release = () => {
       if (this.expireIfOverdue()) return;
@@ -1680,6 +1723,10 @@ export class LessonSession {
 
   private wrap() {
     if (this.snapshot.status !== "active") return;
+    if (this.answerResponseGate?.sourceIsolationRequired) {
+      this.fail("Sprout could not safely finish its voice. This attempt has ended; you can start a new lesson.");
+      return;
+    }
     this.cancelAnswerResponseGate("wrap_up");
     this.cancelNoTranscriptRecovery();
     this.cancelDeferredAdvance();
@@ -1694,6 +1741,10 @@ export class LessonSession {
 
   private goodbye() {
     if (this.snapshot.status === "ended") return;
+    if (this.answerResponseGate?.sourceIsolationRequired) {
+      this.fail("Sprout could not safely finish its voice. This attempt has ended; you can start a new lesson.");
+      return;
+    }
     this.cancelAnswerResponseGate("goodbye");
     this.cancelNoTranscriptRecovery();
     this.cancelDeferredAdvance();
