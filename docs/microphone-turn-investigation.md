@@ -1,0 +1,141 @@
+# Microphone turn investigation baseline
+
+Documentation baseline for [issue #37](https://github.com/hurley87/sprout/issues/37), at
+`0d96a64648ce45f7c663b4d31fef10c63fc91595` on
+`codex/issue-37-microphone-turn-investigation` (2026-09-29). This slice used a
+read-only query of persisted session `j97cpnd4qrd766wxexb28nmefn8f6f2h` and
+the current source. No new microphone or provider trial was run.
+
+## Current finding and limits
+
+Two short answers in the example reached evaluation through the 1,500 ms
+transcript fallback. A microphone speech stop was recorded **after** each
+evaluation request and scene display. The third answer had a stop before its
+request and used the 250 ms microphone transcript tail. This establishes the
+event ordering and selected paths, but not why the detector remained active.
+The recording is attached and marked complete (`audio/webm;codecs=opus`,
+57,333 ms), but its audio was **not auditioned or acoustically analyzed** in this
+baseline. Speaker leakage, nearby speech, background noise, detector calibration,
+and browser frame scheduling remain competing explanations.
+
+The durable record supplies session-relative event times, provider transcript
+positions, and recording metadata. It does not retain microphone RMS, threshold,
+noise floor, quiet resets, frame gaps, track settings, provisional activity,
+speech epoch, timer replacements, or the full in-memory diagnostics. The
+recording's availability does not establish which sound held the detector open.
+The complete record status establishes successful assembly, not acoustic quality.
+
+## Example session timing
+
+All `at` values below are **application milliseconds since `session.started`**,
+from `sessions:getRecord` event `atMs`. The first/last transcript observation
+fields use that origin. Provider utterance start/end values use the provider's
+media timeline and are listed only as context; they are not subtracted from
+application timestamps. Recording seek positions use the recording offset and
+are approximate. A VAD `estimatedAcousticEndAtMs` is the detector's first quiet
+frame estimate, not a verified last audible word. In particular, no audible
+answer-to-response latency follows from these transcript times.
+
+| Answer / scene | Latest transcript first observed → request | Path and microphone events | Request → result → commit/display → release |
+| --- | --- | --- | --- |
+| “One” / 1 duck | 11,534 → 13,037 = **1,503 ms** | `transcript_fallback`; speech start 8,582, stop **15,314**; provider utterance 11,200–11,400 | result 13,330 (**292 ms** reported Jev latency); commit 13,331; display 13,348 (**1,814 ms** from transcript observation); playback permitted 15,774 (**2,443 ms** after commit) |
+| “Two” / 2 ducks | 24,744 → 26,246 = **1,502 ms** | `transcript_fallback`; speech start 22,274, stop **27,512**; provider utterance 24,400–24,600 | result 26,474 (**227 ms** reported); commit 26,497; display 26,514 (**1,770 ms** from observation); playback permitted 28,930 (**2,433 ms** after commit) |
+| “Two” / 3 butterflies | 38,530 → 39,493 = **963 ms** | `microphone_vad`; speech start 28,579, stop **39,243**, then 250 ms tail; provider utterance 38,200–38,400 | STAY result 39,732 (**238 ms** reported); no advance; playback permitted 39,734 |
+
+The reported Jev latency is recorded by the application; one-millisecond
+differences from subtracting rounded event times are possible. In the first two
+rows, the fallback sets `turnEndAt` **when its timer fires**. Their persisted
+`turnEndToRequestMs: 0` therefore does **not** mean zero answer-to-request
+delay. The meaningful observed pre-evaluation interval is latest transcript
+arrival to request. The stop events occurring later explain why those requests
+could not use a preceding microphone stop, but cannot identify the acoustic
+source or rule out an epoch/timer interaction without finer diagnostics. The
+third row's stop is 713 ms after transcript observation; its request follows
+that stop by 250 ms.
+
+The roughly 2.4-second commit-to-permission intervals for the first two
+advances belong to the [response-gate investigation](response-gate-latency-experiment.md)
+and merged [PR #39](https://github.com/hurley87/sprout/pull/39). They are not
+part of the pre-evaluation delay. Permission, provider transcript observation,
+and remote media activity do not establish the onset of audible playback. This
+session predates that merged work; no before/after comparison is made here.
+
+## Current detector and scheduling policy
+
+[`lib/microphone-turn.ts`](../lib/microphone-turn.ts) samples the authorized
+microphone with a Web Audio analyser on animation frames. It calls a frame
+voiced when RMS exceeds `max(0.015, noiseFloor * 3)`. The noise floor updates
+only while inactive and outside a candidate. A provisional burst becomes
+confirmed after 80 ms of accumulated above-threshold frame time; 150 ms of
+quiet discards a provisional burst. Confirmed speech stops after 900 ms of
+quiet, reset by any above-threshold frame. This energy detector does not label
+the speaker or distinguish speech from non-speech. Browser capture
+([`lib/browser-transport.ts`](../lib/browser-transport.ts)) requests echo
+cancellation, noise suppression, and automatic gain control; their effective
+settings and performance were not recorded for this session.
+
+[`lib/session.ts`](../lib/session.ts) logs provisional/confirmed activity,
+speech epochs, transcript revisions, schedules, invalidations, request timing,
+and response-gate blockers in a bounded in-memory diagnostic stream. A clean
+stop with a transcript in the matching speech epoch schedules evaluation after
+the 250 ms transcript tail. Otherwise, each answer-bearing transcript revision
+schedules or replaces a 1,500 ms fallback; a later clean stop may replace it.
+The fallback can proceed despite ongoing confirmed or provisional activity to
+preserve liveness. Answer stabilization after the detected end or latest
+transcript is a separate 250 ms correction policy. Neither policy is changed
+here. The persisted record is coarser than those in-memory diagnostics.
+
+## Pending comparable trial protocol
+
+Run only in a later authorized measurement slice. Use the same MacBook,
+microphone input, browser and version, page/build SHA, room, speaker placement,
+network, voice/model configuration, and evaluator for all trials. Note the
+selected input/output devices, actual `MediaStreamTrack.getSettings()` where
+available, OS input gain, microphone-to-mouth and microphone-to-speaker
+distances, microphone orientation, room dimensions/noise sources, and a fixed
+playback volume measured or recorded at the OS and app level. Keep the tab
+visible. Record any browser audio-processing setting changes; do not assume the
+requested constraints were applied.
+
+Use a crossed design: headphones versus MacBook speakers, each in (a) quiet
+room and (b) ordinary, documented background noise. Run **at least five
+independent sessions per combination**, alternating condition order. For each
+session, give the same three one-word counting answers. Start each answer about
+one second after the tutor's audible question ends, measured by an observer or
+recording, and aim for a 0.4–0.6-second spoken answer at a consistent mouth
+position and level. Record actual answer start/end instead of assuming the aim
+was met. Match speaker playback loudness at the listener's position as closely
+as practical and record the level/setting; do not silently change it between
+conditions. Include five two-second **quiet-room silence** windows and five
+two-second **ordinary background-noise without learner speech** windows per
+output condition, with normal tutor playback on and its end marked. These
+controls test false microphone activity and quiet resets separately from the
+spoken answers. Document interruptions, corrections, missing transcripts, and
+failed runs; retain them in the report rather than replacing them invisibly.
+
+For every answer, export the existing `answer.*`, `advance.*`, and response-gate
+diagnostics and join by scene, answer version, correlation key, and a shared
+application-relative clock. Capture provisional activity, confirmed speech,
+stop, transcript revision, speech epoch, evaluation schedule/deadline and
+replacement reason, request, result, commit, display, gate eligibility/release,
+and first **observed** response. Preserve provider/media timestamps and
+recording offsets in separate columns; use synchronized audio review to mark
+actual acoustic answer end and possible leakage/noise, with uncertainty.
+Report transcript arrival → request, request → result, result → commit/release,
+and release → observed response independently. Gate intervals may overlap and
+must not simply be added.
+
+Report all repetitions by condition, per-answer path counts, fallback and
+false-activity rates, median/range of each interval, and silence-control
+behavior. A speaker-leakage attribution requires a repeatable speaker-versus-
+headphone difference **and** synchronized audio or energy/quiet-reset evidence
+showing tutor playback in the microphone channel at the relevant resets.
+Similar delays under headphones, persistent activity in silence controls,
+missing audio, or unmatched conditions leave that attribution inconclusive.
+For an epoch or scheduling fault, show a transcript/stop pair whose epoch and
+timer logs contradict the selected path. Decide whether current behavior is
+expected, a scoped fix is justified, or more measurement is required. Any
+proposed change must report its effect on fallback delay and false stops while
+preserving correction protection, stale-result invalidation, exactly-once
+advancement, immediate stop handling, and bounded fallback liveness. No
+threshold or timer recommendation is justified by this single session.

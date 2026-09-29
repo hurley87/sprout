@@ -12,6 +12,7 @@ Start with the [MVP PRD](sprout-mvp-prd.md) for the agreed product scope. These 
 | [GPT-Live baseline](gpt-live-baseline.md) | Slice 1 test matrix, observed shortcomings, and problems for the live-control decision |
 | [Jev answer experiment](jev-answer-experiment.md) | Whether one Jev question can drive scene advancement, measured against that baseline |
 | [Response-gate latency baseline](response-gate-latency-experiment.md) | Post-decision gate holds, provider lifecycle limits, and the next measured release-policy hypothesis |
+| [Microphone turn investigation baseline](microphone-turn-investigation.md) | Pre-evaluation fallback evidence, detector policy, and pending comparison protocol |
 
 ## Tutoring principle
 
