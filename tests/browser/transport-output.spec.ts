@@ -14,6 +14,7 @@ async function fixture(page: Page, microphoneMode: "silent" | "continuous" = "si
         contentType: "text/html",
         body: `<button>Start</button><audio></audio><script type="module">
         import { BrowserTransport } from './browser-transport';
+        import { LessonSession } from './session'; window.LessonSession = LessonSession;
         import { replacementMicrophone, outboundMicrophoneRtp } from './replacement-input.mjs';
         window.replacementMicrophone = replacementMicrophone; window.outboundMicrophoneRtp = outboundMicrophoneRtp;
         import { ResponseSourceContract } from './response-source-contract';
@@ -460,3 +461,122 @@ test("continuous experiment microphone has low nonzero PCM and real outbound aud
   );
   expect(await page.evaluate("window.failures")).toEqual([]);
 });
+
+// Exercise the production LessonSession -> BrowserTransport handoff, including
+// provider callbacks, real peers and the recording/playback mix.
+test("integrated stale ADVANCE retires A and instructs B before permission", async ({ page }) => {
+  await fixture(page);
+  await page.evaluate(`(() => {
+    window.sourceA = window.transport.current;
+    window.lateA = window.sourceA.channel.onmessage;
+    window.commandsA = []; window.commandsB = []; window.sendState = [];
+    window.providers[0].channel.onmessage = ({data}) => window.commandsA.push(JSON.parse(data));
+    window.session = new window.LessonSession(window.transport, async () => ({status: 'evaluated', probability: 1, model: 'test', latencyMs: 1}), snapshot => {
+      if (snapshot.sceneIndex === 1) setTimeout(() => window.session.displayed(1), 0);
+    });
+    window.transport.onEvent = event => { window.events.push(event); window.session.receive(event); };
+    window.session.receive({type: 'session.started'}); window.session.displayed(0);
+    const send = window.transport.send.bind(window.transport);
+    window.transport.send = command => { window.sendState.push({ source: window.transport.activeSourceId, blocked: document.querySelector('audio').muted, content: command.content }); send(command); };
+    window.session.receive({type: 'microphone.speech_started'});
+    window.session.receive({type: 'transcript', speaker: 'child', delta: 'One', startMs: 1000, endMs: 1100});
+    window.session.receive({type: 'microphone.speech_stopped', quietMs: 900});
+    window.hidden = setInterval(() => window.providers[0].channel.send(JSON.stringify({type: 'session.output_transcript.delta', delta: 'old scene ', start_ms: 0, end_ms: 100})), 100);
+    window.transport.startRecording();
+  })()`);
+  await expect.poll(() => page.evaluate("Boolean(window.transport.pending)"), { timeout: 8000 }).toBe(true);
+  await expect.poll(() => page.evaluate("window.providers[1]?.channel?.readyState")).toBe("open");
+  expect(await page.evaluate("window.session.snapshot.sceneIndex")).toBe(1);
+  expect(await page.evaluate("document.querySelector('audio').muted")).toBe(true);
+  await page.evaluate(`(() => {
+    window.sourceB = window.transport.pending;
+    window.providers[1].channel.onmessage = ({data}) => window.commandsB.push(JSON.parse(data));
+    window.providers[1].channel.send(JSON.stringify({type: 'session.started'}));
+  })()`);
+  await expect.poll(() => page.evaluate("window.transport.activeSourceId")).toBe(2);
+  await expect.poll(() => page.evaluate("window.commandsB.length")).toBe(1);
+  expect(await page.evaluate("window.sendState")).toEqual([
+    { source: 2, blocked: true, content: await page.evaluate("window.advanceContext(window.sceneAt(1))") },
+  ]);
+  expect(
+    await page.evaluate(
+      "window.commandsA.filter(command => command.content === window.advanceContext(window.sceneAt(1)))",
+    ),
+  ).toEqual([]);
+  expect(
+    await page.evaluate(
+      "window.sourceA.retired && window.sourceA.peer.connectionState === 'closed' && window.sourceA.channel.readyState === 'closed'",
+    ),
+  ).toBe(true);
+  expect(
+    await page.evaluate(
+      "window.session.events.filter(event => event.type === 'answer.response_gate_released').map(event => event.detail.reason)",
+    ),
+  ).toEqual(["replacement_source"]);
+  await page.evaluate(`(() => {
+    clearInterval(window.hidden);
+    window.beforeLate = window.events.length;
+    window.lateA({data: JSON.stringify({type: 'session.output_transcript.delta', delta: 'late A', start_ms: 0, end_ms: 1})});
+    window.lateA({data: JSON.stringify({type: 'session.input_transcript.delta', delta: 'Nine', start_ms: 0, end_ms: 1})});
+    window.providers[0].level.gain.value = 0.8;
+  })()`);
+  expect(await page.evaluate("window.events.length === window.beforeLate")).toBe(true);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        "!document.querySelector('audio').muted && window.transport.playbackReady && window.transport.remoteGain.gain.value === 1",
+      ),
+    )
+    .toBe(true);
+  await page.waitForTimeout(300);
+  const rms = await page.evaluate<{ blocked: number; permitted: number }>(`(async () => {
+    window.transport.stopMedia(); const recording = await window.transport.recording();
+    const decoded = await window.context.decodeAudioData(await recording.blob.arrayBuffer());
+    const pcm = decoded.getChannelData(0); const rate = decoded.sampleRate;
+    const rms = samples => Math.sqrt(samples.reduce((sum, x) => sum + x*x, 0) / samples.length);
+    return {blocked: rms(pcm.slice(rate * 0.3, rate)), permitted: rms(pcm.slice(-rate * 0.15))};
+  })()`);
+  expect(rms.blocked).toBeLessThan(0.001);
+  expect(rms.permitted).toBeGreaterThan(0.01);
+  await page.evaluate(
+    "window.transport.close(); window.providers.forEach(source => { source.peer.close(); source.tone.stop(); }); window.context.close()",
+  );
+});
+
+for (const activity of ["transcript", "microphone.activity_started"] as const) {
+  test(`integrated ${activity} cancels preparing B and closes its peer`, async ({ page }) => {
+    await fixture(page);
+    await page.evaluate(`(() => {
+      window.session = new window.LessonSession(window.transport, async () => ({status: 'evaluated', probability: 1, model: 'test', latencyMs: 1}), snapshot => {
+        if (snapshot.sceneIndex === 1) setTimeout(() => window.session.displayed(1), 0);
+      });
+      window.transport.onEvent = event => window.session.receive(event);
+      window.session.receive({type: 'session.started'}); window.session.displayed(0);
+      window.session.receive({type: 'microphone.speech_started'});
+      window.session.receive({type: 'transcript', speaker: 'child', delta: 'One', startMs: 1000, endMs: 1100});
+      window.session.receive({type: 'microphone.speech_stopped', quietMs: 900});
+      window.hidden = setInterval(() => window.providers[0].channel.send(JSON.stringify({type: 'session.output_transcript.delta', delta: 'old ', start_ms: 0, end_ms: 100})), 100);
+    })()`);
+    await expect
+      .poll(() => page.evaluate("window.transport.pending?.channel?.readyState"), { timeout: 8000 })
+      .toBe("open");
+    await page.evaluate(`(() => {
+      window.sourceB = window.transport.pending; window.lateB = window.sourceB.channel.onmessage;
+      window.session.receive(${activity === "transcript" ? "{type: 'transcript', speaker: 'child', delta: 'Two', startMs: 4000, endMs: 4100}" : "{type: 'microphone.activity_started'}"});
+      window.lateB({data: JSON.stringify({type: 'session.started'})}); clearInterval(window.hidden);
+    })()`);
+    expect(
+      await page.evaluate(
+        "window.sourceB.retired && window.sourceB.peer.connectionState === 'closed' && window.sourceB.channel.readyState === 'closed'",
+      ),
+    ).toBe(true);
+    expect(await page.evaluate("window.transport.activeSourceId")).toBe(1);
+    expect(await page.evaluate("document.querySelector('audio').muted")).toBe(true);
+    expect(await page.evaluate("window.session.events.some(event => event.type === 'replacement.promoted')")).toBe(
+      false,
+    );
+    await page.evaluate(
+      "window.session.dispose(); window.providers.forEach(source => { source.peer.close(); source.tone.stop(); }); window.context.close()",
+    );
+  });
+}

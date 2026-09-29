@@ -181,14 +181,17 @@ export class BrowserTransport implements Transport {
 
   /** SDP applied plus this source's session.started is READY, never playback permission. Pending
    * media is observed but never attached to the audio element or recording. */
-  async prepareReplacement(seed: ReplacementSeed): Promise<LiveSourceId> {
+  async prepareReplacement(seed: ReplacementSeed, signal?: AbortSignal): Promise<LiveSourceId> {
     if (this.cancelled || !this.mic || !this.onEvent) throw new Error("Transport unavailable");
+    if (signal?.aborted) throw new Error("Replacement cancelled");
     if (this.pending) throw new Error("Replacement already pending");
     const validated = parseReplacementSeed(seed);
     if (!validated) throw new Error("Invalid replacement lesson state");
     const requestedAt = performance.now();
     const source = this.createSource();
     this.pending = source;
+    const cancelPreparation = () => this.retireSource(source.id);
+    signal?.addEventListener("abort", cancelPreparation, { once: true });
     const timing: ReplacementTiming = {
       sourceId: source.id,
       clock: "browser.performance.now",
@@ -219,6 +222,7 @@ export class BrowserTransport implements Transport {
       this.retireSource(source.id);
       throw error;
     } finally {
+      signal?.removeEventListener("abort", cancelPreparation);
       clearTimeout(timer!);
       source.abort.signal.removeEventListener("abort", cancel);
       source.started = source.rejectReadiness = undefined;

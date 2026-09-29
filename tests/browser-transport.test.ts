@@ -603,3 +603,23 @@ it("invalid replacement seed fails before creating a connection or paid request"
   expect(a.peer.close).not.toHaveBeenCalled();
   transport.close();
 });
+
+it("gate cancellation signal immediately retires pending B without stopping A", async () => {
+  const a = liveConnection();
+  const transport = new BrowserTransport(audioElement() as unknown as HTMLAudioElement);
+  await transport.start(vi.fn(), vi.fn());
+  const b = liveConnection(false);
+  const abort = new AbortController();
+  const preparing = transport.prepareReplacement(seed, abort.signal);
+  const rejected = expect(preparing).rejects.toThrow("setup ended");
+  await vi.waitFor(() => expect(b.peer.setRemoteDescription).toHaveBeenCalledOnce());
+  abort.abort();
+  await rejected;
+  expect(b.peer.close).toHaveBeenCalledOnce();
+  expect(b.channel.close).toHaveBeenCalledOnce();
+  expect(a.peer.close).not.toHaveBeenCalled();
+  b.channel.onmessage?.({ data: JSON.stringify({ type: "session.started" }) });
+  expect(transport.activateSource(2)).toBe(false);
+  expect(transport.activeSourceId).toBe(1);
+  transport.close();
+});

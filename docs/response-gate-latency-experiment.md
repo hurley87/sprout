@@ -820,3 +820,85 @@ Local evidence under `test-results/replacement-timeline-20260929/`:
 | --- | --- |
 | `silent/results.json` | `3bc3ddf77ca6bae59a4796d5e2b72ed1d5c5687d04d529d63f7bb313c4e395f4` |
 | `continuous/results.json` | `0ac793ae869eea6165e5f4817d94f0b93d161efd519da06fa26b750c7aa646f3` |
+
+## Commit 4: integrated stale-output source isolation — 2026-09-29
+
+The response gate now has two paths. **Normal fast path:** correction/VAD/evaluation
+and scene display finish; A's `output_transcript_quiet` expires (or there is no
+blocked output); the production outcome context is sent to A and its playback
+is permitted. The app does not prepare another connection just because an
+answer gate exists. The 2,500 ms `UTTERANCE_GAP_MS` remains unchanged.
+
+**Stale-output path:** if the *only* remaining blocker is a moving A output
+transcript deadline for 2,500 continuous milliseconds, prepare a replacement.
+The threshold is an additional provider-only hold, measured after all
+application-owned prerequisites clear. It is deliberately conservative:
+replacement startup previously measured about 0.9–1.7 s, while an isolated
+~2 s hold does not yet justify another billed connection. This is a first
+bounded policy, not a tuning claim from a single run. `STALE_OUTPUT_REPLACEMENT_MS`
+is independent of the ordinary transcript gap.
+
+For ADVANCE, the Jev decision, 250 ms correction window, scene commit, and
+actual display must already be complete. For STAY/UNAVAILABLE, evaluation and
+correction/VAD protection must be complete, and the scene must be unchanged.
+Neither PCM quiet, instruction ACK, nor provider-generated text authorizes
+replacement. B is seeded from the gate's answer plus the displayed scene and
+application decision. Its own `session.started` is required for READY. When
+READY, the app rechecks the original scene/revision/answer identity and safety
+state, blocks output, promotes B (permanently retiring A), sends the production
+ADVANCE/STAY/UNAVAILABLE context to B, then permits output. The release reason
+is `replacement_source`; A's quiet deadline is retained in diagnostics rather
+than marked satisfied. Transcript quiet remains the normal and failed-startup
+fallback.
+
+A replacement attempt belongs to one gate identity. New child transcript or
+VAD activity cancels and retires pending B. For a committed ADVANCE, its new
+scene stays displayed and the new child turn can be evaluated against it; the
+old response stays blocked. Gate replacement, lesson end, startup failure, and
+recovery expiry also cancel B. A late preparation result is retired. Startup
+failure leaves A behind the original gate; the original 15-second deadline is
+never restarted. Promotion failure fails closed. The source contract keeps
+retired peers/channels closed and ignores their callbacks.
+
+Provider-free validation: 480 unit tests, including 14 new LessonSession
+handoff cases and a transport abort case; 28 Playwright tests, including the
+integrated real-WebRTC handoff, post-retirement callback rejection, recording
+PCM gate, child-activity cancellation, and a pending-B recovery-expiry case.
+Lint, typecheck, and production build passed. The provider-free fixture uses
+real Chromium peers, audio playback, and recording, with only the provider
+replaced.
+
+### Small billed Live/Jev probe
+
+Evidence: `test-results/integrated-replacement/results.json` (normal pass and
+an inconclusive stale attempt); `test-results/integrated-replacement-stale-retry/results.json`
+(stale pass). Both successful samples used the actual LessonSession,
+BrowserTransport, GPT-Live connections and Jev endpoint. Child VAD/transcript
+were synthetic, and a low continuous experiment-only microphone supplied real
+outbound RTP. These are transport/decision probes, not spoken-child end-to-end
+latency samples. The first stale attempt emitted no greeting transcript and
+could not reproduce a hold; it is retained as an inconclusive sample. The
+retry sent the long-output prompt after a bounded startup wait.
+
+| Category | Safe decision/display from answer | Replacement trigger | B READY after trigger | Outcome instruction after safe | First B/current-source transcript after instruction | First observed media activity after instruction | Outcome |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| Normal | 647 ms | None | — | 0.4 ms on A | 1,513 ms | 1,716 ms | ADVANCE on A; first transcript 2,161 ms from injected answer; no replacement |
+| Reproduced stale output | 497 ms | 2,502 ms after safe | 1,194 ms | 3,700 ms on B | 1,423 ms | 1,578 ms | ADVANCE on B; first transcript 5,620 ms from injected answer |
+
+The stale trigger occurred with 1,786 ms remaining on A's then-current quiet
+deadline. A generated more hidden fragments while B prepared, moving that
+remaining deadline to 2,191 ms at promotion. Twelve hidden A fragments
+extended the gate in the successful stale sample. A's peer and channel were
+closed at promotion; no A output transcript was observed afterward. The
+production ADVANCE instruction was sent only to B, while playback remained
+blocked. The displayed scene and seeded B scene were the committed next scene,
+and outbound microphone RTP increased. In this reproduced case, source
+replacement retired the stale GPT-Live source and resumed the authoritative
+response without waiting for A's remaining transcript-quiet deadline.
+
+The normal sample had no replacement and cannot by itself establish a
+statistically meaningful latency change. The two categories were deliberately
+different, so their total answer latencies are not a strict before/after
+comparison. More natural spoken-child runs, repeated normal-path samples,
+real stale-output reproducibility, and final qualification are still needed
+before closing #36. No issue-closing policy or commit is included here.
