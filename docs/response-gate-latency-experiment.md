@@ -559,3 +559,113 @@ architecture decision remains the one above: establish reliable output-media
 activity and controllable flushing/suppression semantics at the player or media
 relay boundary, with a bounded recovery path that fails closed, before considering
 an event-driven release policy. Do not infer end-to-end safety from this sample.
+
+## Commit 3: seeded replacement qualification — 2026-09-29
+
+This slice adds and measures replacement preparation without calling it from
+LessonSession or changing any answer gate. The base is `cde7686` on
+`feat/response-gate-source-isolation`. Initial `start()` retains its existing
+SDP completion behavior.
+
+A replacement is **READY only when its own SDP answer has been applied AND its
+own live data channel has supplied a parsed `session.started`**. A source-local
+readiness promise is installed before negotiation, so an early event cannot be
+missed and A cannot qualify B. Opening B's channel, transcripts, decoded PCM and
+instruction acknowledgments do not qualify it. A 30-second deadline covers the
+whole preparation, including offer/ICE/local endpoint/SDP/startup. Provider error,
+session or channel close, peer failure, retirement and lesson teardown reject
+preparation and permanently close B. Pending output/transcripts stay internal;
+B's stream has no playback or recording path. A remains authoritative until
+explicit activation. Promotion still blocks playback; separate permission is
+required to hear or record B.
+
+The browser sends only `{ sdp, replacement: { sceneIndex, decision,
+childUtterance } }`. The scene index means the **current displayed scene after
+the application outcome**, not the group the child just counted. Validation
+requires an integer within the lesson, ADVANCE/STAY/UNAVAILABLE, a nonempty
+utterance of at most 1,000 characters with no control characters, exactly the
+three seed fields, and no ADVANCE to the initial scene. The endpoint rejects
+extra request/seed fields before contacting OpenAI. `replacementSessionInput`
+in `lib/lesson.ts` builds text history: the utterance in a user message and
+trusted scene/outcome/app ownership/wait-for-outcome context in a developer
+message. It overrides the base prompt's initial one-duck assumption for the
+replacement and prohibits inferring an earlier scene. UNAVAILABLE prohibits
+right/wrong judgments. Startup requests do not ask for speech. The route always
+uses `LIVE_CONFIG`, adding only this generated `input`; browser instructions,
+model, voice, delegation, storage and arbitrary session configuration cannot
+replace it. Loopback protection, body limit, key secrecy, error redaction and
+single-attempt billed creation remain in place.
+
+### Targeted billed measurement
+
+Ran `node scripts/live-replacement-startup.mjs` against the existing configured
+local app at `http://127.0.0.1:3000`, starting at **2026-09-29 15:28:50.881 UTC**.
+One initial A plus three fresh B sessions were created sequentially with synthetic
+silence as microphone input. Each B was qualified while A remained authoritative,
+B stayed detached, and output was blocked. The first two replacements were then
+retired; the third was explicitly promoted for a separate diagnostic probe.
+There were no creation retries or Jev evaluations. All connections were closed
+on completion.
+
+All timestamps below are **browser `performance.now()` milliseconds in the same
+document**, rounded to 0.1 ms. `POST begun` observes the browser's call to the
+local `/api/live`; it is not a server/provider clock. `SDP received` observes
+successful answer-body parsing, including local server/network work. These are
+application startup observations, not acoustic latency or response delivery.
+
+| Seed / source | Replacement requested | POST begun | SDP received | Remote description applied | `session.started` | READY |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| ADVANCE / 2: “Two” | 1925.6 | 2047.1 | 2571.5 | 2572.7 | 3115.5 | 3115.6 |
+| STAY / 3: “Five” | 3119.9 | 3250.7 | 3641.2 | 3643.7 | 4602.0 | 4602.0 |
+| UNAVAILABLE / 4: “Three” | 4603.9 | 4719.8 | 4947.9 | 4949.1 | 5504.8 | 5504.8 |
+
+| Seed | Requested → SDP | Local POST → SDP | SDP → `session.started` | Requested → READY |
+| --- | ---: | ---: | ---: | ---: |
+| ADVANCE | 645.9 ms | 524.4 ms | 544.0 ms | **1190.0 ms** |
+| STAY | 521.3 ms | 390.5 ms | 960.8 ms | **1482.1 ms** |
+| UNAVAILABLE | 344.0 ms | 228.1 ms | 556.9 ms | **900.9 ms** |
+
+All three provider `session.started.session.input` arrays echoed the generated
+history: the child's exact synthetic utterance plus scene 2 (`butterfly-garden`),
+three butterflies, the correct deterministic decision, application scene
+ownership and silence until the outcome instruction. This verifies provider
+receipt of seeded current-scene context. It does not verify the model's use of
+that context in conversation. A post-readiness diagnostic instruction on the
+third source asked for the displayed object name without a count or judgment;
+**no output transcript arrived within the 20-second observation plus 2-second
+follow-up**, so there is no speech/context-use or conversational-quality claim.
+The replacement was kept muted during that probe.
+
+In these three samples, startup (0.901–1.482 seconds) is faster than both the
+historical **9.054-second** post-evaluation stall and the later **2.7-second**
+transcript-quiet hold recorded above. This makes clean seeded startup a plausible
+alternative worth integrating experimentally. It is not a matched comparison,
+load/reliability distribution, full response-latency measurement or final policy.
+It does not measure outcome-instruction delivery, first audible response or
+child interruption during the handoff.
+
+Local evidence: `test-results/replacement-startup/results.json`, SHA-256
+`0d010f4b960c16f41b718f96c1c0a4d5b7da18c2b67773a4220c748981c5624b`.
+The script additionally checks exact provider input echo and isolation on future
+runs. The retained run predates those additional explicit script assertions;
+the same checks were verified directly from its recorded provider input and
+per-sample isolation fields. No credentials or audio were committed.
+
+### Verification and next slice
+
+Route, BrowserTransport, seed-context and response-source isolation tests pass,
+as does the full 462-test unit suite. Five provider-free Playwright transport
+tests exercise actual Chromium WebRTC/RTP, media observation and recording,
+including SDP/open-channel-without-started, source-specific qualification,
+hidden B output, explicit promotion/permission and teardown before started.
+The tests reused the already-running port-3000 app with a temporary local
+Playwright config because starting port 3100 conflicts with the existing Next
+dev lock. Lint, typecheck and production build pass.
+
+Commit 4 remains unimplemented: select the pathological stale-output trigger,
+construct the authoritative seed at the correct scene/answer boundary, handle
+superseded answers/child interruptions and startup failure within recovery,
+promote explicitly, then send the outcome instruction and grant permission.
+Verify that complete flow before deciding a release policy. This commit leaves
+ADVANCE/STAY gates, `output_transcript_quiet`, `UTTERANCE_GAP_MS`, Jev, the
+250 ms correction window and 15-second recovery unchanged.

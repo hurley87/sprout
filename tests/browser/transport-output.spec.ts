@@ -210,9 +210,30 @@ test("source contract: retirement closes A permanently; connected B alone can be
   await expect.poll(() => page.evaluate<number>("window.pcmRms()")).toBeGreaterThan(0.01);
   expect(await page.evaluate("window.audioA.muted && !window.audioA.paused")).toBe(true);
   await page.evaluate(`(async () => {
-    window.idB = await window.transport.prepareReplacement();
+    window.replacementReady = false;
+    window.preparingB = window.transport.prepareReplacement({ sceneIndex: 2, decision: 'ADVANCE', childUtterance: 'Two' }).then(id => { window.replacementReady = true; window.idB = id; });
     window.sourceB = window.transport.pending;
     window.clientPeers = [window.sourceA.peer, window.sourceB.peer];
+  })()`);
+  await expect.poll(() => page.evaluate("window.sourceB.channel.readyState")).toBe("open");
+  expect(await page.evaluate("window.sourceB.peer.remoteDescription.type")).toBe("answer");
+  await expect.poll(() => page.evaluate("window.sourceB.activity.state")).toBe("active");
+  expect(await page.evaluate("window.audioA.srcObject !== window.sourceB.remote")).toBe(true);
+  expect(await page.evaluate("window.replacementReady || window.sourceB.ready")).toBe(false);
+  expect(
+    await page.evaluate(
+      "window.transport.activeSourceId === window.idA && !window.sourceA.retired && window.audioA.srcObject === window.streamA && window.audioA.muted",
+    ),
+  ).toBe(true);
+  await page.evaluate(`(() => {
+    window.providers[0].channel.send(JSON.stringify({type: 'session.started'}));
+    window.providers[1].channel.send(JSON.stringify({type: 'session.output_transcript.delta', delta: 'hidden B', start_ms: 0, end_ms: 1}));
+  })()`);
+  await expect.poll(() => page.evaluate("window.events.some(event => event.type === 'session.started')")).toBe(true);
+  expect(await page.evaluate("window.replacementReady")).toBe(false);
+  await page.evaluate(`(async () => {
+    window.providers[1].channel.send(JSON.stringify({type: 'session.started'}));
+    await window.preparingB;
     window.contract.add('B', {
       block: blocked => {
         if (window.transport.activeSourceId === window.idB) window.transport.setOutputBlocked(blocked);
@@ -227,6 +248,10 @@ test("source contract: retirement closes A permanently; connected B alone can be
       "window.audioA.srcObject === window.streamA && window.audioA.muted && !window.contract.eligible('B')",
     ),
   ).toBe(true);
+  expect(
+    await page.evaluate("window.events.some(event => event.type === 'transcript' && event.delta === 'hidden B')"),
+  ).toBe(false);
+  expect(await page.evaluate("window.transport.activeSourceId === window.idA && !window.sourceA.retired")).toBe(true);
   await page.evaluate("window.providers[0].level.gain.value = 0");
   await expect.poll(() => page.evaluate<number>("window.pcmRms()")).toBeLessThan(0.001);
   await expect.poll(async () => (await states(page)).at(-1)).toBe("quiet");
@@ -307,5 +332,31 @@ test("source contract: retirement closes A permanently; connected B alone can be
     ),
   ).toBe(true);
   expect(await page.evaluate("window.audioA.srcObject === null && window.audioA.paused")).toBe(true);
+  expect(await page.evaluate("window.failures")).toEqual([]);
+});
+
+test("teardown while real B has SDP and an open channel but no started closes both peers", async ({ page }) => {
+  await fixture(page);
+  await page.evaluate(`(() => {
+    window.sourceA = window.transport.current;
+    window.prepareResult = null;
+    window.preparing = window.transport.prepareReplacement({sceneIndex: 2, decision: 'ADVANCE', childUtterance: 'Two'}).then(() => { window.prepareResult = 'unexpected success'; }, error => { window.prepareResult = error.message; });
+    window.sourceB = window.transport.pending;
+  })()`);
+  await expect.poll(() => page.evaluate("window.sourceB.channel.readyState")).toBe("open");
+  expect(await page.evaluate("window.prepareResult")).toBeNull();
+  await page.evaluate("window.transport.stopMedia(); window.transport.close()");
+  await expect.poll(() => page.evaluate("window.prepareResult")).toContain("setup ended");
+  expect(
+    await page.evaluate(
+      "[window.sourceA, window.sourceB].every(source => source.peer.connectionState === 'closed' && source.retired)",
+    ),
+  ).toBe(true);
+  await page.evaluate(`(() => {
+    window.sourceB.channel.onmessage({data: JSON.stringify({type: 'session.started'})});
+    window.providers.forEach(source => { source.peer.close(); source.tone.stop(); });
+    window.context.close();
+  })()`);
+  expect(await page.evaluate("window.sourceB.ready")).toBe(false);
   expect(await page.evaluate("window.failures")).toEqual([]);
 });

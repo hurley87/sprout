@@ -3,6 +3,24 @@ import type { SessionAudioRecording } from "./session-recorder";
 import type { Transport } from "./session";
 import { MicrophoneTurnDetector } from "./microphone-turn";
 import { OutputActivityObserver } from "./output-activity";
+import { parseReplacementSeed, type ReplacementSeed } from "./lesson";
+
+export const REPLACEMENT_TIMEOUT_MS = 30_000;
+/** All timestamps are browser performance.now() milliseconds in one document.
+ * Provider request boundaries observe the local /api/live call, not server time. */
+export type ReplacementTiming = {
+  sourceId: LiveSourceId;
+  clock: "browser.performance.now";
+  replacement_requested_at: number;
+  provider_request_started_at?: number;
+  provider_response_received_at?: number;
+  remote_description_applied_at?: number;
+  session_started_at?: number;
+  replacement_ready_at?: number;
+  request_to_sdp_ms?: number;
+  sdp_to_session_started_ms?: number;
+  total_prepare_ms?: number;
+};
 
 const serverError = (body: unknown) =>
   typeof body === "object" && body !== null && "error" in body && typeof body.error === "string"
@@ -22,6 +40,9 @@ type LiveSource = {
   recordingSource?: MediaStreamAudioSourceNode;
   ready: boolean;
   retired: boolean;
+  timing?: ReplacementTiming;
+  started?: () => void;
+  rejectReadiness?: (error: Error) => void;
   activity: Extract<ProviderEvent, { type: "output.activity" }>;
 };
 
@@ -30,6 +51,7 @@ export class BrowserTransport implements Transport {
   private connections = new Map<LiveSourceId, LiveSource>();
   private current?: LiveSource;
   private pending?: LiveSource;
+  private lastReplacementTiming?: ReplacementTiming;
   private onEvent?: (event: ProviderEvent) => void;
   private onFailure?: (message: string) => void;
   private mic?: MediaStream;
@@ -54,6 +76,10 @@ export class BrowserTransport implements Transport {
 
   get activeSourceId(): LiveSourceId | undefined {
     return this.current?.id;
+  }
+
+  get replacementTiming(): ReplacementTiming | undefined {
+    return this.lastReplacementTiming && { ...this.lastReplacementTiming };
   }
 
   private get cancelled() {
@@ -134,7 +160,10 @@ export class BrowserTransport implements Transport {
 
   private fail(source: LiveSource, message: string) {
     if (this.authoritative(source)) this.onFailure?.(message);
-    else if (this.live(source)) this.retireSource(source.id);
+    else if (this.live(source)) {
+      source.rejectReadiness?.(new Error(message));
+      this.retireSource(source.id);
+    }
   }
 
   private createSource(): LiveSource {
@@ -150,20 +179,49 @@ export class BrowserTransport implements Transport {
     return source;
   }
 
-  /** Signalling readiness is not application playback permission. Pending
+  /** SDP applied plus this source's session.started is READY, never playback permission. Pending
    * media is observed but never attached to the audio element or recording. */
-  async prepareReplacement(): Promise<LiveSourceId> {
+  async prepareReplacement(seed: ReplacementSeed): Promise<LiveSourceId> {
     if (this.cancelled || !this.mic || !this.onEvent) throw new Error("Transport unavailable");
     if (this.pending) throw new Error("Replacement already pending");
+    const validated = parseReplacementSeed(seed);
+    if (!validated) throw new Error("Invalid replacement lesson state");
+    const requestedAt = performance.now();
     const source = this.createSource();
     this.pending = source;
+    const timing: ReplacementTiming = {
+      sourceId: source.id,
+      clock: "browser.performance.now",
+      replacement_requested_at: requestedAt,
+    };
+    source.timing = this.lastReplacementTiming = timing;
+    let timer: ReturnType<typeof setTimeout>;
+    const cancel = () => source.rejectReadiness?.(new Error("Replacement setup ended"));
+    const started = new Promise<void>((resolve, reject) => {
+      source.rejectReadiness = reject;
+      source.started = resolve;
+      source.abort.signal.addEventListener("abort", cancel, { once: true });
+      timer = setTimeout(() => {
+        reject(new Error("Replacement startup timed out"));
+        this.retireSource(source.id);
+      }, REPLACEMENT_TIMEOUT_MS);
+    });
     try {
-      await this.connectSource(source);
+      await Promise.all([this.connectSource(source, validated), started]);
       if (!this.live(source)) throw new Error("Replacement setup ended");
+      source.ready = true;
+      timing.replacement_ready_at = performance.now();
+      timing.request_to_sdp_ms = timing.provider_response_received_at! - requestedAt;
+      timing.sdp_to_session_started_ms = timing.session_started_at! - timing.provider_response_received_at!;
+      timing.total_prepare_ms = timing.replacement_ready_at - requestedAt;
       return source.id;
     } catch (error) {
       this.retireSource(source.id);
       throw error;
+    } finally {
+      clearTimeout(timer!);
+      source.abort.signal.removeEventListener("abort", cancel);
+      source.started = source.rejectReadiness = undefined;
     }
   }
 
@@ -240,7 +298,7 @@ export class BrowserTransport implements Transport {
       });
   }
 
-  private async connectSource(source: LiveSource) {
+  private async connectSource(source: LiveSource, seed?: ReplacementSeed) {
     const peer = source.peer;
     peer.ontrack = ({ track }) => {
       if (!this.live(source)) {
@@ -277,7 +335,7 @@ export class BrowserTransport implements Transport {
     for (const track of this.mic!.getAudioTracks()) peer.addTrack(track, this.mic!);
     const channel = (source.channel = peer.createDataChannel("oai-events"));
     channel.onmessage = ({ data }) => {
-      if (!this.authoritative(source)) return;
+      if (!this.live(source)) return;
       let raw: unknown;
       try {
         raw = JSON.parse(data);
@@ -286,6 +344,14 @@ export class BrowserTransport implements Transport {
         return;
       }
       const event = parseProviderEvent(raw);
+      if (source.timing && event?.type === "session.started" && source.timing.session_started_at === undefined) {
+        source.timing.session_started_at = performance.now();
+        source.started?.();
+      }
+      if (!this.authoritative(source) && (event?.type === "provider.error" || event?.type === "session.closed")) {
+        this.fail(source, "Replacement voice session ended before activation.");
+        return;
+      }
       if (event) this.emit(source, event);
     };
     channel.onerror = () => this.fail(source, "The voice connection reported an error. Please start a new lesson.");
@@ -298,10 +364,11 @@ export class BrowserTransport implements Transport {
     if (!this.live(source)) return;
     const sdp = peer.localDescription?.sdp;
     if (!sdp) throw new Error("The browser could not prepare its microphone connection.");
+    if (source.timing) source.timing.provider_request_started_at = performance.now();
     const response = await fetch("/api/live", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sdp }),
+      body: JSON.stringify(seed ? { sdp, replacement: seed } : { sdp }),
       signal: source.abort.signal,
     });
     if (!this.live(source)) return;
@@ -310,8 +377,12 @@ export class BrowserTransport implements Transport {
     if (!response.ok) throw new Error(serverError(body) ?? "Sprout could not connect to the voice service.");
     const answer = parseSessionAnswer(body);
     if (!answer) throw new Error("The voice service returned an unusable connection answer.");
+    if (source.timing) source.timing.provider_response_received_at = performance.now();
     await peer.setRemoteDescription({ type: "answer", sdp: answer.sdp });
-    if (this.live(source)) source.ready = true;
+    if (this.live(source)) {
+      if (source.timing) source.timing.remote_description_applied_at = performance.now();
+      else source.ready = true; // Preserve initial start() behavior.
+    }
   }
 
   private gatherIce(peer: RTCPeerConnection, signal: AbortSignal): Promise<void> {

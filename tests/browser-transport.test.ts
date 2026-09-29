@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BrowserTransport } from "../lib/browser-transport";
+import { REPLACEMENT_TIMEOUT_MS, BrowserTransport } from "../lib/browser-transport";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
+const seed = { sceneIndex: 2, decision: "ADVANCE" as const, childUtterance: "Two" };
 
 function audioElement() {
   const audio = {
@@ -14,7 +18,7 @@ function audioElement() {
   return audio;
 }
 
-function liveConnection() {
+function liveConnection(autoStarted = true) {
   const remoteTrack = { stop: vi.fn() } as unknown as MediaStreamTrack;
   const micTrack = { stop: vi.fn() } as unknown as MediaStreamTrack;
   class Stream {
@@ -44,7 +48,9 @@ function liveConnection() {
     createDataChannel: vi.fn(() => channel),
     createOffer: vi.fn(async () => ({ type: "offer", sdp: "offer" })),
     setLocalDescription: vi.fn(async () => {}),
-    setRemoteDescription: vi.fn(async () => {}),
+    setRemoteDescription: vi.fn(async () => {
+      if (autoStarted) channel.onmessage?.({ data: JSON.stringify({ type: "session.started" }) });
+    }),
     close: vi.fn(),
   };
   vi.stubGlobal("MediaStream", Stream);
@@ -296,7 +302,7 @@ describe("production response-source isolation", () => {
     a.peer.ontrack?.({ track: a.remoteTrack });
     const streamA = audio.srcObject;
     const b = liveConnection();
-    const idB = await transport.prepareReplacement();
+    const idB = await transport.prepareReplacement(seed);
     expect(idB).toBeGreaterThan(idA);
     b.peer.ontrack?.({ track: b.remoteTrack });
     expect(audio.srcObject).toBe(streamA);
@@ -386,7 +392,7 @@ describe("production response-source isolation", () => {
     await transport.start(vi.fn(), vi.fn());
     a.peer.ontrack?.({ track: a.remoteTrack });
     const b = liveConnection();
-    const idB = await transport.prepareReplacement();
+    const idB = await transport.prepareReplacement(seed);
     b.peer.ontrack?.({ track: b.remoteTrack });
     transport.stopMedia();
     transport.stopMedia();
@@ -412,8 +418,8 @@ describe("production response-source isolation", () => {
           offer = resolve;
         }),
     );
-    const preparing = transport.prepareReplacement();
-    await expect(transport.prepareReplacement()).rejects.toThrow("already pending");
+    const preparing = transport.prepareReplacement(seed);
+    await expect(transport.prepareReplacement(seed)).rejects.toThrow("already pending");
     // IDs are monotonically allocated, so the first pending source follows A.
     expect(transport.activateSource(idA! + 1)).toBe(false);
     transport.retireSource(idA! + 1);
@@ -433,7 +439,7 @@ it("pending connection failure stays local and a late setup completion cannot su
   await transport.start(vi.fn(), failure);
   const idA = transport.activeSourceId;
   const b = liveConnection();
-  const idB = await transport.prepareReplacement();
+  const idB = await transport.prepareReplacement(seed);
   (b.channel.onerror as (() => void) | null)?.();
   expect(transport.activateSource(idB)).toBe(false);
   expect(transport.activeSourceId).toBe(idA);
@@ -451,7 +457,7 @@ it("pending connection failure stays local and a late setup completion cannot su
         answer = resolve;
       }),
   );
-  const preparing = transport.prepareReplacement();
+  const preparing = transport.prepareReplacement(seed);
   // Let setup reach its final await, then end the lesson before it resolves.
   await vi.waitFor(() => expect(c.peer.setRemoteDescription).toHaveBeenCalledOnce());
   transport.close();
@@ -474,7 +480,7 @@ it("promotion retires a playable A and leaves B's playback and recording blocked
   await Promise.resolve();
   expect(gain.gain.value).toBe(1);
   const b = liveConnection();
-  const idB = await transport.prepareReplacement();
+  const idB = await transport.prepareReplacement(seed);
   b.peer.ontrack?.({ track: b.remoteTrack });
   expect(gain.gain.value).toBe(1); // Pending B has no path into the mix.
   vi.mocked(a.remoteTrack.stop).mockImplementation(() => {
@@ -491,5 +497,109 @@ it("promotion retires a playable A and leaves B's playback and recording blocked
   transport.setOutputBlocked(false);
   expect(audio.muted).toBe(false);
   expect(gain.gain.value).toBe(1);
+  transport.close();
+});
+
+it("SDP and A events cannot qualify B; B started qualifies without promotion or event leakage", async () => {
+  const a = liveConnection();
+  const events = vi.fn();
+  const audio = audioElement();
+  const transport = new BrowserTransport(audio as unknown as HTMLAudioElement);
+  await transport.start(events, vi.fn());
+  a.peer.ontrack?.({ track: a.remoteTrack });
+  const streamA = audio.srcObject;
+  const b = liveConnection(false);
+  let resolved = false;
+  const preparing = transport.prepareReplacement(seed).then(id => {
+    resolved = true;
+    return id;
+  });
+  await vi.waitFor(() => expect(b.peer.setRemoteDescription).toHaveBeenCalledOnce());
+  const count = events.mock.calls.length;
+  const emitB = (raw: unknown) => b.channel.onmessage?.({ data: JSON.stringify(raw) });
+  emitB({ type: "session.output_transcript.delta", delta: "hidden", start_ms: 0, end_ms: 1 });
+  emitB({ type: "session.instructions.appended" });
+  emitB({ type: 42 });
+  a.channel.onmessage?.({ data: JSON.stringify({ type: "session.started" }) });
+  await Promise.resolve();
+  expect(resolved).toBe(false);
+  expect(transport.activateSource(2)).toBe(false);
+  expect(a.peer.close).not.toHaveBeenCalled();
+  emitB({ type: "session.started" });
+  const id = await preparing;
+  expect(id).toBe(2);
+  expect(events.mock.calls.slice(count)).toEqual([[expect.objectContaining({ type: "session.started" })]]);
+  expect(transport.activeSourceId).toBe(1);
+  expect(audio.srcObject).toBe(streamA);
+  expect(a.peer.close).not.toHaveBeenCalled();
+  expect(transport.replacementTiming).toMatchObject({ sourceId: 2, clock: "browser.performance.now" });
+  const timing = transport.replacementTiming!;
+  expect(timing.total_prepare_ms).toBe(timing.replacement_ready_at! - timing.replacement_requested_at);
+  expect(timing.request_to_sdp_ms).toBe(timing.provider_response_received_at! - timing.replacement_requested_at);
+  expect(timing.sdp_to_session_started_ms).toBe(timing.session_started_at! - timing.provider_response_received_at!);
+  expect(timing.remote_description_applied_at).toBeGreaterThanOrEqual(timing.provider_response_received_at!);
+  const request = JSON.parse(vi.mocked(fetch).mock.calls[0][1]!.body as string);
+  expect(request).toEqual({ sdp: "offer", replacement: seed });
+  transport.close();
+});
+
+it.each([
+  "provider error",
+  "provider close",
+  "channel error",
+  "channel close",
+  "peer failure",
+  "retire",
+  "stop",
+  "timeout",
+  "stalled SDP",
+])("%s before started rejects, closes B, and ignores late started", async cause => {
+  const a = liveConnection();
+  const failure = vi.fn();
+  const events = vi.fn();
+  const transport = new BrowserTransport(audioElement() as unknown as HTMLAudioElement);
+  await transport.start(events, failure);
+  const b = liveConnection(false);
+  if (cause === "stalled SDP") b.peer.setRemoteDescription.mockImplementation(() => new Promise(() => {}));
+  vi.useFakeTimers();
+  const preparing = transport.prepareReplacement(seed);
+  const rejection = expect(preparing).rejects.toThrow();
+  for (let i = 0; i < 20; i++) await Promise.resolve();
+  expect(b.peer.setRemoteDescription).toHaveBeenCalledOnce();
+  if (cause === "provider error" || cause === "provider close")
+    b.channel.onmessage?.({ data: JSON.stringify({ type: cause === "provider error" ? "error" : "session.closed" }) });
+  else if (cause === "channel error") (b.channel.onerror as (() => void) | null)?.();
+  else if (cause === "channel close") (b.channel.onclose as (() => void) | null)?.();
+  else if (cause === "peer failure") {
+    b.peer.connectionState = "failed";
+    (b.peer.onconnectionstatechange as (() => void) | null)?.();
+  } else if (cause === "retire") transport.retireSource(2);
+  else if (cause === "stop") transport.stopMedia();
+  else await vi.advanceTimersByTimeAsync(REPLACEMENT_TIMEOUT_MS);
+  await rejection;
+  const count = events.mock.calls.length;
+  b.channel.onmessage?.({ data: JSON.stringify({ type: "session.started" }) });
+  expect(events).toHaveBeenCalledTimes(count);
+  expect(transport.activateSource(2)).toBe(false);
+  expect(b.peer.close).toHaveBeenCalledOnce();
+  expect(b.channel.close).toHaveBeenCalledOnce();
+  expect(transport.replacementTiming?.replacement_ready_at).toBeUndefined();
+  if (cause !== "stop") {
+    expect(transport.activeSourceId).toBe(1);
+    expect(a.peer.close).not.toHaveBeenCalled();
+  }
+  expect(failure).not.toHaveBeenCalled();
+  transport.close();
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it("invalid replacement seed fails before creating a connection or paid request", async () => {
+  const a = liveConnection();
+  const transport = new BrowserTransport(audioElement() as unknown as HTMLAudioElement);
+  await transport.start(vi.fn(), vi.fn());
+  vi.mocked(fetch).mockClear();
+  await expect(transport.prepareReplacement({ ...seed, sceneIndex: -1 })).rejects.toThrow("Invalid");
+  expect(fetch).not.toHaveBeenCalled();
+  expect(a.peer.close).not.toHaveBeenCalled();
   transport.close();
 });

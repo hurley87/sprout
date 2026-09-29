@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { POST } from "../app/api/live/route";
-import { LIVE_CONFIG } from "../lib/lesson";
+import { LIVE_CONFIG, replacementSessionInput } from "../lib/lesson";
 
 const request = (body: unknown = { sdp: "v=0\r\n" }, origin = "http://localhost:3000", host = "localhost:3000") =>
   new Request("http://localhost:3000/api/live", {
@@ -87,4 +87,53 @@ describe("local Live session endpoint", () => {
     );
     expect((await POST(request())).status).toBe(502);
   });
+});
+
+const seed = { sceneIndex: 2, decision: "ADVANCE" as const, childUtterance: "Two" };
+it.each(["ADVANCE", "STAY", "UNAVAILABLE"] as const)(
+  "seeds %s with only canonical config plus generated history",
+  async decision => {
+    vi.stubEnv("OPENAI_API_KEY", "synthetic-test-key");
+    const fetch = vi.fn(async () => Response.json({ session: { id: "B" }, transport: { sdp: "answer" } }));
+    vi.stubGlobal("fetch", fetch);
+    const replacement = { ...seed, decision };
+    expect((await POST(request({ sdp: "v=0", replacement }))).status).toBe(201);
+    const calls = fetch.mock.calls as unknown as [string, RequestInit][];
+    expect(JSON.parse(calls[0][1].body as string)).toEqual({
+      session: { ...LIVE_CONFIG, input: replacementSessionInput(replacement) },
+      transport: { type: "webrtc", sdp: "v=0" },
+    });
+    expect(fetch).toHaveBeenCalledOnce();
+  },
+);
+it.each(["instructions", "model", "voice", "session", "input", "audio", "delegation", "store"])(
+  "rejects arbitrary %s at both request and seed boundaries",
+  async key => {
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    expect((await POST(request({ sdp: "v=0", [key]: "injected" }))).status).toBe(400);
+    expect((await POST(request({ sdp: "v=0", replacement: seed, [key]: "injected" }))).status).toBe(400);
+    expect((await POST(request({ sdp: "v=0", replacement: { ...seed, [key]: "injected" } }))).status).toBe(400);
+    expect(fetch).not.toHaveBeenCalled();
+  },
+);
+it.each([
+  null,
+  {},
+  [],
+  { ...seed, sceneIndex: -1 },
+  { ...seed, sceneIndex: 999 },
+  { ...seed, sceneIndex: 1.5 },
+  { ...seed, sceneIndex: "2" },
+  { ...seed, sceneIndex: 0 },
+  { ...seed, decision: "RIGHT" },
+  { ...seed, childUtterance: 1 },
+  { ...seed, childUtterance: " " },
+  { ...seed, childUtterance: "x".repeat(1001) },
+  { ...seed, childUtterance: "Two\u0000" },
+])("rejects invalid seed %j before billing", async replacement => {
+  const fetch = vi.fn();
+  vi.stubGlobal("fetch", fetch);
+  expect((await POST(request({ sdp: "v=0", replacement }))).status).toBe(400);
+  expect(fetch).not.toHaveBeenCalled();
 });
