@@ -26,6 +26,7 @@ function Scene({ index }: { index: number }) {
 export default function Lesson({ debug }: { debug: boolean }) {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [diagnosticEvents, setDiagnosticEvents] = useState<readonly Diagnostic[]>([]);
+  const [microphoneDiagnostics, setMicrophoneDiagnostics] = useState(false);
   const [endedAttempt, setEndedAttempt] = useState<{ ref?: DurableSessionRef; reader: SessionRecordReader } | null>(
     null,
   );
@@ -65,7 +66,7 @@ export default function Lesson({ debug }: { debug: boolean }) {
     session.current?.dispose();
     const recorder = new ConvexSessionRecorder();
     const current = new LessonSession(
-      new BrowserTransport(audio.current),
+      new BrowserTransport(audio.current, microphoneDiagnostics),
       fetchEvaluateAnswer,
       snapshot => {
         if (session.current === current) {
@@ -152,6 +153,14 @@ export default function Lesson({ debug }: { debug: boolean }) {
             {snapshot ? "Start a new lesson" : "Start counting together"}
             <span aria-hidden="true">↗</span>
           </button>
+          <label className="parent-note">
+            <input
+              type="checkbox"
+              checked={microphoneDiagnostics}
+              onChange={event => setMicrophoneDiagnostics(event.target.checked)}
+            />{" "}
+            Include microphone turn measurements in this attempt’s local diagnostic download
+          </label>
           <div className="parent-note">
             <p>For a parent and child · About 5 minutes · Quantities 1–5</p>
             <p>

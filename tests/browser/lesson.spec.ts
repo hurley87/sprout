@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 
 type TestState = {
   emit: (event: object) => void;
@@ -198,6 +199,31 @@ test("parent start, committed scene, stop, late actions, and diagnostics export"
   const persistence = await page.evaluate(() => window.sproutTest.persistence);
   expect(persistence.indexOf("sessions:generateUploadUrl")).toBeGreaterThan(persistence.indexOf("sessions:finalize"));
   expect(errors).toEqual([]);
+});
+
+test("opt-in microphone measurements appear in the local download", async ({ page }) => {
+  await mockLive(page);
+  await page.goto("/");
+  const checkbox = page.getByRole("checkbox", { name: /Include microphone turn measurements/ });
+  await expect(checkbox).not.toBeChecked();
+  await checkbox.check();
+  await page.getByRole("button", { name: "Start counting together" }).click();
+  await expect(page.locator('[data-scene="hello-duck"]')).toBeVisible();
+  await page.waitForTimeout(600);
+  await page.getByRole("button", { name: "End lesson" }).click();
+  await page.getByText("Parent testing notes").click();
+  const pending = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download attempt diagnostics" }).click();
+  const download = await pending;
+  const report = JSON.parse(await readFile((await download.path())!, "utf8")) as {
+    events: { at: number; type: string; detail: Record<string, unknown> }[];
+  };
+  expect(report.events.some(event => event.type === "microphone.track_settings")).toBe(true);
+  const windows = report.events.filter(event => event.type === "microphone.detector_window");
+  expect(windows.length).toBeGreaterThan(0);
+  expect(windows[0].detail).toMatchObject({ candidate: false, confirmed: false, rmsMax: 0 });
+  expect(windows[0].at).toBeGreaterThanOrEqual(0);
+  expect(windows[0].at).toBeLessThan(5000);
 });
 
 test("a correct count commits once and holds its response until output transcript quiet", async ({ page }) => {

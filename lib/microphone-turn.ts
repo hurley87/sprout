@@ -1,6 +1,26 @@
 import { MICROPHONE_ONSET_MS, MICROPHONE_ONSET_QUIET_MS, MICROPHONE_QUIET_MS } from "./answer";
 import type { MicrophoneEvent } from "./events";
 
+export type MicrophoneMeasurement = {
+  frames: number;
+  rmsMin: number;
+  rmsMean: number;
+  rmsMax: number;
+  threshold: number;
+  noiseFloor: number;
+  aboveThresholdFrames: number;
+  candidate: boolean;
+  confirmed: boolean;
+  quietMs: number;
+  quietResets: number;
+  longestResetQuietMs: number;
+  maxFrameGapMs: number;
+  frameGapsOver100Ms: number;
+  audioContextState: AudioContextState;
+};
+
+const MEASUREMENT_WINDOW_MS = 250;
+
 /** Local energy VAD. GPT-Live has no input-turn completion event. This watches
  * the already-authorized microphone, without recording or retaining samples. */
 export class MicrophoneTurnDetector {
@@ -18,10 +38,23 @@ export class MicrophoneTurnDetector {
   private quietSince = 0;
   private noiseFloor = 0.003;
   private stopped = false;
+  private lastFrameAt?: number;
+  private windowStartedAt?: number;
+  private windowFrames = 0;
+  private rmsSum = 0;
+  private rmsMin = Infinity;
+  private rmsMax = 0;
+  private aboveThresholdFrames = 0;
+  private quietResets = 0;
+  private longestResetQuietMs = 0;
+  private maxFrameGapMs = 0;
+  private frameGapsOver100Ms = 0;
+  private lastThreshold = 0.015;
 
   constructor(
     stream: MediaStream,
     private emit: (event: MicrophoneEvent) => void,
+    private measure?: (measurement: MicrophoneMeasurement) => void,
   ) {
     this.context = new AudioContext();
     this.source = this.context.createMediaStreamSource(stream);
@@ -38,7 +71,27 @@ export class MicrophoneTurnDetector {
     let power = 0;
     for (const sample of this.samples) power += sample * sample;
     const rms = Math.sqrt(power / this.samples.length);
-    const voice = rms > Math.max(0.015, this.noiseFloor * 3);
+    const threshold = Math.max(0.015, this.noiseFloor * 3);
+    const voice = rms > threshold;
+    if (this.measure) {
+      this.lastThreshold = threshold;
+      this.windowStartedAt ??= now;
+      this.windowFrames++;
+      this.rmsSum += rms;
+      this.rmsMin = Math.min(this.rmsMin, rms);
+      this.rmsMax = Math.max(this.rmsMax, rms);
+      if (voice) this.aboveThresholdFrames++;
+      if (this.lastFrameAt !== undefined) {
+        const gap = Math.max(0, now - this.lastFrameAt);
+        this.maxFrameGapMs = Math.max(this.maxFrameGapMs, gap);
+        if (gap > 100) this.frameGapsOver100Ms++;
+      }
+      this.lastFrameAt = now;
+      if (voice && this.quietSince) {
+        this.quietResets++;
+        this.longestResetQuietMs = Math.max(this.longestResetQuietMs, now - this.quietSince);
+      }
+    }
     if (voice) {
       this.quietSince = 0;
       if (!this.active && !this.candidate) {
@@ -86,6 +139,35 @@ export class MicrophoneTurnDetector {
       this.voicedMs = 0;
       this.lastVoicedAt = undefined;
       this.emit({ type: "microphone.activity_discarded" });
+    }
+    if (this.measure && now - this.windowStartedAt! >= MEASUREMENT_WINDOW_MS) {
+      this.measure({
+        frames: this.windowFrames,
+        rmsMin: this.rmsMin,
+        rmsMean: this.rmsSum / this.windowFrames,
+        rmsMax: this.rmsMax,
+        threshold: this.lastThreshold,
+        noiseFloor: this.noiseFloor,
+        aboveThresholdFrames: this.aboveThresholdFrames,
+        candidate: this.candidate,
+        confirmed: this.active,
+        quietMs: this.quietSince ? now - this.quietSince : 0,
+        quietResets: this.quietResets,
+        longestResetQuietMs: this.longestResetQuietMs,
+        maxFrameGapMs: this.maxFrameGapMs,
+        frameGapsOver100Ms: this.frameGapsOver100Ms,
+        audioContextState: this.context.state,
+      });
+      this.windowStartedAt = now;
+      this.windowFrames = 0;
+      this.rmsSum = 0;
+      this.rmsMin = Infinity;
+      this.rmsMax = 0;
+      this.aboveThresholdFrames = 0;
+      this.quietResets = 0;
+      this.longestResetQuietMs = 0;
+      this.maxFrameGapMs = 0;
+      this.frameGapsOver100Ms = 0;
     }
     this.frame = requestAnimationFrame(this.tick);
   };

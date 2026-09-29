@@ -62,6 +62,34 @@ function setup(active = true, evaluateAnswer: EvaluateAnswer = answering(UNSURE)
   }
   return { session, transport, evaluateAnswer };
 }
+
+it("joins transport measurements to the application clock and ignores late callbacks", async () => {
+  let diagnostic!: Parameters<NonNullable<Transport["setMicrophoneDiagnosticSink"]>>[0];
+  const transport: Transport = {
+    start: vi.fn(async () => {}),
+    setMicrophoneDiagnosticSink: sink => {
+      diagnostic = sink;
+    },
+    send: vi.fn(),
+    setOutputBlocked: vi.fn(),
+    stopMedia: vi.fn(),
+    close: vi.fn(),
+  };
+  const session = new LessonSession(transport, answering(UNSURE), vi.fn());
+  await session.start();
+  vi.advanceTimersByTime(123);
+  diagnostic({ type: "microphone.track_settings", detail: { echoCancellation: true, sampleRate: 48000 } });
+  const event = session.report("test").events.at(-1);
+  expect(event).toEqual({
+    at: 123,
+    type: "microphone.track_settings",
+    detail: { echoCancellation: true, sampleRate: 48000 },
+  });
+  session.dispose();
+  const count = session.events.length;
+  diagnostic({ type: "microphone.track_settings", detail: {} });
+  expect(session.events).toHaveLength(count);
+});
 /** Lets the utterance settle and any resulting evaluation resolve. */
 const settle = (extra = 0) => vi.advanceTimersByTimeAsync(SETTLE_MS + extra);
 /** Tests send provider-shaped JSON so the parser boundary is exercised too. */

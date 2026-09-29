@@ -16,6 +16,7 @@ import {
   type EvaluateAnswer,
 } from "./answer";
 import type { ClientCommand, ProviderEvent, TranscriptEvent } from "./events";
+import type { MicrophoneDiagnostic } from "./browser-transport";
 
 import {
   LAST_SCENE,
@@ -74,6 +75,7 @@ export type Snapshot = {
 export type Diagnostic = { at: number; type: string; detail?: unknown };
 
 export interface Transport {
+  setMicrophoneDiagnosticSink?(sink: (event: MicrophoneDiagnostic) => void): void;
   start(onEvent: (event: ProviderEvent) => void, onFailure: (message: string) => void): Promise<void>;
   startRecording?(): void;
   recording?(): Promise<SessionAudioRecording | null>;
@@ -376,6 +378,9 @@ export class LessonSession {
   async start() {
     if (this.recordingStarted) return;
     this.recordingStarted = true;
+    this.transport.setMicrophoneDiagnosticSink?.(event => {
+      if (!this.closed && this.snapshot.status !== "ended") this.log(event.type, event.detail);
+    });
     if (this.recorder)
       this.recording.enqueue("create", async () => {
         const durableSessionRef = await this.recorder!.create(this.retryOf);

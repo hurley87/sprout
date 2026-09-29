@@ -25,6 +25,18 @@ speech epoch, timer replacements, or the full in-memory diagnostics. The
 recording's availability does not establish which sound held the detector open.
 The complete record status establishes successful assembly, not acoustic quality.
 
+## Opt-in detector measurements (commit 2)
+
+Before starting an attempt, select **Include microphone turn measurements in this attempt’s local diagnostic download** on the welcome screen. After ending the attempt, expand **Parent testing notes · Prototype diagnostics** and choose **Download attempt diagnostics**. The checkbox is off by default and applies to the next attempt. The measurements stay in the bounded, in-memory diagnostic stream (up to 8,000 events); they are not canonical learner evidence or part of the durable session record. Download before starting another attempt or reloading the page.
+
+`microphone.track_settings` records the browser's actual audio track settings when available: echo cancellation, noise suppression, automatic gain control, sample rate/size, channel count, and latency. It excludes device and group identifiers and labels. Settings establish what the browser reports, not whether processing was effective.
+
+If Web Audio detector initialization fails, `microphone.detector_unavailable` records that fact without an error string. Transcript fallback remains available.
+
+`microphone.detector_window` is emitted at most once per 250 ms animation-frame window. It includes frame count, RMS minimum/mean/maximum, last effective energy threshold and noise-floor estimate, above-threshold frame count, provisional (`candidate`) and confirmed state, current quiet duration, quiet-reset count and longest reset interval, largest frame gap, number of gaps over 100 ms, and AudioContext state. RMS, threshold, and noise floor are dimensionless energy estimates; no waveform samples are retained. A reset means an above-threshold frame interrupted a confirmed-speech quiet interval. A frame gap measures browser callback spacing, not acoustic silence.
+
+Each event's `at` is milliseconds from the attempt's application `createdAt`, assigned when the session receives the measurement, so it joins existing `answer.*` and session diagnostics. The detector uses animation-frame timestamps only for its own state machine and gap/quiet durations. Provider transcript media positions and estimated acoustic end remain separate clocks and estimates. These measurements alone cannot identify the sound source or establish audible answer timing. This slice does not change detector or evaluation policy; further epoch and fallback-selection diagnostics belong to commit 3.
+
 ## Example session timing
 
 All `at` values below are **application milliseconds since `session.started`**,

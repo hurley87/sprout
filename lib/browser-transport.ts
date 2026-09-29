@@ -1,7 +1,7 @@
 import { parseProviderEvent, parseSessionAnswer, type ClientCommand, type ProviderEvent } from "./events";
 import type { SessionAudioRecording } from "./session-recorder";
 import type { Transport } from "./session";
-import { MicrophoneTurnDetector } from "./microphone-turn";
+import { MicrophoneTurnDetector, type MicrophoneMeasurement } from "./microphone-turn";
 import { OutputActivityObserver } from "./output-activity";
 import { parseReplacementSeed, type ReplacementSeed } from "./lesson";
 
@@ -29,6 +29,42 @@ const serverError = (body: unknown) =>
 
 /** Application-owned identity; provider event IDs never select authority. */
 export type LiveSourceId = number;
+
+export type MicrophoneDiagnostic =
+  | { type: "microphone.track_settings"; detail: Record<string, number | boolean | string> }
+  | { type: "microphone.detector_unavailable"; detail: { reason: "web_audio_initialization_failed" } }
+  | { type: "microphone.detector_window"; detail: MicrophoneMeasurement };
+
+/** Deliberately omit deviceId, groupId, and labels from the local export. */
+export function microphoneTrackSettings(track: MediaStreamTrack): Record<string, number | boolean | string> {
+  let settings: Record<string, unknown> | undefined;
+  try {
+    settings = track.getSettings?.() as Record<string, unknown> | undefined;
+  } catch {
+    return {};
+  }
+  if (!settings) return {};
+  const allowed = [
+    "echoCancellation",
+    "noiseSuppression",
+    "autoGainControl",
+    "sampleRate",
+    "sampleSize",
+    "channelCount",
+    "latency",
+  ] as const;
+  const result: Record<string, number | boolean | string> = {};
+  for (const key of allowed) {
+    const value = settings[key];
+    if (
+      typeof value === "number" ||
+      typeof value === "boolean" ||
+      (key === "echoCancellation" && typeof value === "string")
+    )
+      result[key] = value;
+  }
+  return result;
+}
 
 type LiveSource = {
   id: LiveSourceId;
@@ -72,7 +108,16 @@ export class BrowserTransport implements Transport {
   // The single record of "this attempt is over", set by stopMedia(). Late
   // callbacks and resolved awaits check it instead of tracking their own flags.
   private abort = new AbortController();
-  constructor(private audio: HTMLAudioElement) {}
+  constructor(
+    private audio: HTMLAudioElement,
+    private microphoneDiagnostics = false,
+  ) {}
+
+  private diagnosticSink?: (event: MicrophoneDiagnostic) => void;
+
+  setMicrophoneDiagnosticSink(sink: (event: MicrophoneDiagnostic) => void) {
+    if (this.microphoneDiagnostics && !this.cancelled) this.diagnosticSink = sink;
+  }
 
   get activeSourceId(): LiveSourceId | undefined {
     return this.current?.id;
@@ -102,6 +147,10 @@ export class BrowserTransport implements Transport {
       return;
     }
     this.mic = stream;
+    if (this.microphoneDiagnostics) {
+      const track = stream.getAudioTracks()[0];
+      if (track) this.diagnosticSink?.({ type: "microphone.track_settings", detail: microphoneTrackSettings(track) });
+    }
     try {
       if (typeof MediaRecorder === "undefined") throw new Error("MediaRecorder is unavailable");
       this.context = new AudioContext();
@@ -128,11 +177,24 @@ export class BrowserTransport implements Transport {
     }
     if (this.cancelled) return;
     try {
-      this.turnDetector = new MicrophoneTurnDetector(stream, event => {
-        if (!this.cancelled) onEvent(event);
-      });
+      this.turnDetector = new MicrophoneTurnDetector(
+        stream,
+        event => {
+          if (!this.cancelled) onEvent(event);
+        },
+        this.microphoneDiagnostics
+          ? detail => {
+              if (!this.cancelled) this.diagnosticSink?.({ type: "microphone.detector_window", detail });
+            }
+          : undefined,
+      );
     } catch {
       // Transcript fallback remains available on browsers without Web Audio.
+      if (this.microphoneDiagnostics && !this.cancelled)
+        this.diagnosticSink?.({
+          type: "microphone.detector_unavailable",
+          detail: { reason: "web_audio_initialization_failed" },
+        });
     }
     for (const track of stream.getAudioTracks()) {
       track.onended = () => {
@@ -507,6 +569,7 @@ export class BrowserTransport implements Transport {
   stopMedia() {
     if (this.cancelled) return;
     this.abort.abort();
+    this.diagnosticSink = undefined;
     for (const source of this.connections.values()) this.retireSource(source.id);
     this.audio.muted = true;
     if (this.audio.srcObject) this.audio.pause();
