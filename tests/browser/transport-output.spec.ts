@@ -543,7 +543,7 @@ test("integrated stale ADVANCE retires A and instructs B before permission", asy
   );
 });
 
-for (const activity of ["transcript", "non_answer", "microphone.activity_started"] as const) {
+for (const activity of ["transcript", "non_answer", "microphone.activity_started", "child_stop"] as const) {
   test(`integrated ${activity} cancels preparing B and closes its peer`, async ({ page }) => {
     await fixture(page);
     await page.evaluate(`(() => {
@@ -563,7 +563,7 @@ for (const activity of ["transcript", "non_answer", "microphone.activity_started
     await page.evaluate(`(() => {
       window.sourceA = window.transport.current;
       window.sourceB = window.transport.pending; window.lateB = window.sourceB.channel.onmessage;
-      window.session.receive(${activity === "transcript" ? "{type: 'transcript', speaker: 'child', delta: 'Two', startMs: 4000, endMs: 4100}" : activity === "non_answer" ? "{type: 'transcript', speaker: 'child', delta: 'what?', startMs: 4000, endMs: 4100}" : "{type: 'microphone.activity_started'}"});
+      window.session.receive(${activity === "transcript" ? "{type: 'transcript', speaker: 'child', delta: 'Two', startMs: 4000, endMs: 4100}" : activity === "non_answer" ? "{type: 'transcript', speaker: 'child', delta: 'what?', startMs: 4000, endMs: 4100}" : activity === "child_stop" ? "{type: 'transcript', speaker: 'child', delta: 'stop', startMs: 4000, endMs: 4100}" : "{type: 'microphone.activity_started'}"});
       window.lateB({data: JSON.stringify({type: 'session.started'})}); clearInterval(window.hidden);
     })()`);
     expect(
@@ -571,11 +571,28 @@ for (const activity of ["transcript", "non_answer", "microphone.activity_started
         "window.sourceB.retired && window.sourceB.peer.connectionState === 'closed' && window.sourceB.channel.readyState === 'closed'",
       ),
     ).toBe(true);
-    expect(await page.evaluate("window.transport.activeSourceId")).toBe(1);
-    expect(await page.evaluate("document.querySelector('audio').muted")).toBe(true);
+    expect(await page.evaluate("window.transport.activeSourceId")).toBe(activity === "child_stop" ? undefined : 1);
+    expect(
+      await page.evaluate(
+        activity === "child_stop"
+          ? "document.querySelector('audio').srcObject === null"
+          : "document.querySelector('audio').muted",
+      ),
+    ).toBe(true);
     expect(await page.evaluate("window.session.events.some(event => event.type === 'replacement.promoted')")).toBe(
       false,
     );
+    if (activity === "child_stop") {
+      expect(await page.evaluate("window.sourceA.retired && window.sourceA.peer.connectionState === 'closed'")).toBe(
+        true,
+      );
+      expect(await page.evaluate("window.session.snapshot.reason")).toBe("child_stop");
+      expect(
+        await page.evaluate(
+          "window.session.events.filter(event => event.type === 'advance.committed').length === 1 && window.session.events.filter(event => event.type === 'answer.response_gate_released').length === 0 && window.session.events.filter(event => event.type === 'replacement.instruction_sent').length === 0",
+        ),
+      ).toBe(true);
+    }
     if (activity === "non_answer") {
       expect(
         await page.evaluate(

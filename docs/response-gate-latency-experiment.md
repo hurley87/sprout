@@ -952,3 +952,180 @@ fallback to A and successful B promotion retain their existing instruction-
 then-permit ordering. No trigger threshold, Jev, seed, correction timer, or
 transport-source mechanic changed. The earlier billed Live observations were
 not rerun for this correctness fix.
+
+## Final qualification for issue #36 — 2026-09-29
+
+Architecture was frozen for this pass. The 2,500 ms stale threshold, 2,500 ms
+utterance gap, 250 ms correction window, Jev policy, replacement seed, promotion
+ordering, microphone behavior, and original 15-second recovery budget were not
+changed. One provider-free browser regression was added for child stop while B
+prepares. No production code changed.
+
+### Method and evidence
+
+Three fresh normal and five fresh stale-category billed attempts used the real
+LessonSession, BrowserTransport, GPT-Live, and Jev endpoint. The existing
+long-output prompt deliberately generated stale A output in the stale category.
+The child transcript/VAD (`One` on scene `hello-duck`) were injected; an
+experiment-only continuously advancing low microphone kept outbound Live RTP
+valid. This qualifies the transport/decision flow, not an end-to-end spoken
+child or acoustic onset. The event times below are browser `performance.now()`
+milliseconds within each fresh page; session event offsets were mapped from the
+session creation clock. Values are rounded to the nearest millisecond, so
+same-tick release/instruction ordering should be read from the event sequence.
+`output.activity=active` is observed media activity, not proven audible onset.
+
+The raw local traces are `test-results/qualification-normal/results.json`
+(SHA-256 `106b0df0eb3d4d48e06a7da674859bb53b8aa215ff3c4b89bedd26583988d3c9`),
+`test-results/qualification-stale/results.json`
+(`7c6936198ab9a94e1e0e475bf7fd658c34286eae22673f8bf4df1bc8233cd87e`),
+`test-results/qualification-stale-retry/results.json`
+(`60a023b1ae469fadc12341d9a7557c88c15a7d5cca5abca310117c84ad9703c7`),
+and `test-results/qualification-stale-retry-2/results.json`
+(`e711442ed4e77b77ebf4008ecd68b4f769cb658b4214e839ca714a450bd8a653`).
+These ignored local traces contain the full gate events, provider transcript
+fragments, instructions, media activity, transport timing, and peer state.
+
+| Sample | Decision | Hidden A fragments | Replacement? | Safe→trigger | Trigger→READY | Safe→release | Instruction→transcript | Instruction→media activity | Release reason |
+| --- | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| N1 | ADVANCE | 0 | No | — | — | 1 ms | 1,009 ms | 1,239 ms | `scene_displayed` |
+| N2 | ADVANCE | 0 | No | — | — | 1 ms | 1,572 ms | 1,744 ms | `scene_displayed` |
+| N3 | ADVANCE | 0 | No | — | — | 1 ms | 1,265 ms | 1,550 ms | `scene_displayed` |
+| S1 | ADVANCE | 12 | Yes | 2,501 ms | 1,272 ms | 3,776 ms | 1,176 ms | 1,374 ms | `replacement_source` |
+| S2 | ADVANCE | 13 | Yes | 2,501 ms | 922 ms | 3,427 ms | 766 ms | 971 ms | `replacement_source` |
+| S3 | ADVANCE | 12 | Yes | 2,500 ms | 893 ms | 3,397 ms | 1,029 ms | 1,342 ms | `replacement_source` |
+
+All six passed samples had transcript revision 1, Jev decision `ADVANCE`, one
+scene commit to index 1, one outcome instruction, and one gate release. The
+first current-source transcript came after the outcome instruction. That
+instruction was derived from the advanced scene. All six had increasing
+outbound microphone RTP. The
+outcome instruction was sent while playback was blocked.
+
+**Normal A path.** From answer injection, Jev decided at 532/481/508 ms
+(N1/N2/N3), the scene committed at the same rounded times, and the scene was
+displayed at 564/513/529 ms. There was no A output-quiet deadline after the
+answer, so release followed display at 565/514/530 ms; A remained the current
+connected/open source. First current-source transcript appeared 1,009/1,572/
+1,265 ms after instruction; first observed media activity appeared 1,239/1,744/
+1,550 ms after instruction. Across these three samples, answer→release was
+514/530/565 ms (min/median/max), display-safe→release was 1/1/1 ms,
+instruction→transcript was 1,009/1,265/1,572 ms, and instruction→observed media
+activity was 1,239/1,550/1,744 ms. No replacement startup cost appeared on
+this normal path. The small sample does not establish a statistical latency
+change against historical runs.
+
+**Reproduced stale A path.** In each sample the displayed scene was the last
+application-owned blocker. The provider-only hold began at that safe point;
+`output_transcript_quiet` was the sole remaining blocker through the 2,500 ms
+threshold. The table records the principal `performance.now()` timeline and
+A's quiet deadline both at trigger and at promotion. Each row has its own page
+clock origin.
+
+| Sample | Answer / Jev decision / commit / display=safe | A quiet deadline at trigger / remaining | Trigger / B READY / promotion / B instruction / release | A quiet wait still remaining at promotion | First B transcript / media activity | Original recovery deadline |
+| --- | --- | --- | --- | ---: | --- | ---: |
+| S1 | 3,359 / 3,916 / 3,917 / 3,939 | 7,982 / 1,542 ms | 6,440 / 7,712 / 7,715 / 7,715 / 7,715 | 2,269 ms | 8,891 / 9,089 | 18,360 |
+| S2 | 3,189 / 3,668 / 3,669 / 3,687 | 8,351 / 2,163 ms | 6,188 / 7,110 / 7,114 / 7,114 / 7,114 | 2,489 ms | 7,880 / 8,085 | 18,190 |
+| S3 | 5,691 / 6,394 / 6,394 / 6,421 | 11,156 / 2,235 ms | 8,921 / 9,814 / 9,818 / 9,819 / 9,818 | 2,344 ms | 10,848 / 11,161 | 20,692 |
+
+The trigger→READY durations were 1,272/922/893 ms; READY→promotion was 3/4/4
+ms; promotion→instruction was 1/0/1 ms (rounded). Instruction→first B
+transcript was 1,176/766/1,029 ms and instruction→first B media activity was
+1,374/971/1,342 ms. Display-safe→first B transcript was 4,953/4,193/4,427
+ms; display-safe→first B media activity was 5,150/4,399/4,740 ms. The
+min/median/max are 893/922/1,272 ms for trigger→READY, 3,397/3,427/3,776 ms
+for safe→release, 4,193/4,427/4,953 ms for safe→first transcript, and
+4,399/4,740/5,150 ms for safe→first media activity. The remaining A quiet
+wait avoided at promotion was 2,269/2,344/2,489 ms (min/median/max); it had
+continued to move after the trigger in all three runs. These are distinct
+measurements, not a combined category average.
+
+At promotion, A was marked retired and its peer and data channel were closed
+in all three samples. B had its own `session.started` before READY and was the
+only destination for the authoritative outcome. There were zero observed A
+transcript events and zero observed A media-activity events after promotion;
+the Live harness does not directly label post-promotion PCM samples by source.
+The provider-free WebRTC/recording tests verify that A's playback track and
+recording path are detached on retirement, that blocked A PCM is absent from
+the recording mix, and that late A callbacks are ignored. B resumed on scene
+index 1. All three gates released as `replacement_source` before A's remaining
+quiet deadline and before the original 15-second recovery deadline.
+
+Two other fresh billed stale-category attempts did not emit any A output
+transcript after the existing long-output prompt, despite `session.started`
+and instruction acknowledgments. They timed out before answer injection and
+were inconclusive for the stale mechanism; they are retained in the raw traces
+and are excluded from the three reproduced-stale timing ranges. No provider
+reliability conclusion follows from these five attempts.
+
+### Deterministic interruption, fallback, and failure qualification
+
+Final validation: `tests/session-replacement.test.ts`, `tests/session.test.ts`,
+`tests/browser-transport.test.ts`, and
+`tests/response-source-isolation.test.ts`: **226/226 tests passed**;
+full unit suite: **498/498 passed across 21 files**; provider-free Playwright
+transport/reactive/browser suite: **32/32 passed** after the new integrated
+child-stop case; lint, typecheck, and production build passed. The browser
+suite ran against the already running development server on port 3000 using a
+temporary configuration with the repository's existing Playwright settings.
+The default port-3100 Playwright server initially could not start because this
+checkout already had a Next dev server; no test itself failed for that reason.
+
+The pending-B browser cases exercise provisional child activity followed by
+discard, a non-answer transcript, a new numeric answer, and child stop with
+real browser peers. B cannot late-promote after cancellation. The provisional
+fallback keeps A blocked until genuine transcript quiet, then sends exactly
+one authoritative outcome to A and releases once. Non-answer text preserves
+the gate; a new numeric answer supersedes the old response without permitting
+A or duplicating the committed scene. Child stop closes A and B, detaches
+playback, sends no old outcome, and never releases the protected gate. The
+provider-free recovery-expiry case and unit assertions retain the original
+15-second deadline while B is pending.
+
+The deterministic matrix also covers B startup failure, B readiness timeout,
+B promotion failure, recovery expiry, stop/end/dispose, and wrap/goodbye while
+protected. Startup failure leaves A blocked under the original deadline; B
+readiness timeout retires B; promotion failure, recovery expiry, and protected
+wrap/goodbye fail closed with media stopped. None of those paths permits stale
+A. An explicit A quiet fallback after replacement trigger sends one outcome,
+cancels/retires B, never promotes B, and permits A once. STAY and UNAVAILABLE
+promotion/fallback/cancellation safety is deterministic/provider-free qualified;
+these decisions were not separately reproduced in billed Live.
+
+Historical issue #38 evidence included an approximately 9.054 s pathological
+ADVANCE hold after deterministic commit/evaluation and a later approximately
+2.05 s hidden-output hold. Stale output repeatedly extended `outputQuietAt`.
+Historical runs demonstrated that stale output could extend the gate for
+multiple seconds. In the new reproduced stale-output samples, source
+replacement retired A after the configured stale threshold and resumed through
+B without waiting for A's final quiet deadline. The scenarios are not matched
+before/after benchmarks, and these few samples do not imply a universal
+percentage improvement or statistical significance.
+
+### Issue #36 close decision
+
+A. **Root cause identified:** repeated hidden A transcript fragments moved
+`output_transcript_quiet` while the app was otherwise safe. **Satisfied.**
+B. **Normal fast path preserved:** three ordinary answers stayed on A and did
+not prepare B. **Satisfied.**
+C. **Stale path bounded:** replacement began only after the 2,500 ms
+provider-only hold; the original 15-second recovery remained the hard bound.
+**Satisfied.**
+D. **Source isolation established:** A retired before B permission, its late
+callbacks are rejected, and the provider-free PCM path excludes A after
+retirement. **Satisfied.**
+E. **Authoritative lesson state preserved:** B was seeded from app-owned scene,
+answer, and decision; Sprout sent the scene-1 outcome after deterministic
+commit/display. **Satisfied.**
+F. **Child interruption safe:** integrated and unit cases prevent old response
+speech after newer child activity/input. **Satisfied.**
+G. **Failure paths fail closed:** startup, readiness, promotion, recovery, and
+lifecycle cases cannot expose stale A. **Satisfied.**
+H. **Repeated real evidence:** three normal and three reproduced stale passes,
+with no observed post-promotion A transcript or media event. **Satisfied.**
+
+**Decision:** the implementation meets the issue #36 close criteria. The
+qualified claim is confined to the measured transport/decision flow and the
+provider-free PCM/interrupt/failure invariants. Transcript timing is not
+acoustic latency; instruction acknowledgment and PCM quiet are not release
+boundaries.
