@@ -1,4 +1,4 @@
-import { LIVE_CONFIG } from "@/lib/lesson";
+import { LIVE_CONFIG, parseReplacementSeed, replacementSessionInput } from "@/lib/lesson";
 import { isLocalRequest, readJsonBody } from "@/lib/local-request";
 
 export const runtime = "nodejs";
@@ -16,9 +16,19 @@ export async function POST(request: Request) {
       { error: body.tooLarge ? "Session request is too large." : "Invalid session request." },
       body.tooLarge ? 413 : 400,
     );
-  const sdp = (body.value as { sdp?: unknown } | null)?.sdp;
+  const payload = body.value;
+  if (
+    !payload ||
+    typeof payload !== "object" ||
+    Array.isArray(payload) ||
+    Object.keys(payload).some(key => key !== "sdp" && key !== "replacement")
+  )
+    return json({ error: "Invalid session request." }, 400);
+  const { sdp, replacement } = payload as { sdp?: unknown; replacement?: unknown };
   if (typeof sdp !== "string" || !sdp.startsWith("v=0") || sdp.length > LIMIT)
     return json({ error: "Invalid microphone connection offer." }, 400);
+  const seed = replacement === undefined ? undefined : parseReplacementSeed(replacement);
+  if (seed === null) return json({ error: "Invalid replacement lesson state." }, 400);
   if (!process.env.OPENAI_API_KEY)
     return json(
       {
@@ -31,7 +41,10 @@ export async function POST(request: Request) {
     const response = await fetch("https://api.openai.com/v1/live/sessions", {
       method: "POST",
       headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ session: LIVE_CONFIG, transport: { type: "webrtc", sdp } }),
+      body: JSON.stringify({
+        session: seed ? { ...LIVE_CONFIG, input: replacementSessionInput(seed) } : LIVE_CONFIG,
+        transport: { type: "webrtc", sdp },
+      }),
       signal: AbortSignal.any([request.signal, AbortSignal.timeout(20_000)]),
     });
     if (!response.ok) {

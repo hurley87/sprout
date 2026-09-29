@@ -23,6 +23,7 @@ import {
   MODEL,
   PROMPT_VERSION,
   TIMING,
+  type ReplacementSeed,
   advanceContext,
   evaluationUnavailableContext,
   sceneAt,
@@ -42,6 +43,10 @@ import {
 // Recovery budget, not a silence/completion threshold. On expiry stop media;
 // never open playback to recover a stalled gate. Revisions cannot renew it.
 export const RESPONSE_GATE_RECOVERY_MS = 15_000;
+// Wait a full normal transcript gap with ONLY provider output blocking before
+// paying ~1s for another source. Conservative: historical ~2s holds alone are
+// not enough to justify replacement. Does not alter transcript quiet policy.
+export const STALE_OUTPUT_REPLACEMENT_MS = 2_500;
 
 export type EndReason =
   "parent_stop" | "child_stop" | "model_goodbye" | "wrap_up" | "time_limit" | "connection_failure" | "page_hidden";
@@ -77,6 +82,10 @@ export interface Transport {
   setOutputBlocked(blocked: boolean): void;
   /** True only with a trustworthy delivery attribution for this transcript interval. */
   delivered?(startMs: number, endMs: number): boolean;
+  prepareReplacement?(seed: ReplacementSeed, signal: AbortSignal): Promise<number>;
+  activateSource?(id: number): boolean;
+  retireSource?(id: number): void;
+  readonly activeSourceId?: number;
   stopMedia(): void;
   close(): void;
 }
@@ -115,6 +124,11 @@ type AnswerResponseGate = {
   answerVersion: string;
   startedAt: number;
   outputQuietAt: number;
+  childUtterance: string;
+  replacementAttempted?: boolean;
+  /** The stale A source may be permitted only by an explicit safe release. */
+  sourceIsolationRequired?: boolean;
+  sourceIsolationRequiredAt?: number;
   eligibleAt?: number;
   decision?: GateDecision;
   sceneCommittedAt?: number;
@@ -164,6 +178,10 @@ export class LessonSession {
   // Application state is authoritative; provider transcript events continue
   // while playback is muted and do not imply the child heard Sprout.
   private answerResponseGate: AnswerResponseGate | null = null;
+  private replacementTimer?: ReturnType<typeof setTimeout>;
+  private providerOnlySince?: number;
+  private replacement: { gate: AnswerResponseGate; abort: AbortController; startedAt: number; id?: number } | null =
+    null;
   private responseGateRecoveryTimer?: ReturnType<typeof setTimeout>;
   private outputActivity: "active" | "quiet" | "unavailable" = "unavailable";
   private commands = 0;
@@ -296,7 +314,7 @@ export class LessonSession {
       this.diagnosticChanged?.();
   }
 
-  /** Snapshot existing gate state for diagnostics; this never schedules work. */
+  /** Observe blockers and schedule the optional source isolation path. */
   private observeResponseGate(trigger: string, extra: Record<string, unknown> = {}) {
     const gate = this.answerResponseGate;
     if (!gate) return;
@@ -347,10 +365,12 @@ export class LessonSession {
       eligible_at: sessionTime(gate.eligibleAt),
       eligibility_basis: gate.eligibleAt === undefined ? null : "observed_all_blockers_clear",
       output_blocked: this.outputBlocked,
+      source_isolation_required: gate.sourceIsolationRequired === true,
       output_media_activity: this.outputActivity,
       output_media_is_release_barrier: false,
       ...extra,
     });
+    this.scheduleReplacement();
   }
 
   async start() {
@@ -455,6 +475,7 @@ export class LessonSession {
         this.heard(event);
         return;
       case "microphone.activity_started":
+        this.cancelReplacementForChild("child_speech");
         if (this.microphoneSpeaking || this.provisionalActivity) return;
         this.provisionalActivity = true;
         this.activityTranscriptRevision = this.transcriptRevision;
@@ -464,6 +485,7 @@ export class LessonSession {
           pending_evaluation: Boolean(this.settleTimer),
         });
         this.observeResponseGate("provisional_vad_started");
+        if (this.answerResponseGate?.sourceIsolationRequired) this.scheduleDisplayedRelease();
         return;
       case "microphone.activity_discarded": {
         if (!this.provisionalActivity) return;
@@ -471,6 +493,7 @@ export class LessonSession {
         const heardNewTranscript = this.transcriptRevision !== this.activityTranscriptRevision;
         this.log("answer.activity_discarded", { heard_new_transcript: heardNewTranscript });
         this.observeResponseGate("provisional_vad_discarded");
+        if (this.answerResponseGate?.sourceIsolationRequired) this.scheduleDisplayedRelease();
         if (heardNewTranscript) {
           this.evaluation?.abort();
           if (this.latest) this.scheduleEvaluation(this.latest, TRANSCRIPT_FALLBACK_MS, "transcript_revision");
@@ -479,6 +502,7 @@ export class LessonSession {
         return;
       }
       case "microphone.speech_started":
+        this.cancelReplacementForChild("child_speech");
         if (this.microphoneSpeaking) return;
         const wasProvisional = this.provisionalActivity;
         const heardDuringActivity =
@@ -498,6 +522,7 @@ export class LessonSession {
           decision_preserved: Boolean(this.evaluation || this.deferredAdvance),
         });
         this.observeResponseGate("microphone_speech_started");
+        if (this.answerResponseGate?.sourceIsolationRequired) this.scheduleDisplayedRelease();
         this.startDeferredVadGrace(
           this.microphoneSpeechStartedAt,
           wasProvisional ? "provisional_confirmation" : "confirmed_speech",
@@ -522,6 +547,7 @@ export class LessonSession {
           estimated_acoustic_end_at: this.turnEndAt - event.quietMs - this.createdAt,
         });
         this.observeResponseGate("microphone_speech_stopped");
+        if (this.answerResponseGate?.sourceIsolationRequired) this.scheduleDisplayedRelease();
         if (this.latest && this.transcriptEpoch === this.speechEpoch)
           this.scheduleEvaluation(this.latest, TRANSCRIPT_TAIL_MS, "microphone_vad");
         else if (this.latest) this.scheduleNoTranscriptRecovery(this.speechEpoch);
@@ -609,19 +635,48 @@ export class LessonSession {
       if (this.displayedRelease) this.scheduleDisplayedRelease();
     }
     if (fromChild) {
+      this.cancelReplacementForChild("newer_transcript");
+      const sourceIsolationRequired = this.answerResponseGate?.sourceIsolationRequired === true;
+      if (sourceIsolationRequired && requestsStop(utterance.text)) {
+        // end() retires both sources before any gate cleanup.
+        this.end("child_stop");
+        return;
+      }
       if (this.advanceResponseTransitionActive) {
         if (requestsStop(utterance.text)) {
           this.cancelAnswerResponseGate("child_stop");
           this.end("child_stop");
           return;
         }
-        this.log("answer.advance_transition_transcript_ignored", {
-          scene_index: this.snapshot.sceneIndex,
-          gate_scene_index: this.answerResponseGate?.sceneIndex,
-          answer_bearing: mentionsNumber(utterance.text),
-        });
-        // Keep transition-period speech out of the next answer window too.
-        this.childSpeech = new TranscriptWindow();
+        if (sourceIsolationRequired) {
+          if (mentionsNumber(utterance.text)) {
+            // The committed new scene owns this answer. The new gate inherits
+            // the original recovery deadline and keeps A blocked.
+            clearTimeout(this.displayedReleaseTimer);
+            this.displayedRelease = null;
+            this.log("answer.response_gate_superseded", {
+              reason: "new_answer_on_displayed_scene",
+              scene_index: this.snapshot.sceneIndex,
+              transcript_revision: this.transcriptRevision,
+              output_blocked: this.outputBlocked,
+            });
+          } else {
+            this.preserveNonAnswerOnStaleSource();
+            return;
+          }
+        } else {
+          this.log("answer.advance_transition_transcript_ignored", {
+            scene_index: this.snapshot.sceneIndex,
+            gate_scene_index: this.answerResponseGate?.sceneIndex,
+            answer_bearing: mentionsNumber(utterance.text),
+          });
+          // Keep transition-period speech out of the next answer window too.
+          this.childSpeech = new TranscriptWindow();
+          return;
+        }
+      }
+      if (sourceIsolationRequired && !mentionsNumber(utterance.text)) {
+        this.preserveNonAnswerOnStaleSource();
         return;
       }
       // A transcript can arrive before local VAD notices renewed speech.
@@ -676,6 +731,18 @@ export class LessonSession {
     }
   }
 
+  /** Keep the old authoritative outcome and its A quiet fallback intact. */
+  private preserveNonAnswerOnStaleSource() {
+    this.log("answer.response_gate_preserved", {
+      reason: "non_answer_child_interruption",
+      scene_index: this.snapshot.sceneIndex,
+      output_blocked: this.outputBlocked,
+      source_isolation_required: true,
+    });
+    if (this.displayedRelease) this.scheduleDisplayedRelease();
+    if (this.deferredStay) this.scheduleDeferredStayRelease();
+  }
+
   private updateAnswerResponseGate(utterance: Utterance) {
     const answerVersion = `${utterance.startMs}:${utterance.text.trim()}`;
     const current = this.answerResponseGate;
@@ -686,6 +753,7 @@ export class LessonSession {
         answerVersion,
         startedAt: Date.now(),
         outputQuietAt: 0,
+        childUtterance: utterance.text.trim(),
       };
       this.canonical.sprout.invalidateDelivery();
       this.setOutputBlocked(true, "answer_evaluation");
@@ -700,6 +768,7 @@ export class LessonSession {
           wait_ms: Date.now() - gate.startedAt,
           output_media_activity: this.outputActivity,
         });
+        this.cancelReplacement("recovery_expired");
         this.fail("Sprout could not safely resume its voice. This attempt has ended; you can start a new lesson.");
       }, RESPONSE_GATE_RECOVERY_MS);
       this.log("answer.response_gate_started", {
@@ -717,12 +786,19 @@ export class LessonSession {
       trigger: "identity_superseded",
       decision: current.decision ?? null,
       conditions: [],
-      output_blocked: false,
+      output_blocked: this.outputBlocked,
       output_quiet_at: current.outputQuietAt ? current.outputQuietAt - this.createdAt : null,
       superseded_by_transcript_revision: this.transcriptRevision,
     });
+    this.cancelReplacement("gate_replaced");
     this.answerResponseGate = {
       ...current,
+      childUtterance: utterance.text.trim(),
+      replacementAttempted: undefined,
+      // A is still the same stale source. A new answer does not clear this
+      // classification or renew the original 15-second recovery budget.
+      sourceIsolationRequired: current.sourceIsolationRequired,
+      sourceIsolationRequiredAt: current.sourceIsolationRequiredAt,
       sceneIndex: this.snapshot.sceneIndex,
       transcriptRevision: this.transcriptRevision,
       answerVersion,
@@ -741,6 +817,21 @@ export class LessonSession {
   }
 
   private cancelAnswerResponseGate(reason: string) {
+    const protectedGate = this.answerResponseGate;
+    if (protectedGate?.sourceIsolationRequired && !this.ending) {
+      // No ordinary cancellation path can establish A's quiet or B authority.
+      // If a caller cannot preserve the explicit fallback, stop every source
+      // before clearing the gate instead of stranding it without a deadline.
+      this.log("answer.unsafe_gate_cancellation", {
+        ...this.replacementIdentity(protectedGate),
+        reason,
+        active_source_id: this.transport.activeSourceId ?? null,
+        output_blocked: this.outputBlocked,
+      });
+      this.fail("Sprout could not safely resume its voice. This attempt has ended; you can start a new lesson.");
+      return;
+    }
+    this.cancelReplacement(this.ending ? "lesson_end" : "gate_replaced");
     const gate = this.answerResponseGate;
     if (!gate) return;
     this.answerResponseGate = null;
@@ -748,13 +839,18 @@ export class LessonSession {
     clearTimeout(this.displayedReleaseTimer);
     this.displayedReleaseTimer = undefined;
     this.displayedRelease = null;
-    this.setOutputBlocked(false, reason);
+    // Only explicit outcome release can establish A quiet or B promotion.
+    // Generic cancellation does not prove that stale A is safe to hear.
+    if (!gate.sourceIsolationRequired) this.setOutputBlocked(false, reason);
     this.log("answer.response_gate_cancelled", {
       scene_index: gate.sceneIndex,
       transcript_revision: gate.transcriptRevision,
       answer_version: gate.answerVersion,
       reason,
       wait_ms: Date.now() - gate.startedAt,
+      source_isolation_required: gate.sourceIsolationRequired === true,
+      preserved_output_block: gate.sourceIsolationRequired === true && this.outputBlocked,
+      active_source_id: this.transport.activeSourceId ?? null,
     });
     this.log("answer.response_gate_observed", {
       scene_index: gate.sceneIndex,
@@ -763,7 +859,7 @@ export class LessonSession {
       trigger: "cancelled",
       decision: gate.decision ?? null,
       conditions: [],
-      output_blocked: false,
+      output_blocked: this.outputBlocked,
       output_quiet_at: gate.outputQuietAt ? gate.outputQuietAt - this.createdAt : null,
       cancellation_reason: reason,
       cancelled: true,
@@ -792,9 +888,10 @@ export class LessonSession {
     const contextSentAt = Date.now() - this.createdAt;
     sendContext();
     if (!this.gateMatches(identity)) return false;
+    this.cancelReplacement("gate_released");
     this.answerResponseGate = null;
     clearTimeout(this.responseGateRecoveryTimer);
-    this.setOutputBlocked(false, decision.toLowerCase());
+    this.setOutputBlocked(false, reason === "replacement_source" ? reason : decision.toLowerCase());
     this.log("answer.response_gate_released", {
       scene_index: identity.sceneIndex,
       transcript_revision: identity.transcriptRevision,
@@ -820,6 +917,190 @@ export class LessonSession {
       released: true,
     });
     return true;
+  }
+
+  /** Application authority only; PCM state never participates. */
+  private replacementEligibleForGate(gate: AnswerResponseGate) {
+    if (
+      this.ending ||
+      this.snapshot.status !== "active" ||
+      !this.gateMatches(gate) ||
+      this.transcriptRevision !== gate.transcriptRevision ||
+      !gate.decision ||
+      this.microphoneSpeaking ||
+      this.provisionalActivity ||
+      this.evaluation ||
+      this.settleTimer ||
+      this.pending
+    )
+      return false;
+    if (gate.decision === "ADVANCE")
+      return (
+        gate.sceneCommittedAt !== undefined &&
+        gate.sceneDisplayedAt !== undefined &&
+        this.snapshot.sceneIndex === gate.sceneIndex + 1 &&
+        Boolean(this.displayedRelease)
+      );
+    const deferred = this.deferredStay;
+    return Boolean(
+      deferred &&
+      this.snapshot.sceneIndex === gate.sceneIndex &&
+      deferred.answerVersion === gate.answerVersion &&
+      deferred.transcriptRevision === gate.transcriptRevision &&
+      Date.now() >= Math.max(deferred.correctionReadyAt, deferred.vadGraceUntil ?? 0),
+    );
+  }
+
+  private scheduleReplacement() {
+    clearTimeout(this.replacementTimer);
+    const gate = this.answerResponseGate;
+    if (!gate || !this.transport.prepareReplacement || !this.transport.activateSource || !this.transport.retireSource)
+      return;
+    if (this.replacement || gate.replacementAttempted) return;
+    if (!this.replacementEligibleForGate(gate) || gate.outputQuietAt <= Date.now()) {
+      this.providerOnlySince = undefined;
+      // Observe correction/grace completion even if quiet keeps moving later.
+      const deferred = this.deferredStay;
+      if (deferred && !this.microphoneSpeaking && !this.provisionalActivity && !this.evaluation && !this.settleTimer) {
+        const readyAt = Math.max(deferred.correctionReadyAt, deferred.vadGraceUntil ?? 0);
+        if (readyAt > Date.now())
+          this.replacementTimer = setTimeout(() => this.scheduleReplacement(), readyAt - Date.now());
+      }
+      return;
+    }
+    this.providerOnlySince ??= Date.now();
+    const delay = this.providerOnlySince + STALE_OUTPUT_REPLACEMENT_MS - Date.now();
+    if (delay > 0) {
+      this.replacementTimer = setTimeout(() => this.scheduleReplacement(), delay);
+      return;
+    }
+    if (!gate.sourceIsolationRequired) {
+      gate.sourceIsolationRequired = true;
+      gate.sourceIsolationRequiredAt = Date.now();
+      this.log("answer.source_isolation_required", {
+        ...this.replacementIdentity(gate),
+        reason: "stale_output_threshold",
+        at: gate.sourceIsolationRequiredAt - this.createdAt,
+        active_source_id: this.transport.activeSourceId ?? null,
+        output_blocked: this.outputBlocked,
+      });
+    }
+    gate.replacementAttempted = true; // At most one paid attempt per answer identity.
+    const owner = { gate, abort: new AbortController(), startedAt: Date.now(), id: undefined as number | undefined };
+    this.replacement = owner;
+    const seed: ReplacementSeed = {
+      sceneIndex: this.snapshot.sceneIndex,
+      decision: gate.decision!,
+      childUtterance: gate.childUtterance,
+    };
+    this.log("replacement.triggered", {
+      ...this.replacementIdentity(gate),
+      decision: gate.decision,
+      gate_age_ms: Date.now() - gate.startedAt,
+      provider_only_hold_ms: Date.now() - this.providerOnlySince,
+      remaining_output_quiet_ms: gate.outputQuietAt - Date.now(),
+      threshold_ms: STALE_OUTPUT_REPLACEMENT_MS,
+      source_isolation_required: true,
+    });
+    void this.prepareGateReplacement(owner, seed);
+  }
+
+  private replacementIdentity(gate: AnswerResponseGate) {
+    return {
+      scene_index: gate.sceneIndex,
+      transcript_revision: gate.transcriptRevision,
+      answer_version: gate.answerVersion,
+    };
+  }
+
+  private cancelReplacement(reason: string) {
+    clearTimeout(this.replacementTimer);
+    this.providerOnlySince = undefined;
+    const owner = this.replacement;
+    if (!owner) return;
+    this.replacement = null; // Invalidate before abort/retirement callbacks.
+    owner.abort.abort();
+    if (owner.id !== undefined) this.transport.retireSource?.(owner.id);
+    this.log("replacement.cancelled", { ...this.replacementIdentity(owner.gate), reason, source_id: owner.id });
+  }
+
+  private cancelReplacementForChild(reason: string) {
+    const owner = this.replacement;
+    if (!owner) return;
+    this.cancelReplacement(reason);
+    // The stale classification was made at the trigger. Retiring B cannot
+    // remove the answer gate or make A safe for any decision.
+    this.log("answer.response_gate_preserved", {
+      reason,
+      decision: owner.gate.decision,
+      scene_index: this.snapshot.sceneIndex,
+      output_blocked: this.outputBlocked,
+      source_isolation_required: owner.gate.sourceIsolationRequired === true,
+    });
+  }
+
+  private async prepareGateReplacement(owner: NonNullable<LessonSession["replacement"]>, seed: ReplacementSeed) {
+    try {
+      const id = await this.transport.prepareReplacement!(seed, owner.abort.signal);
+      owner.id = id;
+      if (this.replacement !== owner || owner.abort.signal.aborted) {
+        this.transport.retireSource!(id);
+        return;
+      }
+      this.log("replacement.ready", {
+        ...this.replacementIdentity(owner.gate),
+        source_id: id,
+        prepare_latency_ms: Date.now() - owner.startedAt,
+      });
+      if (Date.now() >= owner.gate.startedAt + RESPONSE_GATE_RECOVERY_MS) {
+        this.cancelReplacement("recovery_expired");
+        this.fail("Sprout could not safely resume its voice. This attempt has ended; you can start a new lesson.");
+        return;
+      }
+      if (!this.replacementEligibleForGate(owner.gate)) {
+        this.cancelReplacement("gate_replaced");
+        return;
+      }
+      const oldSourceId = this.transport.activeSourceId;
+      this.setOutputBlocked(true, "replacement_source");
+      if (!this.transport.activateSource!(id) || this.transport.activeSourceId !== id) {
+        this.cancelReplacement("promotion_failure");
+        this.fail("Sprout could not safely switch its voice. You can start a new lesson.");
+        return;
+      }
+      this.log("replacement.promoted", {
+        ...this.replacementIdentity(owner.gate),
+        decision: seed.decision,
+        source_id: id,
+        old_source_id: oldSourceId,
+        remaining_old_output_quiet_ms: Math.max(0, owner.gate.outputQuietAt - Date.now()),
+      });
+      // Source authority replaced transcript quiet; do not rewrite A's deadline.
+      this.replacement = null;
+      clearTimeout(this.stayTimer);
+      clearTimeout(this.displayedReleaseTimer);
+      this.deferredStay = null;
+      this.displayedRelease = null;
+      this.cancelNoTranscriptRecovery();
+      const content =
+        seed.decision === "ADVANCE"
+          ? advanceContext(this.scene)
+          : seed.decision === "STAY"
+            ? stayContext(this.scene)
+            : evaluationUnavailableContext(this.scene);
+      this.releaseAnswerResponseGate(owner.gate, seed.decision, "replacement_source", () => {
+        this.append("session.instructions.append", content);
+        if (!this.ending)
+          this.log("replacement.instruction_sent", {
+            ...this.replacementIdentity(owner.gate),
+            decision: seed.decision,
+            source_id: id,
+          });
+      });
+    } catch {
+      if (this.replacement === owner) this.cancelReplacement("startup_failure");
+      // The existing transcript gate and original recovery deadline keep control.
+    }
   }
 
   private scheduleEvaluation(
@@ -1209,7 +1490,12 @@ export class LessonSession {
 
   private releaseDeferredStay() {
     const deferred = this.deferredStay;
-    if (!deferred || this.provisionalActivity) return;
+    if (
+      !deferred ||
+      this.provisionalActivity ||
+      (this.answerResponseGate?.sourceIsolationRequired && this.microphoneSpeaking)
+    )
+      return;
     this.deferredStay = null;
     clearTimeout(this.stayTimer);
     if (
@@ -1411,6 +1697,7 @@ export class LessonSession {
     const deferred = this.displayedRelease;
     const gate = this.answerResponseGate;
     if (!deferred || !gate) return;
+    if (gate.sourceIsolationRequired && (this.provisionalActivity || this.microphoneSpeaking)) return;
     const releaseAt = Math.max(deferred.displayedAt, gate.outputQuietAt);
     const release = () => {
       if (this.expireIfOverdue()) return;
@@ -1436,6 +1723,10 @@ export class LessonSession {
 
   private wrap() {
     if (this.snapshot.status !== "active") return;
+    if (this.answerResponseGate?.sourceIsolationRequired) {
+      this.fail("Sprout could not safely finish its voice. This attempt has ended; you can start a new lesson.");
+      return;
+    }
     this.cancelAnswerResponseGate("wrap_up");
     this.cancelNoTranscriptRecovery();
     this.cancelDeferredAdvance();
@@ -1450,6 +1741,10 @@ export class LessonSession {
 
   private goodbye() {
     if (this.snapshot.status === "ended") return;
+    if (this.answerResponseGate?.sourceIsolationRequired) {
+      this.fail("Sprout could not safely finish its voice. This attempt has ended; you can start a new lesson.");
+      return;
+    }
     this.cancelAnswerResponseGate("goodbye");
     this.cancelNoTranscriptRecovery();
     this.cancelDeferredAdvance();

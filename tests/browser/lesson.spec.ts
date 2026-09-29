@@ -10,6 +10,7 @@ type TestState = {
   tracks: MediaStreamTrack[];
   closed: boolean;
   recordingsStarted: number;
+  peerCount: number;
   persistence: string[];
   releaseMic?: () => void;
 };
@@ -27,7 +28,7 @@ async function mockEvaluate(page: Page, probability: number) {
   await page.route("**/api/evaluate", route => route.fulfill({ json: { probability, model: "jev-test" } }));
 }
 
-async function mockLive(page: Page, pendingMic = false) {
+async function mockLive(page: Page, pendingMic = false, pendingReplacement = false) {
   await page.route("**/api/query", route => route.fulfill({ json: { status: "success", value: null } }));
   await page.route("**/api/mutation", async route => {
     const { path } = route.request().postDataJSON();
@@ -49,9 +50,10 @@ async function mockLive(page: Page, pendingMic = false) {
   // No lesson reaches the real evaluation service; tests that care override this.
   await mockEvaluate(page, 0);
   await page.addInitScript(
-    ({ pendingMic }) => {
+    ({ pendingMic, pendingReplacement }) => {
       const state: TestState = {
         recordingsStarted: 0,
+        peerCount: 0,
         persistence: [],
         commands: [],
         shownAt: {},
@@ -95,6 +97,7 @@ async function mockLive(page: Page, pendingMic = false) {
         return stream;
       };
       class Peer {
+        sourceNumber = ++state.peerCount;
         localDescription = { sdp: "v=0\r\n" };
         iceGatheringState = "complete";
         connectionState = "connected";
@@ -112,7 +115,7 @@ async function mockLive(page: Page, pendingMic = false) {
           },
         };
         constructor() {
-          state.emit = event => this.channel.onmessage?.({ data: JSON.stringify(event) });
+          if (this.sourceNumber === 1) state.emit = event => this.channel.onmessage?.({ data: JSON.stringify(event) });
           state.disconnect = () => {
             this.connectionState = "failed";
             this.onconnectionstatechange?.();
@@ -130,7 +133,8 @@ async function mockLive(page: Page, pendingMic = false) {
           const remote = state.tracks[0].clone();
           state.tracks.push(remote);
           this.ontrack?.({ track: remote });
-          state.emit({ type: "session.started" });
+          if (!pendingReplacement || this.sourceNumber === 1)
+            this.channel.onmessage?.({ data: JSON.stringify({ type: "session.started" }) });
         }
         close() {
           state.closed = true;
@@ -140,7 +144,7 @@ async function mockLive(page: Page, pendingMic = false) {
       }
       window.RTCPeerConnection = Peer as unknown as typeof RTCPeerConnection;
     },
-    { pendingMic },
+    { pendingMic, pendingReplacement },
   );
 }
 const emit = (page: Page, event: object) => page.evaluate(event => window.sproutTest.emit(event), event);
@@ -515,8 +519,8 @@ test("failed durable creation leaves diagnostics available and offers no retry",
   await expect(page.getByRole("button", { name: "Download attempt diagnostics" })).toBeVisible();
 });
 
-test("fragmented stale output cannot extend a response gate past its recovery budget", async ({ page }) => {
-  await mockLive(page);
+test("fragmented stale output and pending replacement cannot extend the original recovery budget", async ({ page }) => {
+  await mockLive(page, false, true);
   await mockEvaluate(page, 0.95);
   await page.clock.install();
   await begin(page);
@@ -537,6 +541,7 @@ test("fragmented stale output cannot extend a response gate past its recovery bu
     expect(await page.locator("audio").evaluate((audio: HTMLAudioElement) => audio.muted)).toBe(true);
   }
   expect((await sentContent(page)).filter(text => text.includes("2 ducks"))).toHaveLength(0);
+  expect(await page.evaluate(() => window.sproutTest.peerCount)).toBe(2);
   await page.clock.runFor(1300);
   await expect(page.getByRole("alert").filter({ hasText: "could not safely resume" })).toBeVisible();
   expect(await tracksStopped(page)).toBe(true);
