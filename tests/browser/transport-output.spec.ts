@@ -15,6 +15,8 @@ async function fixture(page: Page) {
         body: `<button>Start</button><audio></audio><script type="module">
         import { BrowserTransport } from './browser-transport';
         import { ResponseSourceContract } from './response-source-contract';
+        import { advanceContext, sceneAt } from './lesson';
+        window.advanceContext = advanceContext; window.sceneAt = sceneAt;
         window.Transport = BrowserTransport;
         window.SourceContract = ResponseSourceContract;
       </script>`,
@@ -358,5 +360,63 @@ test("teardown while real B has SDP and an open channel but no started closes bo
     window.context.close();
   })()`);
   expect(await page.evaluate("window.sourceB.ready")).toBe(false);
+  expect(await page.evaluate("window.failures")).toEqual([]);
+});
+
+test("promoted B receives the production ADVANCE instruction while blocked, then permits playback", async ({
+  page,
+}) => {
+  await fixture(page);
+  expect(await page.evaluate("window.context.state")).toBe("running");
+  await page.evaluate(`(() => {
+    window.idA = window.transport.activeSourceId;
+    window.preparing = window.transport.prepareReplacement({sceneIndex: 2, decision: 'ADVANCE', childUtterance: 'Two'}).then(id => { window.idB = id; });
+  })()`);
+  await expect.poll(() => page.evaluate("window.providers[1]?.channel?.readyState")).toBe("open");
+  await page.evaluate(`(async () => {
+    window.commandsA = []; window.commandsB = [];
+    window.providers[0].channel.onmessage = ({data}) => window.commandsA.push(JSON.parse(data));
+    window.providers[1].channel.onmessage = ({data}) => {
+      const command = JSON.parse(data); window.commandsB.push(command);
+      window.providers[1].channel.send(JSON.stringify({type: 'session.instructions.appended', client_event_id: command.event_id}));
+    };
+    window.providers[1].channel.send(JSON.stringify({type: 'session.started'}));
+    await window.preparing;
+    if (!window.transport.activateSource(window.idB)) throw new Error('Promotion failed');
+    window.blockedAtSend = document.querySelector('audio').muted;
+    window.transport.send({type: 'session.instructions.append', event_id: 'authoritative-advance', delegation_id: null, content: window.advanceContext(window.sceneAt(2))});
+  })()`);
+  await expect.poll(() => page.evaluate("window.commandsB.length")).toBe(1);
+  expect(await page.evaluate("window.commandsA")).toEqual([]);
+  expect(await page.evaluate("window.blockedAtSend")).toBe(true);
+  expect(await page.evaluate("window.commandsB[0]")).toEqual({
+    type: "session.instructions.append",
+    event_id: "authoritative-advance",
+    delegation_id: null,
+    content: await page.evaluate<string>("window.advanceContext(window.sceneAt(2))"),
+  });
+  await expect
+    .poll(() =>
+      page.evaluate(
+        "window.events.some(event => event.type === 'context.appended' && event.clientEventId === 'authoritative-advance')",
+      ),
+    )
+    .toBe(true);
+  expect(await page.evaluate("document.querySelector('audio').muted")).toBe(true);
+  await page.evaluate("window.transport.setOutputBlocked(false)");
+  await expect.poll(() => page.evaluate("!document.querySelector('audio').paused")).toBe(true);
+  expect(
+    await page.evaluate(
+      "!document.querySelector('audio').muted && document.querySelector('audio').srcObject === window.transport.current.remote",
+    ),
+  ).toBe(true);
+  expect(
+    await page.evaluate(
+      "window.transport.activeSourceId === window.idB && window.transport.current.peer.connectionState === 'connected'",
+    ),
+  ).toBe(true);
+  await page.evaluate(
+    "window.transport.close(); window.providers.forEach(source => { source.peer.close(); source.tone.stop(); }); window.context.close()",
+  );
   expect(await page.evaluate("window.failures")).toEqual([]);
 });

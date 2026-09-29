@@ -1,4 +1,4 @@
-/** Targeted billed experiment: one initial session plus three seeded replacements.
+/** Targeted billed experiment: one initial session plus one seeded ADVANCE replacement.
  * Uses the configured local app; never loads or exports credentials.
  * BASE_URL=http://127.0.0.1:3000 node scripts/live-replacement-startup.mjs
  */
@@ -8,7 +8,7 @@ import path from "node:path";
 import ts from "typescript";
 
 const baseURL = process.env.BASE_URL ?? "http://127.0.0.1:3000";
-const output = process.env.LIVE_OUT ?? "test-results/replacement-startup";
+const output = process.env.LIVE_OUT ?? "test-results/replacement-response";
 const browser = await chromium.launch({ args: ["--use-fake-ui-for-media-stream"] });
 const context = await browser.newContext({ permissions: ["microphone"] });
 const page = await context.newPage();
@@ -19,11 +19,19 @@ try {
     if (name === "index") {
       await route.fulfill({
         contentType: "text/html",
-        body: `<button>Start</button><audio muted></audio><script type="module">
+        body: `<button>Start</button><div data-scene></div><audio muted></audio><script type="module">
         import { BrowserTransport } from './browser-transport';
-        import { replacementSessionInput } from './lesson';
+        import { replacementSessionInput, advanceContext, sceneAt, OBJECTS } from './lesson';
         window.Transport = BrowserTransport;
         window.replacementSessionInput = replacementSessionInput;
+        window.advanceContext = advanceContext;
+        window.sceneAt = sceneAt;
+        window.showScene = index => {
+          window.sceneIndex = index;
+          const scene = sceneAt(index);
+          document.querySelector('[data-scene]').dataset.scene = scene.id;
+          document.querySelector('[data-scene]').textContent = OBJECTS[scene.object].emoji.repeat(scene.quantity);
+        };
       </script>`,
       });
       return;
@@ -40,6 +48,7 @@ try {
   await page.waitForFunction("typeof window.Transport === 'function'");
   await page.evaluate(() => {
     window.diagnostics = [];
+    window.showScene(1);
     window.peers = [];
     const Peer = window.RTCPeerConnection;
     window.RTCPeerConnection = class extends Peer {
@@ -62,21 +71,57 @@ try {
             });
           if (event.type === "session.output_transcript.delta")
             window.diagnostics.push({ sourceNumber, at: performance.now(), type: event.type, delta: event.delta });
+          if (event.type === "session.instructions.appended")
+            window.diagnostics.push({
+              sourceNumber,
+              at: performance.now(),
+              type: event.type,
+              clientEventId: event.client_event_id,
+              startMs: event.start_ms,
+              endMs: event.end_ms,
+            });
+          if (event.type === "session.closed")
+            window.diagnostics.push({ sourceNumber, at: performance.now(), type: event.type });
           if (event.type === "error")
             window.diagnostics.push({ sourceNumber, at: performance.now(), type: event.type, code: event.error?.code });
         });
+        const send = channel.send.bind(channel);
+        channel.send = raw => {
+          const command = JSON.parse(raw);
+          send(raw);
+          if (command.type === "session.instructions.append")
+            window.diagnostics.push({
+              sourceNumber,
+              at: performance.now(),
+              type: "outcome.instruction_sent",
+              eventId: command.event_id,
+              content: command.content,
+            });
+        };
         return channel;
       }
     };
     window.audioContext = new AudioContext();
+    window.microphoneContextBeforeStart = window.audioContext.state;
     const silence = window.audioContext.createMediaStreamDestination();
     navigator.mediaDevices.getUserMedia = async () => silence.stream.clone();
     window.transport = new window.Transport(document.querySelector("audio"));
     window.transport.setOutputBlocked(true);
     window.lessonEvents = [];
-    document.querySelector("button").onclick = () => {
+    document.querySelector("button").onclick = async () => {
+      // The synthetic microphone needs a running graph to deliver continuous RTP.
+      // Resume it in the user gesture, just as the provider-free fixture does.
+      await window.audioContext.resume();
+      if (window.audioContext.state !== "running") {
+        window.failure = "Synthetic microphone context did not start";
+        return;
+      }
       window.starting = window.transport.start(
-        event => window.lessonEvents.push(event),
+        event => {
+          window.lessonEvents.push(event);
+          if (event.type === "output.activity")
+            window.diagnostics.push({ sourceNumber: window.transport.activeSourceId, at: performance.now(), ...event });
+        },
         error => {
           window.failure = error;
         },
@@ -91,72 +136,127 @@ try {
   );
   await page.evaluate(() => window.starting);
   if (await page.evaluate(() => window.failure)) throw new Error("Initial voice session failed");
-  const seeds = [
-    { sceneIndex: 2, decision: "ADVANCE", childUtterance: "Two" },
-    { sceneIndex: 2, decision: "STAY", childUtterance: "Five" },
-    { sceneIndex: 2, decision: "UNAVAILABLE", childUtterance: "Three" },
-  ];
-  for (let index = 0; index < seeds.length; index++) {
-    const sample = await page.evaluate(
-      async ({ seed, probe }) => {
-        const authorityBefore = window.transport.activeSourceId;
-        const id = await window.transport.prepareReplacement(seed);
-        const result = {
-          seed,
-          timing: window.transport.replacementTiming,
-          authorityBefore,
-          authorityAfterPreparation: window.transport.activeSourceId,
-          pendingDetached: document.querySelector("audio").srcObject !== window.transport.pending.remote,
-          muted: document.querySelector("audio").muted,
-          seedReceiptConfirmed:
-            JSON.stringify(
-              window.diagnostics.find(event => event.sourceNumber === id && event.type === "session.started")?.input,
-            ) === JSON.stringify(window.replacementSessionInput(seed)),
-        };
-        if (!result.seedReceiptConfirmed) throw new Error("Provider did not confirm generated startup input");
-        if (result.authorityBefore !== result.authorityAfterPreparation || !result.pendingDetached || !result.muted)
-          throw new Error("Preparation isolation failed");
-        if (probe) {
-          if (!window.transport.activateSource(id)) throw new Error("Probe promotion failed");
-          // Test-only context probe after qualification, never part of startup or gates.
-          window.transport.send({
-            type: "session.instructions.append",
-            event_id: "replacement-context-probe",
-            delegation_id: null,
-            content:
-              "For a parent diagnostic only, say the name of the objects currently displayed, without saying their count or judging the child's answer. Then remain quiet.",
-          });
-        } else window.transport.retireSource(id);
-        return result;
-      },
-      { seed: seeds[index], probe: index === seeds.length - 1 },
-    );
-    results.samples.push(sample);
-    console.log(JSON.stringify(sample));
-  }
-  await page
-    .waitForFunction(
-      "window.diagnostics.some(event => event.sourceNumber === 4 && event.type === 'session.output_transcript.delta' && /butterfl/i.test(event.delta))",
-      null,
-      { timeout: 20_000 },
+  const sample = await page.evaluate(async () => {
+    // Model the authoritative display change already completed by the app.
+    window.showScene(2);
+    const seed = { sceneIndex: window.sceneIndex, decision: "ADVANCE", childUtterance: "Two" };
+    const authorityBefore = window.transport.activeSourceId;
+    const id = await window.transport.prepareReplacement(seed);
+    const source = window.transport.pending;
+    window.replacement = source;
+    const result = {
+      seed,
+      microphoneContextBeforeStart: window.microphoneContextBeforeStart,
+      microphoneContextDuringSample: window.audioContext.state,
+      previousScene: window.sceneAt(1),
+      currentScene: window.sceneAt(window.sceneIndex),
+      timing: window.transport.replacementTiming,
+      authorityBefore,
+      authorityAfterPreparation: window.transport.activeSourceId,
+      readyBeforePromotion: source.ready,
+      outputActivityAtReady: source.activity.state,
+      pendingDetached: document.querySelector("audio").srcObject !== source.remote,
+      mutedBeforePromotion: document.querySelector("audio").muted,
+      seedReceiptConfirmed:
+        JSON.stringify(
+          window.diagnostics.find(event => event.sourceNumber === id && event.type === "session.started")?.input,
+        ) === JSON.stringify(window.replacementSessionInput(seed)),
+    };
+    window.sample = result;
+    if (!result.seedReceiptConfirmed) throw new Error("Provider did not confirm generated startup input");
+    if (
+      authorityBefore !== result.authorityAfterPreparation ||
+      !result.pendingDetached ||
+      !result.mutedBeforePromotion ||
+      !source.ready
     )
-    .catch(() => {});
-  // Allow a bounded follow-up fragment to complete the diagnostic sentence.
-  await page.waitForTimeout(2000);
+      throw new Error("Preparation isolation failed");
+    if (!window.transport.activateSource(id)) throw new Error("Replacement promotion failed");
+    result.promotedAt = performance.now();
+    result.blockedAfterPromotion = document.querySelector("audio").muted;
+    result.aRetiredAfterPromotion = !window.peers[0] || window.peers[0].connectionState === "closed";
+    if (!result.blockedAfterPromotion || !result.aRetiredAfterPromotion) throw new Error("Promotion isolation failed");
+    result.instruction = window.advanceContext(window.sceneAt(window.sceneIndex));
+    result.instructionEventId = "replacement-authoritative-advance";
+    window.transport.send({
+      type: "session.instructions.append",
+      event_id: result.instructionEventId,
+      delegation_id: null,
+      content: result.instruction,
+    });
+    result.instructionSentAt = window.diagnostics.find(
+      event => event.sourceNumber === id && event.eventId === result.instructionEventId,
+    ).at;
+    window.transport.setOutputBlocked(false);
+    result.outputPermittedAt = performance.now();
+    return result;
+  });
+  results.samples.push(sample);
+  console.log(JSON.stringify(sample));
+  // Fixed bounded observation collects ACK, transcript and decoded-media evidence,
+  // including connection/authority state when no response arrives.
+  await page.waitForTimeout(20_000);
+  const observation = await page.evaluate(() => {
+    const source = window.replacement;
+    const sample = window.sample;
+    const events = window.diagnostics.filter(event => event.sourceNumber === source.id);
+    const sentAt = sample.instructionSentAt;
+    const ack = events.find(
+      event => event.type === "session.instructions.appended" && event.clientEventId === sample.instructionEventId,
+    );
+    const transcript = events.filter(event => event.type === "session.output_transcript.delta" && event.at >= sentAt);
+    const firstTranscript = transcript[0];
+    const firstMedia = events.find(event => event.type === "output.activity" && event.state === "active");
+    const elapsed = (end, start) => (end === undefined ? null : end - start);
+    return {
+      observationEndedAt: performance.now(),
+      matchingAppendAckAt: ack?.at ?? null,
+      firstOutputTranscriptAt: firstTranscript?.at ?? null,
+      firstOutputMediaActiveAt: firstMedia?.at ?? null,
+      timings: {
+        readyToInstructionSentMs: sentAt - sample.timing.replacement_ready_at,
+        instructionSentToAppendAckMs: elapsed(ack?.at, sentAt),
+        instructionSentToFirstTranscriptMs: elapsed(firstTranscript?.at, sentAt),
+        readyToFirstTranscriptMs: elapsed(firstTranscript?.at, sample.timing.replacement_ready_at),
+        outputPermittedToFirstTranscriptMs: elapsed(firstTranscript?.at, sample.outputPermittedAt),
+        outputPermittedToFirstMediaActiveMs: elapsed(firstMedia?.at, sample.outputPermittedAt),
+      },
+      transcript: transcript.map(event => event.delta).join(""),
+      outputTranscriptsBeforeInstruction: events.filter(
+        event => event.type === "session.output_transcript.delta" && event.at < sentAt,
+      ),
+      responded: transcript.length > 0,
+      currentSceneReferenced: /butterfl/i.test(transcript.map(event => event.delta).join("")),
+      previousSceneReferenced: /duck/i.test(transcript.map(event => event.delta).join("")),
+      finalState: {
+        channel: source.channel.readyState,
+        peer: source.peer.connectionState,
+        outputActivity: source.activity.state,
+        authoritative: window.transport.activeSourceId === source.id,
+        permitted: !document.querySelector("audio").muted && !window.transport.outputBlocked,
+        playbackAttached: document.querySelector("audio").srcObject === source.remote,
+        playbackPaused: document.querySelector("audio").paused,
+        displayedSceneIndex: window.sceneIndex,
+        displayedSceneId: document.querySelector("[data-scene]").dataset.scene,
+        providerErrors: events.filter(event => event.type === "error"),
+        providerClosures: events.filter(event => event.type === "session.closed"),
+        transportFailure: window.failure ?? null,
+      },
+    };
+  });
+  results.observation = observation;
   results.diagnostics = await page.evaluate(() => window.diagnostics);
-  results.contextProbe = results.diagnostics
-    .filter(event => event.sourceNumber === 4 && event.type === "session.output_transcript.delta")
-    .map(event => event.delta)
-    .join("");
-  results.currentSceneObserved = /butterfl/i.test(results.contextProbe);
-  console.log(
-    JSON.stringify({ contextProbe: results.contextProbe, currentSceneObserved: results.currentSceneObserved }),
-  );
+  console.log(JSON.stringify(observation));
+  if (!observation.responded) {
+    results.failure = "No replacement output transcript in the 20-second observation window";
+    process.exitCode = 1;
+  }
 } catch (error) {
   results.failure = error instanceof Error ? error.message : "Experiment failed";
   process.exitCode = 1;
   console.error(results.failure);
 } finally {
+  results.diagnostics ??= await page.evaluate(() => window.diagnostics).catch(() => []);
   await page
     .evaluate(() => {
       window.transport?.close();

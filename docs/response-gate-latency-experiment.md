@@ -669,3 +669,62 @@ promote explicitly, then send the outcome instruction and grant permission.
 Verify that complete flow before deciding a release policy. This commit leaves
 ADVANCE/STAY gates, `output_transcript_quiet`, `UTTERANCE_GAP_MS`, Jev, the
 250 ms correction window and 15-second recovery unchanged.
+
+### Follow-up: real ADVANCE instruction after promotion — 2026-09-29
+
+**B did not respond; speech resumption remains unqualified for commit 4.**
+One fresh replacement was tested on top of `65a49b1` at **15:51:26.966 UTC**,
+using the configured port-3000 app. No retries or Jev calls were made. The
+harness displayed two ducks (scene 1), then three butterflies (scene 2), and
+seeded B with `{ sceneIndex: 2, decision: "ADVANCE", childUtterance: "Two" }`.
+The provider echoed the exact generated history. B became READY in **1690.7 ms**
+while A remained authoritative and B detached/muted. Explicit promotion closed
+A; B stayed blocked while receiving the exact `advanceContext(sceneAt(2))`
+production instruction, with no diagnostic prompt or clarification:
+
+> The child's count was right, so the app has just changed the screen. Briefly celebrate that, then move on. The screen now shows exactly 3 butterflies. Invite the child to count them, for example "How many can you count?", without saying the total yourself. Wait and listen.
+
+The command was `session.instructions.append`, `delegation_id: null`, event ID
+`replacement-authoritative-advance`. Successful local send was recorded on B's
+data channel, then output was permitted. That does not prove provider acceptance.
+All observations below use one document's browser `performance.now()` clock:
+
+| Event | Browser time (ms) |
+| --- | ---: |
+| Replacement READY | 3156.9 |
+| Promotion completed | 3159.2 |
+| Outcome instruction sent to B | 3159.3 |
+| Output permitted | 3159.3 |
+| Matching append ACK | Not observed |
+| First B output transcript | Not observed |
+| First B output media activity `active` | Not observed |
+| Observation ended | 23171.8 |
+
+READY → instruction was **2.4 ms**. Instruction → ACK, instruction → transcript,
+permission → transcript, permission → media activity and READY → transcript are
+**unmeasured**: none arrived in **20.013 seconds after send**. That window is not
+response or acoustic latency. No B transcript preceded the instruction either.
+
+At the end B remained **open/connected, authoritative and permitted**, with
+playback attached and `paused: false`. Media activity remained **unavailable**
+(unknown, not measured silence). No provider error, `session.closed` or transport
+failure occurred. The UI stayed on scene 2 / `butterfly-garden`. No response
+means scene correctness or spoken references to earlier/future scenes cannot be
+verified. The harness does not run LessonSession; unchanged UI alone cannot
+prove conversational correctness or acoustic delivery.
+
+The harness now explicitly resumes its synthetic microphone AudioContext in the
+Start gesture and records state. It was **already running before resume** and
+remained running during this sample, so suspension is not an established cause.
+No production fix was justified or made. Missing ACK/output remains unexplained;
+provider timeline progression and command acceptance were not established.
+Further investigation is needed before commit 4; answer-gate policy is unchanged.
+
+Validation: **36 focused unit tests**, **six provider-free WebRTC tests**, lint
+and typecheck passed. The added browser test verifies the real ADVANCE command
+reaches promoted B while blocked, a matching synthetic ACK is routed, and
+permission enables attached playback. The single billed experiment exited
+nonzero for its failed response criterion, saved diagnostics and closed both
+connections. Local evidence: `test-results/replacement-response-20260929/results.json`,
+SHA-256 `1dda2683f5e9819eeddb5c2d18154fa65c9cfb790c6a7472d798918b3da574e4`.
+No credentials or audio were committed.
