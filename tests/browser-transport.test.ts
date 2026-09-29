@@ -35,6 +35,7 @@ function liveConnection() {
     close: vi.fn(),
   };
   const peer = {
+    connectionState: "connected",
     iceGatheringState: "complete",
     localDescription: { sdp: "offer" },
     ontrack: null as ((event: { track: MediaStreamTrack }) => void) | null,
@@ -273,5 +274,190 @@ it("late remote tracks and play resolution cannot restore output after stop", as
   expect(audio.srcObject).toBeNull();
   expect(audio.pause).toHaveBeenCalledOnce();
   expect(audio.play).toHaveBeenCalledOnce();
+  transport.close();
+});
+
+describe("production response-source isolation", () => {
+  it("keeps B detached, retires A before promotion, rejects every late A callback, and routes send to B", async () => {
+    const a = liveConnection();
+    const audio = audioElement();
+    let resolveA!: () => void;
+    audio.play.mockImplementationOnce(
+      () =>
+        new Promise<void>(resolve => {
+          resolveA = resolve;
+        }),
+    );
+    const events = vi.fn();
+    const failures = vi.fn();
+    const transport = new BrowserTransport(audio as unknown as HTMLAudioElement);
+    await transport.start(events, failures);
+    const idA = transport.activeSourceId!;
+    a.peer.ontrack?.({ track: a.remoteTrack });
+    const streamA = audio.srcObject;
+    const b = liveConnection();
+    const idB = await transport.prepareReplacement();
+    expect(idB).toBeGreaterThan(idA);
+    b.peer.ontrack?.({ track: b.remoteTrack });
+    expect(audio.srcObject).toBe(streamA);
+    expect(audio.play).toHaveBeenCalledOnce();
+    const count = events.mock.calls.length;
+    a.peer.connectionState = "failed";
+    const lateA = () => {
+      for (const raw of [
+        { type: "session.output_transcript.delta", delta: "late", start_ms: 0, end_ms: 1 },
+        { type: "session.closed" },
+        { type: "error" },
+      ])
+        a.channel.onmessage?.({ data: JSON.stringify(raw) });
+      a.channel.onmessage?.({ data: "invalid json" });
+      (a.channel.onclose as (() => void) | null)?.();
+      (a.channel.onerror as (() => void) | null)?.();
+      (a.peer.onconnectionstatechange as (() => void) | null)?.();
+    };
+    // Synchronous media teardown callbacks must already see A invalidated.
+    vi.mocked(a.remoteTrack.stop).mockImplementation(() => {
+      expect(transport.activeSourceId).toBeUndefined();
+      expect(audio.muted).toBe(true);
+      expect(audio.srcObject).toBeNull();
+      lateA();
+    });
+    transport.retireSource(idA);
+    transport.retireSource(idA);
+    transport.setOutputBlocked(false);
+    expect(audio.muted).toBe(true);
+    expect(transport.activateSource(idA)).toBe(false);
+    expect(transport.activateSource(idB)).toBe(true);
+    expect(audio.srcObject).not.toBe(streamA);
+    expect(audio.muted).toBe(true);
+    resolveA();
+    await Promise.resolve();
+    const lateTrack = { stop: vi.fn() } as unknown as MediaStreamTrack;
+    a.peer.ontrack?.({ track: lateTrack });
+    lateA();
+    expect(lateTrack.stop).toHaveBeenCalledOnce();
+    expect(failures).not.toHaveBeenCalled();
+    expect(events.mock.calls.slice(count)).toEqual([[{ type: "output.activity", state: "unavailable" }]]);
+    transport.setOutputBlocked(false);
+    expect(audio.muted).toBe(false);
+    const command = { type: "session.close" as const, event_id: "test" };
+    transport.send(command);
+    expect(a.channel.send).not.toHaveBeenCalled();
+    expect(b.channel.send).toHaveBeenCalledOnce();
+    transport.close();
+    transport.close();
+    expect(a.peer.close).toHaveBeenCalledOnce();
+    expect(b.peer.close).toHaveBeenCalledOnce();
+    expect(a.remoteTrack.stop).toHaveBeenCalledOnce();
+    expect(b.remoteTrack.stop).toHaveBeenCalledOnce();
+    expect(a.micTrack.stop).toHaveBeenCalledOnce();
+  });
+
+  it("lesson teardown retires both current and pending and cannot promote after stop", async () => {
+    const a = liveConnection();
+    const transport = new BrowserTransport(audioElement() as unknown as HTMLAudioElement);
+    await transport.start(vi.fn(), vi.fn());
+    a.peer.ontrack?.({ track: a.remoteTrack });
+    const b = liveConnection();
+    const idB = await transport.prepareReplacement();
+    b.peer.ontrack?.({ track: b.remoteTrack });
+    transport.stopMedia();
+    transport.stopMedia();
+    expect(transport.activateSource(idB)).toBe(false);
+    expect(a.remoteTrack.stop).toHaveBeenCalledOnce();
+    expect(b.remoteTrack.stop).toHaveBeenCalledOnce();
+    expect(a.micTrack.stop).toHaveBeenCalledOnce();
+    transport.close();
+    expect(a.peer.close).toHaveBeenCalledOnce();
+    expect(b.peer.close).toHaveBeenCalledOnce();
+  });
+
+  it("rejects overlapping preparations and cancellation during setup without touching A", async () => {
+    const a = liveConnection();
+    const transport = new BrowserTransport(audioElement() as unknown as HTMLAudioElement);
+    await transport.start(vi.fn(), vi.fn());
+    const idA = transport.activeSourceId;
+    const b = liveConnection();
+    let offer!: (value: { type: string; sdp: string }) => void;
+    b.peer.createOffer.mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          offer = resolve;
+        }),
+    );
+    const preparing = transport.prepareReplacement();
+    await expect(transport.prepareReplacement()).rejects.toThrow("already pending");
+    // IDs are monotonically allocated, so the first pending source follows A.
+    expect(transport.activateSource(idA! + 1)).toBe(false);
+    transport.retireSource(idA! + 1);
+    offer({ type: "offer", sdp: "offer" });
+    await expect(preparing).rejects.toThrow("setup ended");
+    expect(transport.activeSourceId).toBe(idA);
+    expect(a.peer.close).not.toHaveBeenCalled();
+    expect(b.peer.close).toHaveBeenCalledOnce();
+    transport.close();
+  });
+});
+
+it("pending connection failure stays local and a late setup completion cannot survive lesson close", async () => {
+  const a = liveConnection();
+  const failure = vi.fn();
+  const transport = new BrowserTransport(audioElement() as unknown as HTMLAudioElement);
+  await transport.start(vi.fn(), failure);
+  const idA = transport.activeSourceId;
+  const b = liveConnection();
+  const idB = await transport.prepareReplacement();
+  (b.channel.onerror as (() => void) | null)?.();
+  expect(transport.activateSource(idB)).toBe(false);
+  expect(transport.activeSourceId).toBe(idA);
+  expect(failure).not.toHaveBeenCalled();
+  const c = liveConnection();
+  let answer!: () => void;
+  c.peer.setRemoteDescription.mockImplementationOnce(
+    () =>
+      new Promise<void>(resolve => {
+        answer = resolve;
+      }),
+  );
+  const preparing = transport.prepareReplacement();
+  // Let setup reach its final await, then end the lesson before it resolves.
+  await vi.waitFor(() => expect(c.peer.setRemoteDescription).toHaveBeenCalledOnce());
+  transport.close();
+  answer();
+  await expect(preparing).rejects.toThrow("setup ended");
+  expect(transport.activeSourceId).toBeUndefined();
+  expect(a.peer.close).toHaveBeenCalledOnce();
+  expect(b.peer.close).toHaveBeenCalledOnce();
+  expect(c.peer.close).toHaveBeenCalledOnce();
+  expect(failure).not.toHaveBeenCalled();
+});
+
+it("promotion retires a playable A and leaves B's playback and recording blocked", async () => {
+  const a = liveConnection();
+  const { gain } = captureMocks();
+  const audio = audioElement();
+  const transport = new BrowserTransport(audio as unknown as HTMLAudioElement);
+  await transport.start(vi.fn(), vi.fn());
+  a.peer.ontrack?.({ track: a.remoteTrack });
+  await Promise.resolve();
+  expect(gain.gain.value).toBe(1);
+  const b = liveConnection();
+  const idB = await transport.prepareReplacement();
+  b.peer.ontrack?.({ track: b.remoteTrack });
+  expect(gain.gain.value).toBe(1); // Pending B has no path into the mix.
+  vi.mocked(a.remoteTrack.stop).mockImplementation(() => {
+    expect(audio.muted).toBe(true);
+    expect(audio.srcObject).toBeNull();
+    expect(gain.gain.value).toBe(0);
+    expect(transport.activeSourceId).toBeUndefined();
+  });
+  expect(transport.activateSource(idB)).toBe(true);
+  await Promise.resolve();
+  expect(a.remoteTrack.stop).toHaveBeenCalledOnce();
+  expect(audio.muted).toBe(true);
+  expect(gain.gain.value).toBe(0);
+  transport.setOutputBlocked(false);
+  expect(audio.muted).toBe(false);
+  expect(gain.gain.value).toBe(1);
   transport.close();
 });
