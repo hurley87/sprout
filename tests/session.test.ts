@@ -10,7 +10,8 @@ import {
   type EvaluateAnswer,
 } from "../lib/answer";
 import { parseProviderEvent } from "../lib/events";
-import { LessonSession, type Transport } from "../lib/session";
+import { LessonSession, RESPONSE_GATE_RECOVERY_MS, type Transport } from "../lib/session";
+import { diagnosticsTimelines } from "../scripts/live/metrics.mjs";
 import {
   GOODBYE_PHRASE,
   INSTRUCTIONS,
@@ -241,6 +242,31 @@ describe("application lifecycle", () => {
 });
 
 describe("answer response gate", () => {
+  it("exports gate deadlines on the session clock and metrics consume session-produced events", async () => {
+    vi.setSystemTime(1_700_000_000_000);
+    const { session } = setup(true, answering(UNSURE));
+    deliver(session, speech("Five", 100));
+    deliver(session, speech("Okay, let's look", 900, true));
+    await settle();
+    const observed = session.events.find(
+      event =>
+        event.type === "answer.response_gate_observed" &&
+        (event.detail as { trigger?: string }).trigger === "decision_deferred",
+    );
+    expect(observed?.at).toBeLessThan(10_000);
+    expect((observed?.detail as { correction_ready_at?: number }).correction_ready_at).toBeLessThan(10_000);
+    expect(
+      (
+        session.events.find(event => event.type === "answer.response_gate_deadline_updated")?.detail as {
+          deadline_at?: number;
+        }
+      ).deadline_at,
+    ).toBeLessThan(10_000);
+    const timelines = diagnosticsTimelines(session.events);
+    expect(timelines).toHaveLength(1);
+    expect(timelines[0].transcriptRevision).toBe(1);
+  });
+
   it("blocks output immediately for an answer-bearing transcript before Jev runs", () => {
     const { session, transport, evaluateAnswer } = setup();
 
@@ -309,6 +335,9 @@ describe("answer response gate", () => {
     expect(session.snapshot.sceneIndex).toBe(0);
     expect(transport.setOutputBlocked).toHaveBeenCalledExactlyOnceWith(true);
     expect(transport.send).not.toHaveBeenCalled();
+    expect(session.events.filter(event => event.type === "answer.response_gate_observed").at(-1)?.detail).toMatchObject(
+      { eligible_at: null, conditions: expect.arrayContaining(["answer_evaluation"]) },
+    );
 
     complete(evaluated(CONFIDENT));
     await vi.advanceTimersByTimeAsync(0);
@@ -329,6 +358,8 @@ describe("answer response gate", () => {
       decision: "ADVANCE",
       reason: "scene_displayed",
       wait_ms: expect.any(Number),
+      eligible_at: expect.any(Number),
+      eligibility_basis: "observed_all_blockers_clear",
     });
     expect(vi.mocked(transport.send).mock.invocationCallOrder[0]).toBeLessThan(
       vi.mocked(transport.setOutputBlocked).mock.invocationCallOrder[1],
@@ -1444,7 +1475,17 @@ describe("answer-check turn synchronization", () => {
     expect(session.events.findLast(event => event.type === "answer.response_gate_released")?.detail).toMatchObject({
       decision: _decision === "unavailable" ? "UNAVAILABLE" : "STAY",
       reason: "output_transcript_quiet",
+      eligible_at: expect.any(Number),
     });
+    expect(session.events.some(event => event.type === "answer.response_gate_deadline_updated")).toBe(true);
+    expect(session.events.filter(event => event.type === "answer.response_gate_observed")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          detail: expect.objectContaining({ trigger: "blocked_provider_transcript", blocked_output_activity: true }),
+        }),
+        expect.objectContaining({ detail: expect.objectContaining({ trigger: "released", output_blocked: false }) }),
+      ]),
+    );
   });
 
   it("does not treat hidden help transcripts as an audible Sprout turn", async () => {
@@ -1658,6 +1699,17 @@ describe("answer-check turn synchronization", () => {
     const releasedGate = session.events.find(event => event.type === "answer.response_gate_released");
     expect(committed?.at).toBeLessThan(releasedGate?.at ?? 0);
     expect(releasedGate?.detail).toMatchObject({ decision: "ADVANCE", reason: "output_transcript_quiet" });
+    expect(session.events.find(event => event.type === "answer.response_gate_deadline_updated")?.detail).toMatchObject({
+      condition: "output_transcript_quiet",
+      extension_ms: expect.any(Number),
+    });
+    expect(
+      session.events
+        .filter(event => event.type === "answer.response_gate_observed")
+        .map(event => (event.detail as { trigger: string }).trigger),
+    ).toEqual(
+      expect.arrayContaining(["scene_committed", "scene_displayed", "blocked_provider_transcript", "released"]),
+    );
     expect(session.events.filter(event => event.type === "advance.deferred")).toHaveLength(1);
     expect(session.events.filter(event => event.type === "advance.released")).toHaveLength(1);
     expect(session.events.findLast(event => event.type === "advance.released")?.detail).toMatchObject({
@@ -2126,4 +2178,114 @@ describe("provider event parsing", () => {
       parseProviderEvent({ type: "session.delegation.created", delegation: { id: "a", target: "responses" } })?.type,
     ).toBe("delegation.unsupported");
   });
+});
+
+describe("response gate media investigation and bounded recovery", () => {
+  it("does not shorten the fragmented-output hold on media quiet or steering acknowledgments", async () => {
+    const { session, transport } = setup(true, answering(CONFIDENT));
+    deliver(session, speech("One"));
+    deliver(session, speech("Mm-hm", 100, true));
+    await settle(CORRECTION_WINDOW_MS);
+    expect(session.snapshot.sceneIndex).toBe(1);
+    session.displayed(1);
+    for (let fragment = 0; fragment < 17; fragment++) {
+      deliver(session, speech(` stale-${fragment}`, 500 + fragment * 400, true));
+      session.receive({ type: "output.activity", state: "active" });
+      await vi.advanceTimersByTimeAsync(100);
+      session.receive({ type: "output.activity", state: "quiet" });
+      deliver(session, { type: "session.instructions.appended", client_event_id: "sprout_1" });
+      await vi.advanceTimersByTimeAsync(100);
+      expect(transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
+    }
+    expect(session.events.filter(event => event.type === "advance.committed")).toHaveLength(1);
+    expect(session.events.findLast(event => event.type === "answer.response_gate_observed")?.detail).toMatchObject({
+      output_media_activity: "quiet",
+      output_media_is_release_barrier: false,
+    });
+    await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS - 200);
+    expect(session.events.filter(event => event.type === "answer.response_gate_released")).toHaveLength(1);
+    session.dispose();
+  });
+
+  it.each(["fragmented", "missing-evaluation", "missing-display", "child-activity"])(
+    "stops media within the fixed budget for %s",
+    async mode => {
+      const { session, transport } = setup(
+        true,
+        mode === "missing-evaluation" ? () => new Promise(() => {}) : answering(CONFIDENT),
+      );
+      deliver(session, speech("One"));
+      const started = Date.now();
+      if (mode === "child-activity") session.receive({ type: "microphone.activity_started" });
+      await settle(CORRECTION_WINDOW_MS);
+      if (mode === "fragmented") {
+        deliver(session, speech("old scene", 100, true));
+        session.displayed(1);
+        while (Date.now() < started + RESPONSE_GATE_RECOVERY_MS - 1000) {
+          await vi.advanceTimersByTimeAsync(1000);
+          deliver(session, speech(" more", Date.now() - started, true));
+        }
+      }
+      await vi.advanceTimersByTimeAsync(started + RESPONSE_GATE_RECOVERY_MS - Date.now());
+      expect(session.snapshot.reason).toBe("connection_failure");
+      expect(transport.stopMedia).toHaveBeenCalledOnce();
+      expect(transport.close).toHaveBeenCalledOnce();
+      expect(session.events.filter(event => event.type === "answer.response_gate_released")).toHaveLength(0);
+      expect(vi.mocked(transport.stopMedia).mock.invocationCallOrder[0]).toBeLessThan(
+        vi.mocked(transport.setOutputBlocked).mock.invocationCallOrder.at(-1)!,
+      );
+      const commandsBefore = vi.mocked(transport.send).mock.calls.length;
+      session.receive({ type: "output.activity", state: "quiet" });
+      session.displayed(1);
+      deliver(session, speech("late praise", 20000, true));
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(vi.mocked(transport.send).mock.calls.length).toBe(commandsBefore);
+    },
+  );
+
+  it("revised STAY and duplicate signals cannot renew the recovery budget", async () => {
+    const { session, transport } = setup();
+    deliver(session, speech("Five"));
+    deliver(session, speech("stale correction", 100, true));
+    await settle(CORRECTION_WINDOW_MS);
+    for (let revision = 0; revision < 6; revision++) {
+      session.receive({ type: "microphone.activity_started" });
+      deliver(session, speech(" no two", 500 + revision * 500));
+      deliver(session, speech(" old guidance", 500 + revision * 500, true));
+      session.receive({ type: "output.activity", state: "quiet" });
+      session.receive({ type: "output.activity", state: "quiet" });
+      await vi.advanceTimersByTimeAsync(2000);
+    }
+    const started = session.events.find(event => event.type === "answer.response_gate_started")!.at;
+    await vi.advanceTimersByTimeAsync(session.createdAt + started + RESPONSE_GATE_RECOVERY_MS - Date.now());
+    expect(session.snapshot.reason).toBe("connection_failure");
+    expect(transport.send).not.toHaveBeenCalledWith(expect.objectContaining({ content: stayContext(sceneAt(0)) }));
+    expect(session.snapshot.sceneIndex).toBe(0);
+  });
+
+  it("failed steering stops media before cancellation instead of briefly opening playback", async () => {
+    const { session, transport } = setup();
+    vi.mocked(transport.send).mockImplementation(() => {
+      throw new Error("channel lost");
+    });
+    deliver(session, speech("Five"));
+    await settle(CORRECTION_WINDOW_MS);
+    expect(session.snapshot.reason).toBe("connection_failure");
+    expect(session.events.filter(event => event.type === "answer.response_gate_released")).toHaveLength(0);
+    expect(vi.mocked(transport.stopMedia).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(transport.setOutputBlocked).mock.invocationCallOrder.at(-1)!,
+    );
+  });
+});
+
+it("invalidates external input before synchronous media teardown callbacks", () => {
+  const { session, transport } = setup();
+  vi.mocked(transport.stopMedia).mockImplementation(() => {
+    deliver(session, speech("One"));
+    session.fail("late teardown callback");
+  });
+  session.end("parent_stop");
+  expect(session.snapshot.reason).toBe("parent_stop");
+  expect(transport.stopMedia).toHaveBeenCalledOnce();
+  expect(session.events.filter(event => event.type === "answer.response_gate_started")).toHaveLength(0);
 });

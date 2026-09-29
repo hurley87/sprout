@@ -113,3 +113,132 @@ it("adds the structured application end reason without inventing a page timestam
   expect(text).toContain("APPLICATION SESSION END reason=child_stop (diagnostics; no browser timestamp)");
   expect(text.indexOf("APPLICATION SESSION END")).toBeLessThan(text.indexOf("=== SCENARIO FAILED ==="));
 });
+
+it("renders response-gate conditions and terminal evidence in the artifact timeline", async () => {
+  const dir = directory();
+  const source = join(dir, "download.json");
+  const { writeFileSync } = await import("node:fs");
+  writeFileSync(
+    source,
+    JSON.stringify({
+      events: [
+        {
+          at: 10,
+          type: "answer.candidate",
+          detail: { sceneIndex: 0, revision: 3, version: "10:One", transcript_at: 9 },
+        },
+        {
+          at: 20,
+          type: "answer.response_gate_observed",
+          detail: {
+            scene_index: 0,
+            transcript_revision: 3,
+            answer_version: "10:One",
+            conditions: ["output_transcript_quiet"],
+            output_blocked: true,
+            output_quiet_at: 40,
+          },
+        },
+        {
+          at: 30,
+          type: "answer.response_gate_observed",
+          detail: {
+            scene_index: 0,
+            transcript_revision: 3,
+            answer_version: "10:One",
+            conditions: [],
+            output_blocked: false,
+          },
+        },
+        {
+          at: 30,
+          type: "answer.response_gate_released",
+          detail: {
+            scene_index: 0,
+            transcript_revision: 3,
+            answer_version: "10:One",
+            decision: "STAY",
+            reason: "output_transcript_quiet",
+            context_sent_at: 30,
+            eligible_at: 40,
+          },
+        },
+        { at: 31, type: "output.media_activity", detail: { state: "active", output_blocked: false } },
+        { at: 32, type: "transcript.sprout", detail: { delta: "Nice!" } },
+      ],
+    }),
+  );
+  const page = {
+    evaluate: async () => [],
+    getByText: () => ({ click: async () => {} }),
+    getByRole: () => ({ click: async () => {} }),
+    waitForEvent: async () => ({ path: async () => source }),
+  };
+  const text = await exportArtifacts({
+    page,
+    browser: { version: () => "fake" },
+    dir,
+    label: "gate",
+    scenario: {},
+    micScript: "runtime",
+    failure: undefined,
+  });
+  expect(text).toContain("Response gate timeline (application session-relative clock)");
+  expect(text).toContain("output_transcript_quiet=10ms");
+  expect(text).toContain("blocked union=10ms (condition intervals may overlap)");
+  expect(text).toContain("released STAY/output_transcript_quiet at 30ms; context sent 30ms");
+  expect(text).toContain("first transcript observed after release at 32ms");
+  expect(text).toContain("first decoded-media activity after release at 31ms");
+  expect(text).toContain("output.media_activity active at 31ms");
+  expect(text).toContain(
+    "transcript/media observations do not prove current-answer generation, acoustic delivery or completion",
+  );
+  expect(text).toContain("audible onset/provider completion unobserved");
+});
+
+it("prints recovery failure with its answer identity", async () => {
+  const dir = directory();
+  const source = join(dir, "download.json");
+  const { writeFileSync } = await import("node:fs");
+  writeFileSync(
+    source,
+    JSON.stringify({
+      events: [
+        {
+          at: 10,
+          type: "answer.candidate",
+          detail: { sceneIndex: 0, revision: 2, version: "10:Two", transcript_at: 9 },
+        },
+        {
+          at: 20,
+          type: "answer.response_gate_recovery_failed",
+          detail: {
+            scene_index: 0,
+            transcript_revision: 2,
+            answer_version: "10:Two",
+            wait_ms: 15000,
+            output_media_activity: "quiet",
+          },
+        },
+      ],
+    }),
+  );
+  const page = {
+    evaluate: async () => [],
+    getByText: () => ({ click: async () => {} }),
+    getByRole: () => ({ click: async () => {} }),
+    waitForEvent: async () => ({ path: async () => source }),
+  };
+  const text = await exportArtifacts({
+    page,
+    browser: { version: () => "fake" },
+    dir,
+    label: "recovery",
+    scenario: {},
+    micScript: "runtime",
+    failure: undefined,
+  });
+  expect(text).toContain(
+    'answer.response_gate_recovery_failed scene=0 revision=2 answer="10:Two" at 20ms after 15000ms',
+  );
+});

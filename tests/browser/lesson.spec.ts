@@ -514,3 +514,100 @@ test("failed durable creation leaves diagnostics available and offers no retry",
   await page.getByText("Parent testing notes", { exact: false }).click();
   await expect(page.getByRole("button", { name: "Download attempt diagnostics" })).toBeVisible();
 });
+
+test("fragmented stale output cannot extend a response gate past its recovery budget", async ({ page }) => {
+  await mockLive(page);
+  await mockEvaluate(page, 0.95);
+  await page.clock.install();
+  await begin(page);
+  await page.clock.pauseAt(await page.evaluate(() => new Date(Date.now() + 100)));
+  await say(page, "One!");
+  await emit(page, { type: "session.output_transcript.delta", delta: "Old duck guidance", start_ms: 100, end_ms: 300 });
+  await page.clock.runFor(1800);
+  await page.clock.runFor(100);
+  await expect(page.locator('[data-scene="duck-friends"]')).toBeVisible();
+  for (let i = 0; i < 17; i++) {
+    await emit(page, {
+      type: "session.output_transcript.delta",
+      delta: " stale praise",
+      start_ms: 500 + i * 800,
+      end_ms: 800 + i * 800,
+    });
+    await page.clock.runFor(700);
+    expect(await page.locator("audio").evaluate((audio: HTMLAudioElement) => audio.muted)).toBe(true);
+  }
+  expect((await sentContent(page)).filter(text => text.includes("2 ducks"))).toHaveLength(0);
+  await page.clock.runFor(1300);
+  await expect(page.getByRole("alert").filter({ hasText: "could not safely resume" })).toBeVisible();
+  expect(await tracksStopped(page)).toBe(true);
+  expect(
+    await page.locator("audio").evaluate((audio: HTMLAudioElement) => audio.srcObject === null && audio.paused),
+  ).toBe(true);
+  const before = (await commands(page)).length;
+  await emit(page, { type: "session.instructions.appended", client_event_id: "late" });
+  await emit(page, { type: "session.output_transcript.delta", delta: "late success", start_ms: 20000, end_ms: 20500 });
+  await page.clock.runFor(5000);
+  expect(await commands(page)).toHaveLength(before);
+});
+
+test("a revised STAY remains muted and sends only the context for the committed displayed scene", async ({ page }) => {
+  await mockLive(page);
+  await page.clock.install();
+  let evaluations = 0;
+  await page.route("**/api/evaluate", route =>
+    route.fulfill({ json: { probability: evaluations++ === 0 ? 0 : 0.95, model: "jev-test" } }),
+  );
+  await begin(page);
+  await page.clock.pauseAt(await page.evaluate(() => new Date(Date.now() + 100)));
+  await say(page, "Five");
+  await emit(page, { type: "session.output_transcript.delta", delta: "stale correction", start_ms: 100, end_ms: 300 });
+  await page.clock.runFor(1800);
+  await expect.poll(() => evaluations).toBe(1);
+  await page.clock.runFor(100);
+  await say(page, " no one", 500);
+  await emit(page, {
+    type: "session.output_transcript.delta",
+    delta: "late stale correction",
+    start_ms: 1500,
+    end_ms: 1800,
+  });
+  await page.clock.runFor(1800);
+  await expect.poll(() => evaluations).toBe(2);
+  await page.clock.runFor(100);
+  await expect(page.locator('[data-scene="duck-friends"]')).toBeVisible();
+  expect(await releases(page)).toEqual([]);
+  expect(await page.locator("audio").evaluate((audio: HTMLAudioElement) => audio.muted)).toBe(true);
+  await page.clock.runFor(1000);
+  await expect.poll(async () => (await sentContent(page)).filter(text => text.includes("2 ducks")).length).toBe(1);
+  expect(await releases(page)).toEqual([]);
+  const ordered = await page.evaluate(
+    () =>
+      Number(window.sproutTest.commands.find(command => String(command.content ?? "").includes("2 ducks"))?.at) >=
+      window.sproutTest.shownAt["duck-friends"],
+  );
+  expect(ordered).toBe(true);
+  await page.getByRole("button", { name: "End lesson" }).click();
+});
+
+test("failed outcome steering tears down playback while the gate is blocked", async ({ page }) => {
+  await mockLive(page);
+  await page.clock.install();
+  await begin(page);
+  await page.clock.pauseAt(await page.evaluate(() => new Date(Date.now() + 100)));
+  await page.evaluate(() => {
+    const originalPush = window.sproutTest.commands.push.bind(window.sproutTest.commands);
+    window.sproutTest.commands.push = (...commands) => {
+      if (commands.some(command => String(command.content ?? "").includes("has not changed")))
+        throw new Error("steering failed");
+      return originalPush(...commands);
+    };
+  });
+  await say(page, "Five");
+  await page.clock.runFor(1800);
+  await page.clock.runFor(300);
+  await expect(page.getByRole("alert").filter({ hasText: "voice connection was lost" })).toBeVisible();
+  expect(await tracksStopped(page)).toBe(true);
+  expect(
+    await page.locator("audio").evaluate((audio: HTMLAudioElement) => audio.srcObject === null && audio.paused),
+  ).toBe(true);
+});

@@ -32,6 +32,7 @@ export class LiveEventJournal {
   ingest(entries, now) {
     for (const event of entries) {
       if (event.dir === "in" && event.type === "session.output_transcript.delta") {
+        this.emit("sprout-transcript-fragment", { at: event.at, text: event.delta, event });
         const hasTiming =
           Number.isFinite(event.start_ms) &&
           Number.isFinite(event.end_ms) &&
@@ -186,6 +187,19 @@ export function createLiveObserver(page, { quietMs = SPROUT_UTTERANCE_GAP_MS, ti
       wait("scene", event => event.to === scene, { description: `scene ${scene}`, ...options }),
     waitForSceneAdvance: options => wait("scene", event => event.from !== null && event.to !== null, options),
     waitForChildTranscript: options => wait("child-transcript", () => true, options),
+    // Arrival evidence is independent of grouped tutor-turn boundaries. Require
+    // an application outcome instruction after the caller's answer checkpoint.
+    waitForSproutTranscriptAfterRelease: (options = {}) => {
+      const after = options.after ?? cursors.get("sprout-transcript-fragment") ?? 0;
+      return wait(
+        "sprout-transcript-fragment",
+        fragment =>
+          journal.events.some(
+            event => event.kind === "answer-release" && event.cursor > after && event.cursor < fragment.cursor,
+          ),
+        { ...options, description: options.description ?? "post-release Sprout transcript" },
+      );
+    },
     waitForEvaluation: options => wait("evaluation", () => true, options),
     waitForSessionEnd: options => wait("session-end", () => true, options),
   };

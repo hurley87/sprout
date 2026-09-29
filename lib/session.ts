@@ -16,6 +16,7 @@ import {
   type EvaluateAnswer,
 } from "./answer";
 import type { ClientCommand, ProviderEvent, TranscriptEvent } from "./events";
+
 import {
   LAST_SCENE,
   OBJECTS,
@@ -37,6 +38,10 @@ import {
   saidGoodbye,
   type Utterance,
 } from "./transcript";
+
+// Recovery budget, not a silence/completion threshold. On expiry stop media;
+// never open playback to recover a stalled gate. Revisions cannot renew it.
+export const RESPONSE_GATE_RECOVERY_MS = 15_000;
 
 export type EndReason =
   "parent_stop" | "child_stop" | "model_goodbye" | "wrap_up" | "time_limit" | "connection_failure" | "page_hidden";
@@ -110,6 +115,10 @@ type AnswerResponseGate = {
   answerVersion: string;
   startedAt: number;
   outputQuietAt: number;
+  eligibleAt?: number;
+  decision?: GateDecision;
+  sceneCommittedAt?: number;
+  sceneDisplayedAt?: number;
 };
 
 export class LessonSession {
@@ -155,8 +164,11 @@ export class LessonSession {
   // Application state is authoritative; provider transcript events continue
   // while playback is muted and do not imply the child heard Sprout.
   private answerResponseGate: AnswerResponseGate | null = null;
+  private responseGateRecoveryTimer?: ReturnType<typeof setTimeout>;
+  private outputActivity: "active" | "quiet" | "unavailable" = "unavailable";
   private commands = 0;
   private closed = false;
+  private ending = false;
   private ready = false;
   private recordingStarted = false;
   private evidenceOrder = 0;
@@ -284,6 +296,63 @@ export class LessonSession {
       this.diagnosticChanged?.();
   }
 
+  /** Snapshot existing gate state for diagnostics; this never schedules work. */
+  private observeResponseGate(trigger: string, extra: Record<string, unknown> = {}) {
+    const gate = this.answerResponseGate;
+    if (!gate) return;
+    const now = Date.now();
+    const advanceReadyAt = this.deferredAdvance?.correctionReadyAt;
+    const stayReadyAt = this.deferredStay?.correctionReadyAt;
+    const correctionReadyAt = advanceReadyAt ?? stayReadyAt;
+    const vadGraceUntil = this.deferredAdvance?.vadGraceUntil ?? this.deferredStay?.vadGraceUntil;
+    const scheduledEligibilityAt = Math.max(
+      correctionReadyAt ?? 0,
+      gate.outputQuietAt,
+      vadGraceUntil ?? 0,
+      gate.sceneDisplayedAt ?? 0,
+    );
+    const conditions: string[] = [];
+    if (!gate.decision) conditions.push("answer_evaluation");
+    if (correctionReadyAt !== undefined && correctionReadyAt > now) conditions.push("correction_window");
+    if (this.provisionalActivity) conditions.push("provisional_vad");
+    if (this.microphoneSpeaking) conditions.push("microphone_speaking");
+    if (vadGraceUntil !== undefined && vadGraceUntil > now) conditions.push("vad_grace");
+    if (gate.outputQuietAt > now) conditions.push("output_transcript_quiet");
+    if (gate.decision === "ADVANCE" && gate.sceneCommittedAt === undefined) conditions.push("scene_commit");
+    if (gate.decision === "ADVANCE" && gate.sceneCommittedAt !== undefined && gate.sceneDisplayedAt === undefined)
+      conditions.push("scene_display");
+    // This timestamp is the first observation where every known release
+    // blocker is clear. It is deliberately not the maximum of deadlines:
+    // evaluation and provisional activity can outlast those deadlines.
+    const unresolvedBlockers = conditions.filter(condition => condition !== "microphone_speaking");
+    if (unresolvedBlockers.length === 0 && gate.eligibleAt === undefined) gate.eligibleAt = now;
+    if (unresolvedBlockers.length > 0) gate.eligibleAt = undefined;
+    const sessionTime = (at: number | undefined) => (at === undefined ? null : at - this.createdAt);
+    this.log("answer.response_gate_observed", {
+      scene_index: gate.sceneIndex,
+      transcript_revision: gate.transcriptRevision,
+      answer_version: gate.answerVersion,
+      trigger,
+      decision: gate.decision ?? null,
+      conditions,
+      microphone_speaking: this.microphoneSpeaking,
+      provisional_vad: this.provisionalActivity,
+      blocked_output_activity: extra.blocked_output_activity ?? false,
+      output_quiet_at: sessionTime(gate.outputQuietAt || undefined),
+      correction_ready_at: sessionTime(correctionReadyAt),
+      vad_grace_until: sessionTime(vadGraceUntil),
+      scene_committed_at: sessionTime(gate.sceneCommittedAt),
+      scene_displayed_at: sessionTime(gate.sceneDisplayedAt),
+      scheduled_eligible_at: sessionTime(scheduledEligibilityAt || undefined),
+      eligible_at: sessionTime(gate.eligibleAt),
+      eligibility_basis: gate.eligibleAt === undefined ? null : "observed_all_blockers_clear",
+      output_blocked: this.outputBlocked,
+      output_media_activity: this.outputActivity,
+      output_media_is_release_barrier: false,
+      ...extra,
+    });
+  }
+
   async start() {
     if (this.recordingStarted) return;
     this.recordingStarted = true;
@@ -336,6 +405,7 @@ export class LessonSession {
 
   /** Guards the entry points where late external input can still arrive. */
   private expireIfOverdue() {
+    if (this.ending) return true;
     if (this.startedAt !== undefined && Date.now() - this.startedAt >= TIMING.hard) {
       this.end("time_limit");
       return true;
@@ -358,6 +428,22 @@ export class LessonSession {
       this.seen.add(event.eventId);
     }
     switch (event.type) {
+      case "output.activity":
+        if (this.outputActivity === event.state) return;
+        this.outputActivity = event.state;
+        this.log("output.media_activity", {
+          state: event.state,
+          output_blocked: this.outputBlocked,
+          ...(this.answerResponseGate
+            ? {
+                scene_index: this.answerResponseGate.sceneIndex,
+                transcript_revision: this.answerResponseGate.transcriptRevision,
+                answer_version: this.answerResponseGate.answerVersion,
+              }
+            : {}),
+        });
+        this.observeResponseGate("output_media_activity");
+        return;
       case "session.started":
         this.begin();
         return;
@@ -377,12 +463,14 @@ export class LessonSession {
           transcript_revision: this.transcriptRevision,
           pending_evaluation: Boolean(this.settleTimer),
         });
+        this.observeResponseGate("provisional_vad_started");
         return;
       case "microphone.activity_discarded": {
         if (!this.provisionalActivity) return;
         this.provisionalActivity = false;
         const heardNewTranscript = this.transcriptRevision !== this.activityTranscriptRevision;
         this.log("answer.activity_discarded", { heard_new_transcript: heardNewTranscript });
+        this.observeResponseGate("provisional_vad_discarded");
         if (heardNewTranscript) {
           this.evaluation?.abort();
           if (this.latest) this.scheduleEvaluation(this.latest, TRANSCRIPT_FALLBACK_MS, "transcript_revision");
@@ -409,6 +497,7 @@ export class LessonSession {
           pending_evaluation: Boolean(this.settleTimer),
           decision_preserved: Boolean(this.evaluation || this.deferredAdvance),
         });
+        this.observeResponseGate("microphone_speech_started");
         this.startDeferredVadGrace(
           this.microphoneSpeechStartedAt,
           wasProvisional ? "provisional_confirmation" : "confirmed_speech",
@@ -432,6 +521,7 @@ export class LessonSession {
           vad_detection_ms: event.quietMs,
           estimated_acoustic_end_at: this.turnEndAt - event.quietMs - this.createdAt,
         });
+        this.observeResponseGate("microphone_speech_stopped");
         if (this.latest && this.transcriptEpoch === this.speechEpoch)
           this.scheduleEvaluation(this.latest, TRANSCRIPT_TAIL_MS, "microphone_vad");
         else if (this.latest) this.scheduleNoTranscriptRecovery(this.speechEpoch);
@@ -500,7 +590,20 @@ export class LessonSession {
     if (fromChild) this.sproutReply = "";
     else if (!this.answerResponseGate) this.sproutReply += event.delta;
     else {
+      const previousOutputQuietAt = this.answerResponseGate.outputQuietAt;
       this.answerResponseGate.outputQuietAt = Date.now() + UTTERANCE_GAP_MS;
+      this.log("answer.response_gate_deadline_updated", {
+        scene_index: this.answerResponseGate.sceneIndex,
+        transcript_revision: this.answerResponseGate.transcriptRevision,
+        answer_version: this.answerResponseGate.answerVersion,
+        condition: "output_transcript_quiet",
+        previous_deadline_at: previousOutputQuietAt ? previousOutputQuietAt - this.createdAt : null,
+        deadline_at: this.answerResponseGate.outputQuietAt - this.createdAt,
+        extension_ms: Math.max(0, this.answerResponseGate.outputQuietAt - Math.max(Date.now(), previousOutputQuietAt)),
+        provider_transcript_start_ms: event.startMs,
+        provider_transcript_end_ms: event.endMs,
+      });
+      this.observeResponseGate("blocked_provider_transcript", { blocked_output_activity: true });
       if (this.deferredAdvance) this.scheduleDeferredRelease();
       if (this.deferredStay) this.scheduleDeferredStayRelease();
       if (this.displayedRelease) this.scheduleDisplayedRelease();
@@ -548,6 +651,7 @@ export class LessonSession {
         sceneIndex: this.snapshot.sceneIndex,
         utterance: utterance.text,
       });
+      this.observeResponseGate("transcript_revision");
       if (requestsStop(utterance.text)) {
         this.cancelAnswerResponseGate("child_stop");
         this.end("child_stop");
@@ -585,31 +689,62 @@ export class LessonSession {
       };
       this.canonical.sprout.invalidateDelivery();
       this.setOutputBlocked(true, "answer_evaluation");
+      this.responseGateRecoveryTimer = setTimeout(() => {
+        const gate = this.answerResponseGate;
+        if (!gate || this.expireIfOverdue()) return;
+        this.observeResponseGate("recovery_budget_exhausted");
+        this.log("answer.response_gate_recovery_failed", {
+          scene_index: gate.sceneIndex,
+          transcript_revision: gate.transcriptRevision,
+          answer_version: gate.answerVersion,
+          wait_ms: Date.now() - gate.startedAt,
+          output_media_activity: this.outputActivity,
+        });
+        this.fail("Sprout could not safely resume its voice. This attempt has ended; you can start a new lesson.");
+      }, RESPONSE_GATE_RECOVERY_MS);
       this.log("answer.response_gate_started", {
         scene_index: this.snapshot.sceneIndex,
         transcript_revision: this.transcriptRevision,
         answer_version: answerVersion,
       });
+      this.observeResponseGate("gate_started");
       return;
     }
+    this.log("answer.response_gate_observed", {
+      scene_index: current.sceneIndex,
+      transcript_revision: current.transcriptRevision,
+      answer_version: current.answerVersion,
+      trigger: "identity_superseded",
+      decision: current.decision ?? null,
+      conditions: [],
+      output_blocked: false,
+      output_quiet_at: current.outputQuietAt ? current.outputQuietAt - this.createdAt : null,
+      superseded_by_transcript_revision: this.transcriptRevision,
+    });
     this.answerResponseGate = {
       ...current,
       sceneIndex: this.snapshot.sceneIndex,
       transcriptRevision: this.transcriptRevision,
       answerVersion,
       outputQuietAt: current.outputQuietAt,
+      eligibleAt: undefined,
+      decision: undefined,
+      sceneCommittedAt: undefined,
+      sceneDisplayedAt: undefined,
     };
     this.log("answer.response_gate_updated", {
       scene_index: this.snapshot.sceneIndex,
       transcript_revision: this.transcriptRevision,
       answer_version: answerVersion,
     });
+    this.observeResponseGate("gate_identity_updated");
   }
 
   private cancelAnswerResponseGate(reason: string) {
     const gate = this.answerResponseGate;
     if (!gate) return;
     this.answerResponseGate = null;
+    clearTimeout(this.responseGateRecoveryTimer);
     clearTimeout(this.displayedReleaseTimer);
     this.displayedReleaseTimer = undefined;
     this.displayedRelease = null;
@@ -620,6 +755,18 @@ export class LessonSession {
       answer_version: gate.answerVersion,
       reason,
       wait_ms: Date.now() - gate.startedAt,
+    });
+    this.log("answer.response_gate_observed", {
+      scene_index: gate.sceneIndex,
+      transcript_revision: gate.transcriptRevision,
+      answer_version: gate.answerVersion,
+      trigger: "cancelled",
+      decision: gate.decision ?? null,
+      conditions: [],
+      output_blocked: false,
+      output_quiet_at: gate.outputQuietAt ? gate.outputQuietAt - this.createdAt : null,
+      cancellation_reason: reason,
+      cancelled: true,
     });
   }
 
@@ -641,9 +788,12 @@ export class LessonSession {
   ) {
     if (!this.gateMatches(identity)) return false;
     const gate = this.answerResponseGate!;
+    this.observeResponseGate("release_eligibility_check");
+    const contextSentAt = Date.now() - this.createdAt;
     sendContext();
     if (!this.gateMatches(identity)) return false;
     this.answerResponseGate = null;
+    clearTimeout(this.responseGateRecoveryTimer);
     this.setOutputBlocked(false, decision.toLowerCase());
     this.log("answer.response_gate_released", {
       scene_index: identity.sceneIndex,
@@ -652,6 +802,22 @@ export class LessonSession {
       decision,
       reason,
       wait_ms: Date.now() - gate.startedAt,
+      context_sent_at: contextSentAt,
+      output_quiet_at: gate.outputQuietAt ? gate.outputQuietAt - this.createdAt : null,
+      eligible_at: gate.eligibleAt === undefined ? null : gate.eligibleAt - this.createdAt,
+      eligibility_basis: gate.eligibleAt === undefined ? null : "observed_all_blockers_clear",
+    });
+    this.log("answer.response_gate_observed", {
+      scene_index: identity.sceneIndex,
+      transcript_revision: identity.transcriptRevision,
+      answer_version: identity.answerVersion,
+      trigger: "released",
+      decision,
+      conditions: [],
+      output_blocked: false,
+      output_quiet_at: gate.outputQuietAt ? gate.outputQuietAt - this.createdAt : null,
+      release_reason: reason,
+      released: true,
     });
     return true;
   }
@@ -676,6 +842,7 @@ export class LessonSession {
     });
     this.log("answer.candidate", {
       sceneIndex,
+      revision: transcriptRevision,
       utterance: utterance.text,
       version,
       signal: delay === TRANSCRIPT_TAIL_MS ? "microphone_vad" : "transcript_fallback",
@@ -764,6 +931,7 @@ export class LessonSession {
     });
     this.log("answer.requesting", {
       sceneIndex,
+      revision: transcriptRevision,
       version,
       signal: this.turnSignal,
       turn_end_at: turnEndAt - this.createdAt,
@@ -896,6 +1064,7 @@ export class LessonSession {
     this.log("answer.evaluated", {
       scene: sceneAt(sceneIndex).id,
       sceneIndex,
+      revision: transcriptRevision,
       version,
       utterance: utterance.text,
       ...(result.status === "evaluated"
@@ -941,6 +1110,10 @@ export class LessonSession {
       correction_window_ms: CORRECTION_WINDOW_MS,
       spoken_chars: this.sproutReply.length,
     });
+    if (this.answerResponseGate) {
+      this.answerResponseGate.decision = "ADVANCE";
+      this.observeResponseGate("advance_deferred");
+    }
     this.scheduleDeferredRelease();
   }
 
@@ -1017,6 +1190,8 @@ export class LessonSession {
     if (this.microphoneSpeaking && this.microphoneSpeechStartedAt !== undefined)
       this.startDeferredVadGrace(this.microphoneSpeechStartedAt, "active_speech_at_decision");
     this.log("answer.release_deferred", { answer_version: answerVersion, scene: sceneAt(sceneIndex).id });
+    this.answerResponseGate.decision = decision;
+    this.observeResponseGate("decision_deferred");
     this.scheduleDeferredStayRelease();
   }
 
@@ -1122,6 +1297,7 @@ export class LessonSession {
     });
     if (advance) this.scheduleDeferredRelease();
     else this.scheduleDeferredStayRelease();
+    this.observeResponseGate("vad_grace_started");
   }
 
   private cancelDeferredStay() {
@@ -1134,9 +1310,15 @@ export class LessonSession {
   private advance(answerVersion: string) {
     this.log("advance.committed", {
       scene_index: this.snapshot.sceneIndex,
+      transcript_revision: this.answerResponseGate?.transcriptRevision,
       answer_version: answerVersion,
       turn_end_to_commit_ms: Date.now() - this.turnEndAt,
     });
+    if (this.answerResponseGate) {
+      this.answerResponseGate.decision = "ADVANCE";
+      this.answerResponseGate.sceneCommittedAt = Date.now();
+      this.observeResponseGate("scene_committed");
+    }
     const sceneIndex = this.snapshot.sceneIndex + 1;
     this.timeline({
       type: "scene_advance_committed",
@@ -1193,6 +1375,7 @@ export class LessonSession {
     if (pending.answerVersion)
       this.log("advance.displayed", {
         scene_index: pending.sceneIndex - 1,
+        transcript_revision: pending.gateIdentity?.transcriptRevision,
         answer_version: pending.answerVersion,
         turn_end_to_display_ms: Date.now() - (pending.turnEndAt ?? this.turnEndAt),
       });
@@ -1210,6 +1393,10 @@ export class LessonSession {
           sceneIndex,
           displayedAt: Date.now(),
         };
+        if (this.answerResponseGate) {
+          this.answerResponseGate.sceneDisplayedAt = Date.now();
+          this.observeResponseGate("scene_displayed");
+        }
         this.scheduleDisplayedRelease();
         return;
       default: {
@@ -1280,7 +1467,10 @@ export class LessonSession {
   }
 
   end(reason: EndReason, error?: string) {
-    if (this.snapshot.status === "ended") return;
+    if (this.snapshot.status === "ended" || this.ending) return;
+    this.ending = true;
+    // Stop physical media before gate cancellation can request an unmute.
+    this.transport.stopMedia();
     const remaining = this.startedAt === undefined ? TIMING.hard : TIMING.hard - (Date.now() - this.startedAt);
     if (remaining <= 0) reason = "time_limit";
     for (const speaker of ["child", "sprout"] as const) {
@@ -1305,9 +1495,8 @@ export class LessonSession {
     this.evaluation?.abort();
     this.pending = null;
     this.log("lesson.ended", { reason });
-    // Invalidate actions BEFORE any resource callback can fire.
+    // External input was invalidated before stopping media; now publish the ending.
     this.update({ status: "ended", reason, error });
-    this.transport.stopMedia();
     if (this.recorder)
       this.recording.enqueue("attachRecording", async () => {
         const audio = await this.transport.recording?.();

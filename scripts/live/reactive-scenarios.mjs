@@ -116,9 +116,17 @@ async function delayedSecondTurn(ctx, first, text, answer) {
   }, boundary);
   const transcript = await ctx.observer.waitForChildTranscript({ after: second.checkpointBefore });
   const evaluation = await ctx.observer.waitForEvaluation({ after: transcript.cursor });
-  const response = await ctx.assertions.sproutRespondedAfter(evaluation);
+  // A grouped tutor turn can include transcript fragments emitted after this
+  // answer's release. Observe arrival separately; this does not prove a new
+  // authoritative or audible response.
+  const response = await ctx.observer.waitForSproutTranscriptAfterRelease({ after: evaluation.cursor });
+  // Bound safety checks at the grouped tutor-turn end. The end may already be
+  // retained before this fragment (for example, when it belongs to that turn),
+  // so preserve the later of the two observed cursors.
+  const turnEnd = await ctx.observer.waitForSproutTurnEnd({ after: response.cursor });
+  const safetyBoundary = Math.max(response.cursor, turnEnd.cursor);
   const snapshot = await ctx.observer.snapshot();
-  events = snapshot.events.filter(e => e.cursor > first.checkpointBefore && e.cursor <= response.cursor);
+  events = snapshot.events.filter(e => e.cursor > first.checkpointBefore && e.cursor <= safetyBoundary);
   transitions = events.filter(e => e.kind === "scene" && e.from !== null && e.to !== null);
   requireEvidence(
     second.checkpointBefore > first.checkpointBefore,
@@ -127,7 +135,7 @@ async function delayedSecondTurn(ctx, first, text, answer) {
   );
   requireEvidence(!events.some(e => e.kind === "session-end"), "Session ended during the second turn", events);
   requireEvidence(
-    childTranscriptEvents(events, second.checkpointBefore, response.cursor).length > 0,
+    childTranscriptEvents(events, second.checkpointBefore, safetyBoundary).length > 0,
     "Second utterance was not transcribed",
     events,
   );
@@ -149,7 +157,7 @@ async function delayedSecondTurn(ctx, first, text, answer) {
   );
   if (!committed) {
     // Both second utterances are wrong for the original one-duck scene.
-    await ctx.assertions.sceneStayed({ after: first, through: response.cursor });
+    await ctx.assertions.sceneStayed({ after: first, through: safetyBoundary });
   } else {
     // A valid evaluation in the new scene may advance it, but cannot repeat or undo the old transition.
     requireEvidence(
@@ -159,8 +167,8 @@ async function delayedSecondTurn(ctx, first, text, answer) {
       events,
     );
     if (afterOnset.length)
-      await ctx.assertions.sceneAdvancedExactlyOnce({ after: playback, from: scene, through: response.cursor });
-    else await ctx.assertions.sceneStayed({ after: playback, scene, through: response.cursor });
+      await ctx.assertions.sceneAdvancedExactlyOnce({ after: playback, from: scene, through: safetyBoundary });
+    else await ctx.assertions.sceneStayed({ after: playback, scene, through: safetyBoundary });
   }
 }
 

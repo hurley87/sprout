@@ -11,6 +11,7 @@ Start with the [MVP PRD](sprout-mvp-prd.md) for the agreed product scope. These 
 | [ADR 0001](adr/0001-parent-reviewed-evidence.md) | Why only parent-reviewed evidence may inform future lessons |
 | [GPT-Live baseline](gpt-live-baseline.md) | Slice 1 test matrix, observed shortcomings, and problems for the live-control decision |
 | [Jev answer experiment](jev-answer-experiment.md) | Whether one Jev question can drive scene advancement, measured against that baseline |
+| [Response-gate latency baseline](response-gate-latency-experiment.md) | Post-decision gate holds, provider lifecycle limits, and the next measured release-policy hypothesis |
 
 ## Tutoring principle
 

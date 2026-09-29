@@ -120,9 +120,66 @@ export async function exportArtifacts({ page, browser, dir, label, scenario, mic
     diagnostics = { unavailable: `UI diagnostics export failed: ${error}` };
   }
   const summary = metrics(log, diagnostics);
+  const gateTimeline = (summary.answerTimelines ?? [])
+    .filter(
+      row =>
+        row.gateObservations?.length ||
+        row.applicationResponseReleasedAtMs !== undefined ||
+        row.gateCancelledAtMs !== undefined ||
+        row.responseGateRecoveryFailed,
+    )
+    .map(row => {
+      const conditions = Object.entries(row.conditionDurationMs ?? {})
+        .map(([condition, value]) => `${condition}=${value.durationMs}ms`)
+        .join(", ");
+      const terminal =
+        row.applicationResponseReleasedAtMs !== undefined
+          ? `released ${row.gateDecision ?? "decision unknown"}/${row.gateReleaseReason ?? "reason unknown"} at ${row.applicationResponseReleasedAtMs}ms; context sent ${row.gateContextSentAtMs ?? "unknown"}ms`
+          : row.gateCancelledAtMs !== undefined
+            ? `cancelled ${row.gateCancellationReason ?? "reason unknown"} at ${row.gateCancelledAtMs}ms`
+            : row.gateSupersededAtMs !== undefined
+              ? `identity superseded at ${row.gateSupersededAtMs}ms; output remained blocked for the revised answer`
+              : "terminal gate evidence missing";
+      const transcript =
+        row.firstTranscriptObservedAfterReleaseAtMs === null
+          ? "first transcript after release unobserved"
+          : `first transcript observed after release at ${row.firstTranscriptObservedAfterReleaseAtMs}ms (application clock)`;
+      const media = row.mediaAlreadyActiveAtRelease
+        ? `decoded media already active at release (${row.mediaActivityStateAtRelease})`
+        : row.firstDecodedMediaActivityAfterReleaseAtMs !== null
+          ? `first decoded-media activity after release at ${row.firstDecodedMediaActivityAfterReleaseAtMs}ms`
+          : `decoded-media activity after release unobserved (state at release: ${row.mediaActivityStateAtRelease}; signal: ${row.mediaActivitySignalStatus})`;
+      const recovery = row.responseGateRecoveryFailed
+        ? `recovery failed at ${row.responseGateRecoveryFailed.at}ms after ${row.responseGateRecoveryFailed.detail?.wait_ms ?? "unknown"}ms`
+        : "no recovery-failed event";
+      return `response gate scene=${row.sceneIndex} revision=${row.transcriptRevision ?? "unknown"} answer=${JSON.stringify(row.answerVersion)}; ${conditions || "condition durations unavailable"}; blocked union=${row.observedBlockedUnionMs ?? "unknown"}ms (condition intervals may overlap); ${terminal}; output quiet deadline updates=${row.outputQuietDeadlineUpdates?.length ?? 0}; blocked provider transcript observations=${row.blockedProviderOutputActivityCount ?? 0}; ${transcript}; ${media}; ${recovery}; audible onset/provider completion unobserved; transcript/media observations do not prove current-answer generation, acoustic delivery or completion`;
+    });
+  const mediaTransitions = (diagnostics?.events ?? [])
+    .filter(event => event.type === "output.media_activity")
+    .map(event => {
+      const identity =
+        event.detail?.scene_index !== undefined && event.detail?.answer_version !== undefined
+          ? ` scene=${event.detail.scene_index} revision=${event.detail.transcript_revision ?? "unknown"} answer=${JSON.stringify(event.detail.answer_version)}`
+          : " answer identity unavailable on transition";
+      return `output.media_activity ${event.detail?.state ?? "unknown"} at ${event.at}ms (application session-relative clock; blocked=${event.detail?.output_blocked ?? "unknown"};${identity})`;
+    });
+  const recoveryFailures = (diagnostics?.events ?? [])
+    .filter(event => event.type === "answer.response_gate_recovery_failed")
+    .map(
+      event =>
+        `answer.response_gate_recovery_failed scene=${event.detail?.scene_index ?? "unknown"} revision=${event.detail?.transcript_revision ?? "unknown"} answer=${JSON.stringify(event.detail?.answer_version ?? "unknown")} at ${event.at}ms after ${event.detail?.wait_ms ?? "unknown"}ms (media=${event.detail?.output_media_activity ?? "unknown"})`,
+    );
   const evidenceSummary = [
     ...(unavailable ? [unavailable] : []),
     ...(diagnostics?.unavailable ? [`diagnostics unavailable: ${diagnostics.unavailable}`] : []),
+    ...(gateTimeline.length || mediaTransitions.length || recoveryFailures.length
+      ? [
+          "Response gate timeline (application session-relative clock):",
+          ...gateTimeline,
+          ...mediaTransitions,
+          ...recoveryFailures,
+        ]
+      : []),
     `metrics: ${JSON.stringify(summary)}`,
   ].join("\n");
   text = text.includes("=== SCENARIO FAILED ===")

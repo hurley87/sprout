@@ -102,6 +102,15 @@ progression. Nonnumeric answers wait for an actual child transcript and a tutor
 response after it. Negative/exactly-once assertions describe only the observed
 window, not future behavior.
 
+The continuation/correction reactive check first waits for a **transcript
+fragment after the answer's evaluation and application outcome instruction**.
+This arrival signal is independent of grouped tutor-turn starts, so fragments
+inside an existing 2,500 ms provider-timed turn are still observable. It then
+waits for the corresponding grouped turn end and checks scene/session safety
+through the later of fragment arrival and turn end, including a turn end already
+retained when the fragment arrives. The turn end is a conservative transcript
+boundary; neither boundary proves audible delivery or physical audio completion.
+
 Turn-end uses a conservative transcript boundary: provider gaps and an arrival
 quiet fallback (2.5 seconds). It does not confirm physical audio completion.
 Silence durations are intentional child behavior, not fixed response scheduling.
@@ -188,6 +197,25 @@ adapter reads the production typed fixture; unknown scenes fail rather than gues
 `reactive-scenarios.mjs` holds the scenario bodies; `assertions.mjs` provides bounded
 scene/evaluation/session/tutor checks. `reactive-runner.mjs` owns deadlines,
 selection, cleanup and artifacts. No new provider/model layer is needed.
+
+### Targeted live validation after this observer change
+
+Use a fresh evidence directory and the existing configured local app. These
+commands invoke billed live services; do not include them in unit/browser CI:
+
+```bash
+LIVE_OUT=test-results/issue-36-fragment-observer-continuation npm run test:live:reactive continuation
+LIVE_OUT=test-results/issue-36-fragment-observer-correction npm run test:live:reactive corrected-to-wrong
+```
+
+Inspect `timeline.txt` and `diagnostics.json` together. Application timestamps
+are session-relative; page arrival and provider transcript clocks remain
+separate. Compare the first transcript observed after release independently
+from first decoded-media activity after release. If media is already active at
+release, record that state instead of treating it as a post-release transition.
+Unavailable or absent signals remain explicit. Neither observation establishes
+that media belongs to the current answer or was heard. The historical retry
+failure remains unchanged until this targeted rerun supplies new evidence.
 
 ```js
 const child = createReactiveChild({ speech, observer, page, lessonBehavior: countingBehavior });

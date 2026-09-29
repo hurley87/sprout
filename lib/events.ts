@@ -7,9 +7,13 @@ export type MicrophoneEvent =
   | { type: "microphone.activity_started" | "microphone.activity_discarded" | "microphone.speech_started" }
   | { type: "microphone.speech_stopped"; quietMs: number };
 
+export type OutputActivityEvent = { type: "output.activity"; state: "active" | "quiet" | "unavailable" };
+
 export type ProviderEvent =
   // Produced locally from the browser microphone, never parsed from the provider channel.
   | (Identified & MicrophoneEvent)
+  // Local decoded-media observation; provider JSON cannot manufacture it.
+  | (Identified & OutputActivityEvent)
   | (Identified & { type: "session.started" })
   | (Identified & { type: "session.closed"; reason?: string; usage?: unknown })
   | (Identified & { type: "provider.error"; code?: string })
