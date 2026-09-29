@@ -70,9 +70,9 @@ export function metrics(log, diagnostics = null) {
     advances,
     scenesShown: scenes.map(scene => scene.scene),
     delegationsRefused: log.filter(e => e.type === "session.delegation.created").length,
-    // Application diagnostics use the session-relative Date.now clock. Keep
+    // Application diagnostics use milliseconds since attempt createdAt. Keep
     // these separate from browser arrival/provider timestamps in `log`.
-    timingClock: timing ? "application session-relative milliseconds" : null,
+    timingClock: timing ? "application milliseconds since attempt createdAt" : null,
     answerTimelines: timing,
   };
 }
@@ -131,8 +131,39 @@ export function diagnosticsTimelines(events) {
       row.candidateRecordedAtMs = event.at;
       row.utterance = typeof detail.utterance === "string" ? detail.utterance.trim() : null;
       if (Number.isFinite(detail.transcript_at)) row.finalChildTranscriptAtMs = detail.transcript_at;
-    } else if (event.type === "answer.requesting") row.evaluationRequestedAtMs = event.at;
-    else if (event.type === "answer.evaluated") row.evaluationCompletedAtMs = event.at;
+    } else if (event.type === "answer.evaluation_scheduled") {
+      row.evaluationSchedules ??= [];
+      row.evaluationSchedules.push({
+        atMs: event.at,
+        path: detail.path ?? (detail.delay_ms === 250 ? "microphone_vad" : "transcript_fallback"),
+        reason: detail.reason ?? null,
+        selectionReason: detail.selection_reason ?? null,
+        deadlineAtMs: Number.isFinite(detail.deadline_at) ? detail.deadline_at : null,
+        speechEpoch: detail.speech_epoch ?? null,
+        transcriptEpoch: detail.transcript_epoch ?? null,
+      });
+    } else if (
+      event.type === "answer.evaluation_replaced" ||
+      event.type === "answer.evaluation_cancelled" ||
+      event.type === "answer.evaluation_invalidated"
+    ) {
+      row.evaluationScheduleChanges ??= [];
+      row.evaluationScheduleChanges.push({ atMs: event.at, type: event.type, reason: detail.reason ?? null });
+    } else if (event.type === "answer.evaluation_timer_fired") {
+      row.evaluationTimerFiredAtMs = event.at;
+    } else if (event.type === "answer.evaluation_not_requested") {
+      row.evaluationNotRequestedReason = detail.reason ?? null;
+    } else if (event.type === "answer.transcript_revision") {
+      row.speechEpoch = detail.speech_epoch ?? null;
+      row.transcriptEpoch = detail.transcript_epoch ?? null;
+    } else if (event.type === "answer.turn_end" && detail.answer_version === version) {
+      row.microphoneStopAtMs = event.at;
+      row.microphoneStopUsable = detail.usable_for_latest_transcript ?? null;
+      row.microphoneStopSelectionReason = detail.selection_reason ?? null;
+    } else if (event.type === "answer.requesting") {
+      row.evaluationRequestedAtMs = event.at;
+      row.requestPath = detail.signal ?? null;
+    } else if (event.type === "answer.evaluated") row.evaluationCompletedAtMs = event.at;
     else if (event.type === "advance.committed") row.sceneCommitAtMs = event.at;
     else if (event.type === "advance.displayed") row.sceneDisplayedAtMs = event.at;
     else if (event.type === "answer.response_gate_released") {
@@ -256,6 +287,31 @@ export function diagnosticsTimelines(events) {
       row.sceneCommitAtMs === undefined || row.evaluationCompletedAtMs === undefined
         ? null
         : row.sceneCommitAtMs - row.evaluationCompletedAtMs;
+    row.evaluationPath = row.requestPath ?? row.evaluationSchedules?.at(-1)?.path ?? null;
+    row.microphoneStopUsable ??= null;
+    row.microphoneStopSelectionReason ??= null;
+    row.evaluationNotRequestedReason ??= null;
+    row.transcriptArrivalToRequestMs =
+      Number.isFinite(row.finalChildTranscriptAtMs) && Number.isFinite(row.evaluationRequestedAtMs)
+        ? row.evaluationRequestedAtMs - row.finalChildTranscriptAtMs
+        : null;
+    row.requestToResultMs =
+      Number.isFinite(row.evaluationRequestedAtMs) && Number.isFinite(row.evaluationCompletedAtMs)
+        ? row.evaluationCompletedAtMs - row.evaluationRequestedAtMs
+        : null;
+    row.resultToCommitMs =
+      Number.isFinite(row.evaluationCompletedAtMs) && Number.isFinite(row.sceneCommitAtMs)
+        ? row.sceneCommitAtMs - row.evaluationCompletedAtMs
+        : null;
+    row.resultToReleaseMs =
+      Number.isFinite(row.evaluationCompletedAtMs) && Number.isFinite(release)
+        ? release - row.evaluationCompletedAtMs
+        : null;
+    row.releaseToObservedTranscriptMs = next && Number.isFinite(release) ? next.at - release : null;
+    row.releaseToObservedDecodedMediaMs =
+      Number.isFinite(release) && Number.isFinite(row.firstDecodedMediaActivityAfterReleaseAtMs)
+        ? row.firstDecodedMediaActivityAfterReleaseAtMs - release
+        : null;
     row.releaseToFirstTranscriptObservedMs = next && release !== undefined ? next.at - release : null;
     row.finalTranscriptToEvaluationRequestMs =
       row.finalChildTranscriptAtMs === undefined || row.evaluationRequestedAtMs === undefined

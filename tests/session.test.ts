@@ -692,6 +692,71 @@ describe("answer response gate", () => {
 });
 
 describe("answer-gated scene advancement", () => {
+  it("records an absent stop as fallback and distinguishes timer firing from a second request", async () => {
+    const { session, evaluateAnswer } = setup(
+      true,
+      vi.fn(() => new Promise<AnswerResult>(() => {})),
+    );
+    mic(session, "microphone.speech_started");
+    deliver(session, speech("One"));
+    const scheduled = session.events.findLast(e => e.type === "answer.evaluation_scheduled");
+    expect(scheduled?.detail).toMatchObject({
+      path: "transcript_fallback",
+      speech_epoch: 1,
+      transcript_epoch: 1,
+      microphone_speaking: true,
+      deadline_at: SETTLE_MS,
+    });
+    await vi.advanceTimersByTimeAsync(SETTLE_MS);
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+    expect(session.events.findLast(e => e.type === "answer.evaluation_timer_fired")?.at).toBe(SETTLE_MS);
+    expect(session.events.findLast(e => e.type === "answer.requesting")?.detail).toMatchObject({
+      signal: "transcript_fallback",
+    });
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+    expect(session.events.findLast(e => e.type === "answer.evaluation_not_requested")?.detail).toMatchObject({
+      reason: "already_requested",
+    });
+  });
+  it("explains a stop in a newer speech epoch without replacing the answer fallback", async () => {
+    const { session, evaluateAnswer } = setup(true, answering(UNSURE));
+    deliver(session, speech("One"));
+    mic(session, "microphone.speech_started");
+    mic(session, "microphone.speech_stopped");
+    expect(session.events.findLast(e => e.type === "answer.turn_end")?.detail).toMatchObject({
+      speech_epoch: 1,
+      transcript_epoch: 0,
+      usable_for_latest_transcript: false,
+      selection_reason: "transcript_epoch_mismatch",
+    });
+    expect(session.events.filter(e => e.type === "answer.evaluation_scheduled")).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(SETTLE_MS);
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+  });
+  it("records replacement by a usable stop and cancellation on immediate end", () => {
+    const { session, evaluateAnswer, transport } = setup();
+    mic(session, "microphone.speech_started");
+    deliver(session, speech("One"));
+    mic(session, "microphone.speech_stopped");
+    expect(session.events.findLast(e => e.type === "answer.evaluation_replaced")?.detail).toMatchObject({
+      path: "transcript_fallback",
+      reason: "microphone_vad",
+    });
+    expect(session.events.findLast(e => e.type === "answer.turn_end")?.detail).toMatchObject({
+      usable_for_latest_transcript: true,
+      selection_reason: "matching_speech_epoch",
+    });
+    session.end("parent_stop");
+    expect(transport.stopMedia).toHaveBeenCalledOnce();
+    expect(session.events.findLast(e => e.type === "answer.evaluation_cancelled")?.detail).toMatchObject({
+      path: "microphone_vad",
+      reason: "session_ended",
+    });
+    vi.advanceTimersByTime(SETTLE_MS);
+    expect(evaluateAnswer).not.toHaveBeenCalled();
+  });
   it("evaluates a complete short count from microphone turn end, once", async () => {
     const { session, evaluateAnswer } = setup(true, answering(CONFIDENT));
     mic(session, "microphone.speech_started");

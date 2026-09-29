@@ -170,6 +170,7 @@ export class LessonSession {
   private speechEpoch = 0;
   private transcriptEpoch = -1;
   private transcriptRevision = 0;
+  private scheduledEvaluation?: { sceneIndex: number; revision: number; version: string; path: string };
   private activityTranscriptRevision = 0;
   private noTranscriptTimer?: ReturnType<typeof setTimeout>;
   private evaluated = new Set<string>();
@@ -487,6 +488,8 @@ export class LessonSession {
         this.cancelNoTranscriptRecovery();
         this.log("answer.activity_started", {
           transcript_revision: this.transcriptRevision,
+          speech_epoch: this.speechEpoch,
+          transcript_epoch: this.transcriptEpoch,
           pending_evaluation: Boolean(this.settleTimer),
         });
         this.observeResponseGate("provisional_vad_started");
@@ -496,7 +499,12 @@ export class LessonSession {
         if (!this.provisionalActivity) return;
         this.provisionalActivity = false;
         const heardNewTranscript = this.transcriptRevision !== this.activityTranscriptRevision;
-        this.log("answer.activity_discarded", { heard_new_transcript: heardNewTranscript });
+        this.log("answer.activity_discarded", {
+          heard_new_transcript: heardNewTranscript,
+          speech_epoch: this.speechEpoch,
+          transcript_epoch: this.transcriptEpoch,
+          transcript_revision: this.transcriptRevision,
+        });
         this.observeResponseGate("provisional_vad_discarded");
         if (this.answerResponseGate?.sourceIsolationRequired) this.scheduleDisplayedRelease();
         if (heardNewTranscript) {
@@ -522,6 +530,7 @@ export class LessonSession {
         this.vadDetectionMs = undefined;
         this.log("answer.speech_started", {
           epoch: this.speechEpoch,
+          transcript_epoch: this.transcriptEpoch,
           transcript_revision: this.transcriptRevision,
           pending_evaluation: Boolean(this.settleTimer),
           decision_preserved: Boolean(this.evaluation || this.deferredAdvance),
@@ -547,6 +556,17 @@ export class LessonSession {
         this.turnSignal = "microphone_vad";
         this.log("answer.turn_end", {
           signal: this.turnSignal,
+          speech_epoch: this.speechEpoch,
+          transcript_epoch: this.transcriptEpoch,
+          transcript_revision: this.transcriptRevision,
+          scene_index: this.snapshot.sceneIndex,
+          answer_version: this.latest ? `${this.latest.startMs}:${this.latest.text.trim()}` : null,
+          usable_for_latest_transcript: Boolean(this.latest && this.transcriptEpoch === this.speechEpoch),
+          selection_reason: !this.latest
+            ? "no_transcript"
+            : this.transcriptEpoch !== this.speechEpoch
+              ? "transcript_epoch_mismatch"
+              : "matching_speech_epoch",
           quiet_threshold_ms: MICROPHONE_QUIET_MS,
           vad_detection_ms: event.quietMs,
           estimated_acoustic_end_at: this.turnEndAt - event.quietMs - this.createdAt,
@@ -709,6 +729,12 @@ export class LessonSession {
       this.log("answer.transcript_revision", {
         revision: this.transcriptRevision,
         sceneIndex: this.snapshot.sceneIndex,
+        version: `${utterance.startMs}:${utterance.text.trim()}`,
+        speech_epoch: this.speechEpoch,
+        transcript_epoch: this.transcriptEpoch,
+        microphone_speaking: this.microphoneSpeaking,
+        provisional_activity: this.provisionalActivity,
+        last_stop_usable: this.speechEpoch > 0 && this.turnSignal === "microphone_vad" && !this.microphoneSpeaking,
         utterance: utterance.text,
       });
       this.observeResponseGate("transcript_revision");
@@ -1117,13 +1143,40 @@ export class LessonSession {
     const sceneIndex = this.snapshot.sceneIndex;
     const version = `${utterance.startMs}:${utterance.text.trim()}`;
     const restarting = Boolean(this.settleTimer);
+    if (this.scheduledEvaluation)
+      this.log("answer.evaluation_replaced", {
+        ...this.scheduledEvaluation,
+        reason,
+        replacement_scene_index: sceneIndex,
+        replacement_revision: transcriptRevision,
+        replacement_version: version,
+      });
     clearTimeout(this.settleTimer);
+    const path = delay === TRANSCRIPT_TAIL_MS ? "microphone_vad" : "transcript_fallback";
+    const selectionReason =
+      path === "microphone_vad"
+        ? "usable_microphone_stop"
+        : this.microphoneSpeaking
+          ? "microphone_stop_not_observed"
+          : this.speechEpoch === 0
+            ? "no_confirmed_speech"
+            : this.transcriptEpoch !== this.speechEpoch
+              ? "transcript_epoch_mismatch"
+              : "no_usable_microphone_stop";
+    this.scheduledEvaluation = { sceneIndex, revision: transcriptRevision, version, path };
     this.log("answer.evaluation_scheduled", {
       revision: transcriptRevision,
       sceneIndex,
       version,
       delay_ms: delay,
       reason,
+      path,
+      selection_reason: selectionReason,
+      deadline_at: Date.now() + delay - this.createdAt,
+      speech_epoch: this.speechEpoch,
+      transcript_epoch: this.transcriptEpoch,
+      microphone_speaking: this.microphoneSpeaking,
+      provisional_activity: this.provisionalActivity,
       restarted_existing_timer: restarting,
     });
     this.log("answer.candidate", {
@@ -1136,6 +1189,7 @@ export class LessonSession {
     });
     this.settleTimer = setTimeout(() => {
       this.settleTimer = undefined;
+      this.scheduledEvaluation = undefined;
       if (
         transcriptRevision !== this.transcriptRevision ||
         sceneIndex !== this.snapshot.sceneIndex ||
@@ -1153,6 +1207,9 @@ export class LessonSession {
           revision: transcriptRevision,
           sceneIndex,
           version,
+          path,
+          current_revision: this.transcriptRevision,
+          current_scene_index: this.snapshot.sceneIndex,
         });
         return;
       }
@@ -1170,6 +1227,14 @@ export class LessonSession {
         this.turnSignal = "transcript_fallback";
         this.log("answer.turn_end", { signal: this.turnSignal });
       }
+      this.log("answer.evaluation_timer_fired", {
+        sceneIndex,
+        revision: transcriptRevision,
+        version,
+        path,
+        microphone_speaking: this.microphoneSpeaking,
+        provisional_activity: this.provisionalActivity,
+      });
       this.evaluate(utterance);
     }, delay);
   }
@@ -1192,16 +1257,39 @@ export class LessonSession {
 
   private evaluate(utterance: Utterance) {
     const text = utterance.text.trim();
-    if (!this.evaluable || !text) return;
-    // A revised answer is a different version of the same utterance, so it is
-    // judged again; an unchanged one never is.
     const version = `${utterance.startMs}:${text}`;
-    if (this.evaluated.has(version)) return;
-    this.evaluated.add(version);
-    if (!mentionsNumber(text)) {
-      this.log("answer.skipped", { version, reason: "no_count" });
+    const skipped = !this.evaluable
+      ? this.snapshot.status !== "active"
+        ? "session_not_active"
+        : this.pending
+          ? "display_pending"
+          : this.deferredAdvance || this.deferredStay
+            ? "decision_pending_release"
+            : "scene_not_evaluable"
+      : !text
+        ? "empty_transcript"
+        : this.evaluated.has(version)
+          ? "already_requested"
+          : !mentionsNumber(text)
+            ? "no_count"
+            : null;
+    if (skipped) {
+      this.log("answer.evaluation_not_requested", {
+        sceneIndex: this.snapshot.sceneIndex,
+        revision: this.transcriptRevision,
+        version,
+        reason: skipped,
+        signal: this.turnSignal,
+      });
+      if (skipped === "no_count") {
+        this.evaluated.add(version);
+        this.log("answer.skipped", { version, reason: "no_count" });
+      }
       return;
     }
+    // A revised answer is a different version of the same utterance, so it is
+    // judged again; an unchanged one never is.
+    this.evaluated.add(version);
     const sceneIndex = this.snapshot.sceneIndex;
     const finalDeltaAt = this.lastDeltaAt;
     const turnEndAt = this.turnEndAt;
@@ -1220,6 +1308,8 @@ export class LessonSession {
       revision: transcriptRevision,
       version,
       signal: this.turnSignal,
+      speech_epoch: this.speechEpoch,
+      transcript_epoch: this.transcriptEpoch,
       turn_end_at: turnEndAt - this.createdAt,
       transcript_to_request_ms: Date.now() - finalDeltaAt,
       turn_end_to_request_ms: Date.now() - turnEndAt,
@@ -1787,6 +1877,9 @@ export class LessonSession {
       this.recording.enqueue("finalize", () => this.recorder!.finalize(reason, this.recording.incomplete));
     clearTimeout(this.startupTimer);
     clearTimeout(this.settleTimer);
+    if (this.scheduledEvaluation)
+      this.log("answer.evaluation_cancelled", { ...this.scheduledEvaluation, reason: "session_ended" });
+    this.scheduledEvaluation = undefined;
     this.cancelNoTranscriptRecovery();
     this.provisionalActivity = false;
     this.cancelDeferredAdvance();

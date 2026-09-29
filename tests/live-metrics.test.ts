@@ -2,6 +2,141 @@ import { describe, expect, it } from "vitest";
 import { diagnosticsTimelines, metrics } from "../scripts/live/metrics.mjs";
 
 describe("reactive answer timing metrics", () => {
+  it("joins evaluation stages only through one answer identity on the application clock", () => {
+    const rows = diagnosticsTimelines([
+      {
+        at: 100,
+        type: "answer.candidate",
+        detail: { sceneIndex: 0, revision: 1, version: "0:One", transcript_at: 90 },
+      },
+      {
+        at: 100,
+        type: "answer.evaluation_scheduled",
+        detail: {
+          sceneIndex: 0,
+          revision: 1,
+          version: "0:One",
+          path: "transcript_fallback",
+          deadline_at: 1600,
+          speech_epoch: 1,
+          transcript_epoch: 1,
+        },
+      },
+      {
+        at: 200,
+        type: "answer.evaluation_replaced",
+        detail: { sceneIndex: 0, revision: 1, version: "0:One", reason: "microphone_vad" },
+      },
+      {
+        at: 200,
+        type: "answer.turn_end",
+        detail: {
+          scene_index: 0,
+          transcript_revision: 1,
+          answer_version: "0:One",
+          usable_for_latest_transcript: true,
+          selection_reason: "matching_speech_epoch",
+        },
+      },
+      {
+        at: 200,
+        type: "answer.evaluation_scheduled",
+        detail: { sceneIndex: 0, revision: 1, version: "0:One", path: "microphone_vad", deadline_at: 450 },
+      },
+      { at: 450, type: "answer.evaluation_timer_fired", detail: { sceneIndex: 0, revision: 1, version: "0:One" } },
+      {
+        at: 451,
+        type: "answer.requesting",
+        detail: { sceneIndex: 0, revision: 1, version: "0:One", turn_end_to_request_ms: 0 },
+      },
+      { at: 700, type: "answer.evaluated", detail: { sceneIndex: 0, revision: 1, version: "0:One" } },
+      {
+        at: 950,
+        type: "advance.committed",
+        detail: { scene_index: 0, transcript_revision: 1, answer_version: "0:One" },
+      },
+      {
+        at: 1000,
+        type: "answer.response_gate_released",
+        detail: { scene_index: 0, transcript_revision: 1, answer_version: "0:One" },
+      },
+      { at: 1040, type: "transcript.sprout", detail: { delta: "Good" } },
+      { at: 1050, type: "output.media_activity", detail: { state: "active" } },
+    ]);
+    expect(rows[0]).toMatchObject({
+      evaluationPath: "microphone_vad",
+      microphoneStopUsable: true,
+      evaluationTimerFiredAtMs: 450,
+      transcriptArrivalToRequestMs: 361,
+      requestToResultMs: 249,
+      resultToCommitMs: 250,
+      resultToReleaseMs: 300,
+      releaseToObservedTranscriptMs: 40,
+      releaseToObservedDecodedMediaMs: 50,
+      audibleOnsetAtMs: null,
+    });
+    expect(rows[0].evaluationScheduleChanges).toEqual([
+      { atMs: 200, type: "answer.evaluation_replaced", reason: "microphone_vad" },
+    ]);
+  });
+
+  it("keeps old and incomplete artifacts unavailable instead of using fallback zero or another revision", () => {
+    const rows = diagnosticsTimelines([
+      { at: 100, type: "answer.candidate", detail: { sceneIndex: 0, version: "0:One", transcript_at: 90 } },
+      { at: 1600, type: "answer.requesting", detail: { sceneIndex: 0, version: "0:One", turn_end_to_request_ms: 0 } },
+      { at: 1700, type: "answer.evaluated", detail: { sceneIndex: 0, version: "0:One" } },
+      { at: 1900, type: "advance.committed", detail: { scene_index: 1, answer_version: "0:One" } },
+    ]);
+    expect(rows[0]).toMatchObject({
+      evaluationPath: null,
+      transcriptArrivalToRequestMs: 1510,
+      requestToResultMs: 100,
+      resultToCommitMs: null,
+      resultToReleaseMs: null,
+      releaseToObservedTranscriptMs: null,
+      microphoneStopUsable: null,
+    });
+    expect(rows[1].resultToCommitMs).toBeNull();
+  });
+
+  it("reports the requested fallback even when a later microphone stop schedules a redundant tail", () => {
+    const [row] = diagnosticsTimelines([
+      {
+        at: 100,
+        type: "answer.candidate",
+        detail: { sceneIndex: 0, revision: 1, version: "0:One", transcript_at: 100 },
+      },
+      {
+        at: 100,
+        type: "answer.evaluation_scheduled",
+        detail: { sceneIndex: 0, revision: 1, version: "0:One", path: "transcript_fallback" },
+      },
+      {
+        at: 1600,
+        type: "answer.requesting",
+        detail: {
+          sceneIndex: 0,
+          revision: 1,
+          version: "0:One",
+          signal: "transcript_fallback",
+          turn_end_to_request_ms: 0,
+        },
+      },
+      {
+        at: 1700,
+        type: "answer.evaluation_scheduled",
+        detail: { sceneIndex: 0, revision: 1, version: "0:One", path: "microphone_vad" },
+      },
+      {
+        at: 1950,
+        type: "answer.evaluation_not_requested",
+        detail: { sceneIndex: 0, revision: 1, version: "0:One", reason: "already_requested" },
+      },
+    ]);
+    expect(row.evaluationPath).toBe("transcript_fallback");
+    expect(row.transcriptArrivalToRequestMs).toBe(1500);
+    expect(row.evaluationNotRequestedReason).toBe("already_requested");
+  });
   it("attributes a response before the next answer begins", () => {
     const rows = diagnosticsTimelines([
       { at: 2000, type: "answer.candidate", detail: { sceneIndex: 0, version: "10:One", transcript_at: 1900 } },
