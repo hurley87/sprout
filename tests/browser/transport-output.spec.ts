@@ -167,14 +167,21 @@ test("permitted remote PCM is recorded; a suspended observer reports unavailable
   expect(await page.evaluate("window.failures")).toEqual([]);
 });
 
-test("source contract: retired A keeps generating upstream media but stays detached; only authoritative B is permitted", async ({
+test("source contract: retirement closes A permanently; connected B alone can be promoted and permitted", async ({
   page,
 }) => {
   await fixture(page);
   await page.evaluate(`(async () => {
     window.audioA = document.querySelector('audio');
     window.streamA = window.audioA.srcObject;
-    window.lateObserverA = window.transport.current.observer.emit;
+    window.sourceA = window.transport.current;
+    window.lateObserverA = window.sourceA.observer.emit;
+    window.lateMessageA = window.sourceA.channel.onmessage;
+    window.lateCloseA = window.sourceA.channel.onclose;
+    window.lateErrorA = window.sourceA.channel.onerror;
+    window.lateConnectionA = window.sourceA.peer.onconnectionstatechange;
+    window.lateTrackCallbackA = window.sourceA.peer.ontrack;
+    window.lateTrackA = window.providers[0].destination.stream.getAudioTracks()[0].clone();
     window.transport.startRecording();
     // Witness A's decoded PCM before retirement. A zero-gain sink keeps
     // the observation graph rendering without sound.
@@ -204,6 +211,8 @@ test("source contract: retired A keeps generating upstream media but stays detac
   expect(await page.evaluate("window.audioA.muted && !window.audioA.paused")).toBe(true);
   await page.evaluate(`(async () => {
     window.idB = await window.transport.prepareReplacement();
+    window.sourceB = window.transport.pending;
+    window.clientPeers = [window.sourceA.peer, window.sourceB.peer];
     window.contract.add('B', {
       block: blocked => {
         if (window.transport.activeSourceId === window.idB) window.transport.setOutputBlocked(blocked);
@@ -230,36 +239,47 @@ test("source contract: retired A keeps generating upstream media but stays detac
     true,
   );
   expect(await page.evaluate("window.contract.trace.slice(-3)")).toEqual(["ready:B", "retired:A", "authority:B"]);
-  // Retirement stops A's receiving playback track. Witness the provider's
-  // upstream PCM directly: provider media can continue despite detachment.
-  await page.evaluate(`(() => {
-    window.witness.disconnect();
-    window.witness = window.context.createMediaStreamSource(window.providers[0].destination.stream);
-    window.witness.connect(window.analyser);
-    window.providers[0].level.gain.value = 0.2;
-  })()`);
-  await expect.poll(() => page.evaluate<number>("window.pcmRms()")).toBeGreaterThan(0.01);
+  expect(
+    await page.evaluate(
+      "window.sourceA.retired && window.sourceA.observer.closed && window.sourceA.peer.connectionState === 'closed'",
+    ),
+  ).toBe(true);
+  await expect.poll(() => page.evaluate("window.sourceA.channel.readyState")).toBe("closed");
+  expect(await page.evaluate("window.streamA.getTracks().every(track => track.readyState === 'ended')")).toBe(true);
+  expect(
+    await page.evaluate(
+      "window.sourceB.peer.connectionState === 'connected' && window.sourceB.channel.readyState === 'open'",
+    ),
+  ).toBe(true);
   await page.evaluate(`(() => {
     window.contract.ready('A'); window.contract.activate('A'); window.contract.permit('old-answer');
     // Even an accidentally late global-unmute callback cannot restore A's
-    // actual stopped playback track. The upstream provider witness still has PCM.
+    // actual stopped playback track or closed peer.
     window.transport.setOutputBlocked(false);
   })()`);
   expect(
     await page.evaluate("window.audioA.srcObject === null && window.audioA.paused && !window.contract.eligible('A')"),
   ).toBe(true);
   expect(await page.evaluate("window.audioA.muted")).toBe(true);
-  expect(await page.evaluate("window.providers[0].peer.connectionState")).toBe("connected");
   await page.evaluate(`(() => {
     window.beforeLate = window.events.length;
     window.lateObserverA({type: 'output.activity', state: 'quiet'});
     window.lateObserverA({type: 'output.activity', state: 'active'});
+    window.lateCloseA(); window.lateErrorA(); window.lateConnectionA();
+    window.lateTrackCallbackA({track: window.lateTrackA});
+    window.transport.retireSource(window.idA);
+    window.cannotReactivateA = !window.transport.activateSource(window.idA);
     for (const type of ['session.output_transcript.delta', 'session.closed', 'error']) {
-      window.providers[0].channel.send(JSON.stringify({type, delta: 'late A', start_ms: 0, end_ms: 1}));
+      window.lateMessageA({data: JSON.stringify({type, delta: 'late A', start_ms: 0, end_ms: 1})});
     }
   })()`);
   await page.waitForTimeout(150);
   expect(await page.evaluate("window.events.length === window.beforeLate")).toBe(true);
+  expect(
+    await page.evaluate(
+      "window.cannotReactivateA && window.audioA.srcObject === null && window.audioA.paused && window.lateTrackA.readyState === 'ended'",
+    ),
+  ).toBe(true);
   await page.evaluate("window.transport.startRecording()");
   // Promotion attaches only B and is still blocked, even after a stale unmute.
   expect(await page.evaluate("window.transport.activateSource(window.idB)")).toBe(true);
@@ -269,7 +289,6 @@ test("source contract: retired A keeps generating upstream media but stays detac
   expect(await page.evaluate("!window.audioA.muted && window.contract.eligible('B')")).toBe(true);
   await page.waitForTimeout(400);
   const recordingRms = await page.evaluate<{ blocked: number; permitted: number }>(`(async () => {
-    window.clientPeers = [...window.transport.connections.values()].map(source => source.peer);
     window.contract.end(); window.transport.close();
     window.providers.forEach(source => { source.peer.close(); source.tone.stop(); });
     window.witness.disconnect(); window.analyser.disconnect(); window.witnessSink.disconnect(); window.witnessStream.getTracks().forEach(track => track.stop());

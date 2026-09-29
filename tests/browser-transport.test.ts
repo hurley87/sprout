@@ -105,7 +105,7 @@ describe("BrowserTransport output gating", () => {
     transport.stopMedia();
     expect(audio.muted).toBe(false);
     expect(audio.srcObject).toBeNull();
-    expect(peer.close).not.toHaveBeenCalled();
+    expect(peer.close).toHaveBeenCalledOnce();
     transport.close();
     expect(peer.close).toHaveBeenCalledOnce();
     transport.setOutputBlocked(true);
@@ -315,15 +315,40 @@ describe("production response-source isolation", () => {
       (a.channel.onerror as (() => void) | null)?.();
       (a.peer.onconnectionstatechange as (() => void) | null)?.();
     };
-    // Synchronous media teardown callbacks must already see A invalidated.
+    const teardown: string[] = [];
+    a.channel.close.mockImplementation(() => {
+      teardown.push("channel");
+      expect(transport.activeSourceId).toBeUndefined();
+      expect(audio.srcObject).toBeNull();
+      expect(a.remoteTrack.stop).toHaveBeenCalledOnce();
+      expect(transport.activateSource(idA)).toBe(false);
+      lateA();
+    });
+    a.peer.close.mockImplementation(() => {
+      teardown.push("peer");
+      expect(a.channel.close).toHaveBeenCalledOnce();
+      a.peer.connectionState = "closed";
+      lateA();
+    });
+    // Synchronous media and network teardown callbacks see A invalidated.
     vi.mocked(a.remoteTrack.stop).mockImplementation(() => {
       expect(transport.activeSourceId).toBeUndefined();
       expect(audio.muted).toBe(true);
       expect(audio.srcObject).toBeNull();
+      teardown.push("remote");
       lateA();
     });
     transport.retireSource(idA);
     transport.retireSource(idA);
+    expect(teardown).toEqual(["remote", "channel", "peer"]);
+    expect(a.channel.close).toHaveBeenCalledOnce();
+    expect(a.peer.close).toHaveBeenCalledOnce();
+    expect(a.remoteTrack.stop).toHaveBeenCalledOnce();
+    expect(b.channel.close).not.toHaveBeenCalled();
+    expect(b.peer.close).not.toHaveBeenCalled();
+    expect(b.remoteTrack.stop).not.toHaveBeenCalled();
+    expect(a.micTrack.stop).not.toHaveBeenCalled();
+    expect(events).toHaveBeenCalledTimes(count);
     transport.setOutputBlocked(false);
     expect(audio.muted).toBe(true);
     expect(transport.activateSource(idA)).toBe(false);
@@ -344,6 +369,8 @@ describe("production response-source isolation", () => {
     transport.send(command);
     expect(a.channel.send).not.toHaveBeenCalled();
     expect(b.channel.send).toHaveBeenCalledOnce();
+    expect(b.channel.close).not.toHaveBeenCalled();
+    expect(b.peer.close).not.toHaveBeenCalled();
     transport.close();
     transport.close();
     expect(a.peer.close).toHaveBeenCalledOnce();
@@ -410,6 +437,11 @@ it("pending connection failure stays local and a late setup completion cannot su
   (b.channel.onerror as (() => void) | null)?.();
   expect(transport.activateSource(idB)).toBe(false);
   expect(transport.activeSourceId).toBe(idA);
+  expect(b.channel.close).toHaveBeenCalledOnce();
+  expect(b.peer.close).toHaveBeenCalledOnce();
+  expect(a.channel.close).not.toHaveBeenCalled();
+  expect(a.peer.close).not.toHaveBeenCalled();
+  expect(a.micTrack.stop).not.toHaveBeenCalled();
   expect(failure).not.toHaveBeenCalled();
   const c = liveConnection();
   let answer!: () => void;

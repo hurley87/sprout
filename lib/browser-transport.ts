@@ -46,7 +46,6 @@ export class BrowserTransport implements Transport {
   private finishCapture?: (recording: SessionAudioRecording | null) => void;
   private playbackReady = false;
   private outputBlocked = false;
-  private closed = false;
   private turnDetector?: MicrophoneTurnDetector;
   // The single record of "this attempt is over", set by stopMedia(). Late
   // callbacks and resolved awaits check it instead of tracking their own flags.
@@ -164,7 +163,6 @@ export class BrowserTransport implements Transport {
       return source.id;
     } catch (error) {
       this.retireSource(source.id);
-      this.closeSource(source);
       throw error;
     }
   }
@@ -185,8 +183,8 @@ export class BrowserTransport implements Transport {
     return this.authoritative(source);
   }
 
-  /** Invalidate before any abort, media or observer callbacks. Network close
-   * remains separate, like stopMedia()/close(), until lesson-wide close(). */
+  /** Invalidate authority before teardown callbacks, then stop all media and
+   * close the connection so this source cannot keep receiving microphone audio. */
   retireSource(id: LiveSourceId) {
     const source = this.connections.get(id);
     if (!source || source.retired) return;
@@ -194,7 +192,6 @@ export class BrowserTransport implements Transport {
     const wasCurrent = this.current === source;
     if (wasCurrent) this.current = undefined;
     if (this.pending === source) this.pending = undefined;
-    source.abort.abort();
     if (wasCurrent) {
       this.playbackReady = false;
       this.audio.muted = true;
@@ -202,9 +199,13 @@ export class BrowserTransport implements Transport {
       this.audio.srcObject = null;
       this.syncRecordingGate();
     }
+    source.abort.abort();
     source.observer?.close();
     source.recordingSource?.disconnect();
     source.remote?.getTracks().forEach(track => track.stop());
+    source.channel?.close();
+    source.peer.close();
+    this.connections.delete(source.id);
   }
 
   private attachPlayback(source: LiveSource) {
@@ -449,17 +450,7 @@ export class BrowserTransport implements Transport {
     this.audio.muted = false;
   }
 
-  private closeSource(source: LiveSource) {
-    if (!this.connections.has(source.id)) return;
-    source.channel?.close();
-    source.peer.close();
-    this.connections.delete(source.id);
-  }
-
   close() {
     this.stopMedia();
-    if (this.closed) return;
-    this.closed = true;
-    for (const source of this.connections.values()) this.closeSource(source);
   }
 }
