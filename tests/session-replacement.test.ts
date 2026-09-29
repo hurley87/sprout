@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LessonSession, RESPONSE_GATE_RECOVERY_MS, STALE_OUTPUT_REPLACEMENT_MS, type Transport } from "../lib/session";
 import {
   advanceContext,
@@ -8,6 +8,7 @@ import {
   type ReplacementSeed,
 } from "../lib/lesson";
 import type { AnswerResult } from "../lib/answer";
+import { UTTERANCE_GAP_MS } from "../lib/transcript";
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => {
@@ -74,10 +75,10 @@ async function held(decision: ReplacementSeed["decision"] = "ADVANCE") {
   const f = setup(decision);
   f.child();
   f.transcript("sprout", "old ");
-  f.fragments();
+  const hidden = f.fragments();
   await vi.advanceTimersByTimeAsync(251);
   if (decision === "ADVANCE") f.session.displayed(1);
-  return f;
+  return { ...f, hidden };
 }
 const event = (s: LessonSession, type: string) => s.events.filter(e => e.type === type);
 const trigger = () => vi.advanceTimersByTimeAsync(STALE_OUTPUT_REPLACEMENT_MS + 1);
@@ -268,4 +269,108 @@ it("no replacement while Jev is pending even with extended hidden output", async
   f.session.displayed(1);
   await vi.advanceTimersByTimeAsync(STALE_OUTPUT_REPLACEMENT_MS + 1);
   expect(f.transport.prepareReplacement).toHaveBeenCalledOnce();
+});
+
+describe("replacement child interruption after displayed ADVANCE", () => {
+  it("discarded provisional activity retains the original A quiet fallback", async () => {
+    const f = await held();
+    await trigger();
+    f.session.receive({ type: "microphone.activity_started" });
+    expect(event(f.session, "replacement.cancelled")[0].detail).toMatchObject({ reason: "child_speech" });
+    expect(event(f.session, "answer.response_gate_released")).toHaveLength(0);
+    expect(f.transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
+    clearInterval(f.hidden);
+    await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS + 1);
+    expect(event(f.session, "answer.response_gate_released")).toHaveLength(0);
+    f.session.receive({ type: "microphone.activity_discarded" });
+    expect(event(f.session, "answer.response_gate_released")[0].detail).toMatchObject({
+      reason: "output_transcript_quiet",
+      decision: "ADVANCE",
+    });
+    expect(f.transport.send).toHaveBeenCalledOnce();
+    expect(event(f.session, "advance.committed")).toHaveLength(1);
+    expect(f.transport.prepareReplacement).toHaveBeenCalledOnce();
+    f.ready();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(f.transport.retireSource).toHaveBeenCalledWith(2);
+    expect(event(f.session, "replacement.promoted")).toHaveLength(0);
+    expect(f.session.snapshot.status).toBe("active");
+  });
+
+  it("non-answer child turn preserves the old gate and never exposes stale A on arrival", async () => {
+    const f = await held();
+    await trigger();
+    f.transcript("child", "what?", 4000);
+    expect(event(f.session, "replacement.cancelled")[0].detail).toMatchObject({ reason: "newer_transcript" });
+    expect(event(f.session, "answer.response_gate_preserved").at(-1)?.detail).toMatchObject({
+      reason: "non_answer_child_interruption",
+      output_blocked: true,
+    });
+    expect(event(f.session, "answer.response_gate_cancelled")).toHaveLength(0);
+    expect(event(f.session, "answer.response_gate_released")).toHaveLength(0);
+    expect(f.transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
+    expect(f.transport.send).not.toHaveBeenCalled();
+    expect(event(f.session, "transcript.child_or_nearby_speaker").at(-1)?.detail).toMatchObject({
+      delta: "what?",
+      scene: sceneAt(1).id,
+    });
+    f.ready();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(f.transport.retireSource).toHaveBeenCalledWith(2);
+    expect(f.transport.activateSource).not.toHaveBeenCalled();
+    clearInterval(f.hidden);
+    await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS + 1);
+    expect(event(f.session, "answer.response_gate_released")[0].detail).toMatchObject({
+      reason: "output_transcript_quiet",
+    });
+    expect(f.transport.send).toHaveBeenCalledOnce();
+    expect(f.transport.send).toHaveBeenCalledWith(expect.objectContaining({ content: advanceContext(sceneAt(1)) }));
+  });
+
+  it("new answer supersedes old ADVANCE gate on displayed scene without unblocking A", async () => {
+    const f = await held();
+    await trigger();
+    f.transcript("child", "Two", 4000);
+    expect(event(f.session, "answer.response_gate_superseded")[0].detail).toMatchObject({
+      reason: "new_answer_on_displayed_scene",
+      scene_index: 1,
+      output_blocked: true,
+    });
+    expect(f.transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
+    expect(event(f.session, "answer.response_gate_released")).toHaveLength(0);
+    expect(f.transport.send).not.toHaveBeenCalled();
+    f.ready();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(f.transport.retireSource).toHaveBeenCalledWith(2);
+    expect(f.transport.activateSource).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1800);
+    expect(event(f.session, "answer.evaluated").at(-1)?.detail).toMatchObject({
+      sceneIndex: 1,
+      utterance: "Two",
+      stale: false,
+    });
+    expect(
+      event(f.session, "advance.committed").filter(e => (e.detail as { scene_index: number }).scene_index === 0),
+    ).toHaveLength(1);
+    expect(f.transport.send).not.toHaveBeenCalled();
+  });
+
+  it("child stop retires B, stops media before cleanup, and never permits stale A", async () => {
+    const f = await held();
+    await trigger();
+    f.transcript("child", "stop", 4000);
+    expect(f.session.snapshot.reason).toBe("child_stop");
+    expect(event(f.session, "lesson.ended")).toHaveLength(1);
+    expect(f.transport.stopMedia).toHaveBeenCalledOnce();
+    expect(f.transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
+    expect(event(f.session, "replacement.cancelled")[0].detail).toMatchObject({ reason: "newer_transcript" });
+    f.ready();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(f.transport.retireSource).toHaveBeenCalledWith(2);
+    expect(f.transport.activateSource).not.toHaveBeenCalled();
+  });
 });

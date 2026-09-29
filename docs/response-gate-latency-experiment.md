@@ -902,3 +902,27 @@ different, so their total answer latencies are not a strict before/after
 comparison. More natural spoken-child runs, repeated normal-path samples,
 real stale-output reproducibility, and final qualification are still needed
 before closing #36. No issue-closing policy or commit is included here.
+
+### Child interruption correction — 2026-09-29
+
+A later review found that cancelling B on child activity also erased the
+committed ADVANCE gate's `displayedRelease` state. A discarded provisional VAD
+could then strand the gate until recovery; a non-answer transcript could cancel
+the gate and expose stale A. The correction separates replacement ownership
+from answer-gate ownership. Cancelling B preserves the displayed ADVANCE and
+its original transcript-quiet fallback. While provisional or confirmed child
+speech is active, that fallback waits. If the activity is discarded with no
+transcript, the original gate can release on A only after its quiet deadline.
+A non-answer child turn is retained and likewise waits for that safe fallback.
+A new answer-bearing transcript supersedes the old gate on the displayed scene
+without unblocking A, and inherits the original recovery budget. A child stop
+ends the lesson with media stopped before gate cleanup. Late B readiness still
+cannot promote the retired source. No threshold, seed, Jev, microphone, or
+transport-source policy changed.
+
+The focused unit regressions exercise provisional discard, non-answer and
+answer-bearing transcripts, and stop during B preparation. Real-WebRTC
+provider-free coverage verifies that B closes while A remains current and
+muted, blocked A PCM stays out of the recording, and provisional discard can
+release through the original A fallback. The earlier Live measurements above
+are historical; this correctness fix has no new billed Live timing claim.

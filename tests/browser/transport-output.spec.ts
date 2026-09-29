@@ -543,7 +543,7 @@ test("integrated stale ADVANCE retires A and instructs B before permission", asy
   );
 });
 
-for (const activity of ["transcript", "microphone.activity_started"] as const) {
+for (const activity of ["transcript", "non_answer", "microphone.activity_started"] as const) {
   test(`integrated ${activity} cancels preparing B and closes its peer`, async ({ page }) => {
     await fixture(page);
     await page.evaluate(`(() => {
@@ -561,8 +561,9 @@ for (const activity of ["transcript", "microphone.activity_started"] as const) {
       .poll(() => page.evaluate("window.transport.pending?.channel?.readyState"), { timeout: 8000 })
       .toBe("open");
     await page.evaluate(`(() => {
+      window.sourceA = window.transport.current;
       window.sourceB = window.transport.pending; window.lateB = window.sourceB.channel.onmessage;
-      window.session.receive(${activity === "transcript" ? "{type: 'transcript', speaker: 'child', delta: 'Two', startMs: 4000, endMs: 4100}" : "{type: 'microphone.activity_started'}"});
+      window.session.receive(${activity === "transcript" ? "{type: 'transcript', speaker: 'child', delta: 'Two', startMs: 4000, endMs: 4100}" : activity === "non_answer" ? "{type: 'transcript', speaker: 'child', delta: 'what?', startMs: 4000, endMs: 4100}" : "{type: 'microphone.activity_started'}"});
       window.lateB({data: JSON.stringify({type: 'session.started'})}); clearInterval(window.hidden);
     })()`);
     expect(
@@ -575,6 +576,44 @@ for (const activity of ["transcript", "microphone.activity_started"] as const) {
     expect(await page.evaluate("window.session.events.some(event => event.type === 'replacement.promoted')")).toBe(
       false,
     );
+    if (activity === "non_answer") {
+      expect(
+        await page.evaluate(
+          "window.sourceA.peer.connectionState === 'connected' && window.transport.current === window.sourceA",
+        ),
+      ).toBe(true);
+      expect(await page.evaluate("window.transport.remoteGain.gain.value")).toBe(0);
+      expect(
+        await page.evaluate(
+          "window.session.events.some(event => event.type === 'answer.response_gate_cancelled' || event.type === 'answer.response_gate_released')",
+        ),
+      ).toBe(false);
+      await page.waitForTimeout(350);
+      const blockedRms = await page.evaluate<number>(`(async () => {
+        window.transport.stopMedia(); const recording = await window.transport.recording();
+        const decoded = await window.context.decodeAudioData(await recording.blob.arrayBuffer());
+        const pcm = decoded.getChannelData(0); const samples = pcm.slice(-decoded.sampleRate * 0.2);
+        return Math.sqrt(samples.reduce((sum, x) => sum + x*x, 0) / samples.length);
+      })()`);
+      expect(blockedRms).toBeLessThan(0.001);
+    }
+    if (activity === "microphone.activity_started") {
+      await page.waitForTimeout(2700);
+      expect(await page.evaluate("document.querySelector('audio').muted")).toBe(true);
+      await page.evaluate("window.session.receive({type: 'microphone.activity_discarded'})");
+      await expect
+        .poll(() =>
+          page.evaluate(
+            "window.session.events.some(event => event.type === 'answer.response_gate_released' && event.detail.reason === 'output_transcript_quiet')",
+          ),
+        )
+        .toBe(true);
+      expect(
+        await page.evaluate(
+          "window.transport.activeSourceId === 1 && window.sourceA.peer.connectionState === 'connected'",
+        ),
+      ).toBe(true);
+    }
     await page.evaluate(
       "window.session.dispose(); window.providers.forEach(source => { source.peer.close(); source.tone.stop(); }); window.context.close()",
     );

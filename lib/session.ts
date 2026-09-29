@@ -126,6 +126,7 @@ type AnswerResponseGate = {
   outputQuietAt: number;
   childUtterance: string;
   replacementAttempted?: boolean;
+  replacementInterrupted?: boolean;
   eligibleAt?: number;
   decision?: GateDecision;
   sceneCommittedAt?: number;
@@ -481,6 +482,7 @@ export class LessonSession {
           pending_evaluation: Boolean(this.settleTimer),
         });
         this.observeResponseGate("provisional_vad_started");
+        if (this.answerResponseGate?.replacementInterrupted) this.scheduleDisplayedRelease();
         return;
       case "microphone.activity_discarded": {
         if (!this.provisionalActivity) return;
@@ -488,6 +490,7 @@ export class LessonSession {
         const heardNewTranscript = this.transcriptRevision !== this.activityTranscriptRevision;
         this.log("answer.activity_discarded", { heard_new_transcript: heardNewTranscript });
         this.observeResponseGate("provisional_vad_discarded");
+        if (this.answerResponseGate?.replacementInterrupted) this.scheduleDisplayedRelease();
         if (heardNewTranscript) {
           this.evaluation?.abort();
           if (this.latest) this.scheduleEvaluation(this.latest, TRANSCRIPT_FALLBACK_MS, "transcript_revision");
@@ -516,6 +519,7 @@ export class LessonSession {
           decision_preserved: Boolean(this.evaluation || this.deferredAdvance),
         });
         this.observeResponseGate("microphone_speech_started");
+        if (this.answerResponseGate?.replacementInterrupted) this.scheduleDisplayedRelease();
         this.startDeferredVadGrace(
           this.microphoneSpeechStartedAt,
           wasProvisional ? "provisional_confirmation" : "confirmed_speech",
@@ -540,6 +544,7 @@ export class LessonSession {
           estimated_acoustic_end_at: this.turnEndAt - event.quietMs - this.createdAt,
         });
         this.observeResponseGate("microphone_speech_stopped");
+        if (this.answerResponseGate?.replacementInterrupted) this.scheduleDisplayedRelease();
         if (this.latest && this.transcriptEpoch === this.speechEpoch)
           this.scheduleEvaluation(this.latest, TRANSCRIPT_TAIL_MS, "microphone_vad");
         else if (this.latest) this.scheduleNoTranscriptRecovery(this.speechEpoch);
@@ -630,18 +635,49 @@ export class LessonSession {
       this.cancelReplacementForChild("newer_transcript");
       if (this.advanceResponseTransitionActive) {
         if (requestsStop(utterance.text)) {
-          this.cancelAnswerResponseGate("child_stop");
+          // A replacement-interrupted gate still owns stale A. End stops media
+          // before gate cleanup, so the stop request cannot expose A.
+          if (!this.answerResponseGate?.replacementInterrupted) this.cancelAnswerResponseGate("child_stop");
           this.end("child_stop");
           return;
         }
-        this.log("answer.advance_transition_transcript_ignored", {
-          scene_index: this.snapshot.sceneIndex,
-          gate_scene_index: this.answerResponseGate?.sceneIndex,
-          answer_bearing: mentionsNumber(utterance.text),
-        });
-        // Keep transition-period speech out of the next answer window too.
-        this.childSpeech = new TranscriptWindow();
-        return;
+        if (this.answerResponseGate?.replacementInterrupted) {
+          if (mentionsNumber(utterance.text)) {
+            // The committed new scene owns this answer. The new gate inherits
+            // the original recovery deadline and keeps A blocked.
+            clearTimeout(this.displayedReleaseTimer);
+            this.displayedRelease = null;
+            this.log("answer.response_gate_superseded", {
+              reason: "new_answer_on_displayed_scene",
+              scene_index: this.snapshot.sceneIndex,
+              transcript_revision: this.transcriptRevision,
+              output_blocked: this.outputBlocked,
+            });
+          } else {
+            // Keep the displayed ADVANCE context as the neutral response path.
+            // It may release only after A's existing transcript quiet and VAD
+            // protections clear; the non-answer remains learner evidence.
+            this.latest = utterance;
+            this.lastDeltaAt = Date.now();
+            this.transcriptEpoch = this.speechEpoch;
+            this.log("answer.response_gate_preserved", {
+              reason: "non_answer_child_interruption",
+              scene_index: this.snapshot.sceneIndex,
+              output_blocked: this.outputBlocked,
+            });
+            this.scheduleDisplayedRelease();
+            return;
+          }
+        } else {
+          this.log("answer.advance_transition_transcript_ignored", {
+            scene_index: this.snapshot.sceneIndex,
+            gate_scene_index: this.answerResponseGate?.sceneIndex,
+            answer_bearing: mentionsNumber(utterance.text),
+          });
+          // Keep transition-period speech out of the next answer window too.
+          this.childSpeech = new TranscriptWindow();
+          return;
+        }
       }
       // A transcript can arrive before local VAD notices renewed speech.
       const previous = this.latest;
@@ -738,7 +774,7 @@ export class LessonSession {
       trigger: "identity_superseded",
       decision: current.decision ?? null,
       conditions: [],
-      output_blocked: false,
+      output_blocked: this.outputBlocked,
       output_quiet_at: current.outputQuietAt ? current.outputQuietAt - this.createdAt : null,
       superseded_by_transcript_revision: this.transcriptRevision,
     });
@@ -747,6 +783,7 @@ export class LessonSession {
       ...current,
       childUtterance: utterance.text.trim(),
       replacementAttempted: undefined,
+      replacementInterrupted: undefined,
       sceneIndex: this.snapshot.sceneIndex,
       transcriptRevision: this.transcriptRevision,
       answerVersion,
@@ -773,7 +810,9 @@ export class LessonSession {
     clearTimeout(this.displayedReleaseTimer);
     this.displayedReleaseTimer = undefined;
     this.displayedRelease = null;
-    this.setOutputBlocked(false, reason);
+    // On an interrupted replacement, end() already stopped A and B. Keep the
+    // stale-source gate logically blocked through teardown as well.
+    if (!(this.ending && gate.replacementInterrupted)) this.setOutputBlocked(false, reason);
     this.log("answer.response_gate_cancelled", {
       scene_index: gate.sceneIndex,
       transcript_revision: gate.transcriptRevision,
@@ -788,7 +827,7 @@ export class LessonSession {
       trigger: "cancelled",
       decision: gate.decision ?? null,
       conditions: [],
-      output_blocked: false,
+      output_blocked: this.outputBlocked,
       output_quiet_at: gate.outputQuietAt ? gate.outputQuietAt - this.createdAt : null,
       cancellation_reason: reason,
       cancelled: true,
@@ -946,10 +985,14 @@ export class LessonSession {
     if (!owner) return;
     this.cancelReplacement(reason);
     if (owner.gate.decision === "ADVANCE") {
-      // The committed/displayed scene stays authoritative. New child input now
-      // belongs to it, instead of being swallowed by the old advance transition.
-      clearTimeout(this.displayedReleaseTimer);
-      this.displayedRelease = null;
+      // Replacement and gate ownership differ. Retiring B does not make stale
+      // A safe, or erase the displayed scene's transcript-quiet fallback.
+      owner.gate.replacementInterrupted = true;
+      this.log("answer.response_gate_preserved", {
+        reason,
+        scene_index: this.snapshot.sceneIndex,
+        output_blocked: this.outputBlocked,
+      });
     }
   }
 
@@ -1611,6 +1654,7 @@ export class LessonSession {
     const deferred = this.displayedRelease;
     const gate = this.answerResponseGate;
     if (!deferred || !gate) return;
+    if (gate.replacementInterrupted && (this.provisionalActivity || this.microphoneSpeaking)) return;
     const releaseAt = Math.max(deferred.displayedAt, gate.outputQuietAt);
     const release = () => {
       if (this.expireIfOverdue()) return;
