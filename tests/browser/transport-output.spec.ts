@@ -6,7 +6,7 @@ import ts from "typescript";
 // Serve the real transport modules as ESM. Only the provider is replaced by a
 // local WebRTC peer: actual RTP, jitter/decoder buffering, HTMLAudioElement,
 // Web Audio observation and recording all run in Chromium. No billed services.
-async function fixture(page: Page) {
+async function fixture(page: Page, microphoneMode: "silent" | "continuous" = "silent") {
   await page.route("**/transport-fixture/**", async route => {
     const name = new URL(route.request().url()).pathname.split("/").at(-1)!;
     if (name === "index") {
@@ -14,6 +14,8 @@ async function fixture(page: Page) {
         contentType: "text/html",
         body: `<button>Start</button><audio></audio><script type="module">
         import { BrowserTransport } from './browser-transport';
+        import { replacementMicrophone, outboundMicrophoneRtp } from './replacement-input.mjs';
+        window.replacementMicrophone = replacementMicrophone; window.outboundMicrophoneRtp = outboundMicrophoneRtp;
         import { ResponseSourceContract } from './response-source-contract';
         import { advanceContext, sceneAt } from './lesson';
         window.advanceContext = advanceContext; window.sceneAt = sceneAt;
@@ -26,7 +28,11 @@ async function fixture(page: Page) {
     const source = await readFile(
       path.join(
         process.cwd(),
-        name === "response-source-contract" ? "tests/helpers" : "lib",
+        name === "response-source-contract"
+          ? "tests/helpers"
+          : name === "replacement-input.mjs"
+            ? "scripts/live"
+            : "lib",
         name.endsWith(".mjs") ? name : `${name}.ts`,
       ),
       "utf8",
@@ -50,8 +56,8 @@ async function fixture(page: Page) {
   await page.evaluate(`(() => {
     window.events = []; window.failures = []; window.providers = [];
     window.context = new AudioContext();
-    const silence = window.context.createMediaStreamDestination();
-    navigator.mediaDevices.getUserMedia = async () => silence.stream.clone();
+    window.microphone = window.replacementMicrophone(window.context, ${JSON.stringify(microphoneMode)});
+    navigator.mediaDevices.getUserMedia = async () => window.microphone.stream.clone();
     window.acceptOffer = async sdp => {
       const peer = window.provider = new RTCPeerConnection();
       window.tone = window.context.createOscillator();
@@ -417,6 +423,40 @@ test("promoted B receives the production ADVANCE instruction while blocked, then
   ).toBe(true);
   await page.evaluate(
     "window.transport.close(); window.providers.forEach(source => { source.peer.close(); source.tone.stop(); }); window.context.close()",
+  );
+  expect(await page.evaluate("window.failures")).toEqual([]);
+});
+
+test("continuous experiment microphone has low nonzero PCM and real outbound audio RTP", async ({ page }) => {
+  await fixture(page, "continuous");
+  const inputRms = await page.evaluate<number>(`(async () => {
+    const source = window.context.createMediaStreamSource(window.microphone.stream);
+    const analyser = window.context.createAnalyser();
+    const sink = window.context.createGain(); sink.gain.value = 0;
+    source.connect(analyser); analyser.connect(sink); sink.connect(window.context.destination);
+    await new Promise(resolve => setTimeout(resolve, 100));
+    const samples = new Float32Array(analyser.fftSize); analyser.getFloatTimeDomainData(samples);
+    const rms = Math.sqrt(samples.reduce((sum, sample) => sum + sample * sample, 0) / samples.length);
+    source.disconnect(); analyser.disconnect(); sink.disconnect();
+    return rms;
+  })()`);
+  expect(inputRms).toBeGreaterThan(0.0001);
+  expect(inputRms).toBeLessThan(0.002);
+  await page.evaluate(`(async () => {
+    window.rtpBefore = await window.outboundMicrophoneRtp(window.transport.current.peer, 'before');
+  })()`);
+  await expect
+    .poll(() =>
+      page.evaluate<boolean>(`(async () => {
+    window.rtpAfter = await window.outboundMicrophoneRtp(window.transport.current.peer, 'after');
+    return window.rtpAfter.packetsSent > window.rtpBefore.packetsSent && window.rtpAfter.bytesSent > window.rtpBefore.bytesSent;
+  })()`),
+    )
+    .toBe(true);
+  expect(await page.evaluate("window.rtpAfter.reports.every(report => Number.isFinite(report.timestamp))")).toBe(true);
+  expect(await page.evaluate("window.context.state")).toBe("running");
+  await page.evaluate(
+    "window.transport.close(); window.microphone.close(); window.providers.forEach(source => { source.peer.close(); source.tone.stop(); }); window.context.close()",
   );
   expect(await page.evaluate("window.failures")).toEqual([]);
 });

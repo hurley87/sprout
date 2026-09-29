@@ -1,4 +1,5 @@
 /** Targeted billed experiment: one initial session plus one seeded ADVANCE replacement.
+ * REPLACEMENT_MICROPHONE=silent|continuous selects the input control (default: continuous).
  * Uses the configured local app; never loads or exports credentials.
  * BASE_URL=http://127.0.0.1:3000 node scripts/live-replacement-startup.mjs
  */
@@ -8,11 +9,19 @@ import path from "node:path";
 import ts from "typescript";
 
 const baseURL = process.env.BASE_URL ?? "http://127.0.0.1:3000";
-const output = process.env.LIVE_OUT ?? "test-results/replacement-response";
+const microphoneMode = process.env.REPLACEMENT_MICROPHONE ?? "continuous";
+if (!["silent", "continuous"].includes(microphoneMode)) throw new Error("Invalid REPLACEMENT_MICROPHONE");
+const output = process.env.LIVE_OUT ?? `test-results/replacement-timeline/${microphoneMode}`;
 const browser = await chromium.launch({ args: ["--use-fake-ui-for-media-stream"] });
 const context = await browser.newContext({ permissions: ["microphone"] });
 const page = await context.newPage();
-const results = { date: new Date().toISOString(), baseURL, clock: "browser.performance.now", samples: [] };
+const results = {
+  date: new Date().toISOString(),
+  baseURL,
+  clock: "browser.performance.now",
+  microphoneMode,
+  samples: [],
+};
 try {
   await page.route("**/replacement-measure/**", async route => {
     const name = new URL(route.request().url()).pathname.split("/").at(-1);
@@ -21,6 +30,8 @@ try {
         contentType: "text/html",
         body: `<button>Start</button><div data-scene></div><audio muted></audio><script type="module">
         import { BrowserTransport } from './browser-transport';
+        import { replacementMicrophone, outboundMicrophoneRtp, microphoneRtpDeltas } from './replacement-input.mjs';
+        window.replacementMicrophone = replacementMicrophone; window.outboundMicrophoneRtp = outboundMicrophoneRtp; window.microphoneRtpDeltas = microphoneRtpDeltas;
         import { replacementSessionInput, advanceContext, sceneAt, OBJECTS } from './lesson';
         window.Transport = BrowserTransport;
         window.replacementSessionInput = replacementSessionInput;
@@ -36,7 +47,14 @@ try {
       });
       return;
     }
-    const source = await readFile(path.join(process.cwd(), "lib", name.endsWith(".mjs") ? name : `${name}.ts`), "utf8");
+    const source = await readFile(
+      path.join(
+        process.cwd(),
+        name === "replacement-input.mjs" ? "scripts/live" : "lib",
+        name.endsWith(".mjs") ? name : `${name}.ts`,
+      ),
+      "utf8",
+    );
     await route.fulfill({
       contentType: "text/javascript",
       body: ts.transpileModule(source, {
@@ -46,7 +64,7 @@ try {
   });
   await page.goto(`${baseURL}/replacement-measure/index`);
   await page.waitForFunction("typeof window.Transport === 'function'");
-  await page.evaluate(() => {
+  await page.evaluate(mode => {
     window.diagnostics = [];
     window.showScene(1);
     window.peers = [];
@@ -103,8 +121,8 @@ try {
     };
     window.audioContext = new AudioContext();
     window.microphoneContextBeforeStart = window.audioContext.state;
-    const silence = window.audioContext.createMediaStreamDestination();
-    navigator.mediaDevices.getUserMedia = async () => silence.stream.clone();
+    window.microphone = window.replacementMicrophone(window.audioContext, mode);
+    navigator.mediaDevices.getUserMedia = async () => window.microphone.stream.clone();
     window.transport = new window.Transport(document.querySelector("audio"));
     window.transport.setOutputBlocked(true);
     window.lessonEvents = [];
@@ -127,7 +145,7 @@ try {
         },
       );
     };
-  });
+  }, microphoneMode);
   await page.getByRole("button", { name: "Start" }).click();
   await page.waitForFunction(
     "window.diagnostics.some(event => event.sourceNumber === 1 && event.type === 'session.started') || window.failure",
@@ -144,8 +162,14 @@ try {
     const id = await window.transport.prepareReplacement(seed);
     const source = window.transport.pending;
     window.replacement = source;
+    window.rtpSnapshots = [await window.outboundMicrophoneRtp(source.peer, "ready")];
     const result = {
       seed,
+      microphone: {
+        mode: window.microphone.mode,
+        frequencyHz: window.microphone.frequencyHz,
+        amplitude: window.microphone.amplitude,
+      },
       microphoneContextBeforeStart: window.microphoneContextBeforeStart,
       microphoneContextDuringSample: window.audioContext.state,
       previousScene: window.sceneAt(1),
@@ -173,6 +197,7 @@ try {
       throw new Error("Preparation isolation failed");
     if (!window.transport.activateSource(id)) throw new Error("Replacement promotion failed");
     result.promotedAt = performance.now();
+    window.rtpSnapshots.push(await window.outboundMicrophoneRtp(source.peer, "promoted"));
     result.blockedAfterPromotion = document.querySelector("audio").muted;
     result.aRetiredAfterPromotion = !window.peers[0] || window.peers[0].connectionState === "closed";
     if (!result.blockedAfterPromotion || !result.aRetiredAfterPromotion) throw new Error("Promotion isolation failed");
@@ -195,8 +220,13 @@ try {
   console.log(JSON.stringify(sample));
   // Fixed bounded observation collects ACK, transcript and decoded-media evidence,
   // including connection/authority state when no response arrives.
-  await page.waitForTimeout(20_000);
-  const observation = await page.evaluate(() => {
+  await page.waitForTimeout(1000);
+  await page.evaluate(async () =>
+    window.rtpSnapshots.push(await window.outboundMicrophoneRtp(window.replacement.peer, "after_instruction_1s")),
+  );
+  await page.waitForTimeout(19_000);
+  const observation = await page.evaluate(async () => {
+    window.rtpSnapshots.push(await window.outboundMicrophoneRtp(window.replacement.peer, "observation_end"));
     const source = window.replacement;
     const sample = window.sample;
     const events = window.diagnostics.filter(event => event.sourceNumber === source.id);
@@ -210,6 +240,16 @@ try {
     const elapsed = (end, start) => (end === undefined ? null : end - start);
     return {
       observationEndedAt: performance.now(),
+      rtpSnapshots: window.rtpSnapshots,
+      rtpDeltas: window.microphoneRtpDeltas(window.rtpSnapshots),
+      rtpIncreasingAfterReady:
+        window.rtpSnapshots.every(snapshot => snapshot.packetsSent !== null && snapshot.bytesSent !== null) &&
+        window.rtpSnapshots.at(-1).packetsSent > window.rtpSnapshots[0].packetsSent &&
+        window.rtpSnapshots.at(-1).bytesSent > window.rtpSnapshots[0].bytesSent,
+      rtpIncreasingAfterPromotion:
+        window.rtpSnapshots.every(snapshot => snapshot.packetsSent !== null && snapshot.bytesSent !== null) &&
+        window.rtpSnapshots.at(-1).packetsSent > window.rtpSnapshots[1].packetsSent &&
+        window.rtpSnapshots.at(-1).bytesSent > window.rtpSnapshots[1].bytesSent,
       matchingAppendAckAt: ack?.at ?? null,
       firstOutputTranscriptAt: firstTranscript?.at ?? null,
       firstOutputMediaActiveAt: firstMedia?.at ?? null,
@@ -247,8 +287,12 @@ try {
   results.observation = observation;
   results.diagnostics = await page.evaluate(() => window.diagnostics);
   console.log(JSON.stringify(observation));
+  if (microphoneMode === "continuous" && !observation.rtpIncreasingAfterPromotion) {
+    results.failure = "Continuous experiment microphone did not send increasing outbound RTP";
+    process.exitCode = 1;
+  }
   if (!observation.responded) {
-    results.failure = "No replacement output transcript in the 20-second observation window";
+    results.failure ??= "No replacement output transcript in the 20-second observation window";
     process.exitCode = 1;
   }
 } catch (error) {
@@ -261,6 +305,7 @@ try {
     .evaluate(() => {
       window.transport?.close();
       window.peers?.forEach(peer => peer.close());
+      window.microphone?.close();
       window.audioContext?.close();
     })
     .catch(() => {});

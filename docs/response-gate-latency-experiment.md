@@ -728,3 +728,95 @@ nonzero for its failed response criterion, saved diagnostics and closed both
 connections. Local evidence: `test-results/replacement-response-20260929/results.json`,
 SHA-256 `1dda2683f5e9819eeddb5c2d18154fa65c9cfb790c6a7472d798918b3da574e4`.
 No credentials or audio were committed.
+
+### Input RTP controls — 2026-09-29
+
+**The old silent harness sent no audio RTP. Low-level continuous input restored
+both the instruction ACK and GPT-Live output.** Two targeted billed controls
+were run sequentially on top of `d4e4f60`, one fresh A plus one fresh B each,
+without retries or Jev calls. Both used the same scene-2 ADVANCE seed (“Two”
+after two ducks, with three butterflies now displayed), exact
+`advanceContext(sceneAt(2))`, explicit promotion while blocked, then output
+permission and approximately 20 seconds of observation.
+
+- **Silent control**, 16:06:12.095 UTC: the existing empty
+  MediaStreamDestination, with no connected source; AudioContext running.
+- **Continuous control**, 16:06:47.290 UTC: only the test microphone graph changed
+  to a 440 Hz sine oscillator → gain **0.001** → MediaStreamDestination. Nonzero,
+  low amplitude, no speech content, no connection to speakers; context running.
+
+The experiment selects B's audio RTCRtpSender and calls **sender.getStats()**.
+Snapshot times below are browser `performance.now()` milliseconds, with a
+separate document/clock origin per run. Each artifact also retains the original
+RTCStats report ID and native `timestamp` verbatim; those timestamps are not
+mixed with the application clock. Immediate READY/promotion snapshots can share
+a cached stats timestamp; the later snapshots demonstrate progression.
+
+| Snapshot | Silent: sampled at / packets / bytes | Continuous: sampled at / packets / bytes |
+| --- | ---: | ---: |
+| Immediately after READY | 3341.1 / 0 / 0 | 2176.6 / 14 / 690 |
+| Immediately after promotion | 3369.3 / 0 / 0 | 2206.2 / 14 / 690 |
+| About 1 s after instruction | 4376.8 / 0 / 0 | 3214.5 / 66 / 4789 |
+| Observation end | 23383.1 / 0 / 0 | 22217.9 / 1022 / 81739 |
+
+Silent deltas were **0 packets / 0 bytes** in every interval. Continuous deltas
+were **0 / 0** READY → promotion, **52 / 4099** promotion → first-second snapshot,
+and **956 / 76950** thereafter. Total continuous growth after READY and after
+promotion was **1008 packets / 81049 bytes**, over about 20 seconds. Growth was
+confirmed by the post-instruction snapshots, not by track/context/connection
+state or by assuming transmission at READY.
+
+| Observation | Silent source | Continuous source |
+| --- | --- | --- |
+| Outbound packets/bytes increasing after READY and promotion | No | Yes |
+| Matching `session.instructions.appended` ACK | No | Yes |
+| B output transcript | No | Yes |
+| B media activity `active` | No; remained unavailable | Yes; quiet at end |
+| Provider errors / closes / transport failure | None | None |
+| Final peer / channel | Connected / open | Connected / open |
+| Final authority / permission / playback attachment | B / permitted / attached | B / permitted / attached |
+
+The continuous run produced:
+
+> Oh, nice job just now. Look, there are some butterflies here. How many can you count?
+
+It referred to the seeded current butterflies, with no duck reference or
+independent scene change; the screen stayed on index 2 / `butterfly-garden`.
+No B transcript preceded the instruction. Continuous-run browser observations:
+READY **2174.9**, promotion **2181.4**, instruction **2206.6**, permission
+**2206.8**, first transcript **3160.4**, matching ACK **3160.6**, first observed
+active media **3490.6** ms. Derived: READY → instruction **31.7 ms**,
+instruction → ACK **954.0 ms**, instruction → transcript **953.8 ms**,
+READY → transcript **985.5 ms**, permission → transcript **953.6 ms**,
+permission → media activity **1283.8 ms**. These are application/media observations,
+not acoustic latency, audible onset, or proof that the ACK is a playback barrier.
+All corresponding ACK/output intervals were unmeasured for the silent run.
+
+This pair strongly associates the prior no-response result with the harness's
+failure to transmit audio, rather than disproving replacement itself. Increasing
+outbound RTP alone does not prove provider timeline progression; the matching
+provider ACK and output provide the additional evidence here. With continuous
+input, a seeded replacement reached READY, was promoted, accepted the real
+outcome instruction and resumed GPT-Live output while preserving source
+isolation. **The response path is qualified enough to proceed to a commit-4
+experiment**, which remains unimplemented. One sample per control cannot
+establish reliability, pedagogy, acoustic safety or end-to-end latency improvement
+inside the real answer gate.
+
+The harness now defaults to continuous input; `REPLACEMENT_MICROPHONE=silent`
+retains the original control. Continuous runs fail their RTP regression criterion
+if counters do not increase after promotion. Production microphone, transport,
+seed semantics, LessonSession and all gate policies are unchanged. Validation:
+**39 focused unit tests**, **seven provider-free WebRTC tests**, lint and
+typecheck passed. The added browser check observes actual low nonzero input PCM
+and increasing RTP against a local peer; unit stats fixtures test extraction and
+missing-data handling only, not OpenAI behavior. Both live controls closed all
+sources and saved diagnostics; silent exited nonzero for no response, continuous
+passed both RTP and response criteria.
+
+Local evidence under `test-results/replacement-timeline-20260929/`:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| `silent/results.json` | `3bc3ddf77ca6bae59a4796d5e2b72ed1d5c5687d04d529d63f7bb313c4e395f4` |
+| `continuous/results.json` | `0ac793ae869eea6165e5f4817d94f0b93d161efd519da06fa26b750c7aa646f3` |
