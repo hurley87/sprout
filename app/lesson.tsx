@@ -9,6 +9,7 @@ import { LessonSession, type Diagnostic, type Snapshot } from "@/lib/session";
 import { SessionInspector } from "./session-inspector";
 import type { DurableSessionRef, SessionRecordReader } from "@/lib/session-recorder";
 import { JevDiagnostics } from "./jev-diagnostics";
+import { readBrowserSessionReference, saveBrowserSessionReference } from "@/lib/durable-session-reference";
 
 function Scene({ index }: { index: number }) {
   const scene = sceneAt(index);
@@ -30,9 +31,22 @@ export default function Lesson({ debug }: { debug: boolean }) {
   const [endedAttempt, setEndedAttempt] = useState<{ ref?: DurableSessionRef; reader: SessionRecordReader } | null>(
     null,
   );
+  const [savedReferenceIssue, setSavedReferenceIssue] = useState<"missing" | "invalid" | null>(null);
   const audio = useRef<HTMLAudioElement>(null);
   const session = useRef<LessonSession | null>(null);
   const live = snapshot !== null && snapshot.status !== "ended";
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const saved = readBrowserSessionReference();
+      if (saved.status === "available") {
+        setEndedAttempt({ ref: saved.ref, reader: new ConvexSessionRecorder() });
+        return;
+      }
+      setSavedReferenceIssue(saved.status);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const hide = () => {
@@ -64,7 +78,13 @@ export default function Lesson({ debug }: { debug: boolean }) {
   function start(retryOf?: DurableSessionRef) {
     if (!audio.current || (session.current && session.current.snapshot.status !== "ended")) return;
     session.current?.dispose();
-    const recorder = new ConvexSessionRecorder();
+    setEndedAttempt(null);
+    const recorder = new ConvexSessionRecorder(ref => {
+      const stored = saveBrowserSessionReference(ref);
+      setSavedReferenceIssue(stored ? null : "invalid");
+      if (session.current?.snapshot.status === "ended")
+        setEndedAttempt(attempt => (attempt ? { ...attempt, ref } : attempt));
+    });
     const current = new LessonSession(
       new BrowserTransport(audio.current, microphoneDiagnostics),
       fetchEvaluateAnswer,
@@ -175,6 +195,14 @@ export default function Lesson({ debug }: { debug: boolean }) {
               reader={endedAttempt.reader}
               onRetry={ref => start(ref)}
             />
+          )}
+          {!endedAttempt && savedReferenceIssue === "missing" && (
+            <p className="parent-note">No saved session reference is available on this browser.</p>
+          )}
+          {!endedAttempt && savedReferenceIssue === "invalid" && (
+            <p className="parent-note" role="status">
+              The saved session reference is invalid or unavailable on this browser.
+            </p>
           )}
           {snapshot && (
             <details className="diagnostics">

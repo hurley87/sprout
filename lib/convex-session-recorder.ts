@@ -15,18 +15,18 @@ import type { EndReason } from "./session";
 export class ConvexSessionRecorder implements SessionRecorder, SessionRecordReader {
   private client?: ConvexHttpClient;
   private sessionId?: Id<"sessions">;
+  constructor(private readonly onSessionCreated?: (sessionId: DurableSessionRef) => void) {}
   async create(retryOf?: DurableSessionRef) {
-    const url = process.env.NEXT_PUBLIC_CONVEX_URL;
-    if (!url) throw new Error("NEXT_PUBLIC_CONVEX_URL is missing; durable recording is unavailable");
-    this.client = new ConvexHttpClient(url);
+    this.client = this.createClient();
     this.sessionId = await this.client.mutation(
       api.sessions.create,
       retryOf ? { retryOf: retryOf as Id<"sessions"> } : {},
     );
+    this.onSessionCreated?.(this.sessionId);
     return this.sessionId;
   }
   async getRecord(ref: DurableSessionRef): Promise<InspectableSessionRecord | null> {
-    const { client } = this.connection;
+    const client = (this.client ??= this.createClient());
     const record = await client.query(api.sessions.getRecord, { sessionId: ref as Id<"sessions"> });
     if (!record) return null;
     const { session, events, recordingUrl } = record;
@@ -62,6 +62,11 @@ export class ConvexSessionRecorder implements SessionRecorder, SessionRecordRead
   private get connection() {
     if (!this.client || !this.sessionId) throw new Error("No durable session was created");
     return { client: this.client, sessionId: this.sessionId };
+  }
+  private createClient() {
+    const url = process.env.NEXT_PUBLIC_CONVEX_URL;
+    if (!url) throw new Error("NEXT_PUBLIC_CONVEX_URL is missing; durable recording is unavailable");
+    return new ConvexHttpClient(url);
   }
   async attachRecording(recording: SessionAudioRecording) {
     const { client, sessionId } = this.connection;

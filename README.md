@@ -40,7 +40,7 @@ notification fails, the saved record remains available for explicit retry. Confi
 on both servers before enabling analysis; never set it in a `NEXT_PUBLIC_*` variable. No capability is configured or
 deployed by this repository change.
 
-The local inspector offers a loopback-guarded retry for failed, expired, or not-yet-requested saved-record analysis after reload.
+The browser keeps only the latest durable session ID so the local inspector can reopen that saved record after reload. Session evidence and audio stay in Convex. The inspector offers a loopback-guarded retry for failed, expired, or not-yet-requested saved-record analysis without starting a live lesson. Active controller and microphone state are not restored; missing or invalid references and pending/incomplete records are identified explicitly.
 See [Observer provider feasibility](docs/observer-provider-feasibility.md) for limits, evidence rules,
 and the remaining synthetic evaluation gate. No live-provider suitability result is claimed.
 

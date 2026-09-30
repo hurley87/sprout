@@ -202,6 +202,14 @@ is set by this change. The provider path, limits, API compatibility evidence and
 alignment/suitability gates are documented in [Observer provider feasibility](observer-provider-feasibility.md).
 Parent review remains unimplemented.
 
+The browser persists only the latest durable session ID, after Convex creates the record. On reload, a
+read-only Convex client fetches that record directly; inspection does not create a session or restore
+microphone/controller state. The canonical transcript, events, and recording remain in Convex. A missing
+or malformed local reference is reported, an inaccessible record is reported as unavailable, and a
+pending record remains qualified without an Observer retry. Complete and incomplete ended records with
+audio can reach the trusted retry route. This is a single latest-record pointer, not a history dashboard;
+starting another durable attempt replaces the pointer while leaving earlier Convex records intact.
+
 Record what was actually displayed, not just a requested visual action. Distinguish a spoken or interrupted prompt from text generated but never played. If delivery or scene context cannot be established, the Observer must qualify or omit the conclusion.
 
 Support descriptions can include no help observed, a light prompt, a choice, modeling/counting together, parent-reported assistance, or unknown. A fresh example after teaching retains the context of earlier help.
@@ -339,7 +347,10 @@ workflow is intentionally not required for the MVP. Local prototype diagnostic d
 Retry is available only for a fetched ended durable attempt. It disposes the old runtime and creates
 a fresh transport, recorder, controller, and linked session (`retryOf`), preserving the original record.
 Start a new lesson creates an unlinked attempt. The ended reference and reader are held independently
-of the live controller; late updates from old controllers cannot replace the new attempt's UI.
+of the live controller; late updates from old controllers cannot replace the new attempt's UI. The latest
+durable ID is also saved in browser storage and recovered by a fresh read-only recorder after reload, so
+the saved record, recording seek controls, and trusted Observer retry remain available without creating
+a new lesson. Only the ID is stored locally; active lesson state is never resumed.
 
 ### Conversation timeline (commit 5)
 

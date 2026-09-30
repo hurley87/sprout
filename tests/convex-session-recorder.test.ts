@@ -128,13 +128,25 @@ it("does not invent a playback URL and handles a missing record", async () => {
   query.mockResolvedValue(null);
   expect(await recorder.getRecord("session-test")).toBeNull();
 });
-it("failed create returns no identity and cannot fetch an attempt", async () => {
+it("reads an existing record with a fresh reader and does not create a live session", async () => {
+  vi.stubEnv("NEXT_PUBLIC_CONVEX_URL", "https://test.convex.cloud");
+  query.mockResolvedValue({
+    session: { _id: "session-after-reload", state: "ended", recordStatus: "incomplete", createdAt: 100 },
+    events: [],
+    recordingUrl: null,
+  });
+  const reader = new ConvexSessionRecorder();
+  expect((await reader.getRecord("session-after-reload"))?.recordStatus).toBe("incomplete");
+  expect(query).toHaveBeenCalledWith(api.sessions.getRecord, { sessionId: "session-after-reload" });
+  expect(mutation).not.toHaveBeenCalled();
+});
+it("failed create returns no identity while read-only lookup remains independent", async () => {
   vi.stubEnv("NEXT_PUBLIC_CONVEX_URL", "https://test.convex.cloud");
   mutation.mockRejectedValue(new Error("offline"));
   const recorder = new ConvexSessionRecorder();
   await expect(recorder.create()).rejects.toThrow("offline");
-  await expect(recorder.getRecord("unknown")).rejects.toThrow("No durable session");
-  expect(query).not.toHaveBeenCalled();
+  expect(await recorder.getRecord("unknown")).toBeNull();
+  expect(query).toHaveBeenCalledWith(api.sessions.getRecord, { sessionId: "unknown" });
 });
 
 it("passes the live start clock and separate timeline payload through the durable adapter", async () => {

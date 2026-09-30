@@ -280,7 +280,10 @@ export function SessionInspector({
           Retry this lesson
         </button>
       )}
-      {record?.state === "ended" && record.recording && (
+      {record?.state === "ended" && record.recordStatus === "pending" && record.recording && (
+        <p role="status">Observer retry is unavailable while this record is still pending.</p>
+      )}
+      {record?.state === "ended" && record.recordStatus !== "pending" && record.recording && (
         <button
           className="download-button"
           disabled={retryingObserver}

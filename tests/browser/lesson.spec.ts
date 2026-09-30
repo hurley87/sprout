@@ -597,11 +597,151 @@ test("inspects pending then complete canonical evidence, seeks audio, retries an
   expect(await page.evaluate(() => window.sproutTest.tracks.length)).toBeGreaterThan(previousTracks);
   await page.getByRole("button", { name: "End lesson" }).click();
   await expect(inspector.getByText("Retry of attempt-1", { exact: true })).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("sprout.latest-session-reference.v1")))
+    .toBe("attempt-2");
   await page.getByRole("button", { name: "Start a new lesson" }).click();
   await expect(page.locator('[data-scene="hello-duck"]')).toBeVisible();
   expect(creates).toEqual([{}, { retryOf: "attempt-1" }, {}]);
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("sprout.latest-session-reference.v1")))
+    .toBe("attempt-3");
   expect(records.get("attempt-1")).toEqual(original);
   await page.getByRole("button", { name: "End lesson" }).click();
+});
+
+test("reload recovers an incomplete saved record for inspection and trusted Observer retry without a new lesson", async ({
+  page,
+}) => {
+  const referenceKey = "sprout.latest-session-reference.v1";
+  let observerRetrySession: string | undefined;
+  let liveRequests = 0;
+  let createRequests = 0;
+  let queryRequests = 0;
+  const wav = Buffer.alloc(44 + 8000 * 30 * 2);
+  wav.write("RIFF", 0);
+  wav.writeUInt32LE(wav.length - 8, 4);
+  wav.write("WAVEfmt ", 8);
+  wav.writeUInt32LE(16, 16);
+  wav.writeUInt16LE(1, 20);
+  wav.writeUInt16LE(1, 22);
+  wav.writeUInt32LE(8000, 24);
+  wav.writeUInt32LE(16000, 28);
+  wav.writeUInt16LE(2, 32);
+  wav.writeUInt16LE(16, 34);
+  wav.write("data", 36);
+  wav.writeUInt32LE(wav.length - 44, 40);
+
+  await page.route("**/api/query", async route => {
+    queryRequests++;
+    const sessionId = route.request().postDataJSON().args[0].sessionId as string;
+    const pending = sessionId === "pending-session";
+    await route.fulfill({
+      json: {
+        status: "success",
+        value: {
+          session: {
+            _id: sessionId,
+            state: "ended",
+            recordStatus: pending ? "pending" : "incomplete",
+            createdAt: 1000,
+            startedAt: 1100,
+            endedAt: 2000,
+            endingReason: "parent_stop",
+            ...(pending
+              ? {}
+              : {
+                  recording: {
+                    storageId: "synthetic-storage",
+                    mimeType: "audio/wav",
+                    startOffsetMs: 0,
+                    durationMs: 30000,
+                  },
+                }),
+          },
+          events: [
+            {
+              eventKey: "scene",
+              order: 0,
+              atMs: 12300,
+              evidence: {
+                type: "scene_displayed",
+                sceneId: "synthetic",
+                targetQuantity: 1,
+                items: [{ emoji: "🦆", label: "duck" }],
+                arrangement: "row",
+              },
+            },
+          ],
+          recordingUrl: pending ? null : "https://audio-recovery.invalid/saved.wav",
+        },
+      },
+    });
+  });
+  await page.route("**/api/mutation", async route => {
+    const { path } = route.request().postDataJSON();
+    if (path === "sessions:create") createRequests++;
+    await route.fulfill({ json: { status: "success", value: null } });
+  });
+  await page.route("**/api/live", route => {
+    liveRequests++;
+    return route.fulfill({ json: { session: { id: "unexpected" }, transport: { sdp: "test" } } });
+  });
+  await page.route("**/api/observer/retry", async route => {
+    observerRetrySession = route.request().postDataJSON().sessionId as string;
+    await route.fulfill({ json: { status: "scheduled" } });
+  });
+  await page.route("https://audio-recovery.invalid/saved.wav", route => {
+    const range = route
+      .request()
+      .headers()
+      ["range"]?.match(/bytes=(\d+)-(\d*)/);
+    const start = range ? Number(range[1]) : 0;
+    const end = range?.[2] ? Number(range[2]) : wav.length - 1;
+    return route.fulfill({
+      status: range ? 206 : 200,
+      contentType: "audio/wav",
+      headers: {
+        "Accept-Ranges": "bytes",
+        ...(range ? { "Content-Range": `bytes ${start}-${end}/${wav.length}` } : {}),
+      },
+      body: wav.subarray(start, end + 1),
+    });
+  });
+
+  await page.goto("/");
+  await expect(page.getByText("No saved session reference is available on this browser.")).toBeVisible();
+  await page.evaluate(([key, value]) => localStorage.setItem(key, value), [
+    referenceKey,
+    "invalid / reference",
+  ] as const);
+  await page.reload();
+  await expect(page.getByText("The saved session reference is invalid or unavailable on this browser.")).toBeVisible();
+  expect(queryRequests).toBe(0);
+  await page.evaluate(([key, value]) => localStorage.setItem(key, value), [referenceKey, "recovered-session"] as const);
+  await page.reload();
+  const inspector = page.getByRole("region", { name: "Durable session record" });
+  await expect(inspector.getByText("Session: recovered-session")).toBeVisible();
+  await expect(inspector.getByText("Record incomplete", { exact: true })).toBeVisible();
+  const player = inspector.getByLabel("Full-session recording");
+  await expect(player).toHaveAttribute("src", "https://audio-recovery.invalid/saved.wav");
+  await expect.poll(() => player.evaluate((audio: HTMLAudioElement) => audio.readyState)).toBe(4);
+  await inspector.getByRole("button", { name: "Play from here" }).click();
+  await expect.poll(() => player.evaluate((audio: HTMLAudioElement) => audio.currentTime)).toBeGreaterThanOrEqual(12.3);
+  await inspector.getByRole("button", { name: "Retry Observer analysis" }).click();
+  await expect(inspector.getByRole("status").filter({ hasText: "Observer retry scheduled" })).toBeVisible();
+  expect(observerRetrySession).toBe("recovered-session");
+  expect(createRequests).toBe(0);
+  expect(liveRequests).toBe(0);
+
+  await page.evaluate(([key, value]) => localStorage.setItem(key, value), [referenceKey, "pending-session"] as const);
+  await page.reload();
+  const pendingInspector = page.getByRole("region", { name: "Durable session record" });
+  await expect(pendingInspector.getByText("Record still pending", { exact: true })).toBeVisible();
+  await expect(pendingInspector.getByText("Full-session audio unavailable.")).toBeVisible();
+  await expect(pendingInspector.getByRole("button", { name: "Retry Observer analysis" })).toHaveCount(0);
+  expect(createRequests).toBe(0);
+  expect(liveRequests).toBe(0);
 });
 
 test("failed durable creation leaves diagnostics available and offers no retry", async ({ page }) => {
