@@ -1,6 +1,25 @@
 import { test, expect, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 
+// Every parent-review read is mocked, including saved-record recovery tests.
+test.beforeEach(async ({ page }) => {
+  await page.route("**/api/parent-review", route => {
+    const { sessionId } = route.request().postDataJSON();
+    return route.fulfill({
+      json: {
+        sessionId,
+        analysisId: null,
+        status: "not_started",
+        qualification: null,
+        proposals: [],
+        decisions: [],
+        review: null,
+        sources: [],
+      },
+    });
+  });
+});
+
 type TestState = {
   emit: (event: object) => void;
   disconnect: () => void;

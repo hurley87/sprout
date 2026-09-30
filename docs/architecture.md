@@ -236,7 +236,7 @@ A review is final once the next plan has been generated from it. Anything missed
 
 Do not generate the next daily plan while the preceding session's analysis or review remains incomplete, including after a technical retry. Show the blocking state to the parent.
 
-### Durable parent review (implemented backend; UI deferred)
+### Durable parent review
 
 `parent_review.decide` is an internal mutation taking the session ID, analysis ID, actual
 `observerProposals` row ID, and a ParentDecision input without `reviewedAt`. It resolves the
@@ -283,11 +283,54 @@ enter it. A changed canonical snapshot throws and therefore also blocks planning
 must supply the full prerequisite session set and use this interface; this slice does not select
 experiment history or infer profiles, mastery or adaptations.
 
-All new operations are internal, with no public approval RPC or Next route in this slice. A later
-parent UI bridge must follow the existing loopback route and backend server capability pattern;
-it must never expose these mutations as unguarded public writes. Local generated API typing adds
-only this module; no Convex CLI or deployment is needed for the local tests. Live schema deployment,
-provider suitability and parent UI behavior remain unverified.
+Review mutations and the planning gate remain internal. The parent UI reaches them only through
+the capability-gated bridge described below. Local generated API typing is updated by hand; no
+Convex CLI or deployment is needed for local tests. Live schema deployment and provider suitability
+remain unverified.
+
+### Parent review bridge and inspection (issue #5, commit 5)
+
+The saved-session inspector includes an explicit parent review panel. Browser recovery uses the existing
+latest-session reference and never creates or resumes a lesson. Status reads distinguish not started,
+pending, running, failed, and READY; only an explicitly empty READY batch can be acknowledged as empty.
+The proposed summary lists the immutable proposal descriptions. Each original and saved decision remains
+visible with canonical utterance/scene/support context and exchange time. Recording playback uses the
+existing full recording and subtracts its `startOffsetMs`; positions remain approximate.
+
+`POST /api/parent-review` accepts a discriminated command: `get {sessionId}`, `decide
+{sessionId, analysisId, proposalRowId, decision}`, `acceptAll {sessionId, analysisId, note?}`, or
+`complete {sessionId, analysisId, repairLevel, note?, acknowledgeEmpty?}`. Decisions omit `reviewedAt`;
+parent explanations use `parentContext` with `parent_review` provenance. The same-origin loopback guard
+runs before body parsing or RPC. Bodies and the public action's serialized command are bounded to 16 KiB,
+with strict field validation; notes are at most 1000 characters. This is the existing local prototype
+security model, not an authenticated parent account system.
+
+The Next server supplies `OBSERVER_SERVER_CAPABILITY` to `parent_review_action.request`; the public
+Convex action validates it before **every** internal read or write, independently of Next validation.
+It routes writes to existing `parent_review.decide`, `acceptAll`, and `complete`. The internal
+`parent_review.inspect` read shares the same canonical snapshot/proposal validation as `get` for READY
+records, and also supports pre-READY status reads. Its JSON return is bounded to 2 MB. The browser view
+contains only analysis status, incomplete qualification, proposals, decisions, completion metadata and
+canonical evidence sources (`id`, `eventKey`, `atMs`, `evidence`). Backend event IDs resolve actual
+proposal references even though the original recording inspector uses event keys. Neither capability,
+provider diagnostics, attempt tokens, nor internal snapshots enter this view. Route failures use fixed
+safe messages, never raw backend errors. No Convex CLI or deployment is necessary for mocked tests.
+
+Correction controls preserve canonical target quantity and source identities, permit attributed parent
+interpretation/speaker corrections, and keep missing/ambiguous scene timing uncertain. Newly reported
+assistance and pointing/touch-counting go only into parent context. Saved decisions remain immutable;
+identical retries are idempotent and accept-all cannot replace corrections/rejections. Accept-all is an
+explicit atomic acceptance and verified completion. Otherwise completion requires all decisions,
+repair level, and optional note; verified completion requires unchanged acceptances. Empty completion
+requires acknowledgment and creates no evidence. No next lesson or planner is called.
+
+During a write the panel prevents duplicate actions. An uncertain response triggers a saved-state read
+and retains the exact intended payload for explicit retry. Other decisions remain disabled until that
+retry is confirmed; a failed refresh requires a successful refresh first. Reads/writes from an unmounted
+session panel cannot update the next inspection, and reads verify the returned session identity.
+Synthetic browser tests mock every review, Observer retry, recording and Convex service call. Actual
+capability configuration, deployed RPC validation and live recording/provider review remain deployment
+and full-flow verification work for the next slice.
 
 ## 6. Planning rules
 

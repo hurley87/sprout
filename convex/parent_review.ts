@@ -359,3 +359,42 @@ export const get = internalQuery({
     };
   },
 });
+
+/** Backend-derived review view; status reads do not require READY or disclose raw failures. */
+export const inspect = internalQuery({
+  args: { sessionId: v.id("sessions") },
+  returns: v.string(),
+  handler: async (ctx, { sessionId }) => {
+    const session = await ctx.db.get(sessionId);
+    if (!session) throw new Error("Unknown session");
+    const analysis = await ctx.db
+      .query("observerAnalyses")
+      .withIndex("by_session", q => q.eq("sessionId", sessionId))
+      .unique();
+    const saved = analysis?.status === "ready" ? await batch(ctx, sessionId, analysis._id) : null;
+    const result = JSON.stringify({
+      sessionId,
+      analysisId: analysis?._id ?? null,
+      status: analysis?.status ?? "not_started",
+      qualification:
+        session.recordStatus === "incomplete" ? "Known incomplete record: some evidence may be missing." : null,
+      proposals: saved?.proposals.map(row => ({ id: row._id, proposal: row.proposal })) ?? [],
+      decisions: saved?.decisions.map(row => ({ proposalRowId: row.proposalRowId, decision: row.decision })) ?? [],
+      review: saved?.review
+        ? {
+            repairLevel: saved.review.repairLevel,
+            ...(saved.review.note ? { note: saved.review.note } : {}),
+            emptyAcknowledged: saved.review.emptyAcknowledged,
+            completedAt: saved.review.completedAt,
+          }
+        : null,
+      sources:
+        saved?.record.events
+          .filter(event => event.evidence)
+          .map(event => ({ id: event._id, eventKey: event.eventKey, atMs: event.atMs, evidence: event.evidence })) ??
+        [],
+    });
+    if (new TextEncoder().encode(result).length > 2_000_000) throw new Error("Review view exceeds byte limit");
+    return result;
+  },
+});

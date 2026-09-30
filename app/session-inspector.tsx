@@ -4,52 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import {
   recordingOffsetSeconds,
   type DurableSessionRef,
-  type Evidence,
   type TimelineEvent,
   type InspectableSessionRecord,
   type SessionRecordReader,
 } from "@/lib/session-recorder";
 
-function EvidenceDetail({ evidence }: { evidence: Evidence }) {
-  switch (evidence.type) {
-    case "utterance":
-      return (
-        <>
-          <p>
-            {evidence.speaker} · {evidence.state}: {evidence.text}
-          </p>
-          <p>
-            Provider utterance: {evidence.startMs ?? "unknown"}–{evidence.endMs ?? "unknown"} ms
-          </p>
-          <p>
-            Observed: {evidence.firstObservedAtMs ?? "unknown"}–{evidence.lastObservedAtMs ?? "unknown"} ms
-          </p>
-        </>
-      );
-    case "scene_displayed":
-      return (
-        <>
-          <p>
-            Scene actually displayed: {evidence.sceneId} · Target quantity: {evidence.targetQuantity}
-          </p>
-          <ol>
-            {evidence.items.map((item, index) => (
-              <li key={index}>
-                {item.emoji} {item.label}
-              </li>
-            ))}
-          </ol>
-          <p>Arrangement/context: {evidence.arrangement}</p>
-        </>
-      );
-    case "support":
-      return (
-        <p>
-          Support · {evidence.source} · {evidence.mode}: {evidence.description}
-        </p>
-      );
-  }
-}
+import { EvidenceDetail } from "./evidence-detail";
+import { ParentReviewPanel } from "./parent-review-panel";
 
 function TimelineDetail({ event }: { event: TimelineEvent }) {
   switch (event.type) {
@@ -175,6 +136,15 @@ export function SessionRecordView({ record }: { record: InspectableSessionRecord
       ) : (
         <p>Full-session audio unavailable.</p>
       )}
+      {record.state === "ended" && (
+        <ParentReviewPanel
+          key={record.id}
+          sessionId={record.id}
+          seek={seek}
+          hasRecording={Boolean(record.recording)}
+          canRetry={record.recordStatus !== "pending" && Boolean(record.recording)}
+        />
+      )}
       <h3>Canonical evidence timeline and conversation analysis</h3>
       <p>
         Generated text describes provider output; full recording retains the captured audio. Analysis events are not
@@ -226,8 +196,6 @@ export function SessionInspector({
   const [loading, setLoading] = useState(Boolean(sessionRef));
   const [error, setError] = useState(false);
   const [revision, setRevision] = useState(0);
-  const [observerMessage, setObserverMessage] = useState("");
-  const [retryingObserver, setRetryingObserver] = useState(false);
   useEffect(() => {
     if (!sessionRef) return;
     let cancelled = false;
@@ -280,38 +248,6 @@ export function SessionInspector({
           Retry this lesson
         </button>
       )}
-      {record?.state === "ended" && record.recordStatus === "pending" && record.recording && (
-        <p role="status">Observer retry is unavailable while this record is still pending.</p>
-      )}
-      {record?.state === "ended" && record.recordStatus !== "pending" && record.recording && (
-        <button
-          className="download-button"
-          disabled={retryingObserver}
-          onClick={async () => {
-            setRetryingObserver(true);
-            setObserverMessage("");
-            try {
-              const response = await fetch("/api/observer/retry", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ sessionId: record.id }),
-              });
-              const result = (await response.json()) as { status?: string; error?: string };
-              if (!response.ok) throw new Error(result.error ?? "Retry failed.");
-              setObserverMessage(
-                result.status === "scheduled" ? "Observer retry scheduled." : `Observer state: ${result.status}.`,
-              );
-            } catch (retryError) {
-              setObserverMessage(retryError instanceof Error ? retryError.message : "Observer retry failed.");
-            } finally {
-              setRetryingObserver(false);
-            }
-          }}
-        >
-          {retryingObserver ? "Scheduling Observer retry…" : "Retry Observer analysis"}
-        </button>
-      )}
-      {observerMessage && <p role="status">{observerMessage}</p>}
     </section>
   );
 }
