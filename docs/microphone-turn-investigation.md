@@ -105,9 +105,9 @@ preserve liveness. Answer stabilization after the detected end or latest
 transcript is a separate 250 ms correction policy. Neither policy is changed
 here. The persisted record is coarser than those in-memory diagnostics.
 
-## Pending comparable trial protocol
+## Initial comparable trial protocol (superseded by MVP decision below)
 
-Run only in a later authorized measurement slice. Use the same MacBook,
+This was the initial proposed protocol. The final MVP decision below stops further collection; the five-session target is no longer required. If investigation resumes, use the same MacBook,
 microphone input, browser and version, page/build SHA, room, speaker placement,
 network, voice/model configuration, and evaluator for all trials. Note the
 selected input/output devices, actual `MediaStreamTrack.getSettings()` where
@@ -216,8 +216,40 @@ Quiet resets are totals across each captured attempt, not per-answer rates or ca
 - Every captured detector window reported a running AudioContext, and no frame gap exceeded 100 ms. These exports provide no evidence of large animation-frame scheduling gaps in these attempts.
 - A stop can arrive before its transcript, so the stop event can correctly report `no_transcript` and the later transcript can still select the VAD tail. An unjoined stop field in the per-answer parser is not proof of an absent stop; the raw epoch and event ordering must also be inspected.
 
-### Remaining work
+### Interim recommendation (superseded)
 
-Collect four more attempts per condition to reach the planned five, alternating conditions and keeping the physical microphone, position, answer form (“One”, “Two”, “Three”), playback level, and background-noise source consistent. Record actual device and room details, label silence controls, and retain failures and interruptions. Review synchronized audio, including the original problem session where available, before attributing detector activity to speech, speaker leakage, or noise. The current one-attempt-per-condition comparison is inconclusive for acoustic causation and does not support a claim that speakers are faster or slower.
+The initial report proposed further repetitions and left issue #37 unresolved. The targeted reproduction and quiet repeat below replace that blanket collection requirement. The earlier four-trial findings remain historical observations, not the final conclusion.
 
-Issue #37 remains open. Commit 5 remains conditional on a demonstrated failure with measured tradeoffs and a deterministic regression test. No detector, scheduling, threshold, or timer change is part of this report.
+## Targeted reproduction and final MVP decision — 2026-09-29
+
+The user supplied a speakers-with-loud-TV reproduction, followed by a speakers/no-background-noise repeat. Both used the same reported browser, model, prompt version, and audio-processing settings as the earlier trials. Physical microphone identity, placement, volume, and measured noise level were not recorded, so this is a practical debugging comparison rather than a controlled acoustic experiment.
+
+| Condition | Session ID | Export filename |
+| --- | --- | --- |
+| Speakers / loud TV | `j9748xzqf5es7azqkwkrdp5yhs8fcmzs` | `sprout-attempt-1790729984307.json` |
+| Speakers / no background noise | `j976xajq5yaq013yf4jbcb8qsd8fdb8b` | `sprout-attempt-1790730181227.json` |
+
+The quiet trial's initially repeated session ID was corrected by the user. Its durable live-start timestamp matches the export exactly; durable creation is 15 ms after export creation. The loud-TV session's durable creation is 11 ms after its export creation. Raw exports and derived timelines remain locally under `test-results/issue-37/targeted-reproduction-01/` and `test-results/issue-37/targeted-speakers-quiet-01/`.
+
+| Condition | Answer | Actual path | Transcript → request, ms | Request → result, ms | Result → playback permission, ms |
+| --- | --- | --- | ---: | ---: | ---: |
+| Loud TV | One | transcript_fallback | 1,502 | 328 | 2,414 |
+| Loud TV | Two | microphone_vad | 252 | 226 | 14 |
+| Loud TV | Three | transcript_fallback | 1,500 | 233 | 32 |
+| No background noise | One | microphone_vad | 252 | 297 | 14 |
+| No background noise | Two | microphone_vad | 251 | 212 | 15 |
+| No background noise | Three | microphone_vad | 252 | 225 | 19 |
+
+The loud-TV attempt recorded 25 confirmed-speech quiet resets; the quiet repeat recorded zero. Neither recorded a frame gap above 100 ms, and all captured detector windows reported a running AudioContext. All six evaluations returned ADVANCE. Reset counts cover whole attempts, not calibrated false-positive rates.
+
+For “One” in the loud-TV attempt, observed quiet reached about 701 ms before above-threshold energy reset it repeatedly. Evaluation requested at application time 14,161 ms while confirmed microphone activity was still active; microphone stop arrived at 16,049 ms. For “Three”, repeated above-threshold energy again interrupted quiet; evaluation requested at 38,726 ms and microphone stop arrived at 40,034 ms. The 1,500 ms fallback operated as intended in both cases. There is no evidence that an available usable stop was ignored or an epoch mismatch selected fallback in these two answers. The separate 2,414 ms post-result playback hold for “One” is not part of pre-evaluation latency.
+
+**Working conclusion: background noise is the likely cause of the reproduced delayed stops.** Loud TV coincided with repeated energy-driven quiet resets and two fallback evaluations; removing background noise coincided with zero resets and three VAD evaluations. This is consistent with the known limits of an energy detector and its fallback policy, rather than a demonstrated scheduling defect. The user considers this explanation sufficient for the initial MVP. Energy measurements cannot separate TV, Sprout speaker pickup, or nearby speech, and neither the original failing recording nor these recordings have been acoustically reviewed. The original session's precise sound source remains unverified.
+
+**MVP decision: stop investigation and further trials here; retain all detector thresholds and timers.** The earlier five-attempts-per-condition proposal is withdrawn as an MVP requirement. No conditional fix commit is justified. Reopen targeted investigation if comparable fallback delays recur in a quiet room or new evidence demonstrates a detector/integration failure.
+
+Agreed parent-facing guidance:
+
+> For best results, use Sprout in a quiet room with the TV and music off.
+
+This commit records the guidance and decision in documentation; it does not change application UI or policy. The investigation is concluded for the MVP with the above limitations, rather than claiming every original experimental acceptance criterion was completed.
