@@ -1,7 +1,14 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
-import { validateObserverProposal, validateParentDecision, type ParentDecision } from "../lib/observation-contracts";
+import {
+  validateObserverProposal,
+  validateParentDecision,
+  type CanonicalObservationRecord,
+  type ObservationClaim,
+  type ObserverProposal,
+  type ParentDecision,
+} from "../lib/observation-contracts";
 
 export const repairLevel = v.union(
   v.literal("verified"),
@@ -79,6 +86,61 @@ function stable(value: unknown): string {
   return JSON.stringify(value);
 }
 
+/** Scene facts stay canonical even when a parent corrects the interpretation of speech. */
+function validateCorrectionScene(
+  correction: ObservationClaim,
+  proposal: ObserverProposal,
+  record: CanonicalObservationRecord,
+) {
+  const sceneSource = proposal.sources.find(source => source.role === "scene");
+  const scene =
+    sceneSource && "eventId" in sceneSource
+      ? record.events.find(event => event._id === sceneSource.eventId)
+      : undefined;
+  if (
+    correction.targetQuantity !== undefined &&
+    (scene?.evidence?.type !== "scene_displayed" || correction.targetQuantity !== scene.evidence.targetQuantity)
+  )
+    throw new Error("Correction target must match the canonical cited scene quantity");
+
+  const responseSource = proposal.sources.find(source => source.role === "response");
+  const response =
+    responseSource && "eventId" in responseSource
+      ? record.events.find(event => event._id === responseSource.eventId)
+      : undefined;
+  const speech = response?.evidence?.type === "utterance" ? response.evidence : undefined;
+  const { startMs, endMs } = speech ?? {};
+  const hasInterval =
+    typeof startMs === "number" &&
+    Number.isFinite(startMs) &&
+    startMs >= 0 &&
+    typeof endMs === "number" &&
+    Number.isFinite(endMs) &&
+    endMs >= startMs;
+  const scenes = record.events.filter(event => event.evidence?.type === "scene_displayed");
+  const priorScenes = hasInterval ? scenes.filter(event => event.atMs < startMs) : [];
+  const latestAt = Math.max(...priorScenes.map(event => event.atMs), -1);
+  const latestScenes = priorScenes.filter(event => event.atMs === latestAt);
+  const supported =
+    hasInterval &&
+    scene?.evidence?.type === "scene_displayed" &&
+    latestScenes.length === 1 &&
+    latestScenes[0]._id === scene._id &&
+    !scenes.some(event => event.atMs >= startMs && event.atMs <= endMs);
+  if (!supported) {
+    if (correction.behavior !== "uncertain_exchange")
+      throw new Error(
+        "Concrete correction requires a uniquely displayed canonical scene throughout the response interval",
+      );
+    if (
+      !correction.uncertaintyReasons.some(
+        reason => reason === "missing_scene_context" || reason === "conflicting_context",
+      )
+    )
+      throw new Error("Correction must retain missing or ambiguous scene timing uncertainty");
+  }
+}
+
 export const decide = internalMutation({
   args: { ...scope, proposalRowId: v.id("observerProposals"), decision: v.any() },
   returns: v.id("parentDecisions"),
@@ -100,6 +162,7 @@ export const decide = internalMutation({
     if (decision.correction) {
       // Parent testimony can resolve uncertainty or correct interpretation, but cannot create a new exchange.
       if (!decision.parentContext) throw new Error("Corrections require an explicit parent_review explanation");
+      validateCorrectionScene(decision.correction, row.proposal as ObserverProposal, saved.record);
       const support = decision.correction.support;
       if (
         support.sourceEventIds.some(id => !row.proposal.observation.support.sourceEventIds.includes(id)) ||

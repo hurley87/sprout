@@ -2,12 +2,17 @@ import { expect, it } from "vitest";
 import { convexTest } from "convex-test";
 import { internal } from "../convex/_generated/api";
 import schema from "../convex/schema";
-import { observationFixtures } from "./fixtures/observation-contracts";
+import { observationFixtures, type SyntheticObservationFixture } from "./fixtures/observation-contracts";
 import type { ObserverProposal } from "../lib/observation-contracts";
 
-async function fixture(name = "correct-total-without-spoken-count", count = 1) {
+async function fixture(
+  name = "correct-total-without-spoken-count",
+  count = 1,
+  prepare?: (source: SyntheticObservationFixture) => void,
+) {
   const t = convexTest(schema, import.meta.glob("../convex/**/*.ts"));
   const source = structuredClone(observationFixtures.find(item => item.name === name)!);
+  prepare?.(source);
   const sessionId = await t.run(async ctx => {
     const sessionId = await ctx.db.insert("sessions", {
       state: "ended",
@@ -62,6 +67,121 @@ const reject = (id = "p0") => ({
   proposalId: id,
   decision: "rejected",
   rejectionReason: "This was the parent speaking.",
+});
+
+const correct = (correction: ObserverProposal["observation"]) => ({
+  kind: "parent_decision",
+  proposalId: "p0",
+  decision: "corrected",
+  correction,
+  parentContext: { provenance: "parent_review", note: "Corrected the interpretation." },
+});
+
+async function expectNoReviewWrites(f: Awaited<ReturnType<typeof fixture>>) {
+  expect(await f.t.run(ctx => ctx.db.query("parentDecisions").take(10))).toEqual([]);
+  expect(await f.t.run(ctx => ctx.db.query("reviewedEvidence").take(10))).toEqual([]);
+  expect(await f.t.run(ctx => ctx.db.query("sessionReviews").take(10))).toEqual([]);
+  await expect(
+    f.t.mutation(internal.parent_review.complete, { ...f.scope, repairLevel: "light_correction" }),
+  ).rejects.toThrow("incomplete");
+  expect(await f.gate()).toMatchObject({ blocked: true, evidence: [] });
+  expect(await f.t.run(ctx => ctx.db.get(f.rows[0]._id))).toEqual(f.rows[0]);
+}
+
+it("rejects a self-consistent wrong target atomically and keeps it out of planning", async () => {
+  const f = await fixture();
+  await expect(
+    f.decide(
+      correct({
+        ...f.original.observation,
+        targetQuantity: 4,
+        statedTotal: 4,
+        description: "The child correctly identified four objects.",
+      }),
+    ),
+  ).rejects.toThrow("canonical cited scene quantity");
+  await expectNoReviewWrites(f);
+  // Parent interpretation can differ from transcript tokens, while retaining the actual target.
+  const correction = { ...f.original.observation, statedTotal: 2, outcome: "incorrect" as const };
+  await f.decide(correct(correction));
+  await f.t.mutation(internal.parent_review.complete, { ...f.scope, repairLevel: "light_correction" });
+  expect(await f.gate()).toMatchObject({
+    blocked: false,
+    evidence: [{ observation: correction, sources: f.original.sources, interpretationProvenance: "parent_review" }],
+  });
+});
+
+it("permits target omission only for uncertainty and binds supplied uncertain targets to the cited scene", async () => {
+  const f = await fixture("ambiguous-speaker");
+  await expect(f.decide(correct({ ...f.original.observation, targetQuantity: 4 }))).rejects.toThrow(
+    "canonical cited scene quantity",
+  );
+  await expectNoReviewWrites(f);
+  const { targetQuantity, ...correction } = f.original.observation;
+  void targetQuantity;
+  await f.decide(correct(correction));
+  await f.t.mutation(internal.parent_review.complete, { ...f.scope, repairLevel: "light_correction" });
+  expect(await f.gate()).toMatchObject({ blocked: false, evidence: [{ observation: correction }] });
+  const concrete = await fixture();
+  const { targetQuantity: omitted, ...withoutTarget } = concrete.original.observation;
+  void omitted;
+  await expect(concrete.decide(correct(withoutTarget))).rejects.toThrow("invalid or missing observation fields");
+  await expectNoReviewWrites(concrete);
+});
+
+it("cannot resolve missing or ambiguous scene timing into concrete performance or erase its uncertainty", async () => {
+  const preparations: Array<(source: SyntheticObservationFixture) => void> = [
+    // A missing scene, including an attempted target supplied solely by the parent.
+    source => {
+      source.record.events = source.record.events.filter(event => event.evidence?.type !== "scene_displayed");
+      source.proposal!.sources = source.proposal!.sources.filter(source => source.role !== "scene");
+      delete source.proposal!.observation.targetQuantity;
+    },
+    source => {
+      const response = source.record.events.find(event => event.evidence?.type === "utterance")!;
+      if (response.evidence?.type === "utterance") delete response.evidence.startMs;
+    },
+    source => {
+      source.record.events[0].atMs = 1700;
+    }, // Scene at speech start is ambiguous.
+    source => {
+      source.record.events.push({ ...source.record.events[0], _id: "tie-scene" });
+    },
+    source => {
+      source.record.events.push({ ...source.record.events[0], _id: "transition-scene", atMs: 1800 });
+    },
+    source => {
+      source.proposal!.sources = source.proposal!.sources.filter(source => source.role !== "scene");
+    },
+  ];
+  for (const prepare of preparations) {
+    const f = await fixture("ambiguous-speaker", 1, source => {
+      prepare(source);
+      source.proposal!.observation.uncertaintyReasons.push("missing_scene_context");
+    });
+    await expect(
+      f.decide(
+        correct({
+          ...f.original.observation,
+          behavior: "quantity_identification",
+          outcome: "correct",
+          speakerAttribution: "child_or_nearby_speaker",
+          targetQuantity: 3,
+          statedTotal: 3,
+          uncertaintyReasons: [],
+        }),
+      ),
+    ).rejects.toThrow(/canonical cited scene quantity|uniquely displayed canonical scene/);
+    const { targetQuantity, ...uncertain } = f.original.observation;
+    void targetQuantity;
+    await expect(f.decide(correct({ ...uncertain, uncertaintyReasons: ["ambiguous_speaker"] }))).rejects.toThrow(
+      "scene timing uncertainty",
+    );
+    await expectNoReviewWrites(f);
+    await f.decide(correct(uncertain));
+    await f.t.mutation(internal.parent_review.complete, { ...f.scope, repairLevel: "substantial_repair" });
+    expect(await f.gate()).toMatchObject({ blocked: false, evidence: [{ observation: uncertain }] });
+  }
 });
 
 it("accepts unchanged with backend time, canonical row provenance, idempotency and immutable originals", async () => {
@@ -147,6 +267,10 @@ it("requires explicit parent attribution when resolving uncertainty or removing 
         statedTotal: 3,
         uncertaintyReasons: [],
       });
+      await expect(f.decide(correct({ ...correction, targetQuantity: 4, statedTotal: 4 }))).rejects.toThrow(
+        "canonical cited scene quantity",
+      );
+      await expectNoReviewWrites(f);
     } else correction.support = { status: "not_established", kinds: [], sourceEventIds: [] };
     const decision = { kind: "parent_decision", proposalId: "p0", decision: "corrected", correction };
     await expect(f.decide(decision)).rejects.toThrow("parent_review explanation");
@@ -158,7 +282,10 @@ it("requires explicit parent attribution when resolving uncertainty or removing 
       },
     });
     await f.t.mutation(internal.parent_review.complete, { ...f.scope, repairLevel: "substantial_repair" });
-    expect((await f.gate()).evidence[0].interpretationProvenance).toBe("parent_review");
+    expect(await f.gate()).toMatchObject({
+      blocked: false,
+      evidence: [{ observation: correction, sources: f.original.sources, interpretationProvenance: "parent_review" }],
+    });
   }
 });
 
