@@ -80,6 +80,7 @@ export default function Lesson({ debug }: { debug: boolean }) {
     session.current?.dispose();
     setEndedAttempt(null);
     const recorder = new ConvexSessionRecorder(ref => {
+      if (session.current !== current) return;
       const stored = saveBrowserSessionReference(ref);
       setSavedReferenceIssue(stored ? null : "invalid");
       if (session.current?.snapshot.status === "ended")

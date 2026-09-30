@@ -610,6 +610,72 @@ test("inspects pending then complete canonical evidence, seeks audio, retries an
   await page.getByRole("button", { name: "End lesson" }).click();
 });
 
+test("late creation from an older lesson cannot replace the current saved reference or inspector", async ({ page }) => {
+  await mockLive(page);
+  let creates = 0;
+  let oldFinalized = false;
+  let releaseOldCreation: (() => void) | undefined;
+  await page.route("**/api/mutation", async route => {
+    const {
+      path,
+      args: [args],
+    } = route.request().postDataJSON();
+    if (path === "sessions:create") {
+      const creationNumber = ++creates;
+      if (creationNumber === 1)
+        await new Promise<void>(resolve => {
+          releaseOldCreation = resolve;
+        });
+      await route.fulfill({ json: { status: "success", value: creationNumber === 1 ? "session-old" : "session-new" } });
+      return;
+    }
+    if (path === "sessions:finalize" && args.sessionId === "session-old") oldFinalized = true;
+    await route.fulfill({ json: { status: "success", value: null } });
+  });
+  await page.route("**/api/query", route => {
+    const {
+      args: [{ sessionId }],
+    } = route.request().postDataJSON();
+    return route.fulfill({
+      json: {
+        status: "success",
+        value: {
+          session: {
+            _id: sessionId,
+            state: "ended",
+            recordStatus: "pending",
+            createdAt: Date.now(),
+            endingReason: "parent_stop",
+          },
+          events: [],
+          recordingUrl: null,
+        },
+      },
+    });
+  });
+  const savedReference = () => page.evaluate(() => localStorage.getItem("sprout.latest-session-reference.v1"));
+  try {
+    await begin(page);
+    await expect.poll(() => creates).toBe(1);
+    await page.getByRole("button", { name: "End lesson" }).click();
+    await page.getByRole("button", { name: "Start a new lesson" }).click();
+    await expect(page.locator('[data-scene="hello-duck"]')).toBeVisible();
+    await expect.poll(() => creates).toBe(2);
+    await expect.poll(savedReference).toBe("session-new");
+    await page.getByRole("button", { name: "End lesson" }).click();
+    const inspector = page.getByRole("region", { name: "Durable session record" });
+    await expect(inspector.getByText("Session: session-new")).toBeVisible();
+
+    releaseOldCreation?.();
+    await expect.poll(() => oldFinalized).toBe(true);
+    expect(await savedReference()).toBe("session-new");
+    await expect(inspector.getByText("Session: session-new")).toBeVisible();
+    await expect(inspector.getByText("Session: session-old")).toHaveCount(0);
+  } finally {
+    releaseOldCreation?.();
+  }
+});
+
 test("reload recovers an incomplete saved record for inspection and trusted Observer retry without a new lesson", async ({
   page,
 }) => {
