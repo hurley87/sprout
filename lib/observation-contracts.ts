@@ -89,6 +89,8 @@ const record = (value: unknown): value is Record<string, unknown> =>
 const nonEmpty = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0;
 const nonnegativeInteger = (value: unknown): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+const nonnegativeFinite = (value: unknown): value is number =>
+  typeof value === "number" && Number.isFinite(value) && value >= 0;
 const stringArray = (value: unknown, choices: readonly string[]) =>
   Array.isArray(value) && value.every(item => oneOf(item, choices));
 
@@ -219,7 +221,7 @@ export function validateObserverProposal(
       }
       if (
         !nonnegativeInteger(recording.startOffsetMs) ||
-        !nonnegativeInteger(recording.durationMs) ||
+        !nonnegativeFinite(recording.durationMs) ||
         recording.durationMs <= 0 ||
         !intervalValid ||
         recordingEndMs > recording.durationMs ||

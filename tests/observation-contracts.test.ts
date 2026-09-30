@@ -167,34 +167,37 @@ describe("evidence-linked observation contracts", () => {
     expect(validateObserverProposal(falseSupport, observationFixtures[0].record).ok).toBe(false);
   });
 
-  it("accepts recording-backed hint and counting-together support without a structured support row", () => {
-    const fixture = observationFixtures.find(item => item.name === "hint-and-counting-together")!;
-    expect(fixture.fixtureStatus).toBe("synthetic_example_not_delivered_evidence");
-    const record = structuredClone(fixture.record);
-    record.events = record.events.filter(event => event.evidence?.type !== "support");
-    record.recording = { recordingId: "storage_synthetic_recording", startOffsetMs: 1000, durationMs: 5000 };
-    const proposal = structuredClone(fixture.proposal!) as ObserverProposal;
-    proposal.observation.support = {
-      status: "recorded",
-      kinds: ["hint", "counting_together"],
-      sourceEventIds: [],
-      recordingSourceIds: ["recording-support-synthetic-1"],
-    };
-    proposal.sources = proposal.sources.filter(source => source.role !== "support");
-    proposal.sources.push({
-      sourceId: "recording-support-synthetic-1",
-      role: "recording_support",
-      provenance: "recording_review",
-      sessionId: record.session._id,
-      recordingId: "storage_synthetic_recording",
-      recordingStartMs: 200,
-      recordingEndMs: 1200,
-      sessionStartMs: 1200,
-      sessionEndMs: 2200,
-    });
+  it.each([5000, 5000.25, 1200])(
+    "accepts recording-backed support without a structured support row for duration %s ms",
+    durationMs => {
+      const fixture = observationFixtures.find(item => item.name === "hint-and-counting-together")!;
+      expect(fixture.fixtureStatus).toBe("synthetic_example_not_delivered_evidence");
+      const record = structuredClone(fixture.record);
+      record.events = record.events.filter(event => event.evidence?.type !== "support");
+      record.recording = { recordingId: "storage_synthetic_recording", startOffsetMs: 1000, durationMs };
+      const proposal = structuredClone(fixture.proposal!) as ObserverProposal;
+      proposal.observation.support = {
+        status: "recorded",
+        kinds: ["hint", "counting_together"],
+        sourceEventIds: [],
+        recordingSourceIds: ["recording-support-synthetic-1"],
+      };
+      proposal.sources = proposal.sources.filter(source => source.role !== "support");
+      proposal.sources.push({
+        sourceId: "recording-support-synthetic-1",
+        role: "recording_support",
+        provenance: "recording_review",
+        sessionId: record.session._id,
+        recordingId: "storage_synthetic_recording",
+        recordingStartMs: 200,
+        recordingEndMs: 1200,
+        sessionStartMs: 1200,
+        sessionEndMs: 2200,
+      });
 
-    expect(validateObserverProposal(proposal, record).ok).toBe(true);
-  });
+      expect(validateObserverProposal(proposal, record).ok).toBe(true);
+    },
+  );
 
   it("rejects absent or wrong-session recordings and invalid recording/session clock intervals", () => {
     const fixture = observationFixtures.find(item => item.name === "hint-and-counting-together")!;
@@ -264,6 +267,13 @@ describe("evidence-linked observation contracts", () => {
     const incomplete = structuredClone(record);
     incomplete.session.recordStatus = "incomplete";
     expect(validateObserverProposal(proposal, incomplete).ok).toBe(false);
+
+    // Keep the fractional boundary exact: an interval ending at 1200 ms cannot fit in 1199.75 ms.
+    for (const durationMs of [-1, 0, Number.NaN, Number.POSITIVE_INFINITY, 1199.75]) {
+      const invalidDuration = structuredClone(record);
+      invalidDuration.recording!.durationMs = durationMs;
+      expect(validateObserverProposal(proposal, invalidDuration).ok).toBe(false);
+    }
   });
 
   it("keeps parent correction and added assistance in a separately sourced decision", () => {
