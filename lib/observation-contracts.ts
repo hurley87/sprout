@@ -443,6 +443,7 @@ export function validateObserverProposal(
         const target = observation.targetQuantity;
         const hasSequence =
           target !== undefined &&
+          target >= 2 &&
           target <= 5 &&
           numbers.some((number, index) => {
             const sequence = numbers.slice(index, index + target);

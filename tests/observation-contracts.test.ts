@@ -44,6 +44,33 @@ describe("evidence-linked observation contracts", () => {
 
   it.each([
     ["One", 1],
+    ["1", 1],
+    ["Three", 3],
+    ["3", 3],
+  ])("treats lone total %s as identification, not counting", (text, target) => {
+    const fixture = observationFixtures.find(item => item.name === "counting-aloud-with-total")!;
+    const record = structuredClone(fixture.record);
+    const scene = record.events.find(event => event.evidence?.type === "scene_displayed")!;
+    if (scene.evidence?.type === "scene_displayed") scene.evidence.targetQuantity = target;
+    const utterance = record.events.find(event => event.evidence?.type === "utterance")!;
+    if (utterance.evidence?.type === "utterance") utterance.evidence.text = text;
+    const proposal = structuredClone(fixture.proposal!) as ObserverProposal;
+    proposal.observation.targetQuantity = target;
+    proposal.observation.statedTotal = target;
+
+    expect(validateObserverProposal(proposal, record)).toMatchObject({
+      ok: false,
+      issues: expect.arrayContaining([
+        expect.objectContaining({ path: "observation.behavior", message: expect.stringContaining("count sequence") }),
+      ]),
+    });
+    proposal.observation.behavior = "quantity_identification";
+    proposal.observation.countSequenceObserved = false;
+    expect(validateObserverProposal(proposal, record).ok).toBe(true);
+  });
+
+  it.each([
+    ["One, two", 2],
     ["One, two, three, four, five", 5],
   ])("accepts a complete sequence for boundary target %i", (text, target) => {
     const fixture = observationFixtures.find(item => item.name === "counting-aloud-with-total")!;
