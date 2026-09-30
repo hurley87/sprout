@@ -5,7 +5,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
-const seed = { sceneIndex: 2, decision: "ADVANCE" as const, childUtterance: "Two" };
+const seed = { sceneIndex: 2, evaluatedSceneIndex: 1, decision: "ADVANCE" as const, childUtterance: "Two" };
 
 it("exports only useful microphone settings and excludes device identifiers", () => {
   const track = {

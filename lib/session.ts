@@ -25,11 +25,9 @@ import {
   PROMPT_VERSION,
   TIMING,
   type ReplacementSeed,
-  advanceContext,
-  evaluationUnavailableContext,
+  evaluationResultContext,
   sceneAt,
   sceneContext,
-  stayContext,
 } from "./lesson";
 import {
   TranscriptWindow,
@@ -114,9 +112,9 @@ type DeferredAdvance = {
 type DeferredStay = {
   sceneIndex: number;
   answerVersion: string;
+  evaluatedAnswer: string;
   transcriptRevision: number;
   correctionReadyAt: number;
-  content: string;
   decision: "STAY" | "UNAVAILABLE";
   vadGraceUntil?: number;
 };
@@ -1022,6 +1020,7 @@ export class LessonSession {
     const seed: ReplacementSeed = {
       sceneIndex: this.snapshot.sceneIndex,
       decision: gate.decision!,
+      evaluatedSceneIndex: gate.sceneIndex,
       childUtterance: gate.childUtterance,
     };
     this.log("replacement.triggered", {
@@ -1113,12 +1112,18 @@ export class LessonSession {
       this.deferredStay = null;
       this.displayedRelease = null;
       this.cancelNoTranscriptRecovery();
-      const content =
-        seed.decision === "ADVANCE"
-          ? advanceContext(this.scene)
-          : seed.decision === "STAY"
-            ? stayContext(this.scene)
-            : evaluationUnavailableContext(this.scene);
+      const content = evaluationResultContext({
+        evaluatedAnswer: seed.childUtterance,
+        evaluatedScene: sceneAt(seed.evaluatedSceneIndex),
+        meaning:
+          seed.decision === "ADVANCE"
+            ? "met_advancement_criterion"
+            : seed.decision === "STAY"
+              ? "did_not_meet_advancement_criterion"
+              : "unavailable",
+        action: seed.decision,
+        displayedScene: this.scene,
+      });
       this.releaseAnswerResponseGate(owner.gate, seed.decision, "replacement_source", () => {
         this.append("session.instructions.append", content);
         if (!this.ending)
@@ -1459,12 +1464,7 @@ export class LessonSession {
     if (advancing) {
       this.deferAdvance(sceneIndex, version);
     } else if (releasing)
-      this.deferStay(
-        sceneIndex,
-        version,
-        result.status === "unavailable" ? evaluationUnavailableContext(this.scene) : stayContext(this.scene),
-        result.status === "unavailable" ? "UNAVAILABLE" : "STAY",
-      );
+      this.deferStay(sceneIndex, version, utterance.text, result.status === "unavailable" ? "UNAVAILABLE" : "STAY");
   }
 
   private deferAdvance(sceneIndex: number, answerVersion: string) {
@@ -1553,14 +1553,19 @@ export class LessonSession {
     this.deferredAdvance = null;
   }
 
-  private deferStay(sceneIndex: number, answerVersion: string, content: string, decision: "STAY" | "UNAVAILABLE") {
+  private deferStay(
+    sceneIndex: number,
+    answerVersion: string,
+    evaluatedAnswer: string,
+    decision: "STAY" | "UNAVAILABLE",
+  ) {
     if (!this.answerResponseGate) return;
     this.deferredStay = {
       sceneIndex,
       answerVersion,
+      evaluatedAnswer,
       transcriptRevision: this.transcriptRevision,
       correctionReadyAt: Math.max(this.turnEndAt, this.lastDeltaAt) + CORRECTION_WINDOW_MS,
-      content,
       decision,
     };
     if (this.microphoneSpeaking && this.microphoneSpeechStartedAt !== undefined)
@@ -1631,7 +1636,16 @@ export class LessonSession {
       this.log("answer.vad_grace_expired", { decision: deferred.decision, answer_version: deferred.answerVersion });
     this.cancelNoTranscriptRecovery();
     this.releaseAnswerResponseGate(identity, deferred.decision, reason, () =>
-      this.append("session.instructions.append", deferred.content),
+      this.append(
+        "session.instructions.append",
+        evaluationResultContext({
+          evaluatedAnswer: deferred.evaluatedAnswer,
+          evaluatedScene: sceneAt(deferred.sceneIndex),
+          meaning: deferred.decision === "STAY" ? "did_not_meet_advancement_criterion" : "unavailable",
+          action: deferred.decision,
+          displayedScene: this.scene,
+        }),
+      ),
     );
   }
 
@@ -1808,7 +1822,16 @@ export class LessonSession {
       const reason = gate.outputQuietAt > deferred.displayedAt ? "output_transcript_quiet" : "scene_displayed";
       this.displayedRelease = null;
       this.releaseAnswerResponseGate(deferred.gateIdentity, "ADVANCE", reason, () =>
-        this.append("session.instructions.append", advanceContext(this.scene)),
+        this.append(
+          "session.instructions.append",
+          evaluationResultContext({
+            evaluatedAnswer: this.answerResponseGate?.childUtterance ?? "",
+            evaluatedScene: sceneAt(deferred.gateIdentity.sceneIndex),
+            meaning: "met_advancement_criterion",
+            action: "ADVANCE",
+            displayedScene: this.scene,
+          }),
+        ),
       );
     };
     const delay = releaseAt - Date.now();

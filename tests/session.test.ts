@@ -19,12 +19,9 @@ import {
   PROMPT_VERSION,
   SCENES,
   TIMING,
-  advanceContext,
-  evaluationUnavailableContext,
   objectName,
   sceneAt,
   sceneContext,
-  stayContext,
 } from "../lib/lesson";
 import {
   TranscriptWindow,
@@ -148,8 +145,8 @@ function expectAnswerResponseHeld(session: LessonSession, transport: Transport) 
   expect(vi.mocked(transport.setOutputBlocked)).toHaveBeenLastCalledWith(true);
   expect(vi.mocked(transport.setOutputBlocked)).not.toHaveBeenCalledWith(false);
   const sent = vi.mocked(transport.send).mock.calls.map(([command]) => command);
-  expect(sent).not.toContainEqual(expect.objectContaining({ content: advanceContext(sceneAt(1)) }));
-  expect(sent).not.toContainEqual(expect.objectContaining({ content: stayContext(sceneAt(0)) }));
+  expect(sent).not.toContainEqual(expect.objectContaining({ content: expect.stringContaining("committed ADVANCE") }));
+  expect(sent).not.toContainEqual(expect.objectContaining({ content: expect.stringContaining("committed STAY") }));
 }
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
@@ -373,7 +370,7 @@ describe("answer response gate", () => {
     expect(transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
     session.displayed(1);
     expect(vi.mocked(transport.send).mock.calls.map(([command]) => command)).toEqual([
-      expect.objectContaining({ content: advanceContext(sceneAt(1)) }),
+      expect.objectContaining({ content: expect.stringContaining("committed ADVANCE") }),
     ]);
     expect(transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
     expect(session.events.filter(event => event.type === "answer.response_gate_started")).toHaveLength(1);
@@ -1104,7 +1101,7 @@ describe("answer-gated scene advancement", () => {
     expect(session.snapshot.sceneIndex).toBe(1);
     expect(session.events.some(event => event.type === "answer.no_transcript")).toBe(false);
     const sent = vi.mocked(transport.send).mock.calls.map(([command]) => command);
-    expect(sent).toContainEqual(expect.objectContaining({ content: advanceContext(sceneAt(1)) }));
+    expect(sent).toContainEqual(expect.objectContaining({ content: expect.stringContaining("committed ADVANCE") }));
     expect(sent).not.toContainEqual(expect.objectContaining({ content: expect.stringContaining("say it again") }));
   });
   it("checks the scheduled scene even if cleanup is bypassed", async () => {
@@ -1744,7 +1741,9 @@ describe("answer-check turn synchronization", () => {
       if (reply) {
         await vi.advanceTimersByTimeAsync(Math.max(0, UTTERANCE_GAP_MS - SETTLE_MS - CORRECTION_WINDOW_MS));
       }
-      expect(sent(transport)).toEqual([expect.objectContaining({ content: advanceContext(sceneAt(1)) })]);
+      expect(sent(transport)).toEqual([
+        expect.objectContaining({ content: expect.stringContaining("committed ADVANCE") }),
+      ]);
     },
   );
 
@@ -1784,7 +1783,9 @@ describe("answer-check turn synchronization", () => {
     expect(transport.send).not.toHaveBeenCalled();
     expect(transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
     await vi.advanceTimersByTimeAsync(1);
-    expect(sent(transport)).toEqual([expect.objectContaining({ content: advanceContext(sceneAt(1)) })]);
+    expect(sent(transport)).toEqual([
+      expect.objectContaining({ content: expect.stringContaining("committed ADVANCE") }),
+    ]);
     expect(vi.mocked(transport.send).mock.invocationCallOrder[0]).toBeLessThan(
       vi.mocked(transport.setOutputBlocked).mock.invocationCallOrder.at(-1)!,
     );
@@ -1830,7 +1831,12 @@ describe("answer-check turn synchronization", () => {
       expect(session.snapshot.sceneIndex).toBe(0);
       expect(session.events.filter(event => event.type === "advance.released")).toHaveLength(0);
       expect(
-        sent(transport).filter(command => "content" in command && command.content === advanceContext(sceneAt(1))),
+        sent(transport).filter(
+          command =>
+            "content" in command &&
+            typeof command.content === "string" &&
+            command.content.includes("committed ADVANCE"),
+        ),
       ).toHaveLength(0);
     },
   );
@@ -1855,7 +1861,10 @@ describe("answer-check turn synchronization", () => {
     expect(session.snapshot.sceneIndex).toBe(1);
     session.displayed(1);
     expect(
-      sent(transport).filter(command => "content" in command && command.content === advanceContext(sceneAt(1))),
+      sent(transport).filter(
+        command =>
+          "content" in command && typeof command.content === "string" && command.content.includes("committed ADVANCE"),
+      ),
     ).toHaveLength(1);
   });
 
@@ -1893,7 +1902,10 @@ describe("answer-check turn synchronization", () => {
     expect(transport.send).not.toHaveBeenCalled();
     session.displayed(1);
     expect(sent(transport)).toEqual([
-      expect.objectContaining({ type: "session.instructions.append", content: advanceContext(sceneAt(1)) }),
+      expect.objectContaining({
+        type: "session.instructions.append",
+        content: expect.stringContaining("committed ADVANCE"),
+      }),
     ]);
     expect(released(transport)).toHaveLength(0);
   });
@@ -1919,7 +1931,9 @@ describe("answer-check turn synchronization", () => {
     expect(transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
 
     session.displayed(1);
-    expect(sent(transport)).toEqual([expect.objectContaining({ content: advanceContext(sceneAt(1)) })]);
+    expect(sent(transport)).toEqual([
+      expect.objectContaining({ content: expect.stringContaining("committed ADVANCE") }),
+    ]);
     expect(transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
 
     deliver(session, speech("Three", 6000));
@@ -1950,7 +1964,9 @@ describe("answer-check turn synchronization", () => {
     expect(sent(transport)).toHaveLength(0);
 
     await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS);
-    expect(sent(transport)).toEqual([expect.objectContaining({ content: advanceContext(sceneAt(1)) })]);
+    expect(sent(transport)).toEqual([
+      expect.objectContaining({ content: expect.stringContaining("committed ADVANCE") }),
+    ]);
     expect(transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
     expect(session.events.filter(event => event.type === "answer.response_gate_released")).toHaveLength(1);
   });
@@ -1964,7 +1980,9 @@ describe("answer-check turn synchronization", () => {
     expect(ordinary.transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
     expect(ordinary.session.events.filter(event => event.type === "answer.response_gate_cancelled")).toHaveLength(0);
     ordinary.session.displayed(1);
-    expect(sent(ordinary.transport)).toContainEqual(expect.objectContaining({ content: advanceContext(sceneAt(1)) }));
+    expect(sent(ordinary.transport)).toContainEqual(
+      expect.objectContaining({ content: expect.stringContaining("committed ADVANCE") }),
+    );
     expect(ordinary.transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
 
     const stopping = setup(true, answering(CONFIDENT));
@@ -1977,7 +1995,7 @@ describe("answer-check turn synchronization", () => {
     expect(stopping.transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
     stopping.session.displayed(1);
     expect(sent(stopping.transport)).not.toContainEqual(
-      expect.objectContaining({ content: advanceContext(sceneAt(1)) }),
+      expect.objectContaining({ content: expect.stringContaining("committed ADVANCE") }),
     );
   });
   it("waits for hidden output to become quiet after ADVANCE and display before context and unblock", async () => {
@@ -1996,7 +2014,10 @@ describe("answer-check turn synchronization", () => {
     expect(transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
     await vi.advanceTimersByTimeAsync(1);
     expect(sent(transport)).toEqual([
-      expect.objectContaining({ type: "session.instructions.append", content: advanceContext(sceneAt(1)) }),
+      expect.objectContaining({
+        type: "session.instructions.append",
+        content: expect.stringContaining("committed ADVANCE"),
+      }),
     ]);
     expect(transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
     expect(vi.mocked(transport.send).mock.invocationCallOrder[0]).toBeLessThan(
@@ -2019,10 +2040,11 @@ describe("answer-check turn synchronization", () => {
       expect.objectContaining({
         type: "session.instructions.append",
         delegation_id: null,
-        content: stayContext(sceneAt(0)),
+        content: expect.stringContaining("committed STAY"),
       }),
     ]);
-    expect(stayContext(sceneAt(0))).toContain("still shows 1 duck");
+    const outcome = sent(transport)[0];
+    expect("content" in outcome ? outcome.content : "").toContain("currently displayed: 1 duck");
     expect(transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
     expect(vi.mocked(transport.send).mock.invocationCallOrder[0]).toBeLessThan(
       vi.mocked(transport.setOutputBlocked).mock.invocationCallOrder[1],
@@ -2050,12 +2072,12 @@ describe("answer-check turn synchronization", () => {
       expect(sent(transport)).toEqual([
         expect.objectContaining({
           type: "session.instructions.append",
-          content: evaluationUnavailableContext(sceneAt(0)),
+          content: expect.stringContaining("evaluation was unavailable"),
         }),
       ]);
       expect(released(transport)).toHaveLength(1);
-      expect(released(transport)[0]).toMatchObject({ content: expect.stringContaining("could not verify") });
-      expect(released(transport)[0]).not.toMatchObject({ content: stayContext(sceneAt(0)) });
+      expect(released(transport)[0]).toMatchObject({ content: expect.stringContaining("evaluation was unavailable") });
+      expect(released(transport)[0]).not.toMatchObject({ content: expect.stringContaining("committed STAY") });
       expect(transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
       expect(vi.mocked(transport.send).mock.invocationCallOrder[0]).toBeLessThan(
         vi.mocked(transport.setOutputBlocked).mock.invocationCallOrder[1],
@@ -2352,7 +2374,9 @@ describe("response gate media investigation and bounded recovery", () => {
     const started = session.events.find(event => event.type === "answer.response_gate_started")!.at;
     await vi.advanceTimersByTimeAsync(session.createdAt + started + RESPONSE_GATE_RECOVERY_MS - Date.now());
     expect(session.snapshot.reason).toBe("connection_failure");
-    expect(transport.send).not.toHaveBeenCalledWith(expect.objectContaining({ content: stayContext(sceneAt(0)) }));
+    expect(transport.send).not.toHaveBeenCalledWith(
+      expect.objectContaining({ content: expect.stringContaining("committed STAY") }),
+    );
     expect(session.snapshot.sceneIndex).toBe(0);
   });
 

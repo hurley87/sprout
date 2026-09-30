@@ -1,12 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LessonSession, RESPONSE_GATE_RECOVERY_MS, STALE_OUTPUT_REPLACEMENT_MS, type Transport } from "../lib/session";
-import {
-  advanceContext,
-  stayContext,
-  evaluationUnavailableContext,
-  sceneAt,
-  type ReplacementSeed,
-} from "../lib/lesson";
+import { sceneAt, type ReplacementSeed } from "../lib/lesson";
 import type { AnswerResult } from "../lib/answer";
 import { UTTERANCE_GAP_MS } from "../lib/transcript";
 
@@ -104,21 +98,25 @@ it.each(["ADVANCE", "STAY", "UNAVAILABLE"] as const)(
     expect(f.transport.prepareReplacement).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(3);
     expect(f.transport.prepareReplacement).toHaveBeenCalledExactlyOnceWith(
-      { sceneIndex: decision === "ADVANCE" ? 1 : 0, decision, childUtterance: "One" },
+      { sceneIndex: decision === "ADVANCE" ? 1 : 0, evaluatedSceneIndex: 0, decision, childUtterance: "One" },
       expect.any(AbortSignal),
     );
     expect(f.transport.send).not.toHaveBeenCalled();
     f.ready();
     await Promise.resolve();
     await Promise.resolve();
-    const context =
-      decision === "ADVANCE"
-        ? advanceContext(sceneAt(1))
-        : decision === "STAY"
-          ? stayContext(sceneAt(0))
-          : evaluationUnavailableContext(sceneAt(0));
     expect(f.transport.send).toHaveBeenCalledOnce();
-    expect(f.transport.send).toHaveBeenCalledWith(expect.objectContaining({ content: context }));
+    expect(f.transport.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining(
+          decision === "ADVANCE"
+            ? "committed ADVANCE"
+            : decision === "STAY"
+              ? "committed STAY"
+              : "evaluation was unavailable",
+        ),
+      }),
+    );
     expect(f.order.slice(-4)).toEqual(["blocked", "promoted", "instruction", "permitted"]);
     expect(event(f.session, "replacement.promoted")).toHaveLength(1);
     expect(event(f.session, "answer.response_gate_released")[0].detail).toMatchObject({
@@ -326,7 +324,9 @@ describe("replacement child interruption after displayed ADVANCE", () => {
       reason: "output_transcript_quiet",
     });
     expect(f.transport.send).toHaveBeenCalledOnce();
-    expect(f.transport.send).toHaveBeenCalledWith(expect.objectContaining({ content: advanceContext(sceneAt(1)) }));
+    expect(f.transport.send).toHaveBeenCalledWith(
+      expect.objectContaining({ content: expect.stringContaining("committed ADVANCE") }),
+    );
   });
 
   it("new answer supersedes old ADVANCE gate on displayed scene without unblocking A", async () => {
@@ -437,7 +437,7 @@ describe.each(["STAY", "UNAVAILABLE"] as const)("%s stale-source cancellation", 
     await trigger();
     clearInterval(f.hidden);
     await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS + 1);
-    const expected = decision === "STAY" ? stayContext(sceneAt(0)) : evaluationUnavailableContext(sceneAt(0));
+    const expected = expect.stringContaining(decision === "STAY" ? "committed STAY" : "evaluation was unavailable");
     expect(f.transport.send).toHaveBeenCalledOnce();
     expect(f.transport.send).toHaveBeenCalledWith(expect.objectContaining({ content: expected }));
     expect(event(f.session, "answer.response_gate_released")[0].detail).toMatchObject({

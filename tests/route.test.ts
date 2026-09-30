@@ -89,14 +89,14 @@ describe("local Live session endpoint", () => {
   });
 });
 
-const seed = { sceneIndex: 2, decision: "ADVANCE" as const, childUtterance: "Two" };
+const seed = { sceneIndex: 2, evaluatedSceneIndex: 1, decision: "ADVANCE" as const, childUtterance: "Two" };
 it.each(["ADVANCE", "STAY", "UNAVAILABLE"] as const)(
   "seeds %s with only canonical config plus generated history",
   async decision => {
     vi.stubEnv("OPENAI_API_KEY", "synthetic-test-key");
     const fetch = vi.fn(async () => Response.json({ session: { id: "B" }, transport: { sdp: "answer" } }));
     vi.stubGlobal("fetch", fetch);
-    const replacement = { ...seed, decision };
+    const replacement = { ...seed, decision, evaluatedSceneIndex: decision === "ADVANCE" ? 1 : 2 };
     expect((await POST(request({ sdp: "v=0", replacement }))).status).toBe(201);
     const calls = fetch.mock.calls as unknown as [string, RequestInit][];
     expect(JSON.parse(calls[0][1].body as string)).toEqual({
@@ -126,6 +126,7 @@ it.each([
   { ...seed, sceneIndex: 1.5 },
   { ...seed, sceneIndex: "2" },
   { ...seed, sceneIndex: 0 },
+  { ...seed, evaluatedSceneIndex: 2 },
   { ...seed, decision: "RIGHT" },
   { ...seed, childUtterance: 1 },
   { ...seed, childUtterance: " " },
