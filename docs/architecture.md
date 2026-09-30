@@ -181,8 +181,7 @@ run status, qualification/failure, and proposals. Publication validates each pro
 backend records, writes the complete batch and ready state transactionally, and accepts an empty batch as
 a ready result. Invalid batches write nothing. The original proposal rows are immutable: retries after a
 failure do not overwrite them, and repeated successful publication returns the saved batch. Stale or
-expired attempt tokens cannot complete or fail the current attempt. Parent decisions remain a separate,
-unimplemented contract and no run state approves evidence.
+expired attempt tokens cannot complete or fail the current attempt. Parent decisions remain separate and no run state approves evidence.
 
 This local prototype supports at most 1,000 canonical events per analyzed session and at most 1,000
 proposals per publication. Claim checks for an overflow event and rejects the session rather than
@@ -200,7 +199,7 @@ known-incomplete ended records with recordings can be analyzed. Local Next.js an
 must be configured with the same high-entropy capability before enabling provider analysis; no secret
 is set by this change. The provider path, limits, API compatibility evidence and remaining
 alignment/suitability gates are documented in [Observer provider feasibility](observer-provider-feasibility.md).
-Parent review remains unimplemented.
+Parent review UI remains unimplemented; durable internal review operations are described in section 5.
 
 The browser persists only the latest durable session ID, after Convex creates the record. On reload, a
 read-only Convex client fetches that record directly; inspection does not create a session or restore
@@ -236,6 +235,59 @@ A failed Observer run leaves analysis failed and review pending; it cannot silen
 A review is final once the next plan has been generated from it. Anything missed is added in the next day's review rather than by regenerating plans.
 
 Do not generate the next daily plan while the preceding session's analysis or review remains incomplete, including after a technical retry. Show the blocking state to the parent.
+
+### Durable parent review (implemented backend; UI deferred)
+
+`parent_review.decide` is an internal mutation taking the session ID, analysis ID, actual
+`observerProposals` row ID, and a ParentDecision input without `reviewedAt`. It resolves the
+proposal, source exchange IDs and session-relative timestamp from the stored row and revalidates
+the complete canonical record against the analysis snapshot. Client-provided sources, analysis
+provenance, and review timestamps are not accepted. Decisions use backend wall-clock review time;
+proposals, transcripts, delivered scenes and original sources remain unchanged.
+
+`parentDecisions` records accepted, corrected or rejected decisions. `reviewedEvidence` stores only
+accepted/corrected observations with references to their decision, stored proposal, analysis,
+session and original sources/timestamp. Corrections require an explicit `parent_review` note.
+They may resolve recorded uncertainty or correct an interpretation (including removing mistaken
+support), but cannot introduce support event/recording identities or new exchange identities.
+Changed interpretation is attributed to `parent_review` on the evidence row. Newly reported help,
+pointing and touch-counting belong in the separately attributed `parentContext`, never in
+Observer-recorded support. The corrected observation's support describes recorded support;
+consumers must retain parentContext alongside it, and `not_established` never means independent.
+Runtime checks enforce claim shape, outcome consistency, prototype quantity bounds, source and
+text bounds, correction/rejection exclusivity and a nonempty rejection reason.
+
+`parent_review.complete` requires READY analysis and a decision for every stored proposal, and
+records repair level (`verified`, `light_correction`, `substantial_repair`) plus an optional note
+of at most 1,000 characters in `sessionReviews`. Verified requires unchanged acceptances.
+An empty READY batch requires `acknowledgeEmpty: true`, records acknowledgment and creates no
+evidence. Incomplete records can contribute valid completed exchanges; incomplete/failed analysis
+cannot be acknowledged as a successful empty review. All reads detect overflow beyond the existing
+1,000-event/proposal/decision/evidence bounds rather than completing a truncated batch.
+
+`parent_review.acceptAll` accepts the unchanged summary and completes review in one transaction,
+reusing existing unchanged acceptances. Any correction, rejection or invalid stored proposal makes
+the whole operation fail without writes. Identical decision/completion retries return their
+existing IDs and preserve original timestamps; conflicting repeats fail. This slice provides no
+editing/replacement operation, even before planning. A future explicit revision operation may be
+added before plan consumption, but must replace decision/evidence consistently and enforce the
+finality boundary. No planner or plan-consumption marker exists yet; completion does not claim
+that a plan was generated. The documented rule that review becomes final after plan generation
+remains a requirement for the later planner slice.
+
+`parent_review.get` exposes stored row IDs, decisions and per-session completion for internal
+inspection. `parent_review.forPlanning` accepts 1–100 unique prerequisite session IDs and returns
+`{ blocked, reason, evidence }`. It returns no evidence at all if any supplied session lacks READY
+analysis or complete parent review, including technical retries; rejected/pending proposals never
+enter it. A changed canonical snapshot throws and therefore also blocks planning. The later planner
+must supply the full prerequisite session set and use this interface; this slice does not select
+experiment history or infer profiles, mastery or adaptations.
+
+All new operations are internal, with no public approval RPC or Next route in this slice. A later
+parent UI bridge must follow the existing loopback route and backend server capability pattern;
+it must never expose these mutations as unguarded public writes. Local generated API typing adds
+only this module; no Convex CLI or deployment is needed for the local tests. Live schema deployment,
+provider suitability and parent UI behavior remain unverified.
 
 ## 6. Planning rules
 

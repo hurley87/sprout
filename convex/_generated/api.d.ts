@@ -10,6 +10,7 @@
 
 import type * as observer from "../observer.js";
 import type * as observer_action from "../observer_action.js";
+import type * as parent_review from "../parent_review.js";
 import type * as sessions from "../sessions.js";
 
 import type {
@@ -21,6 +22,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   observer: typeof observer;
   observer_action: typeof observer_action;
+  parent_review: typeof parent_review;
   sessions: typeof sessions;
 }>;
 

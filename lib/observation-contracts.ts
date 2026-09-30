@@ -92,7 +92,10 @@ const nonnegativeInteger = (value: unknown): value is number =>
 const nonnegativeFinite = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value) && value >= 0;
 const stringArray = (value: unknown, choices: readonly string[]) =>
-  Array.isArray(value) && value.every(item => oneOf(item, choices));
+  Array.isArray(value) &&
+  value.length <= choices.length &&
+  new Set(value).size === value.length &&
+  value.every(item => oneOf(item, choices));
 const spokenNumbers: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5 };
 function spokenNumberTokens(text: string) {
   return (
@@ -120,6 +123,24 @@ function validateClaim(value: unknown, path: string, issues: ValidationIssue[]):
     issues.push({ path, message: "must be an object" });
     return false;
   }
+  const allowed = [
+    "behavior",
+    "outcome",
+    "speakerAttribution",
+    "statedTotal",
+    "countSequenceObserved",
+    "targetQuantity",
+    "description",
+    "support",
+    "uncertaintyReasons",
+  ];
+  if (Object.keys(value).some(key => !allowed.includes(key)))
+    issues.push({ path, message: "unexpected observation fields" });
+  if (
+    record(value.support) &&
+    Object.keys(value.support).some(key => !["status", "kinds", "sourceEventIds", "recordingSourceIds"].includes(key))
+  )
+    issues.push({ path, message: "unexpected support fields" });
   const valid =
     oneOf(value.behavior, behaviorValues) &&
     oneOf(value.outcome, outcomeValues) &&
@@ -129,13 +150,17 @@ function validateClaim(value: unknown, path: string, issues: ValidationIssue[]):
       ? value.behavior === "uncertain_exchange"
       : nonnegativeInteger(value.targetQuantity) && value.targetQuantity >= 1) &&
     nonEmpty(value.description) &&
+    value.description.length <= 2000 &&
     record(value.support) &&
     oneOf(value.support.status, ["recorded", "not_established"] as const) &&
     stringArray(value.support.kinds, supportValues) &&
     Array.isArray(value.support.sourceEventIds) &&
-    value.support.sourceEventIds.every(nonEmpty) &&
+    value.support.sourceEventIds.length <= 100 &&
+    value.support.sourceEventIds.every(item => nonEmpty(item) && item.length <= 200) &&
     (value.support.recordingSourceIds === undefined ||
-      (Array.isArray(value.support.recordingSourceIds) && value.support.recordingSourceIds.every(nonEmpty))) &&
+      (Array.isArray(value.support.recordingSourceIds) &&
+        value.support.recordingSourceIds.length <= 100 &&
+        value.support.recordingSourceIds.every(item => nonEmpty(item) && item.length <= 200))) &&
     stringArray(value.uncertaintyReasons, uncertaintyValues) &&
     (value.statedTotal === undefined || nonnegativeInteger(value.statedTotal));
   if (!valid) {
@@ -158,6 +183,15 @@ function validateClaim(value: unknown, path: string, issues: ValidationIssue[]):
       issues.push({ path, message: "counting aloud requires an observed count sequence and total" });
     }
   }
+  if (claim.targetQuantity !== undefined && claim.targetQuantity > 5)
+    issues.push({ path, message: "target quantity exceeds prototype scope" });
+  if (claim.statedTotal !== undefined && claim.statedTotal > 100)
+    issues.push({ path, message: "stated total exceeds review bounds" });
+  if (
+    (claim.outcome === "correct" && claim.statedTotal !== claim.targetQuantity) ||
+    (claim.outcome === "incorrect" && claim.statedTotal === claim.targetQuantity)
+  )
+    issues.push({ path, message: "outcome must agree with stated total and target" });
   const recordingSourceIds = claim.support.recordingSourceIds ?? [];
   if (
     claim.support.status === "not_established" &&
@@ -505,7 +539,11 @@ export function validateParentDecision(input: unknown): ValidationResult<ParentD
   const issues: ValidationIssue[] = [];
   if (!record(input)) return { ok: false, issues: [{ path: "$", message: "must be an object" }] };
   if (input.kind !== "parent_decision") issues.push({ path: "kind", message: "must be parent_decision" });
-  if (!nonEmpty(input.proposalId)) issues.push({ path: "proposalId", message: "must link to the original proposal" });
+  if (!nonEmpty(input.proposalId) || input.proposalId.length > 200)
+    issues.push({ path: "proposalId", message: "must link to the original proposal within 200 characters" });
+  const allowed = ["kind", "proposalId", "decision", "reviewedAt", "correction", "rejectionReason", "parentContext"];
+  if (Object.keys(input).some(key => !allowed.includes(key)))
+    issues.push({ path: "$", message: "unexpected decision fields" });
   if (!oneOf(input.decision, ["accepted", "corrected", "rejected"] as const)) {
     issues.push({ path: "decision", message: "must be accepted, corrected, or rejected" });
   }
@@ -515,17 +553,23 @@ export function validateParentDecision(input: unknown): ValidationResult<ParentD
   if (input.decision === "corrected") validateClaim(input.correction, "correction", issues);
   else if (input.correction !== undefined)
     issues.push({ path: "correction", message: "is only valid for a corrected decision" });
-  if (input.decision === "rejected" && !nonEmpty(input.rejectionReason)) {
+  if (input.decision === "rejected" && (!nonEmpty(input.rejectionReason) || input.rejectionReason.length > 1000)) {
     issues.push({ path: "rejectionReason", message: "a rejected proposal needs a reason" });
   }
   if (input.decision !== "rejected" && input.rejectionReason !== undefined) {
     issues.push({ path: "rejectionReason", message: "is only valid for a rejected decision" });
   }
+  if (input.parentContext !== undefined && input.decision !== "corrected")
+    issues.push({ path: "parentContext", message: "added context requires a corrected decision" });
   if (input.parentContext !== undefined) {
     if (
       !record(input.parentContext) ||
       input.parentContext.provenance !== "parent_review" ||
-      !nonEmpty(input.parentContext.note)
+      !nonEmpty(input.parentContext.note) ||
+      input.parentContext.note.length > 1000 ||
+      Object.keys(input.parentContext).some(
+        key => !["provenance", "note", "assistance", "pointingOrTouchCounting"].includes(key),
+      )
     ) {
       issues.push({
         path: "parentContext",
