@@ -33,6 +33,13 @@ shown while the lesson continues. Sprout playback attribution and support captur
 Ended records are analyzed after the recording attachment is durably committed. The internal Convex
 action needs server-side `OPENAI_API_KEY`; `OPENAI_OBSERVER_MODEL` optionally selects a text model,
 defaulting to the unvalidated `gpt-6-astra` evaluation candidate. Never use a `NEXT_PUBLIC_*` key.
+Provider analysis is initiated through a loopback-guarded Next.js route and a backend action that requires the matching
+server-only `OBSERVER_SERVER_CAPABILITY` in both the Next.js and Convex Node runtimes. Public audio attachment only
+persists the recording; after durable assembly, the recorder notifies that route to start automatic analysis. If this
+notification fails, the saved record remains available for explicit retry. Configure the same high-entropy capability
+on both servers before enabling analysis; never set it in a `NEXT_PUBLIC_*` variable. No capability is configured or
+deployed by this repository change.
+
 The local inspector offers a loopback-guarded retry for failed, expired, or not-yet-requested saved-record analysis after reload.
 See [Observer provider feasibility](docs/observer-provider-feasibility.md) for limits, evidence rules,
 and the remaining synthetic evaluation gate. No live-provider suitability result is claimed.

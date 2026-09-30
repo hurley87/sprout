@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { endingReason, evidence, timeline } from "./schema";
 import { makeFunctionReference, type FunctionReference } from "convex/server";
@@ -221,22 +221,18 @@ export const attachRecording = mutation({
       recording: { storageId, mimeType, startOffsetMs, durationMs },
       ...(session.recordStatus === "pending" ? { recordStatus: "complete" as const } : {}),
     });
-    // Schedule from the transaction that durably attaches the last required input.
-    await ctx.scheduler.runAfter(
-      0,
-      makeFunctionReference("observer_action:analyze") as unknown as FunctionReference<"action", "internal">,
-      { sessionId, expectedAttempt: 1 },
-    );
     return sessionId;
   },
 });
 
-export const retryObserver = mutation({
+/** Server-capability-gated entry point uses this internal mutation to schedule analysis. */
+export const scheduleObserver = internalMutation({
   args: { sessionId: v.id("sessions") },
+  returns: v.string(),
   handler: async (ctx, { sessionId }) => {
     const session = await ctx.db.get(sessionId);
     if (!session || session.state !== "ended" || session.recordStatus === "pending" || !session.recording)
-      throw new Error("Observer retry requires an ended, assembled saved recording");
+      throw new Error("Observer analysis requires an ended, assembled saved recording");
     const analysis = await ctx.db
       .query("observerAnalyses")
       .withIndex("by_session", q => q.eq("sessionId", sessionId))

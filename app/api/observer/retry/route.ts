@@ -13,11 +13,14 @@ export async function POST(request: Request) {
   )
     return Response.json({ error: "Invalid request." }, { status: 400 });
   const url = process.env.NEXT_PUBLIC_CONVEX_URL;
-  if (!url) return Response.json({ error: "Session backend is unavailable." }, { status: 503 });
+  const capability = process.env.OBSERVER_SERVER_CAPABILITY;
+  if (!url || !capability)
+    return Response.json({ error: "Observer server configuration is unavailable." }, { status: 503 });
   try {
     const client = new ConvexHttpClient(url);
-    const status = await client.mutation(api.sessions.retryObserver, {
+    const status = await client.action(api.observer_action.requestAnalysis, {
       sessionId: (body.value as { sessionId: string }).sessionId as never,
+      capability,
     });
     return Response.json({ status });
   } catch {

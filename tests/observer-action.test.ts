@@ -11,6 +11,7 @@ afterEach(() => {
 
 it("claims a saved partial record, analyzes mocked recording bytes, validates and atomically publishes once", async () => {
   vi.stubEnv("OPENAI_API_KEY", "synthetic-test-key");
+  vi.stubEnv("OBSERVER_SERVER_CAPABILITY", "synthetic-server-capability");
   const t = convexTest(schema, import.meta.glob("../convex/**/*.ts"));
   const { sessionId, storageId, responseId, sceneId } = await t.run(async ctx => {
     const storageId = await ctx.storage.store(new Blob(["synthetic recording"]));
@@ -95,7 +96,19 @@ it("claims a saved partial record, analyzes mocked recording bytes, validates an
     durationMs: 1000,
   });
   expect((await t.query(api.sessions.getRecord, { sessionId }))?.session.recordStatus).toBe("incomplete");
+  // Public attachment persists audio but cannot schedule analysis. Direct calls without the
+  // server capability fail before scheduling or reaching any provider mock.
   vi.useFakeTimers();
+  await t.finishAllScheduledFunctions(() => vi.advanceTimersToNextTimer());
+  expect(fakeFetch).not.toHaveBeenCalled();
+  await expect(
+    t.action(api.observer_action.requestAnalysis, { sessionId, capability: "wrong-capability" }),
+  ).rejects.toThrow("authorization failed");
+  expect(fakeFetch).not.toHaveBeenCalled();
+  await t.action(api.observer_action.requestAnalysis, {
+    sessionId,
+    capability: "synthetic-server-capability",
+  });
   await t.finishAllScheduledFunctions(() => vi.advanceTimersToNextTimer());
   vi.useRealTimers();
   expect(fakeFetch).toHaveBeenCalledTimes(3);

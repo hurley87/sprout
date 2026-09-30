@@ -187,13 +187,19 @@ This local prototype supports at most 1,000 canonical events per analyzed sessio
 proposals per publication. Claim checks for an overflow event and rejects the session rather than
 snapshotting a partial record. Publication rejects oversized fresh batches before writing; proposal
 reads and successful retries return the complete saved batch, while pre-existing rows beyond the limit
-produce an explicit error. Attaching the saved recording schedules an internal analysis action in the
-same durable mutation. Duplicate triggers and active/ready runs reuse lifecycle state before any provider
-call. A narrow loopback-guarded retry route can reschedule a failed run, recover an expired owner, or start
-analysis for an older saved recording after a reload. Pending records remain ineligible; complete and
-known-incomplete ended records with recordings can be analyzed. The provider path, limits, API compatibility evidence and remaining alignment/suitability
-gates are documented in [Observer provider feasibility](observer-provider-feasibility.md). Parent review
-remains unimplemented.
+produce an explicit error. Public recording attachment persists audio without scheduling provider work.
+After durable assembly, the recorder notifies a loopback-guarded Next.js route. That route invokes a
+public Node action which checks the server-only `OBSERVER_SERVER_CAPABILITY` against Convex runtime
+configuration before an internal mutation schedules analysis. Direct public attachment and retry calls
+cannot schedule analysis without that capability. Duplicate triggers and active/ready runs reuse
+lifecycle state before any provider call. The same route can reschedule a failed run, recover an expired
+owner, or start analysis for an older saved recording after a reload. If automatic notification fails,
+the saved record remains available for retry. Pending records remain ineligible; complete and
+known-incomplete ended records with recordings can be analyzed. Local Next.js and Convex Node runtimes
+must be configured with the same high-entropy capability before enabling provider analysis; no secret
+is set by this change. The provider path, limits, API compatibility evidence and remaining
+alignment/suitability gates are documented in [Observer provider feasibility](observer-provider-feasibility.md).
+Parent review remains unimplemented.
 
 Record what was actually displayed, not just a requested visual action. Distinguish a spoken or interrupted prompt from text generated but never played. If delivery or scene context cannot be established, the Observer must qualify or omit the conclusion.
 

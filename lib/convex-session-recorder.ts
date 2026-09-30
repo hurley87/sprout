@@ -89,6 +89,17 @@ export class ConvexSessionRecorder implements SessionRecorder, SessionRecordRead
       startOffsetMs: recording.startOffsetMs,
       durationMs: recording.durationMs,
     });
+    // Audio is durable now. Notify the loopback server to initiate analysis; failure leaves
+    // the saved record available for the parent's explicit retry path.
+    try {
+      await fetch("/api/observer/retry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId }),
+      });
+    } catch {
+      // Provider work is recoverable from this durable attachment through the retry route.
+    }
   }
   async activate(startedAt?: number) {
     const { client, sessionId } = this.connection;

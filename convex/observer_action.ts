@@ -1,7 +1,7 @@
 "use node";
 
 import { v } from "convex/values";
-import { internalAction } from "./_generated/server";
+import { action, internalAction } from "./_generated/server";
 import { makeFunctionReference, type FunctionReference } from "convex/server";
 import {
   analyzeSavedRecording,
@@ -11,6 +11,20 @@ import {
   PROVIDER_TIMEOUT_MS,
 } from "../lib/observer-provider";
 import type { Id } from "./_generated/dataModel";
+
+/** Public RPC surface; the capability is checked inside this backend action before any scheduling. */
+export const requestAnalysis = action({
+  args: { sessionId: v.id("sessions"), capability: v.string() },
+  returns: v.string(),
+  handler: async (ctx, { sessionId, capability }): Promise<string> => {
+    const expected = process.env.OBSERVER_SERVER_CAPABILITY;
+    if (!expected || capability !== expected) throw new Error("Observer server authorization failed");
+    return await ctx.runMutation(
+      makeFunctionReference("sessions:scheduleObserver") as unknown as FunctionReference<"mutation", "internal">,
+      { sessionId },
+    );
+  },
+});
 
 export const analyze = internalAction({
   args: { sessionId: v.id("sessions"), expectedAttempt: v.optional(v.number()) },

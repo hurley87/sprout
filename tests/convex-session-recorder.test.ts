@@ -55,6 +55,11 @@ it("requests a URL, POSTs the Blob with actual MIME, and attaches to the same se
     startOffsetMs: 0,
     durationMs: 789,
   });
+  expect(upload).toHaveBeenNthCalledWith(2, "/api/observer/retry", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sessionId: "session-test" }),
+  });
 });
 it.each(["url", "upload", "id", "attach"])("propagates %s failure to the persistence queue", async failure => {
   const { recorder, upload } = await setup();
