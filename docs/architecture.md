@@ -159,6 +159,28 @@ Parent-reported assistance, pointing, and touch-counting retain separate `parent
 cannot be inferred from the recording source or rewrite the original proposal. Synthetic fixtures are
 contract examples, not delivered evidence or provider results.
 
+### Durable analysis lifecycle (implemented)
+
+`observerAnalyses` stores one run per session, independently of live session state and record integrity.
+The run moves through pending, running, ready, or failed; attempts claim it atomically for a five-minute
+lease and may recover an expired owner up to five total attempts. Active sessions and ended records still
+marked pending are ineligible. An incomplete record may be analyzed, but its run carries an explicit
+qualification. The claim snapshots canonical ordered event content, recording identity/metadata, and
+record integrity. Publication re-fetches those inputs and refuses a changed snapshot.
+
+Backend-only claim, failure, and publication operations own attempt tokens. The read query exposes only
+run status, qualification/failure, and proposals. Publication validates each proposal against canonical
+backend records, writes the complete batch and ready state transactionally, and accepts an empty batch as
+a ready result. Invalid batches write nothing. The original proposal rows are immutable: retries after a
+failure do not overwrite them, and repeated successful publication returns the saved batch. Stale or
+expired attempt tokens cannot complete or fail the current attempt. Parent decisions remain a separate,
+unimplemented contract and no run state approves evidence.
+
+This local prototype bounds an input snapshot to 1,000 events and proposal reads/writes to 1,000 rows;
+exceeding that practical session size is a limitation to revisit before larger sessions. A lease supports
+manual/backend retry after interruption; automatic scheduling, provider integration, and parent review
+are not part of this slice. Transcript timestamps and model suitability remain feasibility gates.
+
 Record what was actually displayed, not just a requested visual action. Distinguish a spoken or interrupted prompt from text generated but never played. If delivery or scene context cannot be established, the Observer must qualify or omit the conclusion.
 
 Support descriptions can include no help observed, a light prompt, a choice, modeling/counting together, parent-reported assistance, or unknown. A fresh example after teaching retains the context of earlier help.
