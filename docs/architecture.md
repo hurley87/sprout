@@ -140,8 +140,13 @@ already committed evidence survives. There is no unload durability guarantee in 
 
 `lib/observation-contracts.ts` defines runtime-validated Observer proposals against persisted
 session-event IDs, and a separate parent-decision shape for later review work. Proposal timestamps use
-the session-relative `atMs` clock. Concrete performance claims must link both the response and the
-actually displayed scene. A correct total without a spoken count is quantity identification; counting
+the session-relative `atMs` clock. For concrete performance claims, validation uses the utterance's
+`startMs`/`endMs` interval, not its event `atMs` (which is recorded when the completed utterance is
+flushed). The cited scene must be the uniquely timestamped scene already displayed before speech
+starts, with no scene transition during the interval. Missing speech bounds, equal-time ordering, or a
+transition during speech requires an uncertain claim or omission. These checks establish consistency
+with recorded timestamps; they cannot prove acoustic alignment or what was perceptually visible. A
+correct total without a spoken count is quantity identification; counting
 aloud requires an explicit count sequence and total. Missing support evidence means support is not
 established, not that the response was independent. Parent-added assistance or pointing/touch-counting
 context belongs to a separately attributed parent decision and cannot rewrite the proposal. Synthetic

@@ -66,6 +66,89 @@ describe("evidence-linked observation contracts", () => {
     expect(validateObserverProposal(mislabeled, fixture.record).ok).toBe(false);
   });
 
+  it("binds concrete claims to the scene displayed throughout the speech interval", () => {
+    const fixture = observationFixtures.find(item => item.name === "correct-total-without-spoken-count")!;
+    const futureScene = structuredClone(fixture.record);
+    const citedScene = futureScene.events.find(event => event.evidence?.type === "scene_displayed")!;
+    citedScene.atMs = 5000;
+    expect(validateObserverProposal(fixture.proposal, futureScene).ok).toBe(false);
+
+    const replacedScene = structuredClone(fixture.record);
+    replacedScene.events.push({
+      _id: "sessionEvents_replacement_scene",
+      atMs: 1500,
+      evidence: {
+        type: "scene_displayed",
+        sceneId: "ducks-4",
+        targetQuantity: 4,
+        items: [{ emoji: "🦆", label: "duck" }],
+        arrangement: "row",
+      },
+    });
+    expect(validateObserverProposal(fixture.proposal, replacedScene).ok).toBe(false);
+
+    const duringSpeech = structuredClone(fixture.record);
+    duringSpeech.events.push({
+      _id: "sessionEvents_mid_speech_scene",
+      atMs: 1800,
+      evidence: {
+        type: "scene_displayed",
+        sceneId: "ducks-4",
+        targetQuantity: 4,
+        items: [{ emoji: "🦆", label: "duck" }],
+        arrangement: "row",
+      },
+    });
+    expect(validateObserverProposal(fixture.proposal, duringSpeech).ok).toBe(false);
+    expect(validateObserverProposal(fixture.proposal, fixture.record).ok).toBe(true);
+
+    const tiedScenes = structuredClone(fixture.record);
+    const tiedScene = structuredClone(tiedScenes.events.find(event => event.evidence?.type === "scene_displayed")!);
+    tiedScene._id = "sessionEvents_tied_scene";
+    tiedScenes.events.push(tiedScene);
+    expect(validateObserverProposal(fixture.proposal, tiedScenes).ok).toBe(false);
+  });
+
+  it("requires uncertainty when speech timing is missing or scene timing is ambiguous", () => {
+    const fixture = observationFixtures.find(item => item.name === "correct-total-without-spoken-count")!;
+    const missingTiming = structuredClone(fixture.record);
+    const response = missingTiming.events.find(event => event.evidence?.type === "utterance")!;
+    if (response.evidence?.type === "utterance") {
+      delete response.evidence.startMs;
+      delete response.evidence.endMs;
+    }
+    expect(validateObserverProposal(fixture.proposal, missingTiming).ok).toBe(false);
+
+    const uncertain = structuredClone(fixture.proposal!) as ObserverProposal;
+    uncertain.observation = {
+      behavior: "uncertain_exchange",
+      outcome: "uncertain",
+      speakerAttribution: "child_or_nearby_speaker",
+      countSequenceObserved: false,
+      description: "The scene context changed during speech.",
+      support: { status: "not_established", kinds: [], sourceEventIds: [] },
+      uncertaintyReasons: ["conflicting_context"],
+    };
+    uncertain.observation.uncertaintyReasons = ["missing_scene_context"];
+    expect(validateObserverProposal(uncertain, missingTiming).ok).toBe(true);
+    uncertain.observation.uncertaintyReasons = ["conflicting_context"];
+    const changingScene = structuredClone(fixture.record);
+    changingScene.events.push({
+      _id: "sessionEvents_mid_speech_scene",
+      atMs: 1800,
+      evidence: {
+        type: "scene_displayed",
+        sceneId: "ducks-4",
+        targetQuantity: 4,
+        items: [{ emoji: "🦆", label: "duck" }],
+        arrangement: "row",
+      },
+    });
+    expect(validateObserverProposal(uncertain, changingScene).ok).toBe(true);
+    uncertain.observation.uncertaintyReasons = ["ambiguous_speaker"];
+    expect(validateObserverProposal(uncertain, changingScene).ok).toBe(false);
+  });
+
   it("rejects a count claim without a count sequence and support without provenance", () => {
     const fixture = observationFixtures.find(item => item.name === "counting-aloud-with-total")!;
     const noCount = structuredClone(fixture.proposal!) as ObserverProposal;

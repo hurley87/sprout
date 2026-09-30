@@ -218,6 +218,7 @@ export function validateObserverProposal(
   const sceneSource = normalizedSources.find(source => source.role === "scene");
   const responseEvent = responseSource && sourceById.get(responseSource.eventId);
   const sceneEvent = sceneSource && sourceById.get(sceneSource.eventId);
+  const displayedScenes = sourceRecord.events.filter(event => event.evidence?.type === "scene_displayed");
   if (responseEvent && responseEvent.atMs !== input.exchangeAtMs) {
     issues.push({
       path: "exchangeAtMs",
@@ -225,6 +226,43 @@ export function validateObserverProposal(
     });
   }
   if (responseEvent?.evidence?.type === "utterance" && observation) {
+    const { startMs, endMs } = responseEvent.evidence;
+    const hasSpeechInterval =
+      typeof startMs === "number" &&
+      Number.isFinite(startMs) &&
+      startMs >= 0 &&
+      typeof endMs === "number" &&
+      Number.isFinite(endMs) &&
+      endMs >= startMs;
+    const scenesBeforeSpeech = hasSpeechInterval ? displayedScenes.filter(event => event.atMs < startMs) : [];
+    const latestPriorSceneAt = Math.max(...scenesBeforeSpeech.map(event => event.atMs), -1);
+    const latestPriorScenes = scenesBeforeSpeech.filter(event => event.atMs === latestPriorSceneAt);
+    const transitionsDuringSpeech = hasSpeechInterval
+      ? displayedScenes.some(event => event.atMs >= startMs && event.atMs <= endMs)
+      : false;
+    const citedSceneIsCurrent = latestPriorScenes.length === 1 && latestPriorScenes[0]._id === sceneEvent?._id;
+    if (observation.behavior !== "uncertain_exchange") {
+      if (!hasSpeechInterval) {
+        issues.push({
+          path: "sources",
+          message: "a concrete behavior requires trustworthy speech start and end timestamps",
+        });
+      } else if (transitionsDuringSpeech || !citedSceneIsCurrent) {
+        issues.push({
+          path: "sources",
+          message: "a concrete behavior requires the uniquely displayed scene throughout the response interval",
+        });
+      }
+    } else if (
+      (!hasSpeechInterval || transitionsDuringSpeech || !citedSceneIsCurrent) &&
+      !observation.uncertaintyReasons.includes("missing_scene_context") &&
+      !observation.uncertaintyReasons.includes("conflicting_context")
+    ) {
+      issues.push({
+        path: "observation.uncertaintyReasons",
+        message: "missing or ambiguous scene timing must be recorded as uncertainty",
+      });
+    }
     if (responseEvent.evidence.speaker === "sprout") {
       issues.push({ path: "sources", message: "generated Sprout utterances are not learner response evidence" });
     } else if (observation.speakerAttribution !== responseEvent.evidence.speaker) {
