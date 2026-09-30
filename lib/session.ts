@@ -1219,6 +1219,17 @@ export class LessonSession {
         old_source_id: oldSourceId,
         remaining_old_output_quiet_ms: Math.max(0, owner.gate.outputQuietAt - Date.now()),
       });
+      // Provider timestamps restart for each source. Keep the committed A
+      // outcome above, but make every subsequent transcript identity and
+      // canonical utterance source-local to promoted B.
+      for (const speaker of ["child", "sprout"] as const) {
+        clearTimeout(this.utteranceTimers[speaker]);
+        delete this.utteranceTimers[speaker];
+        this.flushUtterance(speaker, "finalized");
+      }
+      this.childSpeech = new TranscriptWindow();
+      this.sproutSpeech = new TranscriptWindow();
+      this.latest = null;
       // Source authority replaced transcript quiet; do not rewrite A's deadline.
       this.replacement = null;
       clearTimeout(this.stayTimer);
