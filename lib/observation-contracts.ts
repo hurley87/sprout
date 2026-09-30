@@ -93,6 +93,15 @@ const nonnegativeFinite = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value) && value >= 0;
 const stringArray = (value: unknown, choices: readonly string[]) =>
   Array.isArray(value) && value.every(item => oneOf(item, choices));
+const spokenNumbers: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5 };
+function spokenNumberTokens(text: string) {
+  return (
+    text
+      .toLowerCase()
+      .match(/\b(?:one|two|three|four|five|[1-5])\b/g)
+      ?.map(token => (/^[1-5]$/.test(token) ? Number(token) : spokenNumbers[token])) ?? []
+  );
+}
 
 const behaviorValues = ["quantity_identification", "counting_aloud_with_total", "uncertain_exchange"] as const;
 const outcomeValues = ["correct", "incorrect", "uncertain"] as const;
@@ -266,6 +275,10 @@ export function validateObserverProposal(
     if (!matchesRole) issues.push({ path: `sources.${index}.role`, message: "does not match the referenced event" });
     normalizedSources.push({ eventId: source.eventId, role: source.role });
   }
+  const responseSource = normalizedSources.find(
+    (source): source is ObservationSource & { eventId: string; role: "response" } => source.role === "response",
+  );
+  const responseEvent = responseSource && sourceById.get(responseSource.eventId);
   if (observation) {
     const supportSourceIds = new Set(
       normalizedSources
@@ -293,6 +306,18 @@ export function validateObserverProposal(
         issues.push({
           path: "observation.support.kinds",
           message: "parent-reported assistance must cite a parent-source event",
+        });
+      }
+      if (
+        event?.evidence?.type === "support" &&
+        (!responseEvent ||
+          responseEvent.evidence?.type !== "utterance" ||
+          typeof responseEvent.evidence.startMs !== "number" ||
+          event.atMs > responseEvent.evidence.startMs)
+      ) {
+        issues.push({
+          path: "observation.support.sourceEventIds",
+          message: "support must be timestamped before the response begins",
         });
       }
     }
@@ -324,13 +349,9 @@ export function validateObserverProposal(
       });
     }
   }
-  const responseSource = normalizedSources.find(
-    (source): source is ObservationSource & { eventId: string; role: "response" } => source.role === "response",
-  );
   const sceneSource = normalizedSources.find(
     (source): source is ObservationSource & { eventId: string; role: "scene" } => source.role === "scene",
   );
-  const responseEvent = responseSource && sourceById.get(responseSource.eventId);
   const sceneEvent = sceneSource && sourceById.get(sceneSource.eventId);
   const displayedScenes = sourceRecord.events.filter(event => event.evidence?.type === "scene_displayed");
   if (responseEvent && responseEvent.atMs !== input.exchangeAtMs) {
@@ -412,6 +433,28 @@ export function validateObserverProposal(
         path: "observation.behavior",
         message: "an interrupted response cannot support a determinate conclusion",
       });
+    }
+    if (observation.behavior !== "uncertain_exchange") {
+      const numbers = spokenNumberTokens(responseEvent.evidence.text);
+      if (!numbers.includes(observation.statedTotal!)) {
+        issues.push({ path: "observation.statedTotal", message: "must be spoken in the canonical response utterance" });
+      }
+      if (observation.behavior === "counting_aloud_with_total") {
+        const target = observation.targetQuantity;
+        const hasSequence =
+          target !== undefined &&
+          target <= 5 &&
+          numbers.some(
+            (number, index) =>
+              number === 1 && numbers.slice(index, index + target).every((value, offset) => value === offset + 1),
+          );
+        if (!hasSequence) {
+          issues.push({
+            path: "observation.behavior",
+            message: "counting aloud requires a canonical spoken count sequence",
+          });
+        }
+      }
     }
   }
   if (

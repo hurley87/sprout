@@ -201,7 +201,7 @@ export const observationFixtures: SyntheticObservationFixture[] = [
       scene: { _id: "sessionEvents_synthetic_scene_4", atMs: 900, targetQuantity: 3 },
       support: {
         _id: "sessionEvents_synthetic_support_4",
-        atMs: 3000,
+        atMs: 2500,
         source: "parent",
         description: "Parent reports giving a hint before the response.",
         kinds: ["parent_reported_assistance"],

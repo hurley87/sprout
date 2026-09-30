@@ -30,6 +30,13 @@ without a running deployment. The live lesson records lifecycle, displayed scene
 through Convex. Configure `NEXT_PUBLIC_CONVEX_URL` for the browser recorder; recording failures are
 shown while the lesson continues. Sprout playback attribution and support capture are deferred.
 
+Ended records are analyzed after the recording attachment is durably committed. The internal Convex
+action needs server-side `OPENAI_API_KEY`; `OPENAI_OBSERVER_MODEL` optionally selects a text model,
+defaulting to the unvalidated `gpt-6-astra` evaluation candidate. Never use a `NEXT_PUBLIC_*` key.
+The local inspector offers a loopback-guarded retry for failed, expired, or not-yet-requested saved-record analysis after reload.
+See [Observer provider feasibility](docs/observer-provider-feasibility.md) for limits, evidence rules,
+and the remaining synthetic evaluation gate. No live-provider suitability result is claimed.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

@@ -57,8 +57,8 @@ function snapshot(record: Awaited<ReturnType<typeof canonical>>) {
 }
 
 export const claim = internalMutation({
-  args: { sessionId: v.id("sessions"), now: v.number() },
-  handler: async (ctx, { sessionId, now }) => {
+  args: { sessionId: v.id("sessions"), now: v.number(), expectedAttempt: v.optional(v.number()) },
+  handler: async (ctx, { sessionId, now, expectedAttempt }) => {
     const record = await canonical(ctx, sessionId);
     if (record.session.state !== "ended" || record.session.recordStatus === "pending")
       throw new Error("Session record is not assembled");
@@ -70,6 +70,20 @@ export const claim = internalMutation({
       return { status: "ready" as const, analysisId: analysis._id, attempt: analysis.attempt, token: null };
     if (analysis?.status === "running" && (analysis.leaseUntil ?? 0) > now)
       return { status: "running" as const, analysisId: analysis._id, attempt: analysis.attempt, token: null };
+    if (expectedAttempt !== undefined) {
+      if (!Number.isInteger(expectedAttempt) || expectedAttempt < 1)
+        throw new Error("Invalid expected Observer attempt");
+      if (analysis && expectedAttempt <= analysis.attempt) {
+        return {
+          status: analysis.status as "pending" | "running" | "ready" | "failed",
+          analysisId: analysis._id,
+          attempt: analysis.attempt,
+          token: null,
+          ...(analysis.failure ? { failure: analysis.failure } : {}),
+        };
+      }
+      if (expectedAttempt !== (analysis?.attempt ?? 0) + 1) throw new Error("Scheduled Observer attempt is stale");
+    }
     if (analysis && analysis.attempt >= maxAttempts) {
       if (analysis.status === "running") {
         await ctx.db.patch(analysis._id, {

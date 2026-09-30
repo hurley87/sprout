@@ -98,6 +98,22 @@ it("recovers an expired lease; stale owners cannot fail or publish", async () =>
   ).toEqual([]);
 });
 
+it("makes duplicate scheduled triggers idempotent across a fast failure while allowing an explicit next attempt", async () => {
+  const { t, sessionId } = await endedRecord();
+  const first = await t.mutation(internal.observer.claim, { sessionId, now: 10, expectedAttempt: 1 });
+  if (first.status !== "claimed") throw new Error("expected first claim");
+  await t.mutation(internal.observer.fail, {
+    analysisId: first.analysisId,
+    token: first.token,
+    message: "synthetic provider failure",
+    now: 11,
+  });
+  const duplicate = await t.mutation(internal.observer.claim, { sessionId, now: 12, expectedAttempt: 1 });
+  expect(duplicate).toMatchObject({ status: "failed", attempt: 1, token: null });
+  const retry = await t.mutation(internal.observer.claim, { sessionId, now: 13, expectedAttempt: 2 });
+  expect(retry).toMatchObject({ status: "claimed", attempt: 2 });
+});
+
 it("settles an expired fifth lease as a durable, idempotent exhaustion failure", async () => {
   const { t, sessionId } = await endedRecord();
   let now = 10;

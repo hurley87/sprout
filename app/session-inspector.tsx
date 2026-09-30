@@ -226,6 +226,8 @@ export function SessionInspector({
   const [loading, setLoading] = useState(Boolean(sessionRef));
   const [error, setError] = useState(false);
   const [revision, setRevision] = useState(0);
+  const [observerMessage, setObserverMessage] = useState("");
+  const [retryingObserver, setRetryingObserver] = useState(false);
   useEffect(() => {
     if (!sessionRef) return;
     let cancelled = false;
@@ -278,6 +280,35 @@ export function SessionInspector({
           Retry this lesson
         </button>
       )}
+      {record?.state === "ended" && record.recording && (
+        <button
+          className="download-button"
+          disabled={retryingObserver}
+          onClick={async () => {
+            setRetryingObserver(true);
+            setObserverMessage("");
+            try {
+              const response = await fetch("/api/observer/retry", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ sessionId: record.id }),
+              });
+              const result = (await response.json()) as { status?: string; error?: string };
+              if (!response.ok) throw new Error(result.error ?? "Retry failed.");
+              setObserverMessage(
+                result.status === "scheduled" ? "Observer retry scheduled." : `Observer state: ${result.status}.`,
+              );
+            } catch (retryError) {
+              setObserverMessage(retryError instanceof Error ? retryError.message : "Observer retry failed.");
+            } finally {
+              setRetryingObserver(false);
+            }
+          }}
+        >
+          {retryingObserver ? "Scheduling Observer retry…" : "Retry Observer analysis"}
+        </button>
+      )}
+      {observerMessage && <p role="status">{observerMessage}</p>}
     </section>
   );
 }
