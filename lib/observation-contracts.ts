@@ -23,12 +23,25 @@ export type ObservationClaim = {
     status: "recorded" | "not_established";
     kinds: SupportKind[];
     sourceEventIds: string[];
+    recordingSourceIds?: string[];
   };
   uncertaintyReasons: UncertaintyReason[];
 };
 
 export type ObservationSourceRole = "response" | "scene" | "support" | "exchange_context";
-export type ObservationSource = { eventId: string; role: ObservationSourceRole };
+export type ObservationSource =
+  | { eventId: string; role: ObservationSourceRole }
+  | {
+      sourceId: string;
+      role: "recording_support";
+      provenance: "recording_review";
+      sessionId: string;
+      recordingId: string;
+      recordingStartMs: number;
+      recordingEndMs: number;
+      sessionStartMs: number;
+      sessionEndMs: number;
+    };
 
 /** Immutable Observer output. Parent decisions are a different contract below. */
 export type ObserverProposal = {
@@ -57,6 +70,7 @@ export type ParentDecision = {
 
 export type CanonicalObservationRecord = {
   session: { _id: string; state: string; recordStatus: string };
+  recording?: { recordingId: string; startOffsetMs: number; durationMs: number };
   events: Array<{
     _id: string;
     atMs: number;
@@ -109,6 +123,8 @@ function validateClaim(value: unknown, path: string, issues: ValidationIssue[]):
     stringArray(value.support.kinds, supportValues) &&
     Array.isArray(value.support.sourceEventIds) &&
     value.support.sourceEventIds.every(nonEmpty) &&
+    (value.support.recordingSourceIds === undefined ||
+      (Array.isArray(value.support.recordingSourceIds) && value.support.recordingSourceIds.every(nonEmpty))) &&
     stringArray(value.uncertaintyReasons, uncertaintyValues) &&
     (value.statedTotal === undefined || nonnegativeInteger(value.statedTotal));
   if (!valid) {
@@ -131,14 +147,18 @@ function validateClaim(value: unknown, path: string, issues: ValidationIssue[]):
       issues.push({ path, message: "counting aloud requires an observed count sequence and total" });
     }
   }
+  const recordingSourceIds = claim.support.recordingSourceIds ?? [];
   if (
     claim.support.status === "not_established" &&
-    (claim.support.kinds.length || claim.support.sourceEventIds.length)
+    (claim.support.kinds.length || claim.support.sourceEventIds.length || recordingSourceIds.length)
   ) {
     issues.push({ path: `${path}.support`, message: "unestablished support cannot list help or source events" });
   }
-  if (claim.support.status === "recorded" && (!claim.support.kinds.length || !claim.support.sourceEventIds.length)) {
-    issues.push({ path: `${path}.support`, message: "recorded support requires its kind and canonical source event" });
+  if (
+    claim.support.status === "recorded" &&
+    (!claim.support.kinds.length || (!claim.support.sourceEventIds.length && !recordingSourceIds.length))
+  ) {
+    issues.push({ path: `${path}.support`, message: "recorded support requires its kind and canonical source" });
   }
   return true;
 }
@@ -167,6 +187,63 @@ export function validateObserverProposal(
   const sourceById = new Map(sourceRecord.events.map(event => [event._id, event]));
   const normalizedSources: ObservationSource[] = [];
   for (const [index, source] of sources.entries()) {
+    if (record(source) && source.role === "recording_support") {
+      const path = `sources.${index}`;
+      const recording = sourceRecord.recording;
+      const recordingStartMs = source.recordingStartMs;
+      const recordingEndMs = source.recordingEndMs;
+      const sessionStartMs = source.sessionStartMs;
+      const sessionEndMs = source.sessionEndMs;
+      const intervalValid =
+        nonnegativeInteger(recordingStartMs) &&
+        nonnegativeInteger(recordingEndMs) &&
+        recordingEndMs > recordingStartMs &&
+        nonnegativeInteger(sessionStartMs) &&
+        nonnegativeInteger(sessionEndMs) &&
+        sessionEndMs > sessionStartMs;
+      if (
+        !nonEmpty(source.sourceId) ||
+        source.provenance !== "recording_review" ||
+        source.sessionId !== sourceRecord.session._id ||
+        source.sessionId !== input.sessionId ||
+        !nonEmpty(source.recordingId) ||
+        !recording ||
+        source.recordingId !== recording.recordingId ||
+        sourceRecord.session.recordStatus !== "complete"
+      ) {
+        issues.push({
+          path,
+          message: "recording support must identify the available recording for this complete session",
+        });
+        continue;
+      }
+      if (
+        !nonnegativeInteger(recording.startOffsetMs) ||
+        !nonnegativeInteger(recording.durationMs) ||
+        recording.durationMs <= 0 ||
+        !intervalValid ||
+        recordingEndMs > recording.durationMs ||
+        !Number.isSafeInteger(recording.startOffsetMs + recordingStartMs) ||
+        !Number.isSafeInteger(recording.startOffsetMs + recordingEndMs) ||
+        sessionStartMs !== recording.startOffsetMs + recordingStartMs ||
+        sessionEndMs !== recording.startOffsetMs + recordingEndMs
+      ) {
+        issues.push({ path, message: "recording support interval must be in bounds and map exactly to session time" });
+        continue;
+      }
+      normalizedSources.push({
+        sourceId: source.sourceId,
+        role: "recording_support",
+        provenance: "recording_review",
+        sessionId: source.sessionId,
+        recordingId: source.recordingId,
+        recordingStartMs,
+        recordingEndMs,
+        sessionStartMs,
+        sessionEndMs,
+      });
+      continue;
+    }
     if (!record(source) || !nonEmpty(source.eventId) || !oneOf(source.role, validRoles)) {
       issues.push({ path: `sources.${index}`, message: "must identify a canonical event and role" });
       continue;
@@ -189,7 +266,11 @@ export function validateObserverProposal(
   }
   if (observation) {
     const supportSourceIds = new Set(
-      normalizedSources.filter(source => source.role === "support").map(source => source.eventId),
+      normalizedSources
+        .filter(
+          (source): source is ObservationSource & { eventId: string; role: "support" } => source.role === "support",
+        )
+        .map(source => source.eventId),
     );
     for (const eventId of observation.support.sourceEventIds) {
       const event = sourceById.get(eventId);
@@ -213,9 +294,40 @@ export function validateObserverProposal(
         });
       }
     }
+    const recordingSupportSources = normalizedSources.filter(
+      (source): source is Extract<ObservationSource, { role: "recording_support" }> =>
+        source.role === "recording_support",
+    );
+    const citedRecordingSupportIds = new Set(observation.support.recordingSourceIds ?? []);
+    for (const sourceId of citedRecordingSupportIds) {
+      if (!recordingSupportSources.some(source => source.sourceId === sourceId)) {
+        issues.push({
+          path: "observation.support.recordingSourceIds",
+          message: "must reference recording support sources",
+        });
+      }
+    }
+    for (const source of recordingSupportSources) {
+      if (!citedRecordingSupportIds.has(source.sourceId)) {
+        issues.push({
+          path: "observation.support.recordingSourceIds",
+          message: "must cite each recording support source",
+        });
+      }
+    }
+    if (citedRecordingSupportIds.size > 0 && observation.support.kinds.includes("parent_reported_assistance")) {
+      issues.push({
+        path: "observation.support.kinds",
+        message: "parent-reported assistance must retain parent_review provenance",
+      });
+    }
   }
-  const responseSource = normalizedSources.find(source => source.role === "response");
-  const sceneSource = normalizedSources.find(source => source.role === "scene");
+  const responseSource = normalizedSources.find(
+    (source): source is ObservationSource & { eventId: string; role: "response" } => source.role === "response",
+  );
+  const sceneSource = normalizedSources.find(
+    (source): source is ObservationSource & { eventId: string; role: "scene" } => source.role === "scene",
+  );
   const responseEvent = responseSource && sourceById.get(responseSource.eventId);
   const sceneEvent = sceneSource && sourceById.get(sceneSource.eventId);
   const displayedScenes = sourceRecord.events.filter(event => event.evidence?.type === "scene_displayed");
@@ -224,6 +336,16 @@ export function validateObserverProposal(
       path: "exchangeAtMs",
       message: "must use the referenced response event's session-relative timestamp",
     });
+  }
+  if (responseEvent?.evidence?.type === "utterance") {
+    for (const source of normalizedSources) {
+      if (source.role === "recording_support" && source.sessionStartMs > (responseEvent.evidence.endMs ?? -1)) {
+        issues.push({
+          path: "sources",
+          message: "recording support must occur before or during the referenced response",
+        });
+      }
+    }
   }
   if (responseEvent?.evidence?.type === "utterance" && observation) {
     const { startMs, endMs } = responseEvent.evidence;

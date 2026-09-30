@@ -98,7 +98,13 @@ export type InspectableSessionRecord = {
   endedAt?: number;
   endingReason?: EndReason;
   retryOf?: DurableSessionRef;
-  recording?: { url: string; mimeType: string; startOffsetMs: number; durationMs: number };
+  recording?: {
+    recordingId: string;
+    url: string;
+    mimeType: string;
+    startOffsetMs: number;
+    durationMs: number;
+  };
   events: { eventKey: string; order: number; atMs: number; evidence?: Evidence; timeline?: TimelineEvent }[];
 };
 

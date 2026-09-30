@@ -147,10 +147,17 @@ starts, with no scene transition during the interval. Missing speech bounds, equ
 transition during speech requires an uncertain claim or omission. These checks establish consistency
 with recorded timestamps; they cannot prove acoustic alignment or what was perceptually visible. A
 correct total without a spoken count is quantity identification; counting
-aloud requires an explicit count sequence and total. Missing support evidence means support is not
-established, not that the response was independent. Parent-added assistance or pointing/touch-counting
-context belongs to a separately attributed parent decision and cannot rewrite the proposal. Synthetic
-fixtures are contract examples, not delivered evidence or provider results.
+aloud requires an explicit count sequence and total. Recorded support can cite either canonical support
+events or a `recording_review` source with the canonical recording ID, recording-relative interval, and
+matching session-relative interval. Validation requires the same session, a complete record with an
+available recording, an interval inside the recording duration, and an exact mapping through
+`startOffsetMs`. This permits a proposal to preserve audible help context when no structured support row
+exists, without creating a delivered support event. Missing or insufficient evidence remains
+`not_established` or an uncertain proposal; it does not imply independence. Recording citations validate
+identity and timing metadata, not whether help was semantically audible, correctly attributed, or helpful.
+Parent-reported assistance, pointing, and touch-counting retain separate `parent_review` provenance and
+cannot be inferred from the recording source or rewrite the original proposal. Synthetic fixtures are
+contract examples, not delivered evidence or provider results.
 
 Record what was actually displayed, not just a requested visual action. Distinguish a spoken or interrupted prompt from text generated but never played. If delivery or scene context cannot be established, the Observer must qualify or omit the conclusion.
 

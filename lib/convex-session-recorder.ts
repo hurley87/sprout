@@ -42,6 +42,8 @@ export class ConvexSessionRecorder implements SessionRecorder, SessionRecordRead
       recording:
         session.recording && recordingUrl
           ? {
+              // One immutable recording is attached per session; this opaque identity avoids exposing the storage ID.
+              recordingId: `${session._id}:recording`,
               url: recordingUrl,
               mimeType: session.recording.mimeType,
               startOffsetMs: session.recording.startOffsetMs,

@@ -102,6 +102,7 @@ it("fetches an application record by reference without exposing storage/database
   const record = await recorder.getRecord("session-test");
   expect(query).toHaveBeenCalledWith(api.sessions.getRecord, { sessionId: "session-test" });
   expect(record?.recording?.url).toBe("https://storage.invalid/audio");
+  expect(record?.recording?.recordingId).toBe("session-test:recording");
   expect(record?.events[0]).toEqual({
     eventKey: "scene",
     order: 0,

@@ -48,7 +48,9 @@ describe("evidence-linked observation contracts", () => {
     expect(validateObserverProposal(wrongSession, fixture.record).ok).toBe(false);
     const wrongEvent = {
       ...proposal,
-      sources: proposal.sources.map(source => ({ ...source, eventId: "missing_event" })),
+      sources: proposal.sources.map(source =>
+        source.role === "recording_support" ? source : { ...source, eventId: "missing_event" },
+      ),
     };
     expect(validateObserverProposal(wrongEvent, fixture.record).ok).toBe(false);
     const wrongTimestamp = { ...proposal, exchangeAtMs: proposal.exchangeAtMs + 1 };
@@ -58,7 +60,10 @@ describe("evidence-linked observation contracts", () => {
   it("rejects learner claims sourced from Sprout speech or contradicted by the displayed total", () => {
     const fixture = observationFixtures.find(item => item.name === "correct-total-without-spoken-count")!;
     const sproutRecord = structuredClone(fixture.record);
-    const answer = sproutRecord.events.find(event => event._id === fixture.proposal!.sources[1].eventId)!;
+    const responseSource = fixture.proposal!.sources.find(source => source.role === "response");
+    if (!responseSource || responseSource.role === "recording_support")
+      throw new Error("Missing response fixture source");
+    const answer = sproutRecord.events.find(event => event._id === responseSource.eventId)!;
     if (answer.evidence?.type === "utterance") answer.evidence.speaker = "sprout";
     expect(validateObserverProposal(fixture.proposal, sproutRecord).ok).toBe(false);
     const mislabeled = structuredClone(fixture.proposal!) as ObserverProposal;
@@ -160,6 +165,105 @@ describe("evidence-linked observation contracts", () => {
     const falseSupport = structuredClone(unsupportedHelp) as ObserverProposal;
     falseSupport.observation.support = { status: "recorded", kinds: ["hint"], sourceEventIds: [] };
     expect(validateObserverProposal(falseSupport, observationFixtures[0].record).ok).toBe(false);
+  });
+
+  it("accepts recording-backed hint and counting-together support without a structured support row", () => {
+    const fixture = observationFixtures.find(item => item.name === "hint-and-counting-together")!;
+    expect(fixture.fixtureStatus).toBe("synthetic_example_not_delivered_evidence");
+    const record = structuredClone(fixture.record);
+    record.events = record.events.filter(event => event.evidence?.type !== "support");
+    record.recording = { recordingId: "storage_synthetic_recording", startOffsetMs: 1000, durationMs: 5000 };
+    const proposal = structuredClone(fixture.proposal!) as ObserverProposal;
+    proposal.observation.support = {
+      status: "recorded",
+      kinds: ["hint", "counting_together"],
+      sourceEventIds: [],
+      recordingSourceIds: ["recording-support-synthetic-1"],
+    };
+    proposal.sources = proposal.sources.filter(source => source.role !== "support");
+    proposal.sources.push({
+      sourceId: "recording-support-synthetic-1",
+      role: "recording_support",
+      provenance: "recording_review",
+      sessionId: record.session._id,
+      recordingId: "storage_synthetic_recording",
+      recordingStartMs: 200,
+      recordingEndMs: 1200,
+      sessionStartMs: 1200,
+      sessionEndMs: 2200,
+    });
+
+    expect(validateObserverProposal(proposal, record).ok).toBe(true);
+  });
+
+  it("rejects absent or wrong-session recordings and invalid recording/session clock intervals", () => {
+    const fixture = observationFixtures.find(item => item.name === "hint-and-counting-together")!;
+    const record = structuredClone(fixture.record);
+    record.events = record.events.filter(event => event.evidence?.type !== "support");
+    record.recording = { recordingId: "storage_synthetic_recording", startOffsetMs: 1000, durationMs: 5000 };
+    const proposal = structuredClone(fixture.proposal!) as ObserverProposal;
+    proposal.observation.support = {
+      status: "recorded",
+      kinds: ["hint", "counting_together"],
+      sourceEventIds: [],
+      recordingSourceIds: ["recording-support-synthetic-1"],
+    };
+    proposal.sources = proposal.sources.filter(source => source.role !== "support");
+    const source = {
+      sourceId: "recording-support-synthetic-1",
+      role: "recording_support" as const,
+      provenance: "recording_review" as const,
+      sessionId: record.session._id,
+      recordingId: "storage_synthetic_recording",
+      recordingStartMs: 200,
+      recordingEndMs: 1200,
+      sessionStartMs: 1200,
+      sessionEndMs: 2200,
+    };
+    proposal.sources.push(source);
+
+    const noRecording = structuredClone(record);
+    delete noRecording.recording;
+    expect(validateObserverProposal(proposal, noRecording).ok).toBe(false);
+    expect(
+      validateObserverProposal(
+        {
+          ...proposal,
+          sources: proposal.sources.map(item =>
+            item.role === "recording_support" ? { ...item, sessionId: "sessions_other" } : item,
+          ),
+        },
+        record,
+      ).ok,
+    ).toBe(false);
+    expect(
+      validateObserverProposal(
+        {
+          ...proposal,
+          sources: proposal.sources.map(item =>
+            item.role === "recording_support" ? { ...item, recordingId: "storage_other" } : item,
+          ),
+        },
+        record,
+      ).ok,
+    ).toBe(false);
+    for (const invalid of [
+      { ...source, recordingStartMs: -1 },
+      { ...source, recordingStartMs: 1200, recordingEndMs: 1100 },
+      { ...source, recordingEndMs: 5001, sessionEndMs: 6001 },
+      { ...source, sessionStartMs: 1201 },
+    ]) {
+      expect(
+        validateObserverProposal(
+          { ...proposal, sources: [...proposal.sources.filter(item => item.role !== "recording_support"), invalid] },
+          record,
+        ).ok,
+      ).toBe(false);
+    }
+
+    const incomplete = structuredClone(record);
+    incomplete.session.recordStatus = "incomplete";
+    expect(validateObserverProposal(proposal, incomplete).ok).toBe(false);
   });
 
   it("keeps parent correction and added assistance in a separately sourced decision", () => {
