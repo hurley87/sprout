@@ -1440,7 +1440,7 @@ describe("answer-gated scene advancement", () => {
     expect(vi.mocked(transport.send).mock.calls[0][0]).toMatchObject({ content: expect.stringContaining("2 ducks") });
   });
   it("cannot advance past the last scene however confident the answers are", async () => {
-    const { session, evaluateAnswer } = setup(true, answering(1));
+    const { session, evaluateAnswer, transport } = setup(true, answering(1));
     for (let i = 0; i < 20; i++) {
       deliver(session, speech(`Answer ${i}`, i * 10_000));
       await settle();
@@ -1450,8 +1450,30 @@ describe("answer-gated scene advancement", () => {
     }
     expect(session.snapshot.sceneIndex).toBe(LAST_SCENE);
     expect(sceneAt(session.snapshot.sceneIndex).quantity).toBe(5);
+    const finalSceneInstruction = vi
+      .mocked(transport.send)
+      .mock.calls.map(([event]) => event)
+      .findLast(event => event.type === "session.instructions.append");
+    expect(finalSceneInstruction).toMatchObject({
+      content: expect.stringContaining("answer the child's counts yourself without waiting for another app update"),
+    });
     // On the last scene there is nothing to decide, so nothing is asked.
     expect(vi.mocked(evaluateAnswer).mock.calls).toHaveLength(LAST_SCENE);
+
+    const callsBeforeFinalCount = vi.mocked(evaluateAnswer).mock.calls.length;
+    const gateEventsBeforeFinalCount = session.events.filter(
+      event => event.type === "answer.response_gate_started",
+    ).length;
+    const outputBlocksBeforeFinalCount = vi.mocked(transport.setOutputBlocked).mock.calls.length;
+    deliver(session, speech("Five", 210_000));
+    await settle();
+
+    expect(session.snapshot.sceneIndex).toBe(LAST_SCENE);
+    expect(vi.mocked(evaluateAnswer).mock.calls).toHaveLength(callsBeforeFinalCount);
+    expect(session.events.filter(event => event.type === "answer.response_gate_started")).toHaveLength(
+      gateEventsBeforeFinalCount,
+    );
+    expect(vi.mocked(transport.setOutputBlocked).mock.calls).toHaveLength(outputBlocksBeforeFinalCount);
   });
   it("refuses model delegation without changing the scene", () => {
     const { session, transport } = setup();

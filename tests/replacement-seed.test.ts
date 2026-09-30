@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluationResultContext, replacementSessionInput, SCENES, sceneAt } from "../lib/lesson";
+import { evaluationResultContext, LAST_SCENE, replacementSessionInput, SCENES, sceneAt } from "../lib/lesson";
 
 describe("replacement lesson context", () => {
   it.each(["ADVANCE", "STAY", "UNAVAILABLE"] as const)(
@@ -30,6 +30,21 @@ describe("replacement lesson context", () => {
       if (decision === "STAY") expect(text).toContain("did not meet the advancement criterion");
     },
   );
+
+  it("tells a replacement on the last group to answer counts without waiting for another app update", () => {
+    const input = replacementSessionInput({
+      sceneIndex: LAST_SCENE,
+      evaluatedSceneIndex: LAST_SCENE - 1,
+      decision: "ADVANCE",
+      childUtterance: "Five",
+    });
+    const context = input[1].content[0].text;
+
+    expect(context).toContain("the last group");
+    expect(context).toContain("the screen will not change again");
+    expect(context).toContain("answer the child's counts yourself without waiting for another app update");
+    expect(context).toContain("Do not say the total before the child has counted");
+  });
 });
 
 describe("counting evaluation result context", () => {
@@ -80,5 +95,20 @@ describe("counting evaluation result context", () => {
     });
     expect(message).toContain("evaluation was unavailable");
     expect(message).toContain("Do not judge the answer right or wrong");
+  });
+
+  it("restores final-scene count handling without giving away the total", () => {
+    const message = evaluationResultContext({
+      evaluatedAnswer: "five",
+      evaluatedScene: sceneAt(LAST_SCENE - 1),
+      meaning: "met_advancement_criterion",
+      action: "ADVANCE",
+      displayedScene: sceneAt(LAST_SCENE),
+    });
+
+    expect(message).toContain("the last group");
+    expect(message).toContain("the screen will not change again");
+    expect(message).toContain("answer the child's counts yourself without waiting for another app update");
+    expect(message).toContain("Do not say the total before the child has counted");
   });
 });
