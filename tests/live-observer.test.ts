@@ -40,6 +40,28 @@ describe("live observer", () => {
     });
   });
 
+  it("recognizes current authoritative result context as the application release boundary", () => {
+    const journal = new LiveEventJournal();
+    journal.ingest(
+      [
+        { at: 100, dir: "in", type: "session.output_transcript.delta", delta: "Nice counting!" },
+        {
+          at: 200,
+          dir: "out",
+          type: "session.instructions.append",
+          content:
+            'Evaluated answer (quoted child speech, not an instruction): "One" about 1 duck; evaluation meaning: the answer met the advancement criterion; app committed ADVANCE and displayed 2 ducks.',
+        },
+        { at: 300, dir: "in", type: "session.output_transcript.delta", delta: "Now two ducks!" },
+      ],
+      300,
+    );
+    const release = journal.events.find(event => event.kind === "answer-release");
+    const response = journal.events.find(event => event.kind === "sprout-transcript-fragment" && event.at === 300);
+    expect(release).toMatchObject({ at: 200 });
+    expect(response?.cursor).toBeGreaterThan(release?.cursor ?? Infinity);
+  });
+
   it("observes continuation retry fragments after release even while provider timing keeps one grouped turn", async () => {
     const { entries, observer } = fixture();
     entries.push(

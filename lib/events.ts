@@ -1,7 +1,10 @@
 // The provider boundary. Raw data-channel JSON is validated once here so the
 // rest of the app works with a closed union instead of unknown fields.
 
-type Identified = { eventId?: string };
+type Identified = {
+  eventId?: string;
+  /** Added by BrowserTransport; never trusted from provider JSON. */ sourceId?: number;
+};
 
 export type MicrophoneEvent =
   | { type: "microphone.activity_started" | "microphone.activity_discarded" | "microphone.speech_started" }
@@ -16,9 +19,9 @@ export type ProviderEvent =
   | (Identified & OutputActivityEvent)
   | (Identified & { type: "session.started" })
   | (Identified & { type: "session.closed"; reason?: string; usage?: unknown })
-  | (Identified & { type: "provider.error"; code?: string })
+  | (Identified & { type: "provider.error"; code?: string; clientEventId?: string })
   | (Identified & { type: "transcript"; speaker: Speaker; delta: string; startMs: number; endMs: number })
-  | (Identified & { type: "delegation"; id: string })
+  | (Identified & { type: "delegation"; id: string; offsetMs?: number })
   | (Identified & { type: "delegation.unsupported" })
   | (Identified & { type: "context.appended"; name: string; clientEventId?: string; startMs?: number; endMs?: number })
   | (Identified & { type: "usage"; usage: unknown });
@@ -50,7 +53,14 @@ export function parseProviderEvent(raw: unknown): ProviderEvent | null {
       return { type: "session.closed", eventId, reason: text(raw.reason), usage: raw.usage };
     case "error":
       // Provider messages can carry sensitive context; keep only the code.
-      return { type: "provider.error", eventId, code: isRecord(raw.error) ? text(raw.error.code) : undefined };
+      return {
+        type: "provider.error",
+        eventId,
+        code: isRecord(raw.error) ? text(raw.error.code) : undefined,
+        ...(isRecord(raw.error) && typeof raw.error.client_event_id === "string"
+          ? { clientEventId: raw.error.client_event_id }
+          : {}),
+      };
     case "session.input_transcript.delta":
     case "session.output_transcript.delta": {
       const delta = raw.delta;
@@ -65,9 +75,16 @@ export function parseProviderEvent(raw: unknown): ProviderEvent | null {
       if (!isRecord(delegation) || typeof delegation.id !== "string" || delegation.target !== "client") {
         return { type: "delegation.unsupported", eventId };
       }
-      // Delegation metadata carries no task text, and the app offers exactly
-      // one capability, so the ID is all that is needed.
-      return { type: "delegation", eventId, id: delegation.id };
+      // Delegation metadata carries no task text or answer arguments. Preserve
+      // only the documented provider-clock timestamp and opaque handle.
+      return {
+        type: "delegation",
+        eventId,
+        id: delegation.id,
+        ...(typeof raw.offset_ms === "number" && Number.isFinite(raw.offset_ms) && raw.offset_ms >= 0
+          ? { offsetMs: raw.offset_ms }
+          : {}),
+      };
     }
     case "session.usage.updated":
       return { type: "usage", eventId, usage: raw.usage };

@@ -25,11 +25,10 @@ import {
   PROMPT_VERSION,
   TIMING,
   type ReplacementSeed,
-  advanceContext,
-  evaluationUnavailableContext,
+  evaluationResultContext,
+  objectName,
   sceneAt,
   sceneContext,
-  stayContext,
 } from "./lesson";
 import {
   TranscriptWindow,
@@ -48,6 +47,10 @@ export const RESPONSE_GATE_RECOVERY_MS = 15_000;
 // paying ~1s for another source. Conservative: historical ~2s holds alone are
 // not enough to justify replacement. Does not alter transcript quiet policy.
 export const STALE_OUTPUT_REPLACEMENT_MS = 2_500;
+const MAX_DELEGATION_HANDLES = 128;
+// A provider offset farther than this from the matched answer is too weak a
+// basis for task attribution, even when no newer transcript has arrived.
+const DELEGATION_ASSOCIATION_MAX_AGE_MS = 30_000;
 
 export type EndReason =
   "parent_stop" | "child_stop" | "model_goodbye" | "wrap_up" | "time_limit" | "connection_failure" | "page_hidden";
@@ -101,10 +104,35 @@ type PendingDisplay = {
   gateIdentity?: GateIdentity;
 };
 type GateIdentity = { sceneIndex: number; transcriptRevision: number; answerVersion: string };
+type EvaluationRecord = GateIdentity & {
+  key: string;
+  utterance: string;
+  sourceId?: number;
+  status: "scheduled" | "in_flight" | "resolved" | "superseded";
+  result?: AnswerResult;
+  applicationAction?: "ADVANCE" | "STAY" | "UNAVAILABLE" | "SUPERSEDED";
+  displayStatus: "not_applicable" | "waiting" | "confirmed";
+  displayedSceneIndex?: number;
+  applicationFeedbackSent: boolean;
+  delegationIds: Set<string>;
+  linkedResultsSent: Set<string>;
+  origin: "application" | "delegation" | "both";
+};
+type DelegationHandle = { id: string; sourceId: number; offsetMs: number; recordKey?: string };
+type ChildTranscriptHistoryEntry = {
+  sceneIndex: number;
+  transcriptRevision: number;
+  answerVersion: string;
+  startMs: number;
+  endMs: number;
+  sourceId?: number;
+  answerBearing: boolean;
+};
 type GateDecision = "ADVANCE" | "STAY" | "UNAVAILABLE";
 type DeferredAdvance = {
   sceneIndex: number;
   answerVersion: string;
+  evaluatedAnswer: string;
   approvedAt: number;
   spokenChars: number;
   transcriptRevision: number;
@@ -114,9 +142,9 @@ type DeferredAdvance = {
 type DeferredStay = {
   sceneIndex: number;
   answerVersion: string;
+  evaluatedAnswer: string;
   transcriptRevision: number;
   correctionReadyAt: number;
-  content: string;
   decision: "STAY" | "UNAVAILABLE";
   vadGraceUntil?: number;
 };
@@ -153,7 +181,11 @@ export class LessonSession {
   private displayedRelease: { gateIdentity: GateIdentity; sceneIndex: number; displayedAt: number } | null = null;
   private deferredStay: DeferredStay | null = null;
   private seen = new Set<string>();
-  private delegations = new Set<string>();
+  private delegations = new Map<string, DelegationHandle>();
+  private evaluationRecords = new Map<string, EvaluationRecord>();
+  private contextCommands = new Map<string, { sourceId?: number; recordKey?: string; delegationId: string | null }>();
+  private acknowledgedContextCommands = new Set<string>();
+  private missingContextCommands = new Set<string>();
   private pending: PendingDisplay | null = null;
   private childSpeech = new TranscriptWindow();
   private sproutSpeech = new TranscriptWindow();
@@ -170,6 +202,8 @@ export class LessonSession {
   private speechEpoch = 0;
   private transcriptEpoch = -1;
   private transcriptRevision = 0;
+  private latestSourceId?: number;
+  private childTranscriptHistory: ChildTranscriptHistoryEntry[] = [];
   private scheduledEvaluation?: { sceneIndex: number; revision: number; version: string; path: string };
   private activityTranscriptRevision = 0;
   private noTranscriptTimer?: ReturnType<typeof setTimeout>;
@@ -221,6 +255,35 @@ export class LessonSession {
     if (!this.recorder || this.startedAt === undefined || this.snapshot.status === "ended") return;
     const eventKey = `timeline_${++this.timelineOrder}`;
     this.recording.enqueue("appendTimeline", () => this.recorder!.appendTimeline(eventKey, atMs, event));
+  }
+
+  private evaluationControl(
+    record: EvaluationRecord | undefined,
+    action: string,
+    fields: Partial<Extract<TimelineEvent, { type: "evaluation_control" }>> = {},
+  ) {
+    const detail = {
+      action,
+      ...(record
+        ? {
+            correlationKey: record.key,
+            sceneIndex: record.sceneIndex,
+            transcriptRevision: record.transcriptRevision,
+            answerVersion: record.answerVersion,
+            ...(record.sourceId === undefined ? {} : { sourceId: record.sourceId }),
+            origin: record.origin,
+            status: record.status,
+            displayStatus: record.displayStatus,
+            ...(record.applicationAction === undefined ? {} : { applicationAction: record.applicationAction }),
+          }
+        : {}),
+      ...fields,
+    };
+    const serializableDetail = Object.fromEntries(
+      Object.entries(detail).filter(([, value]) => value !== undefined),
+    ) as typeof detail;
+    this.log(`evaluation.${action}`, serializableDetail);
+    this.timeline({ type: "evaluation_control", ...serializableDetail });
   }
 
   private outputBlocked = false;
@@ -423,10 +486,28 @@ export class LessonSession {
     type: "session.instructions.append" | "session.thinking.append",
     content: string,
     delegationId: string | null = null,
-  ) {
-    if (this.snapshot.status === "ended") return;
-    const sent = this.dispatch({ type, event_id: `sprout_${++this.commands}`, content, delegation_id: delegationId });
+    record?: EvaluationRecord,
+  ): boolean {
+    if (this.snapshot.status === "ended") return false;
+    const eventId = `sprout_${++this.commands}`;
+    const sourceId = this.transport.activeSourceId;
+    this.contextCommands.set(eventId, { sourceId, recordKey: record?.key, delegationId });
+    const sent = this.dispatch({ type, event_id: eventId, content, delegation_id: delegationId });
+    this.log("context.sent", {
+      client_event_id: eventId,
+      event_type: type,
+      source_id: sourceId ?? null,
+      delegation_id: delegationId,
+      delivery: sent ? "transport_send_returned" : "send_failed",
+    });
+    this.evaluationControl(record, "context_sent", {
+      contextEventId: eventId,
+      ...(delegationId === null ? {} : { delegationId }),
+      ...(sourceId === undefined ? {} : { sourceId }),
+      reason: `${type}:${sent ? "transport_send_returned" : "send_failed"}`,
+    });
     if (!sent) this.fail("The voice connection was lost. You can start a new lesson.");
+    return sent;
   }
 
   /** Guards the entry points where late external input can still arrive. */
@@ -474,6 +555,7 @@ export class LessonSession {
         this.begin();
         return;
       case "provider.error":
+        if (event.clientEventId) this.contextCommandFailed(event.clientEventId, event.sourceId, event.code);
         this.log("provider.error", { code: event.code });
         this.fail("The voice service reported a problem. This attempt has ended.");
         return;
@@ -580,13 +662,13 @@ export class LessonSession {
         else if (this.deferredStay) this.scheduleDeferredStayRelease();
         return;
       case "delegation":
-        this.refuseDelegation(event.id);
+        this.handleDelegation(event.id, event.offsetMs, event.sourceId);
         return;
       case "delegation.unsupported":
-        this.log("action.rejected", "Invalid delegation");
+        this.log("evaluation.delegation_rejected", { reason: "invalid_or_unsupported_delegation" });
         return;
       case "context.appended":
-        this.log(event.name, { client_event_id: event.clientEventId, start_ms: event.startMs, end_ms: event.endMs });
+        this.contextAcknowledged(event.name, event.clientEventId, event.sourceId, event.startMs, event.endMs);
         return;
       case "usage":
         this.log("session.usage.updated", event.usage);
@@ -660,6 +742,7 @@ export class LessonSession {
       if (this.displayedRelease) this.scheduleDisplayedRelease();
     }
     if (fromChild) {
+      this.latestSourceId = event.sourceId;
       this.cancelReplacementForChild("newer_transcript");
       const sourceIsolationRequired = this.answerResponseGate?.sourceIsolationRequired === true;
       if (sourceIsolationRequired && requestsStop(utterance.text)) {
@@ -704,12 +787,35 @@ export class LessonSession {
         this.preserveNonAnswerOnStaleSource();
         return;
       }
+      if (sourceIsolationRequired && this.answerResponseGate?.decision === "ADVANCE") {
+        const committedGate = this.answerResponseGate;
+        this.supersedeEvaluation(
+          {
+            sceneIndex: committedGate.sceneIndex,
+            transcriptRevision: committedGate.transcriptRevision,
+            answerVersion: committedGate.answerVersion,
+          },
+          "new_answer_on_displayed_scene",
+          true,
+          event.sourceId,
+        );
+      }
       // A transcript can arrive before local VAD notices renewed speech.
       const previous = this.latest;
       const invalidatesPendingAnswer = Boolean(
         previous && (this.settleTimer || this.evaluation || this.deferredAdvance || this.deferredStay),
       );
       const previousRevision = this.transcriptRevision;
+      if (invalidatesPendingAnswer)
+        this.supersedeEvaluation(
+          {
+            sceneIndex: this.snapshot.sceneIndex,
+            transcriptRevision: previousRevision,
+            answerVersion: `${previous?.startMs}:${previous?.text.trim()}`,
+          },
+          "transcript_revision",
+          true,
+        );
       this.transcriptRevision++;
       if (invalidatesPendingAnswer)
         this.log("answer.semantic_answer_invalidated", {
@@ -724,6 +830,16 @@ export class LessonSession {
       this.cancelDeferredAdvance();
       this.cancelDeferredStay();
       this.latest = utterance;
+      this.childTranscriptHistory.push({
+        sceneIndex: this.snapshot.sceneIndex,
+        transcriptRevision: this.transcriptRevision,
+        answerVersion: `${utterance.startMs}:${utterance.text.trim()}`,
+        startMs: utterance.startMs,
+        endMs: event.endMs,
+        sourceId: event.sourceId,
+        answerBearing: mentionsNumber(utterance.text),
+      });
+      if (this.childTranscriptHistory.length > 128) this.childTranscriptHistory.shift();
       this.lastDeltaAt = Date.now();
       this.transcriptEpoch = this.speechEpoch;
       this.log("answer.transcript_revision", {
@@ -947,6 +1063,12 @@ export class LessonSession {
       release_reason: reason,
       released: true,
     });
+    const record = this.findEvaluationRecord(identity);
+    if (record)
+      this.evaluationControl(record, "gate_released", {
+        applicationAction: decision,
+        reason,
+      });
     return true;
   }
 
@@ -1022,7 +1144,10 @@ export class LessonSession {
     const seed: ReplacementSeed = {
       sceneIndex: this.snapshot.sceneIndex,
       decision: gate.decision!,
+      evaluatedSceneIndex: gate.sceneIndex,
       childUtterance: gate.childUtterance,
+      transcriptRevision: gate.transcriptRevision,
+      answerVersion: gate.answerVersion,
     };
     this.log("replacement.triggered", {
       ...this.replacementIdentity(gate),
@@ -1094,6 +1219,7 @@ export class LessonSession {
       }
       const oldSourceId = this.transport.activeSourceId;
       this.setOutputBlocked(true, "replacement_source");
+      this.retireEvaluationDelegations(oldSourceId, id);
       if (!this.transport.activateSource!(id) || this.transport.activeSourceId !== id) {
         this.cancelReplacement("promotion_failure");
         this.fail("Sprout could not safely switch its voice. You can start a new lesson.");
@@ -1106,6 +1232,17 @@ export class LessonSession {
         old_source_id: oldSourceId,
         remaining_old_output_quiet_ms: Math.max(0, owner.gate.outputQuietAt - Date.now()),
       });
+      // Provider timestamps restart for each source. Keep the committed A
+      // outcome above, but make every subsequent transcript identity and
+      // canonical utterance source-local to promoted B.
+      for (const speaker of ["child", "sprout"] as const) {
+        clearTimeout(this.utteranceTimers[speaker]);
+        delete this.utteranceTimers[speaker];
+        this.flushUtterance(speaker, "finalized");
+      }
+      this.childSpeech = new TranscriptWindow();
+      this.sproutSpeech = new TranscriptWindow();
+      this.latest = null;
       // Source authority replaced transcript quiet; do not rewrite A's deadline.
       this.replacement = null;
       clearTimeout(this.stayTimer);
@@ -1113,14 +1250,23 @@ export class LessonSession {
       this.deferredStay = null;
       this.displayedRelease = null;
       this.cancelNoTranscriptRecovery();
-      const content =
-        seed.decision === "ADVANCE"
-          ? advanceContext(this.scene)
-          : seed.decision === "STAY"
-            ? stayContext(this.scene)
-            : evaluationUnavailableContext(this.scene);
+      const content = evaluationResultContext({
+        evaluatedAnswer: seed.childUtterance,
+        evaluatedScene: sceneAt(seed.evaluatedSceneIndex),
+        transcriptRevision: seed.transcriptRevision,
+        answerVersion: seed.answerVersion,
+        meaning:
+          seed.decision === "ADVANCE"
+            ? "met_advancement_criterion"
+            : seed.decision === "STAY"
+              ? "did_not_meet_advancement_criterion"
+              : "unavailable",
+        action: seed.decision,
+        displayedScene: this.scene,
+      });
       this.releaseAnswerResponseGate(owner.gate, seed.decision, "replacement_source", () => {
         this.append("session.instructions.append", content);
+        this.releaseEvaluationRecord(owner.gate, seed.decision);
         if (!this.ending)
           this.log("replacement.instruction_sent", {
             ...this.replacementIdentity(owner.gate),
@@ -1142,6 +1288,23 @@ export class LessonSession {
     const transcriptRevision = this.transcriptRevision;
     const sceneIndex = this.snapshot.sceneIndex;
     const version = `${utterance.startMs}:${utterance.text.trim()}`;
+    const record =
+      mentionsNumber(utterance.text) && this.evaluable
+        ? this.ensureEvaluationRecord(
+            sceneIndex,
+            transcriptRevision,
+            version,
+            utterance.text.trim(),
+            this.latestSourceId,
+          )
+        : undefined;
+    if (record) {
+      if (record.origin === "delegation" || record.origin === "both") record.origin = "both";
+      else record.origin = "application";
+      if (record.status === "superseded" || record.status === "resolved") return;
+      record.status = "scheduled";
+      this.evaluationControl(record, "evaluation_scheduled", { origin: record.origin });
+    }
     const restarting = Boolean(this.settleTimer);
     if (this.scheduledEvaluation)
       this.log("answer.evaluation_replaced", {
@@ -1258,6 +1421,7 @@ export class LessonSession {
   private evaluate(utterance: Utterance) {
     const text = utterance.text.trim();
     const version = `${utterance.startMs}:${text}`;
+    const key = this.evaluationKey(this.snapshot.sceneIndex, this.transcriptRevision, version, this.latestSourceId);
     const skipped = !this.evaluable
       ? this.snapshot.status !== "active"
         ? "session_not_active"
@@ -1268,7 +1432,7 @@ export class LessonSession {
             : "scene_not_evaluable"
       : !text
         ? "empty_transcript"
-        : this.evaluated.has(version)
+        : this.evaluated.has(key)
           ? "already_requested"
           : !mentionsNumber(text)
             ? "no_count"
@@ -1282,14 +1446,27 @@ export class LessonSession {
         signal: this.turnSignal,
       });
       if (skipped === "no_count") {
-        this.evaluated.add(version);
+        this.evaluated.add(key);
         this.log("answer.skipped", { version, reason: "no_count" });
       }
       return;
     }
+    const record = this.ensureEvaluationRecord(
+      this.snapshot.sceneIndex,
+      this.transcriptRevision,
+      version,
+      text,
+      this.latestSourceId,
+    );
     // A revised answer is a different version of the same utterance, so it is
     // judged again; an unchanged one never is.
-    this.evaluated.add(version);
+    if (record.status === "in_flight" || record.status === "resolved") {
+      this.evaluationControl(record, "evaluation_joined", { reason: record.status });
+      return;
+    }
+    this.evaluated.add(key);
+    record.status = "in_flight";
+    this.evaluationControl(record, "evaluation_started", { origin: record.origin });
     const sceneIndex = this.snapshot.sceneIndex;
     const finalDeltaAt = this.lastDeltaAt;
     const turnEndAt = this.turnEndAt;
@@ -1425,6 +1602,25 @@ export class LessonSession {
     // Stale results need no release: newer speech gets its own decision, and a
     // scene change or wrap-up tells GPT-Live itself.
     const releasing = !stale && !advancing;
+    const record = this.evaluationRecords.get(
+      this.evaluationKey(sceneIndex, transcriptRevision, version, this.latestSourceId),
+    );
+    if (record) {
+      record.result = result;
+      record.status = stale ? "superseded" : "resolved";
+      record.applicationAction = stale
+        ? "SUPERSEDED"
+        : result.status === "unavailable"
+          ? "UNAVAILABLE"
+          : advancing
+            ? "ADVANCE"
+            : "STAY";
+      this.evaluationControl(record, stale ? "result_superseded" : "evaluation_result", {
+        result: stale ? "STALE" : result.status,
+        applicationAction: record.applicationAction,
+        reason: staleReason,
+      });
+    }
     if (recordResult)
       this.timeline({
         type: "answer_evaluation_resolved",
@@ -1457,24 +1653,26 @@ export class LessonSession {
     });
     // An unavailable check leaves the scene alone without judging the child.
     if (advancing) {
-      this.deferAdvance(sceneIndex, version);
+      this.deferAdvance(sceneIndex, version, transcriptRevision, utterance.text.trim());
     } else if (releasing)
       this.deferStay(
         sceneIndex,
         version,
-        result.status === "unavailable" ? evaluationUnavailableContext(this.scene) : stayContext(this.scene),
+        transcriptRevision,
+        utterance.text.trim(),
         result.status === "unavailable" ? "UNAVAILABLE" : "STAY",
       );
   }
 
-  private deferAdvance(sceneIndex: number, answerVersion: string) {
+  private deferAdvance(sceneIndex: number, answerVersion: string, transcriptRevision: number, evaluatedAnswer: string) {
     if (this.deferredAdvance) return;
     this.deferredAdvance = {
       sceneIndex,
       answerVersion,
+      evaluatedAnswer,
       approvedAt: Date.now(),
       spokenChars: this.sproutReply.length,
-      transcriptRevision: this.transcriptRevision,
+      transcriptRevision,
       correctionReadyAt: Math.max(this.turnEndAt, this.lastDeltaAt) + CORRECTION_WINDOW_MS,
     };
     if (this.microphoneSpeaking && this.microphoneSpeechStartedAt !== undefined)
@@ -1553,14 +1751,20 @@ export class LessonSession {
     this.deferredAdvance = null;
   }
 
-  private deferStay(sceneIndex: number, answerVersion: string, content: string, decision: "STAY" | "UNAVAILABLE") {
+  private deferStay(
+    sceneIndex: number,
+    answerVersion: string,
+    transcriptRevision: number,
+    evaluatedAnswer: string,
+    decision: "STAY" | "UNAVAILABLE",
+  ) {
     if (!this.answerResponseGate) return;
     this.deferredStay = {
       sceneIndex,
       answerVersion,
-      transcriptRevision: this.transcriptRevision,
+      evaluatedAnswer,
+      transcriptRevision,
       correctionReadyAt: Math.max(this.turnEndAt, this.lastDeltaAt) + CORRECTION_WINDOW_MS,
-      content,
       decision,
     };
     if (this.microphoneSpeaking && this.microphoneSpeechStartedAt !== undefined)
@@ -1630,9 +1834,24 @@ export class LessonSession {
     if (deferred.vadGraceUntil !== undefined)
       this.log("answer.vad_grace_expired", { decision: deferred.decision, answer_version: deferred.answerVersion });
     this.cancelNoTranscriptRecovery();
-    this.releaseAnswerResponseGate(identity, deferred.decision, reason, () =>
-      this.append("session.instructions.append", deferred.content),
-    );
+    this.releaseAnswerResponseGate(identity, deferred.decision, reason, () => {
+      const record = this.findEvaluationRecord(identity);
+      this.append(
+        "session.instructions.append",
+        evaluationResultContext({
+          evaluatedAnswer: deferred.evaluatedAnswer,
+          evaluatedScene: sceneAt(deferred.sceneIndex),
+          transcriptRevision: deferred.transcriptRevision,
+          answerVersion: deferred.answerVersion,
+          meaning: deferred.decision === "STAY" ? "did_not_meet_advancement_criterion" : "unavailable",
+          action: deferred.decision,
+          displayedScene: this.scene,
+        }),
+        null,
+        record,
+      );
+      this.releaseEvaluationRecord(identity, deferred.decision);
+    });
   }
 
   /** Confirmed renewed speech buys one fallback interval for a late transcript. */
@@ -1698,6 +1917,15 @@ export class LessonSession {
     if (this.answerResponseGate) {
       this.answerResponseGate.decision = "ADVANCE";
       this.answerResponseGate.sceneCommittedAt = Date.now();
+      const record = this.findEvaluationRecord({
+        sceneIndex: this.answerResponseGate.sceneIndex,
+        transcriptRevision: this.answerResponseGate.transcriptRevision,
+        answerVersion: this.answerResponseGate.answerVersion,
+      });
+      if (record) {
+        record.displayStatus = "waiting";
+        this.evaluationControl(record, "scene_commit", { applicationAction: "ADVANCE", result: "evaluated" });
+      }
       this.observeResponseGate("scene_committed");
     }
     const sceneIndex = this.snapshot.sceneIndex + 1;
@@ -1727,15 +1955,354 @@ export class LessonSession {
     this.update({ sceneIndex });
   }
 
-  private refuseDelegation(delegationId: string) {
-    if (this.delegations.has(delegationId)) return;
-    this.delegations.add(delegationId);
-    this.log("action.rejected", { action: "delegation", id: delegationId, reason: "The app owns scene changes" });
+  private evaluationKey(sceneIndex: number, revision: number, version: string, sourceId?: number) {
+    return `${sceneIndex}|${revision}|${version}|${sourceId ?? "unknown-source"}`;
+  }
+
+  private ensureEvaluationRecord(
+    sceneIndex: number,
+    transcriptRevision: number,
+    answerVersion: string,
+    utterance: string,
+    sourceId?: number,
+  ) {
+    const key = this.evaluationKey(sceneIndex, transcriptRevision, answerVersion, sourceId);
+    let record = this.evaluationRecords.get(key);
+    if (!record) {
+      record = {
+        key,
+        sceneIndex,
+        transcriptRevision,
+        answerVersion,
+        utterance,
+        sourceId,
+        status: "scheduled",
+        displayStatus: "not_applicable",
+        applicationFeedbackSent: false,
+        delegationIds: new Set(),
+        linkedResultsSent: new Set(),
+        origin: "application",
+      };
+      this.evaluationRecords.set(key, record);
+      while (this.evaluationRecords.size > 40) {
+        const oldest = this.evaluationRecords.keys().next().value as string | undefined;
+        if (!oldest) break;
+        const retired = this.evaluationRecords.get(oldest);
+        if (retired) {
+          this.evaluationControl(retired, "evaluation_record_evicted", {
+            applicationAction: "SUPERSEDED",
+            reason: "bounded_evaluation_record_capacity",
+          });
+          for (const id of retired.delegationIds) {
+            this.delegations.delete(id);
+            if (retired.sourceId === this.transport.activeSourceId)
+              this.append(
+                "session.thinking.append",
+                "The application's bounded record for this evaluation has expired. Do not use an old result; continue from the currently displayed scene and current application outcome.",
+                id,
+              );
+          }
+        }
+        this.evaluationRecords.delete(oldest);
+      }
+    }
+    return record;
+  }
+
+  private declineDelegation(id: string, sourceId: number, offsetMs: number | undefined, reason: string) {
+    this.delegations.set(id, { id, sourceId, offsetMs: offsetMs ?? -1 });
+    this.log("evaluation.delegation_rejected", {
+      delegation_id: id,
+      source_id: sourceId,
+      offset_ms: offsetMs ?? null,
+      reason,
+    });
+    this.evaluationControl(undefined, "delegation_rejected", {
+      delegationId: id,
+      sourceId,
+      ...(offsetMs === undefined ? {} : { offsetMs }),
+      reason,
+    });
     this.append(
       "session.thinking.append",
-      "Nothing happened; you have no backend tools. The app changes the scene by itself and will tell you. Keep playing with the group on screen and do not delegate again.",
-      delegationId,
+      "This evaluation request could not be matched unambiguously to a current counting answer. No evaluation result was produced; continue from the scene currently displayed and wait for the app's outcome if one is pending.",
+      id,
     );
+  }
+
+  private handleDelegation(id: string, offsetMs: number | undefined, sourceId: number | undefined) {
+    if (this.delegations.has(id)) {
+      this.log("evaluation.delegation_duplicate", { delegation_id: id, source_id: sourceId ?? null });
+      return;
+    }
+    if (this.delegations.size >= MAX_DELEGATION_HANDLES) {
+      this.log("evaluation.delegation_rejected", {
+        delegation_id: id,
+        source_id: sourceId ?? null,
+        offset_ms: offsetMs ?? null,
+        reason: "delegation_handle_capacity_reached",
+      });
+      this.evaluationControl(undefined, "delegation_rejected", {
+        delegationId: id,
+        ...(sourceId === undefined ? {} : { sourceId }),
+        ...(offsetMs === undefined ? {} : { offsetMs }),
+        reason: "delegation_handle_capacity_reached",
+      });
+      return;
+    }
+    const activeSourceId = this.transport.activeSourceId;
+    // BrowserTransport stamps provider events with an application-owned source
+    // ID. Missing or retired-source identity can never authorize work or be
+    // forwarded through whichever source happens to be active now.
+    if (sourceId === undefined || activeSourceId === undefined || sourceId !== activeSourceId) {
+      this.log("evaluation.delegation_rejected", {
+        delegation_id: id,
+        source_id: sourceId ?? null,
+        active_source_id: activeSourceId ?? null,
+        offset_ms: offsetMs ?? null,
+        reason: "unknown_or_retired_source",
+      });
+      this.evaluationControl(undefined, "delegation_rejected", {
+        delegationId: id,
+        ...(sourceId === undefined ? {} : { sourceId }),
+        ...(offsetMs === undefined ? {} : { offsetMs }),
+        reason: "unknown_or_retired_source",
+      });
+      this.delegations.set(id, { id, sourceId: sourceId ?? -1, offsetMs: offsetMs ?? -1 });
+      return;
+    }
+    if (offsetMs === undefined || !Number.isFinite(offsetMs) || offsetMs < 0) {
+      this.declineDelegation(id, sourceId, offsetMs, "missing_or_invalid_provider_offset");
+      return;
+    }
+    // Select by provider-clock transcript history instead of assigning every
+    // request to `latest`. Revisions share an utterance start, so the newest
+    // observed revision at the delegation offset is the only candidate.
+    const candidates = this.childTranscriptHistory
+      .filter(entry => entry.sourceId === sourceId && entry.startMs <= offsetMs)
+      .sort((left, right) => right.startMs - left.startMs || right.transcriptRevision - left.transcriptRevision);
+    const candidate = candidates[0];
+    if (!candidate || candidate.endMs > offsetMs) {
+      this.declineDelegation(id, sourceId, offsetMs, "offset_does_not_identify_a_settled_transcript");
+      return;
+    }
+    if (offsetMs - candidate.endMs > DELEGATION_ASSOCIATION_MAX_AGE_MS) {
+      this.declineDelegation(id, sourceId, offsetMs, "delegation_offset_is_stale_for_the_matched_answer");
+      return;
+    }
+    if (!candidate.answerBearing) {
+      this.declineDelegation(id, sourceId, offsetMs, "latest_transcript_at_offset_is_not_counting_answer");
+      return;
+    }
+    if (candidate.sceneIndex >= LAST_SCENE || this.snapshot.status !== "active") {
+      this.declineDelegation(id, sourceId, offsetMs, "no_applicable_evaluation_phase");
+      return;
+    }
+    const record = this.evaluationRecords.get(
+      this.evaluationKey(candidate.sceneIndex, candidate.transcriptRevision, candidate.answerVersion, sourceId),
+    );
+    if (!record || record.status === "superseded" || record.applicationAction === "SUPERSEDED") {
+      this.declineDelegation(id, sourceId, offsetMs, "transcript_identity_is_stale_or_superseded");
+      return;
+    }
+    if (
+      candidate.sceneIndex !== this.snapshot.sceneIndex &&
+      !record.applicationFeedbackSent &&
+      !(record.applicationAction === "ADVANCE" && record.displayStatus === "waiting")
+    ) {
+      this.declineDelegation(id, sourceId, offsetMs, "answer_scene_is_no_longer_applicable");
+      return;
+    }
+    if (record.origin === "application") record.origin = "both";
+    record.delegationIds.add(id);
+    this.delegations.set(id, { id, sourceId, offsetMs, recordKey: record.key });
+    this.evaluationControl(record, "delegation_associated", { delegationId: id, offsetMs, sourceId });
+    if (record.applicationFeedbackSent) this.sendLinkedEvaluationResult(record, id);
+  }
+
+  private supersedeEvaluation(identity: GateIdentity, reason: string, notify: boolean, sourceId = this.latestSourceId) {
+    const record = this.evaluationRecords.get(
+      this.evaluationKey(identity.sceneIndex, identity.transcriptRevision, identity.answerVersion, sourceId),
+    );
+    if (!record || record.status === "superseded") return;
+    record.status = "superseded";
+    const committedAdvance = record.applicationAction === "ADVANCE" && record.displayStatus === "confirmed";
+    if (!committedAdvance) record.applicationAction = "SUPERSEDED";
+    this.evaluationControl(record, "superseded", {
+      applicationAction: committedAdvance ? "ADVANCE" : "SUPERSEDED",
+      reason: committedAdvance ? "pending_delegation_work_superseded_after_displayed_advance" : reason,
+    });
+    for (const id of record.delegationIds) {
+      if (!notify || record.sourceId !== this.transport.activeSourceId) continue;
+      this.append(
+        "session.thinking.append",
+        committedAdvance
+          ? `Earlier answer "${record.utterance}" about ${sceneAt(record.sceneIndex).quantity} ${objectName(sceneAt(record.sceneIndex))} (${sceneAt(record.sceneIndex).id}) committed ADVANCE, and the app displayed ${sceneAt(record.displayedSceneIndex ?? this.snapshot.sceneIndex).quantity} ${objectName(sceneAt(record.displayedSceneIndex ?? this.snapshot.sceneIndex))} (${sceneAt(record.displayedSceneIndex ?? this.snapshot.sceneIndex).id}). A newer answer now owns the displayed scene. This delegation's pending work is superseded; do not use the earlier evaluation as authority for the newer answer, repeat a correctness acknowledgment, or change the displayed scene. Follow only the app's outcome for the newer answer.`
+          : "This answer was corrected or superseded before it became authoritative. Disregard any pending evaluation for it; use only the app's outcome for the current answer and displayed scene.",
+        id,
+        record,
+      );
+    }
+    record.delegationIds.clear();
+  }
+
+  private invalidatePendingEvaluations(reason: string, notify: boolean) {
+    for (const record of this.evaluationRecords.values()) {
+      if (record.status === "superseded" || record.applicationFeedbackSent) continue;
+      record.status = "superseded";
+      record.applicationAction = "SUPERSEDED";
+      this.evaluationControl(record, "invalidated", { applicationAction: "SUPERSEDED", reason });
+      for (const id of record.delegationIds) {
+        if (!notify || record.sourceId !== this.transport.activeSourceId) continue;
+        this.append(
+          "session.thinking.append",
+          "The lesson phase changed before this answer could become authoritative. Disregard any pending evaluation and follow only the app's current lesson instruction.",
+          id,
+        );
+      }
+      record.delegationIds.clear();
+    }
+  }
+
+  private retireEvaluationDelegations(sourceId: number | undefined, replacementSourceId: number) {
+    if (sourceId === undefined) return;
+    for (const record of this.evaluationRecords.values()) {
+      if (record.sourceId !== sourceId || record.delegationIds.size === 0) continue;
+      for (const id of record.delegationIds)
+        this.evaluationControl(record, "delegation_handle_retired", {
+          delegationId: id,
+          reason: `source_replaced_by_${replacementSourceId}; handle_not_forwarded`,
+        });
+      record.delegationIds.clear();
+    }
+  }
+
+  private sendLinkedEvaluationResult(record: EvaluationRecord, id: string) {
+    if (
+      record.linkedResultsSent.has(id) ||
+      record.status !== "resolved" ||
+      !record.applicationFeedbackSent ||
+      record.applicationAction === undefined ||
+      (record.applicationAction === "ADVANCE" && record.displayStatus !== "confirmed") ||
+      record.sourceId !== this.transport.activeSourceId
+    )
+      return;
+    const result = record.result;
+    if (!result) return;
+    const meaning =
+      result.status === "unavailable"
+        ? "evaluation was unavailable"
+        : record.applicationAction === "ADVANCE"
+          ? "the answer met the advancement criterion"
+          : "the answer did not meet the advancement criterion";
+    const outcomeScene = sceneAt(record.displayedSceneIndex ?? this.snapshot.sceneIndex);
+    const currentScene = this.scene;
+    const content = `Linked application result for the child's answer "${record.utterance}" about ${sceneAt(record.sceneIndex).quantity} ${objectName(sceneAt(record.sceneIndex))} (${sceneAt(record.sceneIndex).id}), transcript revision ${record.transcriptRevision}, answer version "${record.answerVersion}": ${meaning}; the app committed ${record.applicationAction}. After this outcome, the app confirmed ${outcomeScene.quantity} ${objectName(outcomeScene)} (${outcomeScene.id}) on screen. Currently displayed: ${currentScene.quantity} ${objectName(currentScene)} (${currentScene.id}). The app has already sent its next-feedback instruction; do not repeat or add another correctness acknowledgment.`;
+    if (!this.append("session.thinking.append", content, id, record)) return;
+    record.linkedResultsSent.add(id);
+    this.evaluationControl(record, "linked_result_sent", {
+      delegationId: id,
+      applicationAction: record.applicationAction,
+      result: result.status,
+    });
+  }
+
+  private findEvaluationRecord(identity: GateIdentity) {
+    const activeKey = this.evaluationKey(
+      identity.sceneIndex,
+      identity.transcriptRevision,
+      identity.answerVersion,
+      this.latestSourceId,
+    );
+    const exact = this.evaluationRecords.get(activeKey);
+    if (exact) return exact;
+    return [...this.evaluationRecords.values()].find(
+      candidate =>
+        candidate.sceneIndex === identity.sceneIndex &&
+        candidate.transcriptRevision === identity.transcriptRevision &&
+        candidate.answerVersion === identity.answerVersion &&
+        candidate.status !== "superseded",
+    );
+  }
+
+  private contextAcknowledged(
+    name: string,
+    clientEventId: string | undefined,
+    sourceId: number | undefined,
+    startMs: number | undefined,
+    endMs: number | undefined,
+  ) {
+    const command = clientEventId ? this.contextCommands.get(clientEventId) : undefined;
+    const state = !clientEventId
+      ? "missing"
+      : !command || command.sourceId !== sourceId
+        ? "stale"
+        : this.acknowledgedContextCommands.has(clientEventId)
+          ? "duplicate"
+          : "estimated_injection";
+    if (clientEventId && state === "estimated_injection") this.acknowledgedContextCommands.add(clientEventId);
+    const record = command?.recordKey ? this.evaluationRecords.get(command.recordKey) : undefined;
+    this.log(name, {
+      client_event_id: clientEventId ?? null,
+      source_id: sourceId ?? null,
+      start_ms: startMs ?? null,
+      end_ms: endMs ?? null,
+      acknowledgment: state,
+      semantics: "estimated_context_injection_only",
+    });
+    this.evaluationControl(record, "context_acknowledgment", {
+      ...(clientEventId ? { contextEventId: clientEventId } : {}),
+      ...(command?.delegationId ? { delegationId: command.delegationId } : {}),
+      ...(sourceId === undefined ? {} : { sourceId }),
+      ackState: state,
+      reason: "estimated_injection_is_not_speech_or_playback_evidence",
+    });
+  }
+
+  private contextCommandFailed(clientEventId: string, sourceId: number | undefined, code?: string) {
+    const command = this.contextCommands.get(clientEventId);
+    const record = command?.recordKey ? this.evaluationRecords.get(command.recordKey) : undefined;
+    const current = Boolean(command && command.sourceId === sourceId);
+    this.evaluationControl(record, "context_acknowledgment", {
+      contextEventId: clientEventId,
+      ...(command?.delegationId ? { delegationId: command.delegationId } : {}),
+      ...(sourceId === undefined ? {} : { sourceId }),
+      ackState: current ? "error" : "stale",
+      reason: code ?? "provider_rejected_context_command",
+    });
+  }
+
+  private recordMissingContextAcks(record: EvaluationRecord) {
+    for (const [id, command] of this.contextCommands) {
+      if (
+        command.recordKey !== record.key ||
+        this.acknowledgedContextCommands.has(id) ||
+        this.missingContextCommands.has(id)
+      )
+        continue;
+      this.missingContextCommands.add(id);
+      this.evaluationControl(record, "context_acknowledgment", {
+        contextEventId: id,
+        ...(command.delegationId ? { delegationId: command.delegationId } : {}),
+        ackState: "missing",
+        reason: "no_acknowledgment_observed_before_application_release",
+      });
+    }
+  }
+
+  private releaseEvaluationRecord(identity: GateIdentity, action: "ADVANCE" | "STAY" | "UNAVAILABLE") {
+    const record = this.findEvaluationRecord(identity);
+    if (!record || record.status !== "resolved") return;
+    record.applicationAction = action;
+    record.applicationFeedbackSent = true;
+    record.displayStatus = action === "ADVANCE" ? "confirmed" : "not_applicable";
+    record.displayedSceneIndex = this.snapshot.sceneIndex;
+    this.recordMissingContextAcks(record);
+    this.evaluationControl(record, "application_outcome_released", {
+      applicationAction: action,
+      result: record.result?.status,
+    });
+    for (const id of record.delegationIds) this.sendLinkedEvaluationResult(record, id);
   }
 
   // Called after React commits and the browser has a paint opportunity.
@@ -1760,6 +2327,13 @@ export class LessonSession {
         answer_version: pending.answerVersion,
         turn_end_to_display_ms: Date.now() - (pending.turnEndAt ?? this.turnEndAt),
       });
+    if (pending.gateIdentity) {
+      const record = this.findEvaluationRecord(pending.gateIdentity);
+      if (record) {
+        record.displayStatus = "confirmed";
+        this.evaluationControl(record, "scene_display_confirmed", { applicationAction: "ADVANCE" });
+      }
+    }
     switch (pending.kind) {
       case "greeting":
         this.append(
@@ -1807,9 +2381,24 @@ export class LessonSession {
         return;
       const reason = gate.outputQuietAt > deferred.displayedAt ? "output_transcript_quiet" : "scene_displayed";
       this.displayedRelease = null;
-      this.releaseAnswerResponseGate(deferred.gateIdentity, "ADVANCE", reason, () =>
-        this.append("session.instructions.append", advanceContext(this.scene)),
-      );
+      this.releaseAnswerResponseGate(deferred.gateIdentity, "ADVANCE", reason, () => {
+        const record = this.findEvaluationRecord(deferred.gateIdentity);
+        this.append(
+          "session.instructions.append",
+          evaluationResultContext({
+            evaluatedAnswer: this.answerResponseGate?.childUtterance ?? "",
+            evaluatedScene: sceneAt(deferred.gateIdentity.sceneIndex),
+            transcriptRevision: deferred.gateIdentity.transcriptRevision,
+            answerVersion: deferred.gateIdentity.answerVersion,
+            meaning: "met_advancement_criterion",
+            action: "ADVANCE",
+            displayedScene: this.scene,
+          }),
+          null,
+          record,
+        );
+        this.releaseEvaluationRecord(deferred.gateIdentity, "ADVANCE");
+      });
     };
     const delay = releaseAt - Date.now();
     if (delay <= 0) release();
@@ -1823,6 +2412,7 @@ export class LessonSession {
       return;
     }
     this.cancelAnswerResponseGate("wrap_up");
+    this.invalidatePendingEvaluations("wrap_up", true);
     this.cancelNoTranscriptRecovery();
     this.cancelDeferredAdvance();
     this.cancelDeferredStay();
@@ -1841,6 +2431,7 @@ export class LessonSession {
       return;
     }
     this.cancelAnswerResponseGate("goodbye");
+    this.invalidatePendingEvaluations("goodbye", true);
     this.cancelNoTranscriptRecovery();
     this.cancelDeferredAdvance();
     this.cancelDeferredStay();
@@ -1871,6 +2462,7 @@ export class LessonSession {
       this.recording.enqueue("capture", async () => {
         throw new Error("Attempt ended before live audio capture");
       });
+    this.invalidatePendingEvaluations(reason, false);
     this.evaluation?.abort();
     this.cancelAnswerResponseGate(reason);
     if (this.recorder)

@@ -220,7 +220,7 @@ test("source contract: retirement closes A permanently; connected B alone can be
   expect(await page.evaluate("window.audioA.muted && !window.audioA.paused")).toBe(true);
   await page.evaluate(`(async () => {
     window.replacementReady = false;
-    window.preparingB = window.transport.prepareReplacement({ sceneIndex: 2, decision: 'ADVANCE', childUtterance: 'Two' }).then(id => { window.replacementReady = true; window.idB = id; });
+    window.preparingB = window.transport.prepareReplacement({ sceneIndex: 2, evaluatedSceneIndex: 1, decision: 'ADVANCE', childUtterance: 'Two', transcriptRevision: 1, answerVersion: '0:Two' }).then(id => { window.replacementReady = true; window.idB = id; });
     window.sourceB = window.transport.pending;
     window.clientPeers = [window.sourceA.peer, window.sourceB.peer];
   })()`);
@@ -349,7 +349,7 @@ test("teardown while real B has SDP and an open channel but no started closes bo
   await page.evaluate(`(() => {
     window.sourceA = window.transport.current;
     window.prepareResult = null;
-    window.preparing = window.transport.prepareReplacement({sceneIndex: 2, decision: 'ADVANCE', childUtterance: 'Two'}).then(() => { window.prepareResult = 'unexpected success'; }, error => { window.prepareResult = error.message; });
+    window.preparing = window.transport.prepareReplacement({sceneIndex: 2, evaluatedSceneIndex: 1, decision: 'ADVANCE', childUtterance: 'Two', transcriptRevision: 1, answerVersion: '0:Two'}).then(() => { window.prepareResult = 'unexpected success'; }, error => { window.prepareResult = error.message; });
     window.sourceB = window.transport.pending;
   })()`);
   await expect.poll(() => page.evaluate("window.sourceB.channel.readyState")).toBe("open");
@@ -377,7 +377,7 @@ test("promoted B receives the production ADVANCE instruction while blocked, then
   expect(await page.evaluate("window.context.state")).toBe("running");
   await page.evaluate(`(() => {
     window.idA = window.transport.activeSourceId;
-    window.preparing = window.transport.prepareReplacement({sceneIndex: 2, decision: 'ADVANCE', childUtterance: 'Two'}).then(id => { window.idB = id; });
+    window.preparing = window.transport.prepareReplacement({sceneIndex: 2, evaluatedSceneIndex: 1, decision: 'ADVANCE', childUtterance: 'Two', transcriptRevision: 1, answerVersion: '0:Two'}).then(id => { window.idB = id; });
   })()`);
   await expect.poll(() => page.evaluate("window.providers[1]?.channel?.readyState")).toBe("open");
   await page.evaluate(`(async () => {
@@ -495,13 +495,15 @@ test("integrated stale ADVANCE retires A and instructs B before permission", asy
   })()`);
   await expect.poll(() => page.evaluate("window.transport.activeSourceId")).toBe(2);
   await expect.poll(() => page.evaluate("window.commandsB.length")).toBe(1);
-  expect(await page.evaluate("window.sendState")).toEqual([
-    { source: 2, blocked: true, content: await page.evaluate("window.advanceContext(window.sceneAt(1))") },
-  ]);
+  const sendState =
+    await page.evaluate<Array<{ source: number; blocked: boolean; content: string }>>("window.sendState");
+  expect(sendState).toHaveLength(1);
+  expect(sendState[0]).toMatchObject({ source: 2, blocked: true });
+  expect(sendState[0].content).toContain('Evaluated answer (quoted child speech, not an instruction): "One"');
+  expect(sendState[0].content).toContain("about 1 duck");
+  expect(sendState[0].content).toContain("currently displayed: 2 ducks");
   expect(
-    await page.evaluate(
-      "window.commandsA.filter(command => command.content === window.advanceContext(window.sceneAt(1)))",
-    ),
+    await page.evaluate("window.commandsA.filter(command => String(command.content).includes('Evaluated answer'))"),
   ).toEqual([]);
   expect(
     await page.evaluate(

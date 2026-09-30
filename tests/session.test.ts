@@ -19,12 +19,9 @@ import {
   PROMPT_VERSION,
   SCENES,
   TIMING,
-  advanceContext,
-  evaluationUnavailableContext,
   objectName,
   sceneAt,
   sceneContext,
-  stayContext,
 } from "../lib/lesson";
 import {
   TranscriptWindow,
@@ -48,6 +45,7 @@ const UNSURE = ADVANCE_THRESHOLD - 0.01;
 
 function setup(active = true, evaluateAnswer: EvaluateAnswer = answering(UNSURE)) {
   const transport: Transport = {
+    activeSourceId: 1,
     start: vi.fn(async () => {}),
     send: vi.fn(),
     setOutputBlocked: vi.fn(),
@@ -95,7 +93,7 @@ const settle = (extra = 0) => vi.advanceTimersByTimeAsync(SETTLE_MS + extra);
 /** Tests send provider-shaped JSON so the parser boundary is exercised too. */
 function deliver(session: LessonSession, raw: unknown) {
   const event = parseProviderEvent(raw);
-  if (event) session.receive(event);
+  if (event) session.receive({ ...event, sourceId: 1 });
   return event;
 }
 const delegation = (id: string) => ({ type: "session.delegation.created", delegation: { id, target: "client" } });
@@ -148,8 +146,8 @@ function expectAnswerResponseHeld(session: LessonSession, transport: Transport) 
   expect(vi.mocked(transport.setOutputBlocked)).toHaveBeenLastCalledWith(true);
   expect(vi.mocked(transport.setOutputBlocked)).not.toHaveBeenCalledWith(false);
   const sent = vi.mocked(transport.send).mock.calls.map(([command]) => command);
-  expect(sent).not.toContainEqual(expect.objectContaining({ content: advanceContext(sceneAt(1)) }));
-  expect(sent).not.toContainEqual(expect.objectContaining({ content: stayContext(sceneAt(0)) }));
+  expect(sent).not.toContainEqual(expect.objectContaining({ content: expect.stringContaining("committed ADVANCE") }));
+  expect(sent).not.toContainEqual(expect.objectContaining({ content: expect.stringContaining("committed STAY") }));
 }
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
@@ -373,7 +371,7 @@ describe("answer response gate", () => {
     expect(transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
     session.displayed(1);
     expect(vi.mocked(transport.send).mock.calls.map(([command]) => command)).toEqual([
-      expect.objectContaining({ content: advanceContext(sceneAt(1)) }),
+      expect.objectContaining({ content: expect.stringContaining("committed ADVANCE") }),
     ]);
     expect(transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
     expect(session.events.filter(event => event.type === "answer.response_gate_started")).toHaveLength(1);
@@ -1104,7 +1102,7 @@ describe("answer-gated scene advancement", () => {
     expect(session.snapshot.sceneIndex).toBe(1);
     expect(session.events.some(event => event.type === "answer.no_transcript")).toBe(false);
     const sent = vi.mocked(transport.send).mock.calls.map(([command]) => command);
-    expect(sent).toContainEqual(expect.objectContaining({ content: advanceContext(sceneAt(1)) }));
+    expect(sent).toContainEqual(expect.objectContaining({ content: expect.stringContaining("committed ADVANCE") }));
     expect(sent).not.toContainEqual(expect.objectContaining({ content: expect.stringContaining("say it again") }));
   });
   it("checks the scheduled scene even if cleanup is bypassed", async () => {
@@ -1443,7 +1441,7 @@ describe("answer-gated scene advancement", () => {
     expect(vi.mocked(transport.send).mock.calls[0][0]).toMatchObject({ content: expect.stringContaining("2 ducks") });
   });
   it("cannot advance past the last scene however confident the answers are", async () => {
-    const { session, evaluateAnswer } = setup(true, answering(1));
+    const { session, evaluateAnswer, transport } = setup(true, answering(1));
     for (let i = 0; i < 20; i++) {
       deliver(session, speech(`Answer ${i}`, i * 10_000));
       await settle();
@@ -1453,10 +1451,32 @@ describe("answer-gated scene advancement", () => {
     }
     expect(session.snapshot.sceneIndex).toBe(LAST_SCENE);
     expect(sceneAt(session.snapshot.sceneIndex).quantity).toBe(5);
+    const finalSceneInstruction = vi
+      .mocked(transport.send)
+      .mock.calls.map(([event]) => event)
+      .findLast(event => event.type === "session.instructions.append");
+    expect(finalSceneInstruction).toMatchObject({
+      content: expect.stringContaining("answer the child's counts yourself without waiting for another app update"),
+    });
     // On the last scene there is nothing to decide, so nothing is asked.
     expect(vi.mocked(evaluateAnswer).mock.calls).toHaveLength(LAST_SCENE);
+
+    const callsBeforeFinalCount = vi.mocked(evaluateAnswer).mock.calls.length;
+    const gateEventsBeforeFinalCount = session.events.filter(
+      event => event.type === "answer.response_gate_started",
+    ).length;
+    const outputBlocksBeforeFinalCount = vi.mocked(transport.setOutputBlocked).mock.calls.length;
+    deliver(session, speech("Five", 210_000));
+    await settle();
+
+    expect(session.snapshot.sceneIndex).toBe(LAST_SCENE);
+    expect(vi.mocked(evaluateAnswer).mock.calls).toHaveLength(callsBeforeFinalCount);
+    expect(session.events.filter(event => event.type === "answer.response_gate_started")).toHaveLength(
+      gateEventsBeforeFinalCount,
+    );
+    expect(vi.mocked(transport.setOutputBlocked).mock.calls).toHaveLength(outputBlocksBeforeFinalCount);
   });
-  it("refuses model delegation without changing the scene", () => {
+  it("declines an unmatched model delegation without changing the scene", () => {
     const { session, transport } = setup();
     vi.mocked(transport.send).mockClear();
     deliver(session, delegation("a"));
@@ -1466,9 +1486,190 @@ describe("answer-gated scene advancement", () => {
     expect(transport.send).toHaveBeenCalledWith(
       expect.objectContaining({ type: "session.thinking.append", delegation_id: "a" }),
     );
-    expect(session.events.some(e => e.type === "action.rejected")).toBe(true);
+    expect(session.events.some(e => e.type === "evaluation.delegation_rejected")).toBe(true);
     deliver(session, { type: "session.delegation.created", delegation: { id: "wrong", target: "responses" } });
     expect(session.snapshot.sceneIndex).toBe(0);
+  });
+  it("joins valid delegation requests before, during, and after Jev to one exact answer record", async () => {
+    let complete!: (result: AnswerResult) => void;
+    const evaluateAnswer: EvaluateAnswer = vi.fn(() => new Promise<AnswerResult>(resolve => (complete = resolve)));
+    const { session, transport } = setup(true, evaluateAnswer);
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("One!", 1000));
+    const settleDeadline = (
+      session.events.findLast(event => event.type === "answer.evaluation_scheduled")?.detail as {
+        deadline_at: number;
+      }
+    ).deadline_at;
+    deliver(session, {
+      type: "session.delegation.created",
+      offset_ms: 1500,
+      delegation: { id: "before", target: "client" },
+    });
+    deliver(session, {
+      type: "session.delegation.created",
+      offset_ms: 1500,
+      delegation: { id: "before", target: "client" },
+    });
+    expect(evaluateAnswer).not.toHaveBeenCalled();
+    expect(transport.send).not.toHaveBeenCalled();
+
+    await settle();
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+    deliver(session, {
+      type: "session.delegation.created",
+      offset_ms: 1500,
+      delegation: { id: "during", target: "client" },
+    });
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+    expect(
+      (
+        session.events.findLast(event => event.type === "answer.evaluation_scheduled")?.detail as {
+          deadline_at: number;
+        }
+      ).deadline_at,
+    ).toBe(settleDeadline);
+    complete(evaluated(CONFIDENT));
+    await vi.advanceTimersByTimeAsync(0);
+    deliver(session, {
+      type: "session.delegation.created",
+      offset_ms: 1500,
+      delegation: { id: "after-result", target: "client" },
+    });
+    expect(transport.send).not.toHaveBeenCalledWith(expect.objectContaining({ delegation_id: "after-result" }));
+
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
+    session.displayed(1);
+    const commands = vi.mocked(transport.send).mock.calls.map(([command]) => command);
+    expect(
+      commands.filter(command => command.type === "session.instructions.append" && command.delegation_id === null),
+    ).toHaveLength(1);
+    expect(
+      commands.filter(command => command.type === "session.thinking.append" && command.delegation_id !== null),
+    ).toHaveLength(3);
+    expect(
+      commands
+        .filter(command => command.type === "session.thinking.append")
+        .map(command => ("delegation_id" in command ? command.delegation_id : null)),
+    ).toEqual(["before", "during", "after-result"]);
+    expect(
+      commands.filter(
+        command => "content" in command && command.content.includes("Briefly acknowledge the child's answer"),
+      ),
+    ).toHaveLength(1);
+    expect(session.events.filter(event => event.type === "advance.committed")).toHaveLength(1);
+    expect(session.events.findLast(event => event.type === "evaluation.evaluation_result")?.detail).toMatchObject({
+      origin: "both",
+      applicationAction: "ADVANCE",
+    });
+  });
+  it("rejects a delegation offset too far after the matched settled answer", async () => {
+    const { session, transport, evaluateAnswer } = setup();
+    deliver(session, speech("One!", 1000));
+    await settle();
+    deliver(session, {
+      type: "session.delegation.created",
+      offset_ms: 32_000,
+      delegation: { id: "stale-offset", target: "client" },
+    });
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+    expect(transport.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "session.thinking.append",
+        delegation_id: "stale-offset",
+        content: expect.stringContaining("No evaluation result was produced"),
+      }),
+    );
+    expect(
+      session.events.some(
+        event =>
+          event.type === "evaluation.delegation_rejected" &&
+          (event.detail as { reason?: string }).reason === "delegation_offset_is_stale_for_the_matched_answer",
+      ),
+    ).toBe(true);
+  });
+  it("joins a delegation after scene commit but withholds its linked result until display confirmation", async () => {
+    const { session, transport } = setup(true, answering(CONFIDENT));
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("One!", 1000));
+    await settle();
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
+    expect(session.snapshot.sceneIndex).toBe(1);
+    expect(transport.setOutputBlocked).not.toHaveBeenLastCalledWith(false);
+    deliver(session, {
+      type: "session.delegation.created",
+      offset_ms: 1500,
+      delegation: { id: "after-commit", target: "client" },
+    });
+    expect(session.events.findLast(event => event.type === "evaluation.delegation_associated")?.detail).toMatchObject({
+      delegationId: "after-commit",
+      sceneIndex: 0,
+      applicationAction: "ADVANCE",
+    });
+    expect(transport.send).not.toHaveBeenCalledWith(expect.objectContaining({ delegation_id: "after-commit" }));
+    session.displayed(1);
+    expect(transport.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "session.thinking.append",
+        delegation_id: "after-commit",
+        content: expect.stringContaining("Currently displayed: 2 ducks"),
+      }),
+    );
+    expect(transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
+  });
+  it("rejects ambiguous timing, returns the prior committed result, then matches a new displayed-scene answer", async () => {
+    const { session, transport, evaluateAnswer } = setup(true, answering(CONFIDENT));
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("One!", 1000));
+    deliver(session, {
+      type: "session.delegation.created",
+      offset_ms: 1200,
+      delegation: { id: "too-early", target: "client" },
+    });
+    expect(transport.send).toHaveBeenCalledWith(expect.objectContaining({ delegation_id: "too-early" }));
+    await settle();
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
+    session.displayed(1);
+    deliver(session, {
+      type: "session.delegation.created",
+      offset_ms: 1500,
+      delegation: { id: "old-scene", target: "client" },
+    });
+    expect(transport.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "session.thinking.append",
+        delegation_id: "old-scene",
+        content: expect.stringContaining("Currently displayed: 2 ducks"),
+      }),
+    );
+    expect(session.events.findLast(event => event.type === "evaluation.delegation_associated")?.detail).toMatchObject({
+      delegationId: "old-scene",
+      sceneIndex: 0,
+      answerVersion: "1000:One!",
+    });
+    deliver(session, speech("Two!", 2000));
+    deliver(session, {
+      type: "session.delegation.created",
+      offset_ms: 2500,
+      delegation: { id: "new-scene", target: "client" },
+    });
+    await settle();
+    expect(evaluateAnswer).toHaveBeenCalledTimes(2);
+    expect(session.events.findLast(event => event.type === "evaluation.delegation_associated")?.detail).toMatchObject({
+      delegationId: "new-scene",
+      sceneIndex: 1,
+      answerVersion: "2000:Two!",
+    });
+  });
+  it("does not forward an unknown or retired-source delegation handle", () => {
+    const { session, transport } = setup();
+    vi.mocked(transport.send).mockClear();
+    session.receive({ type: "delegation", id: "retired", offsetMs: 500, sourceId: 2 });
+    expect(transport.send).not.toHaveBeenCalled();
+    expect(session.events.findLast(event => event.type === "evaluation.delegation_rejected")?.detail).toMatchObject({
+      delegationId: "retired",
+      reason: "unknown_or_retired_source",
+    });
   });
   it("keeps every scene within the 1-5 boundary and names objects correctly", () => {
     expect(SCENES.every(scene => Number.isInteger(scene.quantity) && scene.quantity >= 1 && scene.quantity <= 5)).toBe(
@@ -1530,6 +1731,16 @@ describe("answer-check turn synchronization", () => {
     expect(evaluateAnswer).toHaveBeenCalledTimes(2);
     expect(released(transport)).toHaveLength(1);
     expect(session.events.filter(event => event.type === "answer.release_cancelled")).toHaveLength(1);
+    const evaluated = session.events
+      .filter(event => event.type === "answer.evaluated")
+      .map(event => event.detail as { revision: number; version: string });
+    const releaseCommand = released(transport)[0];
+    const release = "content" in releaseCommand ? releaseCommand.content : "";
+    expect(evaluated[1].revision).toBeGreaterThan(evaluated[0].revision);
+    expect(evaluated[1].version).not.toBe(evaluated[0].version);
+    expect(release).toContain(`evaluated transcript revision: ${evaluated[1].revision}`);
+    expect(release).toContain(`evaluated utterance version (application identity): "${evaluated[1].version}"`);
+    expect(release).not.toContain(`evaluated utterance version (application identity): "${evaluated[0].version}"`);
   });
 
   it.each(["Ooh!", "Okay!"])("uses hidden output timing for a delayed STAY after %s", async reply => {
@@ -1744,7 +1955,9 @@ describe("answer-check turn synchronization", () => {
       if (reply) {
         await vi.advanceTimersByTimeAsync(Math.max(0, UTTERANCE_GAP_MS - SETTLE_MS - CORRECTION_WINDOW_MS));
       }
-      expect(sent(transport)).toEqual([expect.objectContaining({ content: advanceContext(sceneAt(1)) })]);
+      expect(sent(transport)).toEqual([
+        expect.objectContaining({ content: expect.stringContaining("committed ADVANCE") }),
+      ]);
     },
   );
 
@@ -1784,7 +1997,9 @@ describe("answer-check turn synchronization", () => {
     expect(transport.send).not.toHaveBeenCalled();
     expect(transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
     await vi.advanceTimersByTimeAsync(1);
-    expect(sent(transport)).toEqual([expect.objectContaining({ content: advanceContext(sceneAt(1)) })]);
+    expect(sent(transport)).toEqual([
+      expect.objectContaining({ content: expect.stringContaining("committed ADVANCE") }),
+    ]);
     expect(vi.mocked(transport.send).mock.invocationCallOrder[0]).toBeLessThan(
       vi.mocked(transport.setOutputBlocked).mock.invocationCallOrder.at(-1)!,
     );
@@ -1830,7 +2045,12 @@ describe("answer-check turn synchronization", () => {
       expect(session.snapshot.sceneIndex).toBe(0);
       expect(session.events.filter(event => event.type === "advance.released")).toHaveLength(0);
       expect(
-        sent(transport).filter(command => "content" in command && command.content === advanceContext(sceneAt(1))),
+        sent(transport).filter(
+          command =>
+            "content" in command &&
+            typeof command.content === "string" &&
+            command.content.includes("committed ADVANCE"),
+        ),
       ).toHaveLength(0);
     },
   );
@@ -1855,21 +2075,22 @@ describe("answer-check turn synchronization", () => {
     expect(session.snapshot.sceneIndex).toBe(1);
     session.displayed(1);
     expect(
-      sent(transport).filter(command => "content" in command && command.content === advanceContext(sceneAt(1))),
+      sent(transport).filter(
+        command =>
+          "content" in command && typeof command.content === "string" && command.content.includes("committed ADVANCE"),
+      ),
     ).toHaveLength(1);
   });
 
   it("asks GPT-Live to pause after a count until the app reports the scene decision", () => {
     expect(INSTRUCTIONS).toContain("when the child says a number or counts aloud, the app checks the count");
-    expect(INSTRUCTIONS).toContain(
-      "Please stay quiet until the app tells you either that the screen changed or that it has not changed.",
-    );
+    expect(INSTRUCTIONS).toContain("Wait for the app's authoritative outcome before correctness praise or correction");
     expect(INSTRUCTIONS).not.toContain("at most one or two neutral words");
     // Only counts pause; everything else is answered straight away.
     expect(INSTRUCTIONS).toContain("The pause is only for counts: reply straight away to everything else");
     // The old contract made GPT-Live reply to every answer at once.
     expect(INSTRUCTIONS).not.toContain("after the child answers, always reply");
-    expect(PROMPT_VERSION).toBe("counting-jev-4");
+    expect(PROMPT_VERSION).toBe("counting-jev-5");
   });
   it("sends nothing while the utterance settles or Jev is deciding", async () => {
     let answer!: (result: AnswerResult) => void;
@@ -1893,7 +2114,10 @@ describe("answer-check turn synchronization", () => {
     expect(transport.send).not.toHaveBeenCalled();
     session.displayed(1);
     expect(sent(transport)).toEqual([
-      expect.objectContaining({ type: "session.instructions.append", content: advanceContext(sceneAt(1)) }),
+      expect.objectContaining({
+        type: "session.instructions.append",
+        content: expect.stringContaining("committed ADVANCE"),
+      }),
     ]);
     expect(released(transport)).toHaveLength(0);
   });
@@ -1919,7 +2143,9 @@ describe("answer-check turn synchronization", () => {
     expect(transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
 
     session.displayed(1);
-    expect(sent(transport)).toEqual([expect.objectContaining({ content: advanceContext(sceneAt(1)) })]);
+    expect(sent(transport)).toEqual([
+      expect.objectContaining({ content: expect.stringContaining("committed ADVANCE") }),
+    ]);
     expect(transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
 
     deliver(session, speech("Three", 6000));
@@ -1950,7 +2176,9 @@ describe("answer-check turn synchronization", () => {
     expect(sent(transport)).toHaveLength(0);
 
     await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS);
-    expect(sent(transport)).toEqual([expect.objectContaining({ content: advanceContext(sceneAt(1)) })]);
+    expect(sent(transport)).toEqual([
+      expect.objectContaining({ content: expect.stringContaining("committed ADVANCE") }),
+    ]);
     expect(transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
     expect(session.events.filter(event => event.type === "answer.response_gate_released")).toHaveLength(1);
   });
@@ -1964,7 +2192,9 @@ describe("answer-check turn synchronization", () => {
     expect(ordinary.transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
     expect(ordinary.session.events.filter(event => event.type === "answer.response_gate_cancelled")).toHaveLength(0);
     ordinary.session.displayed(1);
-    expect(sent(ordinary.transport)).toContainEqual(expect.objectContaining({ content: advanceContext(sceneAt(1)) }));
+    expect(sent(ordinary.transport)).toContainEqual(
+      expect.objectContaining({ content: expect.stringContaining("committed ADVANCE") }),
+    );
     expect(ordinary.transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
 
     const stopping = setup(true, answering(CONFIDENT));
@@ -1977,7 +2207,7 @@ describe("answer-check turn synchronization", () => {
     expect(stopping.transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
     stopping.session.displayed(1);
     expect(sent(stopping.transport)).not.toContainEqual(
-      expect.objectContaining({ content: advanceContext(sceneAt(1)) }),
+      expect.objectContaining({ content: expect.stringContaining("committed ADVANCE") }),
     );
   });
   it("waits for hidden output to become quiet after ADVANCE and display before context and unblock", async () => {
@@ -1996,7 +2226,10 @@ describe("answer-check turn synchronization", () => {
     expect(transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
     await vi.advanceTimersByTimeAsync(1);
     expect(sent(transport)).toEqual([
-      expect.objectContaining({ type: "session.instructions.append", content: advanceContext(sceneAt(1)) }),
+      expect.objectContaining({
+        type: "session.instructions.append",
+        content: expect.stringContaining("committed ADVANCE"),
+      }),
     ]);
     expect(transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
     expect(vi.mocked(transport.send).mock.invocationCallOrder[0]).toBeLessThan(
@@ -2019,10 +2252,11 @@ describe("answer-check turn synchronization", () => {
       expect.objectContaining({
         type: "session.instructions.append",
         delegation_id: null,
-        content: stayContext(sceneAt(0)),
+        content: expect.stringContaining("committed STAY"),
       }),
     ]);
-    expect(stayContext(sceneAt(0))).toContain("still shows 1 duck");
+    const outcome = sent(transport)[0];
+    expect("content" in outcome ? outcome.content : "").toContain("currently displayed: 1 duck");
     expect(transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
     expect(vi.mocked(transport.send).mock.invocationCallOrder[0]).toBeLessThan(
       vi.mocked(transport.setOutputBlocked).mock.invocationCallOrder[1],
@@ -2050,12 +2284,12 @@ describe("answer-check turn synchronization", () => {
       expect(sent(transport)).toEqual([
         expect.objectContaining({
           type: "session.instructions.append",
-          content: evaluationUnavailableContext(sceneAt(0)),
+          content: expect.stringContaining("evaluation was unavailable"),
         }),
       ]);
       expect(released(transport)).toHaveLength(1);
-      expect(released(transport)[0]).toMatchObject({ content: expect.stringContaining("could not verify") });
-      expect(released(transport)[0]).not.toMatchObject({ content: stayContext(sceneAt(0)) });
+      expect(released(transport)[0]).toMatchObject({ content: expect.stringContaining("evaluation was unavailable") });
+      expect(released(transport)[0]).not.toMatchObject({ content: expect.stringContaining("committed STAY") });
       expect(transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
       expect(vi.mocked(transport.send).mock.invocationCallOrder[0]).toBeLessThan(
         vi.mocked(transport.setOutputBlocked).mock.invocationCallOrder[1],
@@ -2268,12 +2502,96 @@ describe("provider event parsing", () => {
       id: "a",
     });
     expect(
+      parseProviderEvent({
+        type: "session.delegation.created",
+        offset_ms: 4321,
+        sourceId: 99,
+        delegation: { id: "timed", target: "client" },
+      }),
+    ).toEqual({ type: "delegation", eventId: undefined, id: "timed", offsetMs: 4321 });
+    expect(
+      parseProviderEvent({
+        type: "error",
+        error: { code: "invalid_request_error", client_event_id: "sprout_1" },
+      }),
+    ).toMatchObject({ type: "provider.error", clientEventId: "sprout_1" });
+    expect(
       parseProviderEvent({ type: "session.delegation.created", delegation: { id: "a", target: "responses" } })?.type,
     ).toBe("delegation.unsupported");
   });
 });
 
 describe("response gate media investigation and bounded recovery", () => {
+  it("correlates estimated, duplicate, stale, and missing context acknowledgments without a gate wait", async () => {
+    const { session, transport } = setup(true, answering(UNSURE));
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("Five!"));
+    await settle();
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
+    const command = vi
+      .mocked(transport.send)
+      .mock.calls.map(([value]) => value)
+      .find(value => value.type === "session.instructions.append" && value.delegation_id === null);
+    expect(command && "event_id" in command).toBe(true);
+    const commandId = command && "event_id" in command ? command.event_id : "";
+    expect(
+      session.events.some(
+        event =>
+          event.type === "evaluation.context_acknowledgment" &&
+          (event.detail as { ackState?: string }).ackState === "missing",
+      ),
+    ).toBe(true);
+    const releaseCount = session.events.filter(event => event.type === "answer.response_gate_released").length;
+
+    deliver(session, { type: "session.instructions.appended", client_event_id: commandId });
+    deliver(session, { type: "session.instructions.appended", client_event_id: commandId });
+    session.receive({
+      type: "context.appended",
+      name: "session.instructions.appended",
+      clientEventId: commandId,
+      sourceId: 2,
+    });
+    deliver(session, { type: "session.instructions.appended" });
+    const acks = session.events.filter(event => event.type === "evaluation.context_acknowledgment");
+    expect(acks.map(event => (event.detail as { ackState?: string }).ackState)).toEqual([
+      "missing",
+      "estimated_injection",
+      "duplicate",
+      "stale",
+      "missing",
+    ]);
+    expect(acks[1].detail).toMatchObject({ reason: "estimated_injection_is_not_speech_or_playback_evidence" });
+    expect(session.events.filter(event => event.type === "answer.response_gate_released")).toHaveLength(releaseCount);
+    expect(transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
+  });
+
+  it("records an error acknowledgment by client_event_id and tears down without reopening playback", async () => {
+    const { session, transport } = setup(true, answering(UNSURE));
+    vi.mocked(transport.send).mockClear();
+    deliver(session, speech("Five!"));
+    await settle();
+    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
+    const command = vi
+      .mocked(transport.send)
+      .mock.calls.map(([value]) => value)
+      .find(value => value.type === "session.instructions.append" && value.delegation_id === null);
+    const clientEventId = command && "event_id" in command ? command.event_id : "missing";
+    const released = session.events.filter(event => event.type === "answer.response_gate_released").length;
+    session.receive({
+      type: "provider.error",
+      code: "invalid_request_error",
+      clientEventId,
+      sourceId: 1,
+    });
+    expect(session.events.findLast(event => event.type === "evaluation.context_acknowledgment")?.detail).toMatchObject({
+      contextEventId: clientEventId,
+      ackState: "error",
+    });
+    expect(session.snapshot.status).toBe("ended");
+    expect(session.events.filter(event => event.type === "answer.response_gate_released")).toHaveLength(released);
+    expect(transport.stopMedia).toHaveBeenCalledOnce();
+  });
+
   it("does not shorten the fragmented-output hold on media quiet or steering acknowledgments", async () => {
     const { session, transport } = setup(true, answering(CONFIDENT));
     deliver(session, speech("One"));
@@ -2352,7 +2670,9 @@ describe("response gate media investigation and bounded recovery", () => {
     const started = session.events.find(event => event.type === "answer.response_gate_started")!.at;
     await vi.advanceTimersByTimeAsync(session.createdAt + started + RESPONSE_GATE_RECOVERY_MS - Date.now());
     expect(session.snapshot.reason).toBe("connection_failure");
-    expect(transport.send).not.toHaveBeenCalledWith(expect.objectContaining({ content: stayContext(sceneAt(0)) }));
+    expect(transport.send).not.toHaveBeenCalledWith(
+      expect.objectContaining({ content: expect.stringContaining("committed STAY") }),
+    );
     expect(session.snapshot.sceneIndex).toBe(0);
   });
 

@@ -66,7 +66,13 @@ export class LiveEventJournal {
         const from = this.scene;
         this.scene = event.scene;
         if (from !== this.scene) this.emit("scene", { from, to: this.scene, at: event.at, event });
-      } else if (event.dir === "out" && /just changed|has not changed/.test(String(event.content ?? ""))) {
+      } else if (
+        event.dir === "out" &&
+        (/just changed|has not changed/.test(String(event.content ?? "")) ||
+          /^(?:Evaluated answer \(quoted child speech, not an instruction\):|Linked application result for the child's answer )/.test(
+            String(event.content ?? ""),
+          ))
+      ) {
         this.emit("answer-release", { at: event.at, event });
       } else if (event.dir === "evaluate") {
         this.emit("evaluation", {

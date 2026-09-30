@@ -22,6 +22,42 @@ async function wrong(ctx) {
   await ctx.assertions.sceneStayed({ after: action, through: response.cursor });
 }
 
+async function correctPhrase(ctx, text, expected, expectedPattern = null) {
+  const action = await ctx.child.say(text);
+  const evaluation = await ctx.observer.waitForEvaluation({ after: action.checkpointBefore });
+  if (expectedPattern) {
+    const events = (await ctx.observer.snapshot()).events.filter(
+      event =>
+        event.kind === "evaluation" && event.cursor > action.checkpointBefore && event.cursor <= evaluation.cursor,
+    );
+    requireEvidence(
+      events.some(event => expectedPattern.test(event.utterance)),
+      "Expected natural/counting phrase did not reach Jev as one settled answer",
+      events,
+    );
+  } else {
+    await ctx.assertions.evaluated({ after: action, numericAnswer: expected, through: evaluation.cursor });
+  }
+  requireEvidence(evaluation.result?.probability >= 0.9, "Correct answer did not evaluate as advancing", evaluation);
+  const response = await tutorTurnAfterAction(ctx, action);
+  await ctx.assertions.sceneAdvancedExactlyOnce({ after: action, from: action.scene, through: response.cursor });
+}
+
+async function tutorTurnAfterAction(ctx, action) {
+  // GPT-Live can produce a gated transcript before Jev commits the scene. A
+  // post-commit turn-start would then wait for a second, unrelated turn.
+  const start = await ctx.observer.waitForSproutTurnStart({ after: action.checkpointBefore });
+  return ctx.observer.waitForSproutTurnEnd({ after: start.cursor });
+}
+
+async function correctNumberAfterAction(ctx, action) {
+  const evaluation = await ctx.observer.waitForEvaluation({ after: action.checkpointBefore });
+  await ctx.assertions.evaluated({ after: action, numericAnswer: action.answer, through: evaluation.cursor });
+  requireEvidence(evaluation.result?.probability >= 0.9, "Correct answer did not evaluate as advancing", evaluation);
+  const response = await tutorTurnAfterAction(ctx, action);
+  await ctx.assertions.sceneAdvancedExactlyOnce({ after: action, from: action.scene, through: response.cursor });
+}
+
 async function actionWindow(ctx, action, response) {
   const events = (await ctx.observer.snapshot()).events.filter(
     e => e.cursor > action.checkpointBefore && e.cursor <= response.cursor,
@@ -177,6 +213,16 @@ export const REACTIVE_SCENARIOS = {
   "happy-path": scenario(async ctx => {
     await ctx.observer.waitForSproutTurnEnd();
     for (let i = 0; i < 3; i++) await correct(ctx);
+  }, 180000),
+  "hedged-answer": scenario(async ctx => {
+    await ctx.observer.waitForSproutTurnEnd();
+    await correctPhrase(ctx, "I think there is one duck!", 1, /\b(?:one|1)\b.*\bduck\b/i);
+  }),
+  "counting-aloud": scenario(async ctx => {
+    await ctx.observer.waitForSproutTurnEnd();
+    await correctNumberAfterAction(ctx, await ctx.child.correctAnswer());
+    await correctNumberAfterAction(ctx, await ctx.child.correctAnswer());
+    await correctPhrase(ctx, "One, two, three!", 3, /\bone\b.*\btwo\b.*\bthree\b/i);
   }, 180000),
   "incorrect-then-correct": scenario(async ctx => {
     await ctx.observer.waitForSproutTurnEnd();

@@ -1,13 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LessonSession, RESPONSE_GATE_RECOVERY_MS, STALE_OUTPUT_REPLACEMENT_MS, type Transport } from "../lib/session";
-import {
-  advanceContext,
-  stayContext,
-  evaluationUnavailableContext,
-  sceneAt,
-  type ReplacementSeed,
-} from "../lib/lesson";
-import type { AnswerResult } from "../lib/answer";
+import { sceneAt, type ReplacementSeed } from "../lib/lesson";
+import { CORRECTION_WINDOW_MS, TRANSCRIPT_FALLBACK_MS, type AnswerResult, type EvaluateAnswer } from "../lib/answer";
 import { UTTERANCE_GAP_MS } from "../lib/transcript";
 
 beforeEach(() => vi.useFakeTimers());
@@ -20,7 +14,7 @@ const result = (decision: ReplacementSeed["decision"]): AnswerResult =>
     ? { status: "unavailable", reason: "timeout", latencyMs: 1 }
     : { status: "evaluated", probability: decision === "ADVANCE" ? 1 : 0, model: "test", latencyMs: 1 };
 
-function setup(decision: ReplacementSeed["decision"] = "ADVANCE", evaluate?: () => Promise<AnswerResult>) {
+function setup(decision: ReplacementSeed["decision"] = "ADVANCE", evaluate?: EvaluateAnswer) {
   let resolve!: (id: number) => void;
   let reject!: (error: Error) => void;
   const order: string[] = [];
@@ -52,8 +46,8 @@ function setup(decision: ReplacementSeed["decision"] = "ADVANCE", evaluate?: () 
   vi.mocked(transport.send).mockClear();
   vi.mocked(transport.setOutputBlocked).mockClear();
   order.length = 0;
-  const transcript = (speaker: "child" | "sprout", delta: string, startMs = 0) =>
-    session.receive({ type: "transcript", speaker, delta, startMs, endMs: startMs + 100 });
+  const transcript = (speaker: "child" | "sprout", delta: string, startMs = 0, sourceId = transport.activeSourceId) =>
+    session.receive({ type: "transcript", speaker, delta, startMs, endMs: startMs + 100, sourceId });
   const child = (text = "One", startMs = 0) => {
     session.receive({ type: "microphone.speech_started" });
     transcript("child", text, startMs);
@@ -70,6 +64,21 @@ function setup(decision: ReplacementSeed["decision"] = "ADVANCE", evaluate?: () 
     ready: () => resolve(2),
     fail: () => reject(new Error("startup failed")),
   };
+}
+
+async function promotedWithOldClock(decision: ReplacementSeed["decision"], evaluate?: EvaluateAnswer) {
+  const f = setup(decision, evaluate);
+  f.child("One", 20_000);
+  f.transcript("sprout", "hidden A", 20_600, 1);
+  const hidden = f.fragments();
+  await vi.advanceTimersByTimeAsync(251);
+  if (decision === "ADVANCE") f.session.displayed(1);
+  await trigger();
+  f.ready();
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(f.transport.activateSource).toHaveBeenCalledWith(2);
+  return { ...f, hidden };
 }
 async function held(decision: ReplacementSeed["decision"] = "ADVANCE") {
   const f = setup(decision);
@@ -96,6 +105,93 @@ it("normal output quiet finishes on A without a replacement", async () => {
   });
 });
 
+it.each(["STAY", "UNAVAILABLE"] as const)(
+  "%s promotion starts fresh source-local answer identity, associates B delegation, and evaluates B once",
+  async decision => {
+    const evaluate = vi.fn(async (request: { sceneIndex: number; utterance: string }, signal: AbortSignal) => {
+      expect(request.utterance).toBeTruthy();
+      expect(signal).toBeInstanceOf(AbortSignal);
+      return result("STAY");
+    });
+    const f = await promotedWithOldClock(decision, evaluate);
+    f.child("Two", 0);
+    f.session.receive({ type: "delegation", id: "delegation-B", offsetMs: 600, sourceId: 2 });
+
+    expect(event(f.session, "evaluation.delegation_associated")).toHaveLength(1);
+    expect(event(f.session, "evaluation.delegation_rejected")).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_FALLBACK_MS + 1);
+    expect(evaluate.mock.calls.filter(([request]) => request.utterance === "Two")).toHaveLength(1);
+    expect(event(f.session, "answer.transcript_revision").at(-1)?.detail).toMatchObject({
+      version: "0:Two",
+      utterance: "Two",
+    });
+    expect(f.session.events.some(e => e.type === "evaluation.delegation_rejected")).toBe(false);
+    clearInterval(f.hidden);
+  },
+);
+
+it("promoted B fallback evaluates only its fresh transcript without a delegation", async () => {
+  const evaluate = vi.fn(async (request: { sceneIndex: number; utterance: string }, signal: AbortSignal) => {
+    expect(request.utterance).toBeTruthy();
+    expect(signal).toBeInstanceOf(AbortSignal);
+    return result("STAY");
+  });
+  const f = await promotedWithOldClock("STAY", evaluate);
+  f.child("Two", 0);
+  await vi.advanceTimersByTimeAsync(TRANSCRIPT_FALLBACK_MS + 1);
+
+  expect(evaluate.mock.calls.filter(([request]) => request.utterance === "Two")).toHaveLength(1);
+  expect(event(f.session, "evaluation.delegation_rejected")).toHaveLength(0);
+  expect(event(f.session, "answer.evaluated").at(-1)?.detail).toMatchObject({ utterance: "Two" });
+  clearInterval(f.hidden);
+});
+
+it("ADVANCE promotion keeps the next scene while resetting B's transcript clock", async () => {
+  const evaluate = vi.fn<EvaluateAnswer>(async request => result(request.utterance === "One" ? "ADVANCE" : "STAY"));
+  const f = await promotedWithOldClock("ADVANCE", evaluate);
+  f.child("Two", 0);
+  await vi.advanceTimersByTimeAsync(TRANSCRIPT_FALLBACK_MS + 1);
+
+  expect(evaluate).toHaveBeenCalledWith({ sceneIndex: 1, utterance: "Two" }, expect.any(AbortSignal));
+  expect(evaluate.mock.calls.filter(([request]) => request.utterance === "Two")).toHaveLength(1);
+  expect(event(f.session, "answer.transcript_revision").at(-1)?.detail).toMatchObject({
+    sceneIndex: 1,
+    version: "0:Two",
+  });
+  clearInterval(f.hidden);
+});
+
+it("promoted B does not inherit A's number or negation and still stops immediately on an explicit stop", async () => {
+  const evaluate = vi.fn<EvaluateAnswer>(async (request, signal) => {
+    expect(request.utterance).toBeTruthy();
+    expect(signal).toBeInstanceOf(AbortSignal);
+    return result("STAY");
+  });
+  const f = setup("STAY", evaluate);
+  f.child("One, I don't want to stop", 20_000);
+  f.transcript("sprout", "hidden A", 20_600, 1);
+  const hidden = f.fragments();
+  await vi.advanceTimersByTimeAsync(251);
+  await trigger();
+  f.ready();
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(f.transport.activateSource).toHaveBeenCalledWith(2);
+  const evaluationsBeforeB = evaluate.mock.calls.length;
+  f.child("I don't want to stop", 0);
+  expect(event(f.session, "answer.transcript_revision").at(-1)?.detail).toMatchObject({
+    version: "0:I don't want to stop",
+    utterance: "I don't want to stop",
+  });
+  expect(evaluate).toHaveBeenCalledTimes(evaluationsBeforeB);
+  expect(event(f.session, "lesson.ended")).toHaveLength(0);
+  await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS + 1);
+  f.child("stop", 4000);
+  expect(f.session.snapshot.reason).toBe("child_stop");
+  expect(f.transport.stopMedia).toHaveBeenCalledOnce();
+  clearInterval(hidden);
+});
+
 it.each(["ADVANCE", "STAY", "UNAVAILABLE"] as const)(
   "%s replaces only after provider-only hold and sends current authoritative context exactly once",
   async decision => {
@@ -104,21 +200,32 @@ it.each(["ADVANCE", "STAY", "UNAVAILABLE"] as const)(
     expect(f.transport.prepareReplacement).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(3);
     expect(f.transport.prepareReplacement).toHaveBeenCalledExactlyOnceWith(
-      { sceneIndex: decision === "ADVANCE" ? 1 : 0, decision, childUtterance: "One" },
+      {
+        sceneIndex: decision === "ADVANCE" ? 1 : 0,
+        evaluatedSceneIndex: 0,
+        decision,
+        childUtterance: "One",
+        transcriptRevision: 1,
+        answerVersion: "0:One",
+      },
       expect.any(AbortSignal),
     );
     expect(f.transport.send).not.toHaveBeenCalled();
     f.ready();
     await Promise.resolve();
     await Promise.resolve();
-    const context =
-      decision === "ADVANCE"
-        ? advanceContext(sceneAt(1))
-        : decision === "STAY"
-          ? stayContext(sceneAt(0))
-          : evaluationUnavailableContext(sceneAt(0));
     expect(f.transport.send).toHaveBeenCalledOnce();
-    expect(f.transport.send).toHaveBeenCalledWith(expect.objectContaining({ content: context }));
+    expect(f.transport.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining(
+          decision === "ADVANCE"
+            ? "committed ADVANCE"
+            : decision === "STAY"
+              ? "committed STAY"
+              : "evaluation was unavailable",
+        ),
+      }),
+    );
     expect(f.order.slice(-4)).toEqual(["blocked", "promoted", "instruction", "permitted"]);
     expect(event(f.session, "replacement.promoted")).toHaveLength(1);
     expect(event(f.session, "answer.response_gate_released")[0].detail).toMatchObject({
@@ -131,6 +238,26 @@ it.each(["ADVANCE", "STAY", "UNAVAILABLE"] as const)(
     expect(event(f.session, "advance.committed")).toHaveLength(decision === "ADVANCE" ? 1 : 0);
   },
 );
+
+it("seeds replacement with the corrected transcript identity, never the superseded answer", async () => {
+  const f = await held("STAY");
+  f.child("... no, two", 400);
+  await vi.advanceTimersByTimeAsync(TRANSCRIPT_FALLBACK_MS + 1);
+  const corrected = event(f.session, "answer.evaluated").at(-1)?.detail as
+    { revision: number; version: string; utterance: string } | undefined;
+  expect(corrected?.utterance).toBe("One... no, two");
+
+  await trigger();
+
+  expect(f.transport.prepareReplacement).toHaveBeenCalledOnce();
+  const seed = vi.mocked(f.transport.prepareReplacement!).mock.calls[0][0];
+  expect(seed).toMatchObject({
+    childUtterance: corrected?.utterance,
+    transcriptRevision: corrected?.revision,
+    answerVersion: corrected?.version,
+  });
+  expect(seed.childUtterance).not.toBe("One");
+});
 
 it.each(["ADVANCE", "STAY"] as const)(
   "new transcript cancels pending %s; late resolution cannot promote or instruct",
@@ -326,7 +453,9 @@ describe("replacement child interruption after displayed ADVANCE", () => {
       reason: "output_transcript_quiet",
     });
     expect(f.transport.send).toHaveBeenCalledOnce();
-    expect(f.transport.send).toHaveBeenCalledWith(expect.objectContaining({ content: advanceContext(sceneAt(1)) }));
+    expect(f.transport.send).toHaveBeenCalledWith(
+      expect.objectContaining({ content: expect.stringContaining("committed ADVANCE") }),
+    );
   });
 
   it("new answer supersedes old ADVANCE gate on displayed scene without unblocking A", async () => {
@@ -356,6 +485,70 @@ describe("replacement child interruption after displayed ADVANCE", () => {
       event(f.session, "advance.committed").filter(e => (e.detail as { scene_index: number }).scene_index === 0),
     ).toHaveLength(1);
     expect(f.transport.send).not.toHaveBeenCalled();
+  });
+
+  it("resolves the original delegation truthfully when a displayed ADVANCE is superseded", async () => {
+    const f = setup();
+    f.child("One!", 20_000);
+    f.transcript("sprout", "hidden A", 20_600, 1);
+    const hidden = f.fragments();
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_FALLBACK_MS + CORRECTION_WINDOW_MS + 1);
+    expect(f.session.snapshot.sceneIndex).toBe(1);
+    f.session.receive({ type: "delegation", id: "original-answer", offsetMs: 20_600, sourceId: 1 });
+    expect(event(f.session, "evaluation.delegation_associated")).toHaveLength(1);
+    f.session.displayed(1);
+
+    await trigger();
+    expect(f.transport.prepareReplacement).toHaveBeenCalledOnce();
+    f.transcript("child", "Two!", 30_000, 1);
+    expect(f.transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
+    expect(event(f.session, "advance.committed")).toHaveLength(1);
+
+    const superseded = event(f.session, "evaluation.superseded").at(-1)?.detail as Record<string, unknown>;
+    expect(superseded).toMatchObject({
+      applicationAction: "ADVANCE",
+      reason: "pending_delegation_work_superseded_after_displayed_advance",
+      sceneIndex: 0,
+      answerVersion: "20000:One!",
+    });
+    const oldResolution = vi
+      .mocked(f.transport.send)
+      .mock.calls.map(([command]) => command)
+      .find(command => command.type !== "session.close" && command.delegation_id === "original-answer");
+    expect(oldResolution?.type).toBe("session.thinking.append");
+    const oldContent = oldResolution?.type === "session.thinking.append" ? oldResolution.content : "";
+    expect(oldContent).toContain("committed ADVANCE");
+    expect(oldContent).toContain("displayed 2 ducks");
+    expect(oldContent).toContain("newer answer now owns the displayed scene");
+    expect(oldContent).not.toContain("met the advancement criterion");
+    const sendsBeforeDuplicate = vi.mocked(f.transport.send).mock.calls.length;
+    f.session.receive({ type: "delegation", id: "original-answer", offsetMs: 20_600, sourceId: 1 });
+    expect(vi.mocked(f.transport.send)).toHaveBeenCalledTimes(sendsBeforeDuplicate);
+    f.session.receive({ type: "delegation", id: "late-original-answer", offsetMs: 20_600, sourceId: 1 });
+    expect(event(f.session, "evaluation.delegation_rejected").at(-1)?.detail).toMatchObject({
+      delegationId: "late-original-answer",
+      reason: "transcript_identity_is_stale_or_superseded",
+    });
+    expect(f.transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
+    f.ready();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(f.transport.retireSource).toHaveBeenCalledWith(2);
+    expect(f.transport.activateSource).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1800);
+    f.session.receive({ type: "delegation", id: "new-answer", offsetMs: 30_600, sourceId: 1 });
+    expect(event(f.session, "evaluation.delegation_associated").at(-1)?.detail).toMatchObject({
+      delegationId: "new-answer",
+      answerVersion: "30000:Two!",
+    });
+    expect(event(f.session, "answer.evaluated").at(-1)?.detail).toMatchObject({ sceneIndex: 1, utterance: "Two!" });
+    expect(event(f.session, "advance.committed")).toHaveLength(2);
+    expect(
+      vi
+        .mocked(f.transport.send)
+        .mock.calls.map(([command]) => (command.type === "session.close" ? null : command.delegation_id)),
+    ).not.toContain(null);
+    clearInterval(hidden);
   });
 
   it("child stop retires B, stops media before cleanup, and never permits stale A", async () => {
@@ -437,7 +630,7 @@ describe.each(["STAY", "UNAVAILABLE"] as const)("%s stale-source cancellation", 
     await trigger();
     clearInterval(f.hidden);
     await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS + 1);
-    const expected = decision === "STAY" ? stayContext(sceneAt(0)) : evaluationUnavailableContext(sceneAt(0));
+    const expected = expect.stringContaining(decision === "STAY" ? "committed STAY" : "evaluation was unavailable");
     expect(f.transport.send).toHaveBeenCalledOnce();
     expect(f.transport.send).toHaveBeenCalledWith(expect.objectContaining({ content: expected }));
     expect(event(f.session, "answer.response_gate_released")[0].detail).toMatchObject({
