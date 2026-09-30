@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ObservationClaim, ObserverProposal, ParentDecision } from "../lib/observation-contracts";
 import { reviewPlaybackAtMs, type RepairLevel, type ReviewCommand, type ReviewSnapshot } from "../lib/parent-review";
+import { reconcileReviewWrite, type ReviewWrite } from "../lib/parent-review-reconciliation";
 import { EvidenceDetail } from "./evidence-detail";
 
 const label = (value: string) => value.replaceAll("_", " ");
@@ -263,7 +264,7 @@ function ReviewPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [retryMessage, setRetryMessage] = useState("");
-  const [uncertain, setUncertain] = useState<ReviewCommand | null>(null);
+  const [uncertain, setUncertain] = useState<ReviewWrite | null>(null);
   const [refreshed, setRefreshed] = useState(false);
   const [repair, setRepair] = useState<RepairLevel>("verified");
   const [note, setNote] = useState("");
@@ -271,12 +272,28 @@ function ReviewPanel({
   const alive = useRef(false);
   const lock = useRef(false);
   const readRevision = useRef(0);
+  const pending = useRef<ReviewWrite | null>(null);
   async function refresh() {
+    setRefreshed(false);
     const revision = ++readRevision.current;
     const value = await request({ operation: "get", sessionId });
     if (alive.current && revision === readRevision.current && value) {
       setSnapshot(value);
-      setRefreshed(true);
+      const command = pending.current;
+      if (command) {
+        const result = reconcileReviewWrite(command, value);
+        setError(result.outcome === "saved" ? "" : result.message);
+        setRefreshed(result.outcome === "unresolved" && result.retryable);
+        if (result.outcome !== "unresolved") {
+          pending.current = null;
+          setUncertain(null);
+        } else {
+          setUncertain(command);
+        }
+      } else {
+        setError("");
+        setRefreshed(true);
+      }
     }
   }
   useEffect(() => {
@@ -298,8 +315,9 @@ function ReviewPanel({
       alive.current = false;
     };
   }, [sessionId]);
-  async function write(command: ReviewCommand) {
-    if (lock.current) return;
+  async function write(command: ReviewWrite) {
+    if (lock.current || (pending.current && pending.current !== command)) return;
+    pending.current = command;
     lock.current = true;
     setBusy(true);
     setError("");
@@ -307,7 +325,6 @@ function ReviewPanel({
     try {
       await request(command);
       if (!alive.current) return;
-      setUncertain(null);
       await refresh();
     } catch {
       if (!alive.current) return;
@@ -346,7 +363,6 @@ function ReviewPanel({
           setBusy(true);
           try {
             await refresh();
-            if (alive.current) setError("");
           } catch {
             if (alive.current) setError("Saved review could not be refreshed.");
           } finally {
@@ -372,7 +388,7 @@ function ReviewPanel({
           {canRetry && (
             <button
               className="download-button"
-              disabled={busy}
+              disabled={disabled}
               onClick={async () => {
                 if (lock.current) return;
                 lock.current = true;

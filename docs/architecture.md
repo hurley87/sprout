@@ -325,8 +325,16 @@ repair level, and optional note; verified completion requires unchanged acceptan
 requires acknowledgment and creates no evidence. No next lesson or planner is called.
 
 During a write the panel prevents duplicate actions. An uncertain response triggers a saved-state read
-and retains the exact intended payload for explicit retry. Other decisions remain disabled until that
-retry is confirmed; a failed refresh requires a successful refresh first. Reads/writes from an unmounted
+and reconciles the exact intended payload against a same-session, same-analysis READY snapshot.
+An identical persisted decision or full completion clears uncertainty without a duplicate write;
+comparison ignores backend-owned review/completion timestamps but preserves all input values.
+A different immutable decision or completion (including note, repair level or empty acknowledgment)
+shows a conflict and the actual saved result, discards the impossible retry, and permits remaining
+review actions. Accept-all also conflicts with stored corrections/rejections; partial unchanged
+acceptances without completion remain unresolved. Original proposals and saved decisions never change.
+If no authoritative result establishes the outcome, retain the exact original payload and block
+competing decisions/completion/Observer retry. A successful refresh enables only that identical retry;
+a failed refresh or changed analysis/proposal identity keeps it disabled. Reads/writes from an unmounted
 session panel cannot update the next inspection, and reads verify the returned session identity.
 Synthetic browser tests mock every review, Observer retry, recording and Convex service call. Actual
 capability configuration, deployed RPC validation and live recording/provider review remain deployment

@@ -31,6 +31,7 @@ async function harness(page: Page, initial = snapshot()) {
   let current = initial;
   const writes: ReviewCommand[] = [];
   let failWrite = false;
+  let persistFailedWrite = true;
   let failRead = false;
   let delayWrite: Promise<void> | null = null;
   let delayRead: Promise<void> | null = null;
@@ -49,35 +50,62 @@ async function harness(page: Page, initial = snapshot()) {
       }
       writes.push(command);
       if (delayWrite) await delayWrite;
-      if (command.operation === "decide") {
-        if (!current.decisions.some(row => row.proposalRowId === command.proposalRowId))
-          current.decisions.push({
-            proposalRowId: command.proposalRowId,
-            decision: { ...command.decision, reviewedAt: 100 } as ParentDecision,
-          });
-      } else {
-        if (command.operation === "acceptAll")
-          current.decisions = current.proposals.map(row => ({
-            proposalRowId: row.id,
-            decision: {
-              kind: "parent_decision",
-              proposalId: row.proposal.proposalId,
-              decision: "accepted",
-              reviewedAt: 100,
-            },
-          }));
-        current.review = {
-          repairLevel: command.repairLevel ?? "verified",
-          ...(command.note ? { note: command.note } : {}),
-          emptyAcknowledged: Boolean(command.acknowledgeEmpty),
-          completedAt: 100,
-        };
-      }
       const fail = failWrite;
       failWrite = false;
+      let conflict = false;
+      if (!fail || persistFailedWrite) {
+        if (command.operation === "decide") {
+          const prior = current.decisions.find(row => row.proposalRowId === command.proposalRowId);
+          if (prior) {
+            const { reviewedAt, ...input } = prior.decision;
+            void reviewedAt;
+            conflict = JSON.stringify(input) !== JSON.stringify(command.decision);
+          } else if (current.review) conflict = true;
+          else
+            current.decisions.push({
+              proposalRowId: command.proposalRowId,
+              decision: { ...command.decision, reviewedAt: 100 } as ParentDecision,
+            });
+        } else {
+          const empty = current.proposals.length === 0;
+          const incompatible = current.decisions.some(row => row.decision.decision !== "accepted");
+          conflict =
+            (empty && command.acknowledgeEmpty !== true) ||
+            (!empty && command.acknowledgeEmpty === true) ||
+            ((command.operation === "acceptAll" || command.repairLevel === "verified") && incompatible) ||
+            (command.operation === "complete" &&
+              current.proposals.some(row => !current.decisions.some(decision => decision.proposalRowId === row.id)));
+          const nextReview = {
+            repairLevel: command.repairLevel ?? "verified",
+            ...(command.note ? { note: command.note } : {}),
+            emptyAcknowledged: empty,
+            completedAt: 100,
+          };
+          if (current.review)
+            conflict ||=
+              current.review.repairLevel !== nextReview.repairLevel ||
+              current.review.note !== nextReview.note ||
+              current.review.emptyAcknowledged !== empty;
+          if (!conflict) {
+            if (command.operation === "acceptAll")
+              for (const row of current.proposals)
+                if (!current.decisions.some(decision => decision.proposalRowId === row.id))
+                  current.decisions.push({
+                    proposalRowId: row.id,
+                    decision: {
+                      kind: "parent_decision",
+                      proposalId: row.proposal.proposalId,
+                      decision: "accepted",
+                      reviewedAt: 100,
+                    },
+                  });
+            current.review ??= nextReview;
+          }
+        }
+      }
       return route.fulfill({
-        status: fail ? 409 : 200,
-        json: fail ? { error: "private error must not display" } : { saved: true },
+        status: fail || conflict ? 409 : 200,
+        json: fail || conflict ? { error: "private error must not display" } : { saved: true },
       });
     }
     if (url.endsWith("/api/query")) {
@@ -151,8 +179,9 @@ async function harness(page: Page, initial = snapshot()) {
       current = value;
     },
     getCurrent: () => current,
-    failNextWrite: () => {
+    failNextWrite: (persist = true) => {
       failWrite = true;
+      persistFailedWrite = persist;
     },
     failReads: (value: boolean) => {
       failRead = value;
@@ -322,7 +351,7 @@ test("uncertain writes refresh persistence, prevent duplicate clicks and retry i
       release = resolve;
     }),
   );
-  h.failNextWrite();
+  h.failNextWrite(false);
   h.failReads(true);
   const accept = h.panel.getByRole("button", { name: "Accept unchanged", exact: true });
   await accept.click();
@@ -335,7 +364,8 @@ test("uncertain writes refresh persistence, prevent duplicate clicks and retry i
   await expect(accept).toBeDisabled();
   h.failReads(false);
   await h.panel.getByRole("button", { name: "Refresh review" }).click();
-  await expect(h.panel.getByText("Saved parent decision: accepted")).toBeVisible();
+  await expect(h.panel.getByRole("button", { name: "Retry identical save" })).toBeEnabled();
+  await expect(accept).toBeDisabled();
   await h.panel.getByRole("button", { name: "Retry identical save" }).click();
   await expect(h.panel.getByRole("button", { name: "Retry identical save" })).toHaveCount(0);
   expect(h.writes).toHaveLength(2);
@@ -446,4 +476,240 @@ test("initial read and Observer retry failures remain safe and recover explicitl
   await h.panel.getByRole("button", { name: "Retry Observer analysis" }).click();
   await expect(h.panel.getByText("Observer analysis: pending")).toBeVisible();
   expect(h.writes).toEqual([]);
+});
+
+test("stale rejection conflicts with saved acceptance and recovers into completion without retry", async ({ page }) => {
+  const initial = snapshot();
+  const originals = structuredClone(initial.proposals);
+  const h = await harness(page, initial);
+  await h.panel.getByRole("button", { name: "Reject proposal" }).click();
+  await h.panel.getByLabel("Rejection reason").fill("Stale rejection");
+  const persisted = snapshot();
+  persisted.decisions = [
+    {
+      proposalRowId: "row-0",
+      decision: { kind: "parent_decision", proposalId: "p0", decision: "accepted", reviewedAt: 50 },
+    },
+  ];
+  h.setCurrent(persisted);
+  h.failNextWrite();
+  await h.panel.getByRole("button", { name: "Save rejection" }).click();
+  await expect(h.panel.getByRole("alert")).toContainText("Save conflict");
+  await expect(h.panel.getByText("Saved parent decision: accepted")).toBeVisible();
+  await expect(h.panel.getByRole("button", { name: "Retry identical save" })).toHaveCount(0);
+  await expect(h.panel.getByRole("button", { name: "Finish review", exact: true })).toBeEnabled();
+  expect(h.getCurrent().decisions).toEqual(persisted.decisions);
+  await h.panel.getByRole("button", { name: "Refresh review" }).click();
+  await h.panel.getByRole("button", { name: "Finish review", exact: true }).click();
+  await expect(h.panel.getByText(/Review complete · verified/)).toBeVisible();
+  expect(h.writes.map(command => command.operation)).toEqual(["decide", "complete"]);
+  expect(h.getCurrent().proposals).toEqual(originals);
+});
+
+for (const readFailure of [false, true])
+  test(`lost response with persisted decision resolves without duplicate RPC (failed refresh: ${readFailure})`, async ({
+    page,
+  }) => {
+    const h = await harness(page);
+    h.failNextWrite();
+    h.failReads(readFailure);
+    await h.panel.getByRole("button", { name: "Accept unchanged", exact: true }).click();
+    if (readFailure) {
+      await expect(h.panel.getByRole("alert")).toContainText("Save and refresh");
+      await expect(h.panel.getByRole("button", { name: "Retry identical save" })).toBeDisabled();
+      h.failReads(false);
+      await h.panel.getByRole("button", { name: "Refresh review" }).click();
+    }
+    await expect(h.panel.getByText("Saved parent decision: accepted")).toBeVisible();
+    await expect(h.panel.getByRole("button", { name: "Retry identical save" })).toHaveCount(0);
+    await expect(h.panel.getByRole("button", { name: "Finish review", exact: true })).toBeEnabled();
+    expect(h.writes).toHaveLength(1);
+  });
+
+test("successful write followed by failed read reconciles on manual refresh", async ({ page }) => {
+  const h = await harness(page);
+  h.failReads(true);
+  await h.panel.getByRole("button", { name: "Accept unchanged", exact: true }).click();
+  await expect(h.panel.getByRole("alert")).toContainText("Save and refresh");
+  h.failReads(false);
+  await h.panel.getByRole("button", { name: "Refresh review" }).click();
+  await expect(h.panel.getByRole("button", { name: "Retry identical save" })).toHaveCount(0);
+  await expect(h.panel.getByRole("button", { name: "Finish review", exact: true })).toBeEnabled();
+  expect(h.writes).toHaveLength(1);
+});
+
+for (const operation of ["complete", "acceptAll"] as const)
+  test(`conflicting ${operation} retains saved completion note and repair level`, async ({ page }) => {
+    const initial = snapshot();
+    initial.decisions = [
+      {
+        proposalRowId: "row-0",
+        decision: { kind: "parent_decision", proposalId: "p0", decision: "accepted", reviewedAt: 12 },
+      },
+    ];
+    const h = await harness(page, initial);
+    await expect(h.panel.getByText("Saved parent decision: accepted")).toBeVisible();
+    await h.panel.getByLabel("Optional review note").fill("Attempted note");
+    const persisted = structuredClone(initial);
+    persisted.review = {
+      repairLevel: "light_correction",
+      note: "Other tab's note",
+      emptyAcknowledged: false,
+      completedAt: 20,
+    };
+    h.setCurrent(persisted);
+    await h.panel
+      .getByRole("button", {
+        name: operation === "complete" ? "Finish review" : "Accept all unchanged and finish",
+        exact: true,
+      })
+      .click();
+    await expect(h.panel.getByRole("alert")).toContainText("Save conflict");
+    await expect(h.panel.getByText(/Review complete · light correction/)).toBeVisible();
+    await expect(h.panel.getByText("Review note: Other tab's note")).toBeVisible();
+    await expect(h.panel.getByRole("button", { name: "Retry identical save" })).toHaveCount(0);
+    expect(h.getCurrent().review).toEqual(persisted.review);
+    expect(h.writes).toHaveLength(1);
+  });
+
+for (const decision of ["corrected", "rejected"] as const)
+  test(`accept-all conflict preserves stored ${decision} and permits remaining decisions and completion`, async ({
+    page,
+  }) => {
+    const h = await harness(page, snapshot(2));
+    const persisted = snapshot(2);
+    const originals = structuredClone(persisted.proposals);
+    persisted.decisions = [
+      {
+        proposalRowId: "row-0",
+        decision: {
+          kind: "parent_decision",
+          proposalId: "p0",
+          decision,
+          reviewedAt: 30,
+          ...(decision === "rejected"
+            ? { rejectionReason: "Other tab rejected" }
+            : {
+                correction: { ...persisted.proposals[0].proposal.observation, description: "Other tab corrected" },
+                parentContext: { provenance: "parent_review", note: "Other parent context" },
+              }),
+        },
+      },
+    ];
+    const stored = structuredClone(persisted.decisions);
+    h.setCurrent(persisted);
+    await h.panel.getByRole("button", { name: "Accept all unchanged and finish" }).click();
+    await expect(h.panel.getByRole("alert")).toContainText("Save conflict");
+    await expect(h.panel.getByText(`Saved parent decision: ${decision}`)).toBeVisible();
+    await expect(h.panel.getByRole("button", { name: "Retry identical save" })).toHaveCount(0);
+    await h.panel.getByRole("article").nth(1).getByRole("button", { name: "Accept unchanged", exact: true }).click();
+    await h.panel.getByLabel("Parent repair level").selectOption("substantial_repair");
+    await h.panel.getByRole("button", { name: "Finish review", exact: true }).click();
+    await expect(h.panel.getByText(/Review complete · substantial repair/)).toBeVisible();
+    expect(h.getCurrent().decisions[0]).toEqual(stored[0]);
+    expect(h.getCurrent().proposals).toEqual(originals);
+  });
+
+test("partial accept-all without completion keeps exact note locked until identical retry", async ({ page }) => {
+  const h = await harness(page, snapshot(2));
+  await h.panel.getByLabel("Optional review note").fill("Original bulk note");
+  const partial = snapshot(2);
+  partial.decisions = [
+    {
+      proposalRowId: "row-0",
+      decision: { kind: "parent_decision", proposalId: "p0", decision: "accepted", reviewedAt: 50 },
+    },
+  ];
+  h.setCurrent(partial);
+  h.failNextWrite(false);
+  await h.panel.getByRole("button", { name: "Accept all unchanged and finish" }).click();
+  await expect(h.panel.getByRole("button", { name: "Retry identical save" })).toBeEnabled();
+  await expect(h.panel.getByRole("button", { name: "Accept unchanged", exact: true })).toBeDisabled();
+  await expect(h.panel.getByLabel("Optional review note")).toBeDisabled();
+  h.failReads(true);
+  await h.panel.getByRole("button", { name: "Refresh review" }).click();
+  await expect(h.panel.getByRole("button", { name: "Retry identical save" })).toBeDisabled();
+  h.failReads(false);
+  await h.panel.getByRole("button", { name: "Refresh review" }).click();
+  await h.panel.getByRole("button", { name: "Retry identical save" }).click();
+  await expect(h.panel.getByText(/Review complete · verified/)).toBeVisible();
+  expect(h.writes[1]).toEqual(h.writes[0]);
+  expect(h.getCurrent().decisions[0].decision.reviewedAt).toBe(50);
+});
+
+test("lost empty completion response resolves stored acknowledgment and note", async ({ page }) => {
+  const h = await harness(page, snapshot(0));
+  await h.panel.getByLabel("I acknowledge this empty READY summary").check();
+  await h.panel.getByLabel("Optional review note").fill("Empty checked");
+  h.failNextWrite();
+  await h.panel.getByRole("button", { name: "Finish review", exact: true }).click();
+  await expect(h.panel.getByText("Empty summary explicitly acknowledged.")).toBeVisible();
+  await expect(h.panel.getByText("Review note: Empty checked")).toBeVisible();
+  await expect(h.panel.getByRole("button", { name: "Retry identical save" })).toHaveCount(0);
+  expect(h.writes).toHaveLength(1);
+});
+
+for (const operation of ["complete", "acceptAll"] as const)
+  test(`lost ${operation} response resolves full saved completion without another write`, async ({ page }) => {
+    const initial = snapshot();
+    if (operation === "complete")
+      initial.decisions = [
+        {
+          proposalRowId: "row-0",
+          decision: { kind: "parent_decision", proposalId: "p0", decision: "accepted", reviewedAt: 4 },
+        },
+      ];
+    const h = await harness(page, initial);
+    await expect(h.panel.getByText("Observer analysis: ready")).toBeVisible();
+    await h.panel.getByLabel("Optional review note").fill("Original completion");
+    h.failNextWrite();
+    await h.panel
+      .getByRole("button", {
+        name: operation === "complete" ? "Finish review" : "Accept all unchanged and finish",
+        exact: true,
+      })
+      .click();
+    await expect(h.panel.getByText("Review note: Original completion")).toBeVisible();
+    await expect(h.panel.getByRole("button", { name: "Retry identical save" })).toHaveCount(0);
+    await expect(h.panel.getByRole("alert")).toHaveCount(0);
+    expect(h.writes).toHaveLength(1);
+  });
+
+test("changed analysis cannot authorize an uncertain retry or a competing decision", async ({ page }) => {
+  const h = await harness(page);
+  h.failNextWrite(false);
+  h.failReads(true);
+  await h.panel.getByRole("button", { name: "Accept unchanged", exact: true }).click();
+  await expect(h.panel.getByRole("alert")).toContainText("Save and refresh");
+  h.setCurrent({ ...snapshot(), analysisId: "different-analysis" });
+  h.failReads(false);
+  await h.panel.getByRole("button", { name: "Refresh review" }).click();
+  await expect(h.panel.getByRole("alert")).toContainText("original analysis");
+  await expect(h.panel.getByRole("button", { name: "Retry identical save" })).toBeDisabled();
+  await expect(h.panel.getByRole("button", { name: "Accept unchanged", exact: true })).toBeDisabled();
+  expect(h.writes).toHaveLength(1);
+});
+
+test("late failed write from an unmounted panel cannot lock a new inspection", async ({ page }) => {
+  const h = await harness(page);
+  let release!: () => void;
+  h.delayWrites(
+    new Promise<void>(resolve => {
+      release = resolve;
+    }),
+  );
+  h.failNextWrite(false);
+  await h.panel.getByRole("button", { name: "Accept unchanged", exact: true }).click();
+  await expect(h.panel.getByRole("button", { name: "Accept unchanged", exact: true })).toBeDisabled();
+  h.setCurrent({ ...snapshot(0), sessionId: "new-session", analysisId: "new-analysis" });
+  await page.evaluate(() => localStorage.setItem("sprout.latest-session-reference.v1", "new-session"));
+  await page.reload();
+  await expect(h.panel.getByText(/READY summary: no usable observations/)).toBeVisible();
+  release();
+  h.delayWrites(null);
+  await h.panel.getByLabel("I acknowledge this empty READY summary").check();
+  await h.panel.getByRole("button", { name: "Finish review", exact: true }).click();
+  await expect(h.panel.getByText(/Review complete · verified/)).toBeVisible();
+  expect(h.writes[1].sessionId).toBe("new-session");
+  await expect(h.panel.getByRole("button", { name: "Retry identical save" })).toHaveCount(0);
 });
