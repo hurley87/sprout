@@ -147,7 +147,8 @@ starts, with no scene transition during the interval. Missing speech bounds, equ
 transition during speech requires an uncertain claim or omission. These checks establish consistency
 with recorded timestamps; they cannot prove acoustic alignment or what was perceptually visible. A
 correct total without a spoken count is quantity identification; counting
-aloud requires an explicit count sequence and total. Recorded support can cite either canonical support
+aloud requires the complete canonical spoken sequence from one through the displayed target quantity,
+as well as the stated total. A short or incomplete sequence is insufficient. Recorded support can cite either canonical support
 events or a `recording_review` source with the canonical recording ID, recording-relative interval, and
 matching session-relative interval. Validation requires the same session, a complete record with an
 available recording, an interval inside the recording duration, and an exact mapping through

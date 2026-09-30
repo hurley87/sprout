@@ -23,6 +23,42 @@ describe("evidence-linked observation contracts", () => {
     });
   });
 
+  it.each([
+    ["Three, one", 3, 3, "correct"],
+    ["One, three", 3, 3, "correct"],
+    ["One, two, three", 4, 3, "incorrect"],
+  ])("rejects incomplete sequence %s for target %i", (text, target, total, outcome) => {
+    const fixture = observationFixtures.find(item => item.name === "counting-aloud-with-total")!;
+    const record = structuredClone(fixture.record);
+    const scene = record.events.find(event => event.evidence?.type === "scene_displayed")!;
+    if (scene.evidence?.type === "scene_displayed") scene.evidence.targetQuantity = target;
+    const utterance = record.events.find(event => event.evidence?.type === "utterance")!;
+    if (utterance.evidence?.type === "utterance") utterance.evidence.text = text;
+    const proposal = structuredClone(fixture.proposal!) as ObserverProposal;
+    proposal.observation.targetQuantity = target;
+    proposal.observation.statedTotal = total;
+    proposal.observation.outcome = outcome as ObserverProposal["observation"]["outcome"];
+
+    expect(validateObserverProposal(proposal, record)).toMatchObject({ ok: false });
+  });
+
+  it.each([
+    ["One", 1],
+    ["One, two, three, four, five", 5],
+  ])("accepts a complete sequence for boundary target %i", (text, target) => {
+    const fixture = observationFixtures.find(item => item.name === "counting-aloud-with-total")!;
+    const record = structuredClone(fixture.record);
+    const scene = record.events.find(event => event.evidence?.type === "scene_displayed")!;
+    if (scene.evidence?.type === "scene_displayed") scene.evidence.targetQuantity = target;
+    const utterance = record.events.find(event => event.evidence?.type === "utterance")!;
+    if (utterance.evidence?.type === "utterance") utterance.evidence.text = text;
+    const proposal = structuredClone(fixture.proposal!) as ObserverProposal;
+    proposal.observation.targetQuantity = target;
+    proposal.observation.statedTotal = target;
+
+    expect(validateObserverProposal(proposal, record).ok).toBe(true);
+  });
+
   it("never infers incorrect performance from silence or missing scene context", () => {
     const silence = observationFixtures.find(item => item.name === "silence-produces-no-observation")!;
     expect(silence.proposal).toBeUndefined();

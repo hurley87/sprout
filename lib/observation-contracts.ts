@@ -444,10 +444,12 @@ export function validateObserverProposal(
         const hasSequence =
           target !== undefined &&
           target <= 5 &&
-          numbers.some(
-            (number, index) =>
-              number === 1 && numbers.slice(index, index + target).every((value, offset) => value === offset + 1),
-          );
+          numbers.some((number, index) => {
+            const sequence = numbers.slice(index, index + target);
+            return (
+              number === 1 && sequence.length === target && sequence.every((value, offset) => value === offset + 1)
+            );
+          });
         if (!hasSequence) {
           issues.push({
             path: "observation.behavior",

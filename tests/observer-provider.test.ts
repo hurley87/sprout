@@ -182,6 +182,19 @@ it("rejects cross-session, untimed/cross-scene and support-inventing proposals",
   }
 });
 
+it("rejects a provider count proposal when the canonical response has an incomplete sequence", async () => {
+  const incompleteSnapshot = snapshot.replace("One, two, three", "Three, one");
+  await expect(
+    analyzeSavedRecording({
+      provider: provider([proposal]),
+      audio: new Blob(["synthetic"]),
+      mimeType: "audio/webm",
+      canonicalSnapshot: incompleteSnapshot,
+      signal: new AbortController().signal,
+    }),
+  ).rejects.toThrow(ObserverProviderError);
+});
+
 it("fails closed for missing configuration, refusals, malformed output and oversized audio", async () => {
   expect(() => createOpenAIObserverProvider(undefined)).toThrow("OPENAI_API_KEY");
   const fetcher = vi.fn(async () =>
