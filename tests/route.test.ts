@@ -89,7 +89,14 @@ describe("local Live session endpoint", () => {
   });
 });
 
-const seed = { sceneIndex: 2, evaluatedSceneIndex: 1, decision: "ADVANCE" as const, childUtterance: "Two" };
+const seed = {
+  sceneIndex: 2,
+  evaluatedSceneIndex: 1,
+  decision: "ADVANCE" as const,
+  childUtterance: "Two",
+  transcriptRevision: 5,
+  answerVersion: "20:Two",
+};
 it.each(["ADVANCE", "STAY", "UNAVAILABLE"] as const)(
   "seeds %s with only canonical config plus generated history",
   async decision => {
@@ -132,6 +139,8 @@ it.each([
   { ...seed, childUtterance: " " },
   { ...seed, childUtterance: "x".repeat(1001) },
   { ...seed, childUtterance: "Two\u0000" },
+  { ...seed, transcriptRevision: -1 },
+  { ...seed, answerVersion: "" },
 ])("rejects invalid seed %j before billing", async replacement => {
   const fetch = vi.fn();
   vi.stubGlobal("fetch", fetch);

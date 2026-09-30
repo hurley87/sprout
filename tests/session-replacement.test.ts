@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LessonSession, RESPONSE_GATE_RECOVERY_MS, STALE_OUTPUT_REPLACEMENT_MS, type Transport } from "../lib/session";
 import { sceneAt, type ReplacementSeed } from "../lib/lesson";
-import type { AnswerResult } from "../lib/answer";
+import { TRANSCRIPT_FALLBACK_MS, type AnswerResult } from "../lib/answer";
 import { UTTERANCE_GAP_MS } from "../lib/transcript";
 
 beforeEach(() => vi.useFakeTimers());
@@ -98,7 +98,14 @@ it.each(["ADVANCE", "STAY", "UNAVAILABLE"] as const)(
     expect(f.transport.prepareReplacement).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(3);
     expect(f.transport.prepareReplacement).toHaveBeenCalledExactlyOnceWith(
-      { sceneIndex: decision === "ADVANCE" ? 1 : 0, evaluatedSceneIndex: 0, decision, childUtterance: "One" },
+      {
+        sceneIndex: decision === "ADVANCE" ? 1 : 0,
+        evaluatedSceneIndex: 0,
+        decision,
+        childUtterance: "One",
+        transcriptRevision: 1,
+        answerVersion: "0:One",
+      },
       expect.any(AbortSignal),
     );
     expect(f.transport.send).not.toHaveBeenCalled();
@@ -129,6 +136,26 @@ it.each(["ADVANCE", "STAY", "UNAVAILABLE"] as const)(
     expect(event(f.session, "advance.committed")).toHaveLength(decision === "ADVANCE" ? 1 : 0);
   },
 );
+
+it("seeds replacement with the corrected transcript identity, never the superseded answer", async () => {
+  const f = await held("STAY");
+  f.child("... no, two", 400);
+  await vi.advanceTimersByTimeAsync(TRANSCRIPT_FALLBACK_MS + 1);
+  const corrected = event(f.session, "answer.evaluated").at(-1)?.detail as
+    { revision: number; version: string; utterance: string } | undefined;
+  expect(corrected?.utterance).toBe("One... no, two");
+
+  await trigger();
+
+  expect(f.transport.prepareReplacement).toHaveBeenCalledOnce();
+  const seed = vi.mocked(f.transport.prepareReplacement!).mock.calls[0][0];
+  expect(seed).toMatchObject({
+    childUtterance: corrected?.utterance,
+    transcriptRevision: corrected?.revision,
+    answerVersion: corrected?.version,
+  });
+  expect(seed.childUtterance).not.toBe("One");
+});
 
 it.each(["ADVANCE", "STAY"] as const)(
   "new transcript cancels pending %s; late resolution cannot promote or instruct",

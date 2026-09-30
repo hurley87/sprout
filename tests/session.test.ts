@@ -1549,6 +1549,16 @@ describe("answer-check turn synchronization", () => {
     expect(evaluateAnswer).toHaveBeenCalledTimes(2);
     expect(released(transport)).toHaveLength(1);
     expect(session.events.filter(event => event.type === "answer.release_cancelled")).toHaveLength(1);
+    const evaluated = session.events
+      .filter(event => event.type === "answer.evaluated")
+      .map(event => event.detail as { revision: number; version: string });
+    const releaseCommand = released(transport)[0];
+    const release = "content" in releaseCommand ? releaseCommand.content : "";
+    expect(evaluated[1].revision).toBeGreaterThan(evaluated[0].revision);
+    expect(evaluated[1].version).not.toBe(evaluated[0].version);
+    expect(release).toContain(`evaluated transcript revision: ${evaluated[1].revision}`);
+    expect(release).toContain(`evaluated utterance version (application identity): "${evaluated[1].version}"`);
+    expect(release).not.toContain(`evaluated utterance version (application identity): "${evaluated[0].version}"`);
   });
 
   it.each(["Ooh!", "Okay!"])("uses hidden output timing for a delayed STAY after %s", async reply => {

@@ -103,6 +103,7 @@ type GateDecision = "ADVANCE" | "STAY" | "UNAVAILABLE";
 type DeferredAdvance = {
   sceneIndex: number;
   answerVersion: string;
+  evaluatedAnswer: string;
   approvedAt: number;
   spokenChars: number;
   transcriptRevision: number;
@@ -1022,6 +1023,8 @@ export class LessonSession {
       decision: gate.decision!,
       evaluatedSceneIndex: gate.sceneIndex,
       childUtterance: gate.childUtterance,
+      transcriptRevision: gate.transcriptRevision,
+      answerVersion: gate.answerVersion,
     };
     this.log("replacement.triggered", {
       ...this.replacementIdentity(gate),
@@ -1115,6 +1118,8 @@ export class LessonSession {
       const content = evaluationResultContext({
         evaluatedAnswer: seed.childUtterance,
         evaluatedScene: sceneAt(seed.evaluatedSceneIndex),
+        transcriptRevision: seed.transcriptRevision,
+        answerVersion: seed.answerVersion,
         meaning:
           seed.decision === "ADVANCE"
             ? "met_advancement_criterion"
@@ -1462,19 +1467,26 @@ export class LessonSession {
     });
     // An unavailable check leaves the scene alone without judging the child.
     if (advancing) {
-      this.deferAdvance(sceneIndex, version);
+      this.deferAdvance(sceneIndex, version, transcriptRevision, utterance.text.trim());
     } else if (releasing)
-      this.deferStay(sceneIndex, version, utterance.text, result.status === "unavailable" ? "UNAVAILABLE" : "STAY");
+      this.deferStay(
+        sceneIndex,
+        version,
+        transcriptRevision,
+        utterance.text.trim(),
+        result.status === "unavailable" ? "UNAVAILABLE" : "STAY",
+      );
   }
 
-  private deferAdvance(sceneIndex: number, answerVersion: string) {
+  private deferAdvance(sceneIndex: number, answerVersion: string, transcriptRevision: number, evaluatedAnswer: string) {
     if (this.deferredAdvance) return;
     this.deferredAdvance = {
       sceneIndex,
       answerVersion,
+      evaluatedAnswer,
       approvedAt: Date.now(),
       spokenChars: this.sproutReply.length,
-      transcriptRevision: this.transcriptRevision,
+      transcriptRevision,
       correctionReadyAt: Math.max(this.turnEndAt, this.lastDeltaAt) + CORRECTION_WINDOW_MS,
     };
     if (this.microphoneSpeaking && this.microphoneSpeechStartedAt !== undefined)
@@ -1556,6 +1568,7 @@ export class LessonSession {
   private deferStay(
     sceneIndex: number,
     answerVersion: string,
+    transcriptRevision: number,
     evaluatedAnswer: string,
     decision: "STAY" | "UNAVAILABLE",
   ) {
@@ -1564,7 +1577,7 @@ export class LessonSession {
       sceneIndex,
       answerVersion,
       evaluatedAnswer,
-      transcriptRevision: this.transcriptRevision,
+      transcriptRevision,
       correctionReadyAt: Math.max(this.turnEndAt, this.lastDeltaAt) + CORRECTION_WINDOW_MS,
       decision,
     };
@@ -1641,6 +1654,8 @@ export class LessonSession {
         evaluationResultContext({
           evaluatedAnswer: deferred.evaluatedAnswer,
           evaluatedScene: sceneAt(deferred.sceneIndex),
+          transcriptRevision: deferred.transcriptRevision,
+          answerVersion: deferred.answerVersion,
           meaning: deferred.decision === "STAY" ? "did_not_meet_advancement_criterion" : "unavailable",
           action: deferred.decision,
           displayedScene: this.scene,
@@ -1827,6 +1842,8 @@ export class LessonSession {
           evaluationResultContext({
             evaluatedAnswer: this.answerResponseGate?.childUtterance ?? "",
             evaluatedScene: sceneAt(deferred.gateIdentity.sceneIndex),
+            transcriptRevision: deferred.gateIdentity.transcriptRevision,
+            answerVersion: deferred.gateIdentity.answerVersion,
             meaning: "met_advancement_criterion",
             action: "ADVANCE",
             displayedScene: this.scene,
