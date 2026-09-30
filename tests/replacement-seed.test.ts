@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { evaluationResultContext, LAST_SCENE, replacementSessionInput, SCENES, sceneAt } from "../lib/lesson";
+import { readFileSync } from "node:fs";
+import {
+  evaluationResultContext,
+  LAST_SCENE,
+  parseReplacementSeed,
+  replacementSessionInput,
+  SCENES,
+  sceneAt,
+} from "../lib/lesson";
+import { REPLACEMENT_STARTUP_SEED } from "../scripts/live/replacement-startup-seed.mjs";
 
 describe("replacement lesson context", () => {
   it.each(["ADVANCE", "STAY", "UNAVAILABLE"] as const)(
@@ -54,6 +63,28 @@ describe("replacement lesson context", () => {
 });
 
 describe("counting evaluation result context", () => {
+  it("keeps the replacement startup harness seed and outcome on the production contract", () => {
+    const seed = parseReplacementSeed(REPLACEMENT_STARTUP_SEED);
+    expect(seed).toEqual(REPLACEMENT_STARTUP_SEED);
+    expect(seed).not.toBeNull();
+
+    const instruction = evaluationResultContext({
+      evaluatedAnswer: seed!.childUtterance,
+      evaluatedScene: sceneAt(seed!.evaluatedSceneIndex),
+      transcriptRevision: seed!.transcriptRevision,
+      answerVersion: seed!.answerVersion,
+      meaning: "met_advancement_criterion",
+      action: seed!.decision,
+      displayedScene: sceneAt(seed!.sceneIndex),
+    });
+    expect(instruction).toContain('"Two" about 2 ducks (duck-friends)');
+    expect(instruction).toContain("currently displayed: 3 butterflies (butterfly-garden)");
+
+    const harness = readFileSync(new URL("../scripts/live-replacement-startup.mjs", import.meta.url), "utf8");
+    expect(harness).toContain("evaluationResultContext({");
+    expect(harness).not.toContain("advanceContext");
+  });
+
   it("separates an ADVANCE evaluation from the new displayed scene", () => {
     expect(
       evaluationResultContext({

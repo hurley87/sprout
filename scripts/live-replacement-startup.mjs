@@ -7,6 +7,7 @@ import { chromium } from "@playwright/test";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import ts from "typescript";
+import { REPLACEMENT_STARTUP_SEED } from "./live/replacement-startup-seed.mjs";
 
 const baseURL = process.env.BASE_URL ?? "http://127.0.0.1:3000";
 const microphoneMode = process.env.REPLACEMENT_MICROPHONE ?? "continuous";
@@ -32,10 +33,10 @@ try {
         import { BrowserTransport } from './browser-transport';
         import { replacementMicrophone, outboundMicrophoneRtp, microphoneRtpDeltas } from './replacement-input.mjs';
         window.replacementMicrophone = replacementMicrophone; window.outboundMicrophoneRtp = outboundMicrophoneRtp; window.microphoneRtpDeltas = microphoneRtpDeltas;
-        import { replacementSessionInput, advanceContext, sceneAt, OBJECTS } from './lesson';
+        import { replacementSessionInput, evaluationResultContext, sceneAt, OBJECTS } from './lesson';
         window.Transport = BrowserTransport;
         window.replacementSessionInput = replacementSessionInput;
-        window.advanceContext = advanceContext;
+        window.evaluationResultContext = evaluationResultContext;
         window.sceneAt = sceneAt;
         window.showScene = index => {
           window.sceneIndex = index;
@@ -154,10 +155,9 @@ try {
   );
   await page.evaluate(() => window.starting);
   if (await page.evaluate(() => window.failure)) throw new Error("Initial voice session failed");
-  const sample = await page.evaluate(async () => {
+  const sample = await page.evaluate(async seed => {
     // Model the authoritative display change already completed by the app.
-    window.showScene(2);
-    const seed = { sceneIndex: window.sceneIndex, decision: "ADVANCE", childUtterance: "Two" };
+    window.showScene(seed.sceneIndex);
     const authorityBefore = window.transport.activeSourceId;
     const id = await window.transport.prepareReplacement(seed);
     const source = window.transport.pending;
@@ -201,7 +201,15 @@ try {
     result.blockedAfterPromotion = document.querySelector("audio").muted;
     result.aRetiredAfterPromotion = !window.peers[0] || window.peers[0].connectionState === "closed";
     if (!result.blockedAfterPromotion || !result.aRetiredAfterPromotion) throw new Error("Promotion isolation failed");
-    result.instruction = window.advanceContext(window.sceneAt(window.sceneIndex));
+    result.instruction = window.evaluationResultContext({
+      evaluatedAnswer: seed.childUtterance,
+      evaluatedScene: window.sceneAt(seed.evaluatedSceneIndex),
+      transcriptRevision: seed.transcriptRevision,
+      answerVersion: seed.answerVersion,
+      meaning: "met_advancement_criterion",
+      action: seed.decision,
+      displayedScene: window.sceneAt(seed.sceneIndex),
+    });
     result.instructionEventId = "replacement-authoritative-advance";
     window.transport.send({
       type: "session.instructions.append",
@@ -215,7 +223,7 @@ try {
     window.transport.setOutputBlocked(false);
     result.outputPermittedAt = performance.now();
     return result;
-  });
+  }, REPLACEMENT_STARTUP_SEED);
   results.samples.push(sample);
   console.log(JSON.stringify(sample));
   // Fixed bounded observation collects ACK, transcript and decoded-media evidence,
