@@ -6,6 +6,7 @@ import { validateObserverProposal } from "../lib/observation-contracts";
 const leaseMs = 5 * 60 * 1000;
 const maxAttempts = 5;
 const maxObserverRows = 1000;
+const exhaustedFailure = "Observer analysis exhausted all five attempts after the final lease expired.";
 const incompleteQualification =
   "Session record is known incomplete; analysis uses only saved evidence and may omit conclusions requiring missing material.";
 
@@ -69,7 +70,46 @@ export const claim = internalMutation({
       return { status: "ready" as const, analysisId: analysis._id, attempt: analysis.attempt, token: null };
     if (analysis?.status === "running" && (analysis.leaseUntil ?? 0) > now)
       return { status: "running" as const, analysisId: analysis._id, attempt: analysis.attempt, token: null };
-    if (analysis && analysis.attempt >= maxAttempts) throw new Error("Observer attempt limit reached");
+    if (analysis && analysis.attempt >= maxAttempts) {
+      if (analysis.status === "running") {
+        await ctx.db.patch(analysis._id, {
+          status: "failed",
+          failure: exhaustedFailure,
+          attemptToken: undefined,
+          leaseUntil: undefined,
+          completedAt: now,
+        });
+        return {
+          status: "failed" as const,
+          analysisId: analysis._id,
+          attempt: analysis.attempt,
+          token: null,
+          failure: exhaustedFailure,
+        };
+      }
+      if (analysis.status === "failed")
+        return {
+          status: "failed" as const,
+          analysisId: analysis._id,
+          attempt: analysis.attempt,
+          token: null,
+          failure: analysis.failure ?? exhaustedFailure,
+        };
+      await ctx.db.patch(analysis._id, {
+        status: "failed",
+        failure: exhaustedFailure,
+        attemptToken: undefined,
+        leaseUntil: undefined,
+        completedAt: now,
+      });
+      return {
+        status: "failed" as const,
+        analysisId: analysis._id,
+        attempt: analysis.attempt,
+        token: null,
+        failure: exhaustedFailure,
+      };
+    }
     const attempt = (analysis?.attempt ?? 0) + 1;
     const token = `${sessionId}:${attempt}:${now}`;
     const inputSnapshot = snapshot(record);
@@ -113,7 +153,7 @@ export const publish = internalMutation({
     if (analysis.status === "ready") return prior.map(row => row.proposal);
     if (proposals.length > maxObserverRows)
       throw new Error(`Observer proposal batch exceeds the ${maxObserverRows}-proposal limit`);
-    if (analysis.status !== "running" || analysis.attemptToken !== token || (analysis.leaseUntil ?? 0) < now)
+    if (analysis.status !== "running" || analysis.attemptToken !== token || (analysis.leaseUntil ?? 0) <= now)
       throw new Error("Attempt is stale or expired");
     const record = await canonical(ctx, analysis.sessionId);
     if (
@@ -174,7 +214,7 @@ export const fail = internalMutation({
       !analysis ||
       analysis.status !== "running" ||
       analysis.attemptToken !== token ||
-      (analysis.leaseUntil ?? 0) < now
+      (analysis.leaseUntil ?? 0) <= now
     )
       return false;
     await ctx.db.patch(analysisId, {

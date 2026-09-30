@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import { convexTest } from "convex-test";
 import { api, internal } from "../convex/_generated/api";
+import type { Id } from "../convex/_generated/dataModel";
 import schema from "../convex/schema";
 
 async function endedRecord(
@@ -95,6 +96,66 @@ it("recovers an expired lease; stale owners cannot fail or publish", async () =>
       now: 400001,
     }),
   ).toEqual([]);
+});
+
+it("settles an expired fifth lease as a durable, idempotent exhaustion failure", async () => {
+  const { t, sessionId } = await endedRecord();
+  let now = 10;
+  let finalClaim: { analysisId: Id<"observerAnalyses">; token: string } | null = null;
+
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    const claim = await t.mutation(internal.observer.claim, { sessionId, now });
+    if (claim.status !== "claimed") throw new Error(`expected claim ${attempt}`);
+    expect(claim.attempt).toBe(attempt);
+    finalClaim = { analysisId: claim.analysisId, token: claim.token };
+    if (attempt < 5) now += 5 * 60 * 1000 + 1;
+  }
+
+  if (!finalClaim) throw new Error("expected fifth claim");
+  const activeLease = await t.mutation(internal.observer.claim, {
+    sessionId,
+    now: now + 5 * 60 * 1000 - 1,
+  });
+  expect(activeLease).toMatchObject({ status: "running", attempt: 5 });
+  expect(await t.query(api.observer.get, { sessionId })).toMatchObject({ status: "running", attempt: 5 });
+
+  const expiredAt = now + 5 * 60 * 1000 + 1;
+  const exhausted = await t.mutation(internal.observer.claim, { sessionId, now: expiredAt });
+  expect(exhausted).toMatchObject({
+    status: "failed",
+    attempt: 5,
+    token: null,
+    failure: expect.stringContaining("exhausted all five attempts"),
+  });
+  expect(await t.mutation(internal.observer.claim, { sessionId, now: expiredAt + 1000 })).toEqual(exhausted);
+  expect(await t.query(api.observer.get, { sessionId })).toMatchObject({
+    status: "failed",
+    attempt: 5,
+    failure: expect.stringContaining("exhausted all five attempts"),
+    proposals: [],
+  });
+
+  expect(
+    await t.mutation(internal.observer.fail, {
+      analysisId: finalClaim.analysisId,
+      token: finalClaim.token,
+      message: "late owner failure",
+      now: expiredAt + 1000,
+    }),
+  ).toBe(false);
+  await expect(
+    t.mutation(internal.observer.publish, {
+      analysisId: finalClaim.analysisId,
+      token: finalClaim.token,
+      proposals: [],
+      now: expiredAt + 1000,
+    }),
+  ).rejects.toThrow("stale or expired");
+
+  const stored = await t.run(ctx => ctx.db.get(finalClaim.analysisId));
+  expect(stored).toMatchObject({ status: "failed", attempt: 5, completedAt: expiredAt });
+  expect(stored?.attemptToken).toBeUndefined();
+  expect(stored?.leaseUntil).toBeUndefined();
 });
 
 it("qualifies incomplete records and allows a failed attempt to be retried", async () => {
