@@ -79,6 +79,38 @@ export const timeline = v.union(
     toScene: v.number(),
     correlationKey: v.string(),
   }),
+  // Application control diagnostics remain separate from learner evidence.
+  v.object({
+    type: v.literal("evaluation_control"),
+    action: v.string(),
+    correlationKey: v.optional(v.string()),
+    sceneIndex: v.optional(v.number()),
+    transcriptRevision: v.optional(v.number()),
+    answerVersion: v.optional(v.string()),
+    sourceId: v.optional(v.number()),
+    delegationId: v.optional(v.string()),
+    offsetMs: v.optional(v.number()),
+    origin: v.optional(v.union(v.literal("application"), v.literal("delegation"), v.literal("both"))),
+    status: v.optional(
+      v.union(v.literal("scheduled"), v.literal("in_flight"), v.literal("resolved"), v.literal("superseded")),
+    ),
+    displayStatus: v.optional(v.union(v.literal("not_applicable"), v.literal("waiting"), v.literal("confirmed"))),
+    result: v.optional(v.union(v.literal("evaluated"), v.literal("unavailable"), v.literal("STALE"))),
+    applicationAction: v.optional(
+      v.union(v.literal("ADVANCE"), v.literal("STAY"), v.literal("UNAVAILABLE"), v.literal("SUPERSEDED")),
+    ),
+    contextEventId: v.optional(v.string()),
+    ackState: v.optional(
+      v.union(
+        v.literal("estimated_injection"),
+        v.literal("error"),
+        v.literal("missing"),
+        v.literal("duplicate"),
+        v.literal("stale"),
+      ),
+    ),
+    reason: v.optional(v.string()),
+  }),
 );
 
 export default defineSchema({

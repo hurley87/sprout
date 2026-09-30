@@ -87,10 +87,30 @@ export const appendEvent = mutation({
       nonnegative(timeline.quietMs, "quietMs");
       if (!Number.isFinite(timeline.estimatedAcousticEndAtMs)) throw new Error("Estimated acoustic end must be finite");
     }
-    if (timeline && "correlationKey" in timeline && !timeline.correlationKey.trim())
+    if (
+      timeline &&
+      "correlationKey" in timeline &&
+      typeof timeline.correlationKey === "string" &&
+      !timeline.correlationKey.trim()
+    )
       throw new Error("correlationKey is required");
-    if (timeline && "sceneIndex" in timeline && (!Number.isInteger(timeline.sceneIndex) || timeline.sceneIndex < 0))
+    if (
+      timeline &&
+      "sceneIndex" in timeline &&
+      typeof timeline.sceneIndex === "number" &&
+      (!Number.isInteger(timeline.sceneIndex) || timeline.sceneIndex < 0)
+    )
       throw new Error("Invalid sceneIndex");
+    if (timeline?.type === "evaluation_control") {
+      if (!timeline.action.trim()) throw new Error("Control action is required");
+      for (const [field, value] of Object.entries({
+        sceneIndex: timeline.sceneIndex,
+        transcriptRevision: timeline.transcriptRevision,
+        sourceId: timeline.sourceId,
+        offsetMs: timeline.offsetMs,
+      }))
+        if (value !== undefined) nonnegative(value, field);
+    }
     if (timeline?.type === "answer_evaluation_requested")
       nonnegative(timeline.turnEndToRequestMs, "turnEndToRequestMs");
     if (timeline?.type === "answer_evaluation_resolved") {

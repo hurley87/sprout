@@ -276,6 +276,66 @@ test("a correct count commits once and holds its response until output transcrip
   expect(told).toBeGreaterThanOrEqual(shownAt);
 });
 
+test("a valid delegation shares the app evaluation and contradictory tutor text stays gated", async ({ page }) => {
+  await mockLive(page);
+  let evaluations = 0;
+  let finishEvaluation!: () => Promise<void>;
+  await page.route("**/api/evaluate", async route => {
+    evaluations++;
+    await new Promise<void>(resolve => {
+      finishEvaluation = async () => {
+        await route.fulfill({ json: { probability: 0.95, model: "jev-test" } });
+        resolve();
+      };
+    });
+  });
+  await begin(page);
+  const before = (await commands(page)).length;
+  await say(page, "One!", 1000);
+  await emit(page, {
+    type: "session.delegation.created",
+    offset_ms: 1500,
+    delegation: { id: "count-one", target: "client" },
+  });
+  await expect.poll(() => evaluations).toBe(1);
+  await emit(page, {
+    type: "session.output_transcript.delta",
+    delta: "Yes, you got it right; now there are two ducks!",
+    start_ms: 1600,
+    end_ms: 2100,
+  });
+  expect(await page.locator("audio").evaluate((audio: HTMLAudioElement) => audio.muted)).toBe(true);
+  await expect(page.locator('[data-scene="hello-duck"]')).toBeVisible();
+  expect((await sentContent(page)).slice(before).some(text => text.includes("met the advancement criterion"))).toBe(
+    false,
+  );
+
+  await finishEvaluation();
+  await expect(page.locator('[data-scene="duck-friends"]')).toBeVisible();
+  await page.waitForTimeout(2600);
+  await expect
+    .poll(async () => (await commands(page)).filter(command => command.delegation_id === "count-one"))
+    .toHaveLength(1);
+  expect(evaluations).toBe(1);
+  const linked = (await commands(page)).find(command => command.delegation_id === "count-one")!;
+  expect(linked.type).toBe("session.thinking.append");
+  expect(String(linked.content)).toContain("met the advancement criterion");
+  expect(String(linked.content)).toContain("Currently displayed: 2 ducks");
+  expect(String(linked.content)).toContain("do not repeat or add another correctness acknowledgment");
+  expect(
+    (await sentContent(page)).filter(text => text.includes("Briefly acknowledge the child's answer")),
+  ).toHaveLength(1);
+  expect(
+    (await commands(page)).filter(
+      command =>
+        command.type === "session.instructions.append" &&
+        command.delegation_id === null &&
+        String(command.content).includes("Evaluated answer ("),
+    ),
+  ).toHaveLength(1);
+  expect(await page.locator("audio").evaluate((audio: HTMLAudioElement) => audio.muted)).toBe(false);
+});
+
 test("an unconvincing count keeps the scene and releases GPT-Live on it", async ({ page }) => {
   await mockLive(page);
   await mockEvaluate(page, 0.4);

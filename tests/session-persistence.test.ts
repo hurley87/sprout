@@ -302,10 +302,24 @@ it("persists analysis separately, preserving mixed order and event-key idempoten
     lastObservedAtMs: 450,
   };
   await t.mutation(api.sessions.appendEvent, { sessionId, eventKey: "child", atMs: 500, evidence: learner });
+  const control = {
+    type: "evaluation_control" as const,
+    action: "delegation_associated",
+    correlationKey: "0|1|100:Three|1",
+    sceneIndex: 0,
+    transcriptRevision: 1,
+    answerVersion: "100:Three",
+    sourceId: 1,
+    delegationId: "delegation_1",
+    offsetMs: 550,
+    origin: "both" as const,
+  };
+  await t.mutation(api.sessions.appendEvent, { sessionId, eventKey: "control", atMs: 510, timeline: control });
   const record = await t.query(api.sessions.getRecord, { sessionId });
   expect(record?.events.map(({ order, evidence, timeline }) => ({ order, evidence, timeline }))).toEqual([
     { order: 0, evidence: undefined, timeline: generated },
     { order: 1, evidence: learner, timeline: undefined },
+    { order: 2, evidence: undefined, timeline: control },
   ]);
   await expect(
     t.mutation(api.sessions.appendEvent, { ...args, timeline: { ...generated, text: "Other" } }),

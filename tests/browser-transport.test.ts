@@ -420,7 +420,7 @@ describe("production response-source isolation", () => {
     lateA();
     expect(lateTrack.stop).toHaveBeenCalledOnce();
     expect(failures).not.toHaveBeenCalled();
-    expect(events.mock.calls.slice(count)).toEqual([[{ type: "output.activity", state: "unavailable" }]]);
+    expect(events.mock.calls.slice(count)).toEqual([[{ type: "output.activity", state: "unavailable", sourceId: 2 }]]);
     transport.setOutputBlocked(false);
     expect(audio.muted).toBe(false);
     const command = { type: "session.close" as const, event_id: "test" };

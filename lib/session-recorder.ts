@@ -58,7 +58,26 @@ export type TimelineEvent =
       reason?: string;
       decision: "STALE" | "UNAVAILABLE" | "ADVANCE" | "STAY";
     }
-  | { type: "scene_advance_committed"; fromScene: number; toScene: number; correlationKey: string };
+  | { type: "scene_advance_committed"; fromScene: number; toScene: number; correlationKey: string }
+  | {
+      type: "evaluation_control";
+      action: string;
+      correlationKey?: string;
+      sceneIndex?: number;
+      transcriptRevision?: number;
+      answerVersion?: string;
+      sourceId?: number;
+      delegationId?: string;
+      offsetMs?: number;
+      origin?: "application" | "delegation" | "both";
+      status?: "scheduled" | "in_flight" | "resolved" | "superseded";
+      displayStatus?: "not_applicable" | "waiting" | "confirmed";
+      result?: "evaluated" | "unavailable" | "STALE";
+      applicationAction?: "ADVANCE" | "STAY" | "UNAVAILABLE" | "SUPERSEDED";
+      contextEventId?: string;
+      ackState?: "estimated_injection" | "error" | "missing" | "duplicate" | "stale";
+      reason?: string;
+    };
 
 export type SessionAudioRecording = {
   blob: Blob;

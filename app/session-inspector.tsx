@@ -101,6 +101,26 @@ function TimelineDetail({ event }: { event: TimelineEvent }) {
           Scene advance committed · {event.fromScene} → {event.toScene} · {event.correlationKey}
         </p>
       );
+    case "evaluation_control":
+      return (
+        <p>
+          Evaluation control · {event.action} · {event.correlationKey ?? "unassociated"}
+          {event.sceneIndex === undefined ? "" : ` · scene ${event.sceneIndex}`}
+          {event.transcriptRevision === undefined ? "" : ` · revision ${event.transcriptRevision}`}
+          {event.answerVersion ? ` · answer ${event.answerVersion}` : ""}
+          {event.sourceId === undefined ? "" : ` · source ${event.sourceId}`}
+          {event.delegationId ? ` · delegation ${event.delegationId}` : ""}
+          {event.offsetMs === undefined ? "" : ` · provider offset ${event.offsetMs} ms`}
+          {event.origin ? ` · origin ${event.origin}` : ""}
+          {event.status ? ` · work ${event.status}` : ""}
+          {event.result ? ` · result ${event.result}` : ""}
+          {event.applicationAction ? ` · action ${event.applicationAction}` : ""}
+          {event.displayStatus ? ` · display ${event.displayStatus}` : ""}
+          {event.contextEventId ? ` · context ${event.contextEventId}` : ""}
+          {event.ackState ? ` · acknowledgment ${event.ackState}` : ""}
+          {event.reason ? ` · ${event.reason}` : ""}
+        </p>
+      );
   }
 }
 

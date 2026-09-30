@@ -217,7 +217,7 @@ export class BrowserTransport implements Transport {
   }
 
   private emit(source: LiveSource, event: ProviderEvent) {
-    if (this.authoritative(source)) this.onEvent?.(event);
+    if (this.authoritative(source)) this.onEvent?.({ ...event, sourceId: source.id });
   }
 
   private fail(source: LiveSource, message: string) {
