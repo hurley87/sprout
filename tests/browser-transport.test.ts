@@ -1,11 +1,34 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { REPLACEMENT_TIMEOUT_MS, BrowserTransport } from "../lib/browser-transport";
+import { REPLACEMENT_TIMEOUT_MS, BrowserTransport, microphoneTrackSettings } from "../lib/browser-transport";
 
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
 const seed = { sceneIndex: 2, decision: "ADVANCE" as const, childUtterance: "Two" };
+
+it("exports only useful microphone settings and excludes device identifiers", () => {
+  const track = {
+    getSettings: () => ({
+      echoCancellation: true,
+      noiseSuppression: false,
+      autoGainControl: true,
+      sampleRate: 48000,
+      channelCount: 1,
+      latency: 0.02,
+      deviceId: "private-device",
+      groupId: "private-group",
+    }),
+  } as unknown as MediaStreamTrack;
+  expect(microphoneTrackSettings(track)).toEqual({
+    echoCancellation: true,
+    noiseSuppression: false,
+    autoGainControl: true,
+    sampleRate: 48000,
+    channelCount: 1,
+    latency: 0.02,
+  });
+});
 
 function audioElement() {
   const audio = {
@@ -171,6 +194,28 @@ function captureMocks() {
   vi.stubGlobal("MediaRecorder", Recorder);
   return { sources, gain, mix, context, recorders };
 }
+
+it("only forwards microphone settings when the attempt explicitly opts in", async () => {
+  const { micTrack } = liveConnection();
+  Object.assign(micTrack, { getSettings: () => ({ sampleRate: 48000, deviceId: "private" }) });
+  captureMocks();
+  const off = new BrowserTransport(audioElement() as unknown as HTMLAudioElement);
+  const offSink = vi.fn();
+  off.setMicrophoneDiagnosticSink(offSink);
+  await off.start(vi.fn(), vi.fn());
+  expect(offSink).not.toHaveBeenCalled();
+  off.stopMedia();
+
+  const optedIn = liveConnection();
+  Object.assign(optedIn.micTrack, { getSettings: () => ({ sampleRate: 48000, deviceId: "private" }) });
+  captureMocks();
+  const on = new BrowserTransport(audioElement() as unknown as HTMLAudioElement, true);
+  const onSink = vi.fn();
+  on.setMicrophoneDiagnosticSink(onSink);
+  await on.start(vi.fn(), vi.fn());
+  expect(onSink).toHaveBeenCalledWith({ type: "microphone.track_settings", detail: { sampleRate: 48000 } });
+  on.stopMedia();
+});
 
 it("mixes mic and permitted remote audio, starts at live boundary, and finishes once", async () => {
   const { peer, remoteTrack, micTrack } = liveConnection();

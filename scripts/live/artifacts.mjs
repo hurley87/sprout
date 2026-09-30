@@ -120,6 +120,12 @@ export async function exportArtifacts({ page, browser, dir, label, scenario, mic
     diagnostics = { unavailable: `UI diagnostics export failed: ${error}` };
   }
   const summary = metrics(log, diagnostics);
+  const evaluationTimeline = (summary.answerTimelines ?? [])
+    .filter(row => row.evaluationSchedules?.length || row.evaluationRequestedAtMs !== undefined)
+    .map(
+      row =>
+        `evaluation scene=${row.sceneIndex} revision=${row.transcriptRevision ?? "unknown"} answer=${JSON.stringify(row.answerVersion)}; path=${row.evaluationPath ?? "unavailable"}; schedules=${JSON.stringify(row.evaluationSchedules ?? [])}; changes=${JSON.stringify(row.evaluationScheduleChanges ?? [])}; stop=${row.microphoneStopAtMs ?? "unavailable"}ms usable=${row.microphoneStopUsable ?? "unavailable"} reason=${row.microphoneStopSelectionReason ?? "unavailable"}; timer fired=${row.evaluationTimerFiredAtMs ?? "unavailable"}ms; request=${row.evaluationRequestedAtMs ?? "unavailable"}ms${row.evaluationNotRequestedReason ? ` (not requested: ${row.evaluationNotRequestedReason})` : ""}; transcript arrival→request=${row.transcriptArrivalToRequestMs ?? "unavailable"}ms; request→result=${row.requestToResultMs ?? "unavailable"}ms; result→commit=${row.resultToCommitMs ?? "unavailable"}ms; result→release=${row.resultToReleaseMs ?? "unavailable"}ms; release→observed transcript=${row.releaseToObservedTranscriptMs ?? "unavailable"}ms; release→observed decoded-media activity=${row.releaseToObservedDecodedMediaMs ?? "unavailable"}ms; acoustic onset unavailable`,
+    );
   const gateTimeline = (summary.answerTimelines ?? [])
     .filter(
       row =>
@@ -172,6 +178,9 @@ export async function exportArtifacts({ page, browser, dir, label, scenario, mic
   const evidenceSummary = [
     ...(unavailable ? [unavailable] : []),
     ...(diagnostics?.unavailable ? [`diagnostics unavailable: ${diagnostics.unavailable}`] : []),
+    ...(evaluationTimeline.length
+      ? ["Evaluation timeline (application milliseconds since attempt createdAt):", ...evaluationTimeline]
+      : []),
     ...(gateTimeline.length || mediaTransitions.length || recoveryFailures.length
       ? [
           "Response gate timeline (application session-relative clock):",
