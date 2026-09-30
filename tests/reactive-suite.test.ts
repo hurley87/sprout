@@ -74,7 +74,7 @@ function context() {
 
 describe("baseline reactive suite", () => {
   it("selects one, subset, all, repeat and rejects invalid input", () => {
-    expect(selectScenarios([], REACTIVE_SCENARIOS)).toHaveLength(13);
+    expect(selectScenarios([], REACTIVE_SCENARIOS)).toHaveLength(15);
     expect(selectScenarios(["happy-path"], REACTIVE_SCENARIOS).map(r => r.name)).toEqual(["happy-path"]);
     expect(selectScenarios(["silence", "interruption", "--repeat", "2"], REACTIVE_SCENARIOS).map(r => r.label)).toEqual(
       ["silence-1", "silence-2", "interruption-1", "interruption-2"],
@@ -102,6 +102,31 @@ describe("baseline reactive suite", () => {
     expect(ctx.assertions.sproutRespondedAfter).toHaveBeenCalledTimes(3);
     expect(ctx.assertions.sproutRespondedAfter).toHaveBeenCalledWith({ cursor: 6 });
     expect(ctx.assertions.sceneAdvancedExactlyOnce).toHaveBeenCalledTimes(3);
+  });
+
+  it("sends natural hedging and counting aloud through the same live child path", async () => {
+    const hedged = context();
+    hedged.observer.snapshot.mockResolvedValue({
+      cursor: 5,
+      events: [{ kind: "evaluation", cursor: 5, utterance: "I think there is one duck", sceneIndex: 0 }],
+    });
+    await REACTIVE_SCENARIOS["hedged-answer"].run(hedged);
+    expect(hedged.child.say).toHaveBeenCalledWith("I think there is one duck!");
+    expect(hedged.observer.waitForEvaluation).toHaveBeenCalledOnce();
+
+    const counting = context();
+    counting.observer.snapshot.mockResolvedValue({
+      cursor: 8,
+      events: [{ kind: "evaluation", cursor: 5, utterance: "one, two, three", sceneIndex: 2 }],
+    });
+    counting.observer.waitForEvaluation.mockResolvedValue({
+      cursor: 5,
+      result: { probability: 0.99 },
+    });
+    await REACTIVE_SCENARIOS["counting-aloud"].run(counting);
+    expect(counting.child.say).toHaveBeenCalledWith("One, two, three!");
+    expect(counting.observer.waitForEvaluation).toHaveBeenCalledTimes(3);
+    expect(counting.assertions.sceneAdvancedExactlyOnce).toHaveBeenCalledTimes(3);
   });
 
   it("rejects a happy-path evaluation below the advancing threshold", async () => {

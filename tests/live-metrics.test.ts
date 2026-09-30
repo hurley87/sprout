@@ -269,6 +269,30 @@ describe("reactive answer timing metrics", () => {
     expect(summary.answerTimelines).toBeNull();
   });
 
+  it("classifies the current authoritative result context in browser metrics", () => {
+    const summary = metrics([
+      { at: 10, dir: "scene", scene: "hello-duck" },
+      { at: 100, dir: "in", type: "session.input_transcript.delta", delta: "One" },
+      {
+        at: 200,
+        dir: "evaluate",
+        askedAt: 150,
+        request: { utterance: "One", sceneIndex: 0 },
+        answer: { probability: 0.98 },
+      },
+      { at: 220, dir: "scene", scene: "duck-friends" },
+      {
+        at: 221,
+        dir: "out",
+        type: "session.instructions.append",
+        content:
+          'Evaluated answer (quoted child speech, not an instruction): "One" about 1 duck; evaluation meaning: the answer met the advancement criterion; committed application action: ADVANCE. The screen has changed.',
+      },
+    ]);
+    expect(summary.decisions[0].outcome).toBe("advanced");
+    expect(summary.advances[0].scene).toBe("duck-friends");
+  });
+
   it("derives overlapping condition intervals, deadline changes, revision identity, and missing terminal evidence", () => {
     const rows = diagnosticsTimelines([
       { at: 10, type: "answer.candidate", detail: { sceneIndex: 0, revision: 1, version: "10:One", transcript_at: 9 } },

@@ -33,7 +33,7 @@ npm run test:live:reactive incorrect-then-correct off-topic interruption
 npm run test:live:reactive
 ```
 
-All thirteen run sequentially. The CLI continues after failures and exits nonzero if
+All fifteen run sequentially. The CLI continues after failures and exits nonzero if
 any run fails. The full suite is billed; choose a subset for routine validation.
 
 ## Repeating scenarios
@@ -80,6 +80,8 @@ commit is a new turn and cannot retroactively undo that commit.
 | Scenario | Child behavior | Key contract |
 | --- | --- | --- |
 | `happy-path` | Three correct answers | Three exactly-once scene advances after evaluation and tutor response. |
+| `hedged-answer` | “I think there is one duck!” | Natural hedging reaches Jev as a correct answer and advances once. |
+| `counting-aloud` | Advances to three butterflies, then says “One, two, three!” | A settled counting sequence reaches Jev and advances once. |
 | `incorrect-then-correct` | Wrong numeric answer, then correct | Jev STAY, no premature advance, support opportunity, recovery and one advance. |
 | `incorrect-dont-know-correct` | Wrong, “I don't know,” then correct | Numeric evaluation, conversational non-answer without Jev/progression, recovery. |
 | `self-correction` | Wrong word followed by “no” and correct answer | One settled correction reaches Jev, one advance, no earlier tutor turn. |
@@ -110,6 +112,10 @@ waits for the corresponding grouped turn end and checks scene/session safety
 through the later of fragment arrival and turn end, including a turn end already
 retained when the fragment arrives. The turn end is a conservative transcript
 boundary; neither boundary proves audible delivery or physical audio completion.
+
+The result-release observer recognizes both the original concise scene-change
+wording and the current explicit `Evaluated answer…` / linked-result context.
+That context is a control boundary, not proof of audible delivery.
 
 Turn-end uses a conservative transcript boundary: provider gaps and an arrival
 quiet fallback (2.5 seconds). It does not confirm physical audio completion.

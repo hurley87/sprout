@@ -302,3 +302,24 @@ blocked, with no claim of per-utterance audibility. Full recording = what the ca
 Delivered evidence = only claims strong enough to represent learner experience. `audio.play()`
 resolution does not establish utterance delivery. Existing one-file gated capture stays unchanged;
 no clips, export/download workflow, naturalness score, or fake audible-start events are added.
+
+### GPT-Live and Jev evaluation cooperation (issue #40)
+
+For numeric counting answers, GPT-Live may request a client delegation, but the application
+identifies the answer from its own scene, transcript revision, answer version, and active source.
+The delegation ID correlates the request; it cannot select an answer. The application-triggered
+evaluation remains live without a delegation, and both triggers share one Jev result for that
+answer identity. Ambiguous, stale, superseded, or retired-source delegations are declined.
+
+Jev keeps the existing `jev-1.13.0` question and `0.90` threshold. The app validates the result,
+commits at most one scene transition, confirms the displayed scene, then sends explicit result
+context. The general application context uses `delegation_id: null`; an associated request also
+gets an ID-linked result. Playback remains behind the existing correction, display, output, and
+source-isolation gates. The 30-second delegation association age is a local matching heuristic,
+not a provider recommendation or a wait before application evaluation.
+
+Live validation is synthetic adult speech through the browser microphone and real GPT-Live/Jev.
+Generated tutor transcripts, media activity, and context acknowledgments are separate observations:
+an acknowledgment estimates context injection, while transcript or decoded-media activity does
+not establish acoustic onset or that the child heard the content. See [issue #40 findings](issue-40-cooperation-findings.md)
+for the targeted outcomes, retained artifacts, timing, and remaining live gaps.

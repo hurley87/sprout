@@ -3,6 +3,21 @@
  * took, and how closely the scene and Sprout's speech followed an advance.
  */
 export function metrics(log, diagnostics = null) {
+  const outcomeContext = event =>
+    event.dir === "out" &&
+    (/just changed|has not changed/.test(String(event.content ?? "")) ||
+      /^(?:Evaluated answer \(quoted child speech, not an instruction\):|Linked application result for the child's answer )/.test(
+        String(event.content ?? ""),
+      ));
+  const outcomeName = event => {
+    const content = String(event.content ?? "");
+    if (content.includes("committed application action: ADVANCE") || content.includes("just changed"))
+      return "advanced";
+    if (content.includes("committed application action: STAY") || content.includes("has not changed")) return "stayed";
+    if (content.includes("committed application action: UNAVAILABLE")) return "unavailable";
+    if (content.includes("committed application action: SUPERSEDED")) return "superseded";
+    return event.type;
+  };
   const evaluations = log
     .filter(e => e.dir === "evaluate")
     .map(e => ({
@@ -28,19 +43,13 @@ export function metrics(log, diagnostics = null) {
   const decisions = evaluations.map((e, i) => {
     const spoke = childSpoke.findLast(d => d.at <= e.askedAt);
     const until = evaluations[i + 1]?.askedAt ?? Infinity;
-    const told = log.find(
-      o =>
-        o.dir === "out" &&
-        o.at >= e.askedAt &&
-        o.at < until &&
-        /just changed|has not changed/.test(String(o.content ?? "")),
-    );
+    const told = log.find(o => outcomeContext(o) && o.at >= e.askedAt && o.at < until);
     const decidedAt = told?.at ?? log.find(r => r.dir === "evaluate" && r.askedAt === e.askedAt)?.at;
     const before = spoke && decidedAt ? sproutBetween(spoke.at, decidedAt) : "";
     const firstWord = spoke && sproutSpoke.find(d => d.at > spoke.at);
     return {
       utterance: e.utterance,
-      outcome: told ? (String(told.content).includes("just changed") ? "advanced" : told.type) : "none",
+      outcome: told ? outcomeName(told) : "none",
       sproutBeforeDecision: before,
       sproutWordsBeforeDecision: words(before),
       // Last word heard to the first word Sprout says after it: the silence the child hears.
@@ -52,7 +61,7 @@ export function metrics(log, diagnostics = null) {
     // The evaluation that caused this scene is the last one before it.
     const cause = evaluations.findLast(e => e.askedAt <= scene.at);
     const spoke = cause ? childSpoke.findLast(e => e.at <= cause.askedAt) : undefined;
-    const told = log.find(e => e.dir === "out" && e.at >= scene.at && String(e.content ?? "").includes("just changed"));
+    const told = log.find(e => outcomeContext(e) && e.at >= scene.at);
     return {
       scene: scene.scene,
       probability: cause?.probability ?? null,
