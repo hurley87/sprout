@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LessonSession, RESPONSE_GATE_RECOVERY_MS, STALE_OUTPUT_REPLACEMENT_MS, type Transport } from "../lib/session";
 import { sceneAt, type ReplacementSeed } from "../lib/lesson";
-import { TRANSCRIPT_FALLBACK_MS, type AnswerResult, type EvaluateAnswer } from "../lib/answer";
+import { CORRECTION_WINDOW_MS, TRANSCRIPT_FALLBACK_MS, type AnswerResult, type EvaluateAnswer } from "../lib/answer";
 import { UTTERANCE_GAP_MS } from "../lib/transcript";
 
 beforeEach(() => vi.useFakeTimers());
@@ -485,6 +485,70 @@ describe("replacement child interruption after displayed ADVANCE", () => {
       event(f.session, "advance.committed").filter(e => (e.detail as { scene_index: number }).scene_index === 0),
     ).toHaveLength(1);
     expect(f.transport.send).not.toHaveBeenCalled();
+  });
+
+  it("resolves the original delegation truthfully when a displayed ADVANCE is superseded", async () => {
+    const f = setup();
+    f.child("One!", 20_000);
+    f.transcript("sprout", "hidden A", 20_600, 1);
+    const hidden = f.fragments();
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_FALLBACK_MS + CORRECTION_WINDOW_MS + 1);
+    expect(f.session.snapshot.sceneIndex).toBe(1);
+    f.session.receive({ type: "delegation", id: "original-answer", offsetMs: 20_600, sourceId: 1 });
+    expect(event(f.session, "evaluation.delegation_associated")).toHaveLength(1);
+    f.session.displayed(1);
+
+    await trigger();
+    expect(f.transport.prepareReplacement).toHaveBeenCalledOnce();
+    f.transcript("child", "Two!", 30_000, 1);
+    expect(f.transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
+    expect(event(f.session, "advance.committed")).toHaveLength(1);
+
+    const superseded = event(f.session, "evaluation.superseded").at(-1)?.detail as Record<string, unknown>;
+    expect(superseded).toMatchObject({
+      applicationAction: "ADVANCE",
+      reason: "pending_delegation_work_superseded_after_displayed_advance",
+      sceneIndex: 0,
+      answerVersion: "20000:One!",
+    });
+    const oldResolution = vi
+      .mocked(f.transport.send)
+      .mock.calls.map(([command]) => command)
+      .find(command => command.type !== "session.close" && command.delegation_id === "original-answer");
+    expect(oldResolution?.type).toBe("session.thinking.append");
+    const oldContent = oldResolution?.type === "session.thinking.append" ? oldResolution.content : "";
+    expect(oldContent).toContain("committed ADVANCE");
+    expect(oldContent).toContain("displayed 2 ducks");
+    expect(oldContent).toContain("newer answer now owns the displayed scene");
+    expect(oldContent).not.toContain("met the advancement criterion");
+    const sendsBeforeDuplicate = vi.mocked(f.transport.send).mock.calls.length;
+    f.session.receive({ type: "delegation", id: "original-answer", offsetMs: 20_600, sourceId: 1 });
+    expect(vi.mocked(f.transport.send)).toHaveBeenCalledTimes(sendsBeforeDuplicate);
+    f.session.receive({ type: "delegation", id: "late-original-answer", offsetMs: 20_600, sourceId: 1 });
+    expect(event(f.session, "evaluation.delegation_rejected").at(-1)?.detail).toMatchObject({
+      delegationId: "late-original-answer",
+      reason: "transcript_identity_is_stale_or_superseded",
+    });
+    expect(f.transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
+    f.ready();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(f.transport.retireSource).toHaveBeenCalledWith(2);
+    expect(f.transport.activateSource).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1800);
+    f.session.receive({ type: "delegation", id: "new-answer", offsetMs: 30_600, sourceId: 1 });
+    expect(event(f.session, "evaluation.delegation_associated").at(-1)?.detail).toMatchObject({
+      delegationId: "new-answer",
+      answerVersion: "30000:Two!",
+    });
+    expect(event(f.session, "answer.evaluated").at(-1)?.detail).toMatchObject({ sceneIndex: 1, utterance: "Two!" });
+    expect(event(f.session, "advance.committed")).toHaveLength(2);
+    expect(
+      vi
+        .mocked(f.transport.send)
+        .mock.calls.map(([command]) => (command.type === "session.close" ? null : command.delegation_id)),
+    ).not.toContain(null);
+    clearInterval(hidden);
   });
 
   it("child stop retires B, stops media before cleanup, and never permits stale A", async () => {

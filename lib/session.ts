@@ -787,6 +787,19 @@ export class LessonSession {
         this.preserveNonAnswerOnStaleSource();
         return;
       }
+      if (sourceIsolationRequired && this.answerResponseGate?.decision === "ADVANCE") {
+        const committedGate = this.answerResponseGate;
+        this.supersedeEvaluation(
+          {
+            sceneIndex: committedGate.sceneIndex,
+            transcriptRevision: committedGate.transcriptRevision,
+            answerVersion: committedGate.answerVersion,
+          },
+          "new_answer_on_displayed_scene",
+          true,
+          event.sourceId,
+        );
+      }
       // A transcript can arrive before local VAD notices renewed speech.
       const previous = this.latest;
       const invalidatesPendingAnswer = Boolean(
@@ -2107,20 +2120,27 @@ export class LessonSession {
     if (record.applicationFeedbackSent) this.sendLinkedEvaluationResult(record, id);
   }
 
-  private supersedeEvaluation(identity: GateIdentity, reason: string, notify: boolean) {
+  private supersedeEvaluation(identity: GateIdentity, reason: string, notify: boolean, sourceId = this.latestSourceId) {
     const record = this.evaluationRecords.get(
-      this.evaluationKey(identity.sceneIndex, identity.transcriptRevision, identity.answerVersion, this.latestSourceId),
+      this.evaluationKey(identity.sceneIndex, identity.transcriptRevision, identity.answerVersion, sourceId),
     );
     if (!record || record.status === "superseded") return;
     record.status = "superseded";
-    record.applicationAction = "SUPERSEDED";
-    this.evaluationControl(record, "superseded", { applicationAction: "SUPERSEDED", reason });
+    const committedAdvance = record.applicationAction === "ADVANCE" && record.displayStatus === "confirmed";
+    if (!committedAdvance) record.applicationAction = "SUPERSEDED";
+    this.evaluationControl(record, "superseded", {
+      applicationAction: committedAdvance ? "ADVANCE" : "SUPERSEDED",
+      reason: committedAdvance ? "pending_delegation_work_superseded_after_displayed_advance" : reason,
+    });
     for (const id of record.delegationIds) {
       if (!notify || record.sourceId !== this.transport.activeSourceId) continue;
       this.append(
         "session.thinking.append",
-        "This answer was corrected or superseded before it became authoritative. Disregard any pending evaluation for it; use only the app's outcome for the current answer and displayed scene.",
+        committedAdvance
+          ? `Earlier answer "${record.utterance}" about ${sceneAt(record.sceneIndex).quantity} ${objectName(sceneAt(record.sceneIndex))} (${sceneAt(record.sceneIndex).id}) committed ADVANCE, and the app displayed ${sceneAt(record.displayedSceneIndex ?? this.snapshot.sceneIndex).quantity} ${objectName(sceneAt(record.displayedSceneIndex ?? this.snapshot.sceneIndex))} (${sceneAt(record.displayedSceneIndex ?? this.snapshot.sceneIndex).id}). A newer answer now owns the displayed scene. This delegation's pending work is superseded; do not use the earlier evaluation as authority for the newer answer, repeat a correctness acknowledgment, or change the displayed scene. Follow only the app's outcome for the newer answer.`
+          : "This answer was corrected or superseded before it became authoritative. Disregard any pending evaluation for it; use only the app's outcome for the current answer and displayed scene.",
         id,
+        record,
       );
     }
     record.delegationIds.clear();
