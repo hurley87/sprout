@@ -85,6 +85,51 @@ it("runs saved audio transcription and validates evidence against the exact cano
   );
 });
 
+it("uploads supported recording containers with an extension parsed from MIME parameters", async () => {
+  const cases = [
+    ["audio/webm;codecs=opus", "audio/webm;codecs=opus", "session.webm"],
+    ["audio/ogg;codecs=opus", "audio/ogg;codecs=opus", "session.ogg"],
+    [' Audio/WebM ; Codecs = "Opus" ', "audio/webm;codecs=opus", "session.webm"],
+    ["audio/ogg", "audio/ogg", "session.ogg"],
+    ["audio/wav", "audio/wav", "session.wav"],
+  ] as const;
+
+  for (const [mimeType, blobType, filename] of cases) {
+    let uploaded: FormDataEntryValue | null = null;
+    const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      uploaded = (init?.body as FormData).get("file");
+      return Response.json({ text: "synthetic transcript" });
+    });
+    const openai = createOpenAIObserverProvider("synthetic-key", fetcher as typeof fetch);
+    const audio = new Blob(["synthetic audio bytes"], { type: blobType });
+
+    await expect(openai.transcribe(audio, mimeType, new AbortController().signal)).resolves.toBe(
+      "synthetic transcript",
+    );
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(uploaded).toMatchObject({ name: filename, type: blobType, size: audio.size });
+  }
+});
+
+it("rejects malformed or unsupported MIME parameters before making a request", async () => {
+  const fetcher = vi.fn(async () => Response.json({ text: "unexpected" }));
+  const openai = createOpenAIObserverProvider("synthetic-key", fetcher as typeof fetch);
+
+  for (const mimeType of [
+    "audio/webm;codecs=vorbis",
+    "audio/wav;codecs=opus",
+    "audio/webm;codecs=opus;rate=48000",
+    'audio/webm;codecs="opus',
+    "audio//webm",
+    "not a mime type",
+  ]) {
+    await expect(openai.transcribe(new Blob(["synthetic"]), mimeType, new AbortController().signal)).rejects.toThrow(
+      "MIME type is unsupported",
+    );
+  }
+  expect(fetcher).not.toHaveBeenCalled();
+});
+
 it("accepts explicit empty evidence without turning provider failure into empty success", async () => {
   const empty = provider([]);
   await expect(

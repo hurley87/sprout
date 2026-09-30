@@ -19,6 +19,31 @@ export class ObserverProviderError extends Error {
   }
 }
 
+const transcriptionExtensions: Record<string, string> = {
+  "audio/webm": "webm",
+  "audio/wav": "wav",
+  "audio/x-wav": "wav",
+  "audio/mp4": "mp4",
+  "audio/m4a": "m4a",
+  "audio/x-m4a": "m4a",
+  "audio/mpeg": "mp3",
+  "audio/mp3": "mp3",
+  "audio/mpga": "mpga",
+  "audio/ogg": "ogg",
+  "audio/flac": "flac",
+};
+
+function transcriptionExtension(mimeType: string): string | undefined {
+  const match = /^\s*(audio\/[a-z0-9.+-]+)\s*(?:;\s*codecs\s*=\s*(?:"([a-z0-9._-]+)"|([a-z0-9._-]+))\s*)?$/i.exec(
+    mimeType,
+  );
+  if (!match) return undefined;
+  const baseType = match[1].toLowerCase();
+  const codec = (match[2] ?? match[3])?.toLowerCase();
+  if (codec && (!(baseType === "audio/webm" || baseType === "audio/ogg") || codec !== "opus")) return undefined;
+  return transcriptionExtensions[baseType];
+}
+
 const textSchema = { type: "string" } as const;
 const nullableInteger = { anyOf: [{ type: "integer" }, { type: "null" }] } as const;
 const proposalSchema = {
@@ -126,20 +151,7 @@ export function createOpenAIObserverProvider(
       if (audio.size <= 0 || audio.size > AUDIO_LIMIT_BYTES)
         throw new ObserverProviderError("Recording exceeds the Observer audio size limit.");
       const form = new FormData();
-      const extensions: Record<string, string> = {
-        "audio/webm": "webm",
-        "audio/wav": "wav",
-        "audio/x-wav": "wav",
-        "audio/mp4": "mp4",
-        "audio/m4a": "m4a",
-        "audio/x-m4a": "m4a",
-        "audio/mpeg": "mp3",
-        "audio/mp3": "mp3",
-        "audio/mpga": "mpga",
-        "audio/ogg": "ogg",
-        "audio/flac": "flac",
-      };
-      const extension = extensions[mimeType.toLowerCase()];
+      const extension = transcriptionExtension(mimeType);
       if (!extension) throw new ObserverProviderError("Saved recording MIME type is unsupported for transcription.");
       form.set("file", audio, `session.${extension}`);
       form.set("model", "gpt-transcribe");
