@@ -165,8 +165,11 @@ contract examples, not delivered evidence or provider results.
 The run moves through pending, running, ready, or failed; attempts claim it atomically for a five-minute
 lease and may recover an expired owner up to five total attempts. Active sessions and ended records still
 marked pending are ineligible. An incomplete record may be analyzed, but its run carries an explicit
-qualification. The claim snapshots canonical ordered event content, recording identity/metadata, and
-record integrity. Publication re-fetches those inputs and refuses a changed snapshot.
+record-level qualification derived from the canonical integrity snapshot on every new attempt. A retry
+against an incomplete record retains that qualification through success or failure; a retry against a
+complete record clears stale qualification. This does not require uncertainty for otherwise supported
+completed exchanges. The claim snapshots canonical ordered event content, recording identity/metadata,
+and record integrity. Publication re-fetches those inputs and refuses a changed snapshot.
 
 Backend-only claim, failure, and publication operations own attempt tokens. The read query exposes only
 run status, qualification/failure, and proposals. Publication validates each proposal against canonical

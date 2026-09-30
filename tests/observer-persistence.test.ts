@@ -117,6 +117,88 @@ it("qualifies incomplete records and allows a failed attempt to be retried", asy
   expect(retry).toMatchObject({ status: "claimed", attempt: 2 });
 });
 
+it("qualifies an initially incomplete request when claimed and retains it after successful publication", async () => {
+  const { t, sessionId } = await endedRecord("ended", "incomplete");
+  await t.mutation(internal.observer.request, { sessionId });
+  const claim = await t.mutation(internal.observer.claim, { sessionId, now: 10 });
+  if (claim.status !== "claimed") throw new Error("expected claim");
+  expect(await t.query(api.observer.get, { sessionId })).toMatchObject({
+    status: "running",
+    qualification: expect.stringContaining("incomplete"),
+  });
+
+  expect(
+    await t.mutation(internal.observer.publish, {
+      analysisId: claim.analysisId,
+      token: claim.token,
+      proposals: [],
+      now: 11,
+    }),
+  ).toEqual([]);
+  expect(await t.query(api.observer.get, { sessionId })).toMatchObject({
+    status: "ready",
+    qualification: expect.stringContaining("incomplete"),
+    proposals: [],
+  });
+});
+
+it("refreshes qualification from the canonical record on a retry after input-change failure", async () => {
+  const { t, sessionId } = await endedRecord();
+  const first = await t.mutation(internal.observer.claim, { sessionId, now: 10 });
+  if (first.status !== "claimed") throw new Error("expected claim");
+  await t.run(ctx => ctx.db.patch(sessionId, { recordStatus: "incomplete" }));
+
+  expect(
+    await t.mutation(internal.observer.publish, {
+      analysisId: first.analysisId,
+      token: first.token,
+      proposals: [],
+      now: 11,
+    }),
+  ).toBeNull();
+  expect(await t.query(api.observer.get, { sessionId })).toMatchObject({
+    status: "failed",
+    qualification: null,
+    failure: expect.stringContaining("inputs changed"),
+  });
+
+  const retry = await t.mutation(internal.observer.claim, { sessionId, now: 12 });
+  expect(retry).toMatchObject({ status: "claimed", attempt: 2 });
+  expect(await t.query(api.observer.get, { sessionId })).toMatchObject({
+    status: "running",
+    qualification: expect.stringContaining("incomplete"),
+  });
+  if (retry.status !== "claimed") throw new Error("expected retry claim");
+  expect(
+    await t.mutation(internal.observer.fail, {
+      analysisId: retry.analysisId,
+      token: retry.token,
+      message: "provider unavailable",
+      now: 13,
+    }),
+  ).toBe(true);
+  expect(await t.query(api.observer.get, { sessionId })).toMatchObject({
+    status: "failed",
+    qualification: expect.stringContaining("incomplete"),
+  });
+});
+
+it("clears stale qualification when a new attempt snapshots a complete record", async () => {
+  const { t, sessionId } = await endedRecord();
+  await t.run(ctx =>
+    ctx.db.insert("observerAnalyses", {
+      sessionId,
+      status: "failed",
+      attempt: 1,
+      qualification: "stale incomplete qualification",
+    }),
+  );
+
+  const retry = await t.mutation(internal.observer.claim, { sessionId, now: 10 });
+  expect(retry).toMatchObject({ status: "claimed", attempt: 2 });
+  expect(await t.query(api.observer.get, { sessionId })).toMatchObject({ status: "running", qualification: null });
+});
+
 it("claims a session with exactly 1,000 events and rejects 1,001 without creating an analysis", async () => {
   const withinLimit = await endedRecord();
   await withinLimit.t.run(async ctx => {

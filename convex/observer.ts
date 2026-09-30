@@ -6,6 +6,12 @@ import { validateObserverProposal } from "../lib/observation-contracts";
 const leaseMs = 5 * 60 * 1000;
 const maxAttempts = 5;
 const maxObserverRows = 1000;
+const incompleteQualification =
+  "Session record is known incomplete; analysis uses only saved evidence and may omit conclusions requiring missing material.";
+
+function qualification(recordStatus: "complete" | "incomplete") {
+  return recordStatus === "incomplete" ? incompleteQualification : undefined;
+}
 
 export const request = internalMutation({
   args: { sessionId: v.id("sessions") },
@@ -75,12 +81,7 @@ export const claim = internalMutation({
         attemptToken: token,
         leaseUntil: now + leaseMs,
         inputSnapshot,
-        ...(record.session.recordStatus === "incomplete"
-          ? {
-              qualification:
-                "Session record is known incomplete; completed exchanges may still be proposed with explicit uncertainty.",
-            }
-          : {}),
+        qualification: qualification(record.session.recordStatus),
       });
       return { status: "claimed" as const, analysisId, attempt, token, inputSnapshot };
     }
@@ -90,6 +91,7 @@ export const claim = internalMutation({
       attemptToken: token,
       leaseUntil: now + leaseMs,
       inputSnapshot,
+      qualification: qualification(record.session.recordStatus),
       failure: undefined,
       completedAt: undefined,
     });
