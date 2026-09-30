@@ -138,6 +138,15 @@ means no durable attempt exists and subsequent adapter operations report failure
 interrupted speech and finalization, but browser suspension/unload can prevent pending network writes;
 already committed evidence survives. There is no unload durability guarantee in this slice.
 
+`lib/observation-contracts.ts` defines runtime-validated Observer proposals against persisted
+session-event IDs, and a separate parent-decision shape for later review work. Proposal timestamps use
+the session-relative `atMs` clock. Concrete performance claims must link both the response and the
+actually displayed scene. A correct total without a spoken count is quantity identification; counting
+aloud requires an explicit count sequence and total. Missing support evidence means support is not
+established, not that the response was independent. Parent-added assistance or pointing/touch-counting
+context belongs to a separately attributed parent decision and cannot rewrite the proposal. Synthetic
+fixtures are contract examples, not delivered evidence or provider results.
+
 Record what was actually displayed, not just a requested visual action. Distinguish a spoken or interrupted prompt from text generated but never played. If delivery or scene context cannot be established, the Observer must qualify or omit the conclusion.
 
 Support descriptions can include no help observed, a light prompt, a choice, modeling/counting together, parent-reported assistance, or unknown. A fresh example after teaching retains the context of earlier help.
@@ -209,6 +218,11 @@ Use what this test reveals to decide where Jev fits. Do not commit to per-uttera
 That test led to one bounded use of Jev, kept after the [answer experiment](jev-answer-experiment.md): a single Noul question decides whether the child's count matches the displayed scene, and the application — not the live model — advances the scene. The probability is a control signal only and never becomes stored learner evidence. Jev has no other runtime responsibility; `choice` and `score` remain unused.
 
 The post-session Observer and planner need structured, validated output; their exact models are not yet selected. Model confidence values are not a substitute for evidence or parent review.
+
+Issue #5's provider feasibility decision and documented first candidate path are in
+[Observer provider feasibility](observer-provider-feasibility.md). The recommendation is a saved-file
+transcription stage followed by a text model with Structured Outputs and local cross-validation;
+API compatibility is documented, while model suitability and timestamp alignment remain unverified.
 
 ## 8. Implementation constraints and verification
 
