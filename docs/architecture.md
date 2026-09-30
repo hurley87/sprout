@@ -176,10 +176,13 @@ failure do not overwrite them, and repeated successful publication returns the s
 expired attempt tokens cannot complete or fail the current attempt. Parent decisions remain a separate,
 unimplemented contract and no run state approves evidence.
 
-This local prototype bounds an input snapshot to 1,000 events and proposal reads/writes to 1,000 rows;
-exceeding that practical session size is a limitation to revisit before larger sessions. A lease supports
-manual/backend retry after interruption; automatic scheduling, provider integration, and parent review
-are not part of this slice. Transcript timestamps and model suitability remain feasibility gates.
+This local prototype supports at most 1,000 canonical events per analyzed session and at most 1,000
+proposals per publication. Claim checks for an overflow event and rejects the session rather than
+snapshotting a partial record. Publication rejects oversized fresh batches before writing; proposal
+reads and successful retries return the complete saved batch, while pre-existing rows beyond the limit
+produce an explicit error. A lease supports manual/backend retry after interruption; automatic scheduling,
+provider integration, and parent review are not part of this slice. Transcript timestamps and model
+suitability remain feasibility gates.
 
 Record what was actually displayed, not just a requested visual action. Distinguish a spoken or interrupted prompt from text generated but never played. If delivery or scene context cannot be established, the Observer must qualify or omit the conclusion.
 

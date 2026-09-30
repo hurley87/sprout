@@ -5,6 +5,7 @@ import { validateObserverProposal } from "../lib/observation-contracts";
 
 const leaseMs = 5 * 60 * 1000;
 const maxAttempts = 5;
+const maxObserverRows = 1000;
 
 export const request = internalMutation({
   args: { sessionId: v.id("sessions") },
@@ -25,7 +26,9 @@ async function canonical(ctx: MutationCtx, sessionId: Id<"sessions">) {
   const events = await ctx.db
     .query("sessionEvents")
     .withIndex("by_session_order", q => q.eq("sessionId", sessionId))
-    .take(1000);
+    .take(maxObserverRows + 1);
+  if (events.length > maxObserverRows)
+    throw new Error(`Session has more than ${maxObserverRows} events; Observer analysis is unsupported`);
   return { session, events };
 }
 
@@ -102,8 +105,12 @@ export const publish = internalMutation({
     const prior = await ctx.db
       .query("observerProposals")
       .withIndex("by_analysis_ordinal", q => q.eq("analysisId", analysisId))
-      .take(1000);
+      .take(maxObserverRows + 1);
+    if (prior.length > maxObserverRows)
+      throw new Error(`Stored Observer batch exceeds the ${maxObserverRows}-proposal limit`);
     if (analysis.status === "ready") return prior.map(row => row.proposal);
+    if (proposals.length > maxObserverRows)
+      throw new Error(`Observer proposal batch exceeds the ${maxObserverRows}-proposal limit`);
     if (analysis.status !== "running" || analysis.attemptToken !== token || (analysis.leaseUntil ?? 0) < now)
       throw new Error("Attempt is stale or expired");
     const record = await canonical(ctx, analysis.sessionId);
@@ -189,7 +196,9 @@ export const get = query({
     const rows = await ctx.db
       .query("observerProposals")
       .withIndex("by_analysis_ordinal", q => q.eq("analysisId", analysis._id))
-      .take(1000);
+      .take(maxObserverRows + 1);
+    if (rows.length > maxObserverRows)
+      throw new Error(`Stored Observer batch exceeds the ${maxObserverRows}-proposal limit`);
     return {
       status: analysis.status,
       attempt: analysis.attempt,
