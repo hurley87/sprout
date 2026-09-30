@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { ObservationClaim, ObserverProposal, ParentDecision } from "../lib/observation-contracts";
-import type { RepairLevel, ReviewCommand, ReviewSnapshot } from "../lib/parent-review";
+import { reviewPlaybackAtMs, type RepairLevel, type ReviewCommand, type ReviewSnapshot } from "../lib/parent-review";
 import { EvidenceDetail } from "./evidence-detail";
 
 const label = (value: string) => value.replaceAll("_", " ");
@@ -424,7 +424,10 @@ function ReviewPanel({
               <Claim claim={row.proposal.observation} />
               <p>Exchange: {row.proposal.exchangeAtMs} ms from session start</p>
               {hasRecording && (
-                <button className="download-button" onClick={() => seek(row.proposal.exchangeAtMs)}>
+                <button
+                  className="download-button"
+                  onClick={() => seek(reviewPlaybackAtMs(row.proposal, snapshot.sources))}
+                >
                   Play exchange
                 </button>
               )}

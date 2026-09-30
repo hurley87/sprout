@@ -6,7 +6,13 @@ import type { ParentDecision } from "../../lib/observation-contracts";
 function snapshot(count = 1): ReviewSnapshot {
   const f = structuredClone(observationFixtures[0]);
   f.proposal!.sessionId = "saved-session";
-  f.proposal!.exchangeAtMs = 12300;
+  const response = f.record.events.find(event => event._id === "sessionEvents_synthetic_answer_1")!;
+  response.atMs = 20000; // Speech was flushed/saved well after it finished.
+  if (response.evidence?.type === "utterance") {
+    response.evidence.startMs = 12000;
+    response.evidence.endMs = 14000;
+  }
+  f.proposal!.exchangeAtMs = response.atMs;
   return {
     sessionId: "saved-session",
     analysisId: "analysis-saved",
@@ -87,7 +93,7 @@ async function harness(page: Page, initial = snapshot()) {
               createdAt: 1,
               recording: { storageId: "synthetic", mimeType: "audio/wav", startOffsetMs: 2000, durationMs: 30000 },
             },
-            events: [],
+            events: current.sources.map((source, order) => ({ ...source, order })),
             recordingUrl: "https://synthetic-audio.invalid/saved.wav",
           },
         },
@@ -173,13 +179,22 @@ test("inspects canonical sources, seeks with start offset and accepts unchanged 
   const audio = page.getByLabel("Full-session recording");
   await expect.poll(() => audio.evaluate((a: HTMLAudioElement) => a.readyState)).toBe(4);
   await article.getByRole("button", { name: "Play exchange" }).click();
-  await expect.poll(() => audio.evaluate((a: HTMLAudioElement) => a.currentTime)).toBeGreaterThanOrEqual(10.3);
+  await expect.poll(() => audio.evaluate((a: HTMLAudioElement) => a.currentTime)).toBeGreaterThanOrEqual(10);
   const position = await audio.evaluate((a: HTMLAudioElement) => {
     a.pause();
     return a.currentTime;
   });
-  expect(position).toBeGreaterThanOrEqual(10.3);
+  expect(position).toBeGreaterThanOrEqual(10);
   expect(position).toBeLessThan(11);
+  await expect(article.getByText("Exchange: 20000 ms from session start")).toBeVisible();
+  // Ordinary event inspection still seeks to the flush event, applying the offset once.
+  await page.getByRole("button", { name: "Play from here" }).nth(1).click();
+  const eventPosition = await audio.evaluate((a: HTMLAudioElement) => {
+    a.pause();
+    return a.currentTime;
+  });
+  expect(eventPosition).toBeGreaterThanOrEqual(18);
+  expect(eventPosition).toBeLessThan(19);
   await article.getByRole("button", { name: "Accept unchanged", exact: true }).click();
   await expect(article.getByText("Saved parent decision: accepted")).toBeVisible();
   await expect(article.getByRole("button", { name: "Light correction" })).toHaveCount(0);
@@ -190,6 +205,32 @@ test("inspects canonical sources, seeks with start offset and accepts unchanged 
   await expect(h.panel.getByText("Original Observer proposal · p0")).toBeVisible();
   expect(h.unexpected).toEqual([]);
 });
+
+for (const missing of ["speech bounds", "response source"] as const)
+  test(`exchange playback falls back to event time without ${missing}`, async ({ page }) => {
+    const state = snapshot();
+    const response = state.sources.find(source => source.evidence.type === "utterance")!;
+    if (missing === "speech bounds" && response.evidence.type === "utterance") {
+      delete response.evidence.startMs;
+      delete response.evidence.endMs;
+    } else {
+      state.sources = state.sources.filter(source => source.id !== response.id);
+    }
+    const original = structuredClone(state.proposals);
+    const h = await harness(page, state);
+    const audio = page.getByLabel("Full-session recording");
+    await expect.poll(() => audio.evaluate((a: HTMLAudioElement) => a.readyState)).toBe(4);
+    await h.panel.getByRole("button", { name: "Play exchange" }).click();
+    const position = await audio.evaluate((a: HTMLAudioElement) => {
+      a.pause();
+      return a.currentTime;
+    });
+    expect(position).toBeGreaterThanOrEqual(18);
+    expect(position).toBeLessThan(19);
+    expect(h.getCurrent().proposals).toEqual(original);
+    expect(h.writes).toEqual([]);
+    expect(h.unexpected).toEqual([]);
+  });
 
 test("accept-all is one explicit write and survives reload", async ({ page }) => {
   const h = await harness(page, snapshot(2));
