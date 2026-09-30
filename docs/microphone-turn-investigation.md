@@ -159,3 +159,65 @@ proposed change must report its effect on fallback delay and false stops while
 preserving correction protection, stale-result invalidation, exactly-once
 advancement, immediate stop handling, and bounded fallback liveness. No
 threshold or timer recommendation is justified by this single session.
+
+## Interim trial findings — 2026-09-29 (commit 4)
+
+Four user-supplied diagnostic exports cover one attempt in each condition, collected on September 29 in America/Toronto (September 30 UTC in the exports). All 12 actual evaluation requests used `microphone_vad`, and all 12 results were ADVANCE. No transcript fallback fired. Initial fallback schedules replaced by a usable microphone stop, and superseded transcript candidates, are not fallback evaluations. The original delayed-stop failure has not reproduced in this sample.
+
+**Recommendation: retain the current detector and timing policy.** These observations do not establish a detector or integration fault, establish speaker leakage, or resolve the original session’s acoustic cause. This is an interim report, not completion of issue #37 or the planned repeated comparison. No scoped fix is justified yet.
+
+### Provenance and conditions
+
+Condition labels and session IDs were supplied by the user. The exports contain no durable session ID; those associations have not been independently checked against persisted records. The original files, trial metadata, and derived answer timelines are saved locally under the ignored `test-results/issue-37/` directory. Raw exports and recordings are not included in this documentation commit. SHA-256 values below identify the exact input bytes.
+
+| Condition | User-supplied session ID | Export filename | SHA-256 |
+| --- | --- | --- | --- |
+| headphones / quiet | `j97csynefvw00g1xqfcdasaz6s8fdvvj` | `sprout-attempt-1790728585190.json` | `d1b86e331104f4f786bfeb1f3e419702d1e2a9357410388a19f8d7b2b129f4b8` |
+| speakers / quiet | `j97bg9t90fa2a1z132zx1pp72d8fd38w` | `sprout-attempt-1790728829040.json` | `a1e69b3597434e89a1af6b8d50a2c1933dea67a5108607e88ed03641244d8cb3` |
+| headphones / background noise | `j97awymkjdr89d82gmejcw7xz98fckm8` | `sprout-attempt-1790729012710.json` | `88c462e58ccb77f0dd79a0504981d857c2142881ddd6f0f9b57a9455d748d4b7` |
+| speakers / background noise | `j975vc1f1fhc0syr4vfnj2ak558fcc8j` | `sprout-attempt-1790729238868.json` | `3784a7506bf0c2527a8a60f74f60c57ef8722288930a176c0fc47109a9b90287` |
+
+All four exports report Chrome 153 on macOS, `gpt-live-1`, and prompt `counting-jev-4`. Reported microphone settings are identical: echo cancellation, noise suppression, and automatic gain control enabled; 48 kHz, 16-bit, mono, and 0.01-second latency. These settings do not identify the physical microphone or demonstrate processing effectiveness. Build SHA, microphone device, seating/microphone position, playback volume, and noise source/level were not supplied. Audio has not been auditioned. No separate silence-control windows were labeled.
+
+### Per-answer timings
+
+All intervals below are milliseconds computed within the diagnostic application clock (attempt `createdAt`). Each row represents an actual request, not an intermediate transcript revision. Result → commit was 1 ms for every row. Release means application playback permission. Observed transcript and decoded-media activity are separate proxies, not audible onset; unavailable means no matching observation was found within the parser’s answer window, not that no response was heard.
+
+| Condition | Answer | Transcript arrival → request | Request → result | Result → release | Release → observed transcript | Release → decoded-media activity |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| headphones / quiet | One | 381 | 421 | 20 | 1086 | 1365 |
+| headphones / quiet | Two | 535 | 209 | 15 | 1473 | 1764 |
+| headphones / quiet | Three. | 252 | 315 | 12 | 1245 | 1693 |
+| speakers / quiet | One | 253 | 234 | 16 | 1806 | 2055 |
+| speakers / quiet | Two | 251 | 205 | 18 | 1046 | 1262 |
+| speakers / quiet | 1, 2, 3 | 252 | 208 | 13 | 662 | 861 |
+| headphones / background noise | One | 988 | 254 | 13 | unavailable | 928 |
+| headphones / background noise | Two | 659 | 221 | 19 | unavailable | unavailable |
+| headphones / background noise | Three | 252 | 216 | 13 | unavailable | unavailable |
+| speakers / background noise | One | 256 | 242 | 17 | 1629 | 1965 |
+| speakers / background noise | Two | 328 | 237 | 13 | 953 | 1302 |
+| speakers / background noise | Three | 550 | 230 | 18 | 939 | 1191 |
+
+### Detector comparison and interpretation
+
+Quiet resets are totals across each captured attempt, not per-answer rates or calibrated false-positive counts. Attempts differ in duration and spoken content. Each reset means above-threshold energy interrupted a confirmed-speech quiet interval; it does not identify the sound source.
+
+| Condition | Actual VAD requests | Actual fallback requests | Quiet resets | Transcript → request median (range), ms | Largest frame gap, ms |
+| --- | ---: | ---: | ---: | --- | ---: |
+| headphones / quiet | 3 | 0 | 0 | 381 (252–535) | 16.6 |
+| speakers / quiet | 3 | 0 | 4 | 252 (251–253) | 9.7 |
+| headphones / background noise | 3 | 0 | 39 | 659 (252–988) | 18.1 |
+| speakers / background noise | 3 | 0 | 0 | 328 (256–550) | 10.5 |
+
+- Headphones/quiet had no quiet resets. Its first two fallback schedules were replaced by VAD tails; the third transcript arrived after the microphone stop.
+- Speakers/quiet had four resets during the third counting turn. That transcript was “1, 2, 3”, whereas the headphones/quiet answer was “Three.” Continued counting is a competing explanation; those trials do not isolate speaker leakage.
+- Headphones/background noise had 39 resets and longer transcript-to-request waits on the first two answers. The detector still reached quiet in time to replace fallback with the VAD path. Noise, nearby speech, answer delivery, and unspecified setup differences remain competing causes.
+- Speakers/background noise had no quiet resets, but two additional confirmed activity periods between the second and third answers ended without an associated transcript. Their acoustic source is unknown; absence of a transcript alone does not establish false detection.
+- Every captured detector window reported a running AudioContext, and no frame gap exceeded 100 ms. These exports provide no evidence of large animation-frame scheduling gaps in these attempts.
+- A stop can arrive before its transcript, so the stop event can correctly report `no_transcript` and the later transcript can still select the VAD tail. An unjoined stop field in the per-answer parser is not proof of an absent stop; the raw epoch and event ordering must also be inspected.
+
+### Remaining work
+
+Collect four more attempts per condition to reach the planned five, alternating conditions and keeping the physical microphone, position, answer form (“One”, “Two”, “Three”), playback level, and background-noise source consistent. Record actual device and room details, label silence controls, and retain failures and interruptions. Review synchronized audio, including the original problem session where available, before attributing detector activity to speech, speaker leakage, or noise. The current one-attempt-per-condition comparison is inconclusive for acoustic causation and does not support a claim that speakers are faster or slower.
+
+Issue #37 remains open. Commit 5 remains conditional on a demonstrated failure with measured tradeoffs and a deterministic regression test. No detector, scheduling, threshold, or timer change is part of this report.
