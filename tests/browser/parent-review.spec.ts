@@ -3,6 +3,26 @@ import { observationFixtures } from "../fixtures/observation-contracts";
 import type { ReviewCommand, ReviewSnapshot } from "../../lib/parent-review";
 import type { ParentDecision } from "../../lib/observation-contracts";
 
+for (const viewport of [
+  { width: 1280, height: 900 },
+  { width: 390, height: 844 },
+])
+  test(`synthetic review presentation at ${viewport.width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize(viewport);
+    const h = await harness(page);
+    const article = h.panel.getByRole("article");
+    await article.getByText("Supporting canonical exchange").click();
+    await expect(article.getByText(/Scene actually displayed/)).toBeVisible();
+    await expect(article.getByRole("button", { name: "Play exchange" })).toBeVisible();
+    await article.getByRole("button", { name: "Light correction" }).click();
+    await expect(article.getByLabel("I provided assistance")).toBeVisible();
+    await expect(article.getByLabel("I observed pointing or touch-counting")).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await h.panel.screenshot({ path: testInfo.outputPath(`review-${viewport.width}.png`) });
+    expect(h.writes).toEqual([]);
+    expect(h.unexpected).toEqual([]);
+  });
+
 function snapshot(count = 1): ReviewSnapshot {
   const f = structuredClone(observationFixtures[0]);
   f.proposal!.sessionId = "saved-session";

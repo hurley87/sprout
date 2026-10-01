@@ -37,7 +37,7 @@ function fixture(
                 type: "scene_displayed" as const,
                 sceneId: "ducks-3",
                 targetQuantity: options.scene.targetQuantity,
-                items: [{ emoji: "🦆", label: "duck" }],
+                items: Array.from({ length: options.scene.targetQuantity }, () => ({ emoji: "🦆", label: "duck" })),
                 arrangement: "row",
               },
             },

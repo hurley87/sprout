@@ -199,7 +199,9 @@ known-incomplete ended records with recordings can be analyzed. Local Next.js an
 must be configured with the same high-entropy capability before enabling provider analysis; no secret
 is set by this change. The provider path, limits, API compatibility evidence and remaining
 alignment/suitability gates are documented in [Observer provider feasibility](observer-provider-feasibility.md).
-Parent review UI remains unimplemented; durable internal review operations are described in section 5.
+The parent review UI and bridge are implemented; durable review operations are described in section 5.
+Local full-flow verification and remaining semantic/provider/manual gates are recorded in
+[issue #5 verification](issue-5-verification.md).
 
 The browser persists only the latest durable session ID, after Convex creates the record. On reload, a
 read-only Convex client fetches that record directly; inspection does not create a session or restore
@@ -367,7 +369,7 @@ During play, a new theme can replace the original setting while preserving the o
 
 ## 7. Stack and feasibility gate
 
-Retain the proposed Next.js/React/TypeScript application and Convex persistence. The experiment runs locally on the builder's MacBook; Vercel deployment is deferred. The repository contains the slice 1 GPT-Live-1 voice prototype ([baseline findings](gpt-live-baseline.md)) and the standalone Convex session-record foundation; live evidence persistence is wired; Observer and planner integrations are not implemented.
+Retain the proposed Next.js/React/TypeScript application and Convex persistence. The experiment runs locally on the builder's MacBook; Vercel deployment is deferred. The repository contains the slice 1 GPT-Live-1 voice prototype ([baseline findings](gpt-live-baseline.md)) and the standalone Convex session-record foundation; live evidence persistence, the saved-file Observer adapter, and parent review are implemented and locally tested. Live Observer acceptance remains open; the planner is not implemented.
 
 GPT-Live 1 is the initial voice candidate. OpenAI documents the model as `gpt-live-1`. Vercel documents Jev as `typesafe-ai/jev`; the prototype calls TypeSafe's own API directly and pins `jev-1.13.0`, because the advance threshold is calibrated against that version. Suitability for this child's speech is still unestablished: the results so far come from synthetic adult speech. Sources checked 2026-09-22: [GPT-Live 1](https://developers.openai.com/api/docs/models/gpt-live-1), [Jev](https://vercel.com/ai-gateway/models/jev).
 
@@ -383,7 +385,7 @@ Use what this test reveals to decide where Jev fits. Do not commit to per-uttera
 
 That test led to one bounded use of Jev, kept after the [answer experiment](jev-answer-experiment.md): a single Noul question decides whether the child's count matches the displayed scene, and the application — not the live model — advances the scene. The probability is a control signal only and never becomes stored learner evidence. Jev has no other runtime responsibility; `choice` and `score` remain unused.
 
-The post-session Observer and planner need structured, validated output; their exact models are not yet selected. Model confidence values are not a substitute for evidence or parent review.
+The post-session Observer uses the candidate adapter documented below with structured output and canonical validation. Its model suitability remains unverified; the planner model is not selected. Model confidence values are not a substitute for evidence or parent review.
 
 Issue #5's provider feasibility decision and documented first candidate path are in
 [Observer provider feasibility](observer-provider-feasibility.md). The recommendation is a saved-file
