@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { validateObserverProposal, validateParentDecision, type ObserverProposal } from "../lib/observation-contracts";
+import { sourceTimelineBound } from "../lib/evidence-timing";
 import { observationFixtures } from "./fixtures/observation-contracts";
 
 describe("evidence-linked observation contracts", () => {
@@ -182,6 +183,7 @@ describe("evidence-linked observation contracts", () => {
     const missingTiming = structuredClone(fixture.record);
     const response = missingTiming.events.find(event => event.evidence?.type === "utterance")!;
     if (response.evidence?.type === "utterance") {
+      delete response.evidence.sessionTiming;
       delete response.evidence.startMs;
       delete response.evidence.endMs;
     }
@@ -382,3 +384,34 @@ describe("evidence-linked observation contracts", () => {
     ).toBe(false);
   });
 });
+
+// Display/input sequencing can disambiguate a fence tie, but elapsed provider
+// time cannot establish which of two same-time displays was current.
+it.each(["mapped_provider", "source_input_bound", "source_timeline_bound"] as const)(
+  "applies provenance-aware display ties to Observer %s publication",
+  provenance => {
+    const fixture = structuredClone(
+      observationFixtures.find(item => item.name === "correct-total-without-spoken-count")!,
+    );
+    const scene = fixture.record.events.find(event => event.evidence?.type === "scene_displayed")!;
+    const speech = fixture.record.events.find(event => event.evidence?.type === "utterance")!.evidence;
+    if (scene.evidence?.type !== "scene_displayed" || speech?.type !== "utterance") throw new Error("fixture evidence");
+    const inputScene = { sceneId: scene.evidence.sceneId, displayedAtMs: scene.atMs };
+    speech.providerTiming = { clock: "provider", sourceId: 1, startMs: 50600, endMs: 50800 };
+    speech.firstObservedAtMs = speech.lastObservedAtMs = 2000;
+    speech.sessionTiming =
+      provenance === "mapped_provider"
+        ? { clock: "session", provenance, startMs: scene.atMs, endMs: 2000 }
+        : provenance === "source_input_bound"
+          ? { clock: "session", provenance, sourceId: 1, startMs: scene.atMs, endMs: 2000, inputScene }
+          : sourceTimelineBound(speech.providerTiming, scene.atMs - 50600, scene.atMs, inputScene, 2000);
+    expect(validateObserverProposal(fixture.proposal, fixture.record).ok).toBe(provenance !== "mapped_provider");
+    fixture.record.events.push({ ...scene, _id: "conflicting-same-time-display" });
+    expect(validateObserverProposal(fixture.proposal, fixture.record).ok).toBe(false);
+    fixture.record.events.pop();
+    if (speech.sessionTiming?.provenance !== "mapped_provider") {
+      speech.sessionTiming!.inputScene.sceneId = "wrong-scene";
+      expect(validateObserverProposal(fixture.proposal, fixture.record).ok).toBe(false);
+    }
+  },
+);

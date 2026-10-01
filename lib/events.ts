@@ -20,7 +20,15 @@ export type ProviderEvent =
   | (Identified & { type: "session.started" })
   | (Identified & { type: "session.closed"; reason?: string; usage?: unknown })
   | (Identified & { type: "provider.error"; code?: string; clientEventId?: string })
-  | (Identified & { type: "transcript"; speaker: Speaker; delta: string; startMs: number; endMs: number })
+  | (Identified & {
+      type: "transcript";
+      speaker: Speaker;
+      delta: string;
+      startMs: number;
+      endMs: number;
+      /** Local causal lower bound on source creation; never parsed from JSON. */
+      sourceRequestedAt?: number;
+    })
   | (Identified & { type: "delegation"; id: string; offsetMs?: number })
   | (Identified & { type: "delegation.unsupported" })
   | (Identified & { type: "context.appended"; name: string; clientEventId?: string; startMs?: number; endMs?: number })

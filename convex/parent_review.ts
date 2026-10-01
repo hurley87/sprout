@@ -1,3 +1,4 @@
+import { responseSceneValidity, sessionSpeechInterval } from "../lib/evidence-timing";
 import { v } from "convex/values";
 import { internalMutation, internalQuery, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
@@ -66,15 +67,50 @@ async function batch(ctx: QueryCtx, sessionId: Id<"sessions">, analysisId: Id<"o
       : {}),
     events,
   };
+  const timingUnverifiedIds = new Set<Id<"observerProposals">>();
   for (const row of proposals) {
-    if (row.sessionId !== sessionId || !validateObserverProposal(row.proposal, record).ok)
-      throw new Error("Invalid stored proposal provenance");
+    const result = validateObserverProposal(row.proposal, record);
+    if (row.sessionId !== sessionId) throw new Error("Invalid stored proposal provenance");
+    if (!result.ok) {
+      // Legacy compatibility permits exclusion only. Keep every other provenance
+      // check strict, and never endorse a timing-invalid immutable proposal.
+      const responseSource = row.proposal.sources.find(
+        (source: ObserverProposal["sources"][number]) => source.role === "response",
+      );
+      const response =
+        responseSource && "eventId" in responseSource
+          ? record.events.find(event => event._id === responseSource.eventId)
+          : undefined;
+      const timingOnly =
+        !sessionSpeechInterval(response?.evidence) &&
+        result.issues.every(issue =>
+          [
+            "a concrete behavior requires trustworthy speech start and end timestamps",
+            "missing or ambiguous scene timing must be recorded as uncertainty",
+            "support must be timestamped before the response begins",
+            "recording support must occur before or during the referenced response",
+          ].includes(issue.message),
+        );
+      if (!timingOnly) throw new Error("Invalid stored proposal provenance");
+      timingUnverifiedIds.add(row._id);
+    }
   }
   const review = await ctx.db
     .query("sessionReviews")
     .withIndex("by_session", q => q.eq("sessionId", sessionId))
     .unique();
-  return { proposals, decisions, review, record };
+  for (const item of decisions) {
+    const proposal = proposals.find(row => row._id === item.proposalRowId);
+    if (
+      item.sessionId !== sessionId ||
+      !proposal ||
+      !validateParentDecision(item.decision).ok ||
+      item.decision.proposalId !== proposal.proposal.proposalId ||
+      decisions.filter(row => row.proposalRowId === item.proposalRowId).length !== 1
+    )
+      throw new Error("Invalid stored decision provenance");
+  }
+  return { proposals, decisions, review, record, timingUnverifiedIds };
 }
 
 function stable(value: unknown): string {
@@ -109,25 +145,12 @@ function validateCorrectionScene(
     responseSource && "eventId" in responseSource
       ? record.events.find(event => event._id === responseSource.eventId)
       : undefined;
-  const speech = response?.evidence?.type === "utterance" ? response.evidence : undefined;
-  const { startMs, endMs } = speech ?? {};
-  const hasInterval =
-    typeof startMs === "number" &&
-    Number.isFinite(startMs) &&
-    startMs >= 0 &&
-    typeof endMs === "number" &&
-    Number.isFinite(endMs) &&
-    endMs >= startMs;
-  const scenes = record.events.filter(event => event.evidence?.type === "scene_displayed");
-  const priorScenes = hasInterval ? scenes.filter(event => event.atMs < startMs) : [];
-  const latestAt = Math.max(...priorScenes.map(event => event.atMs), -1);
-  const latestScenes = priorScenes.filter(event => event.atMs === latestAt);
-  const supported =
-    hasInterval &&
-    scene?.evidence?.type === "scene_displayed" &&
-    latestScenes.length === 1 &&
-    latestScenes[0]._id === scene._id &&
-    !scenes.some(event => event.atMs >= startMs && event.atMs <= endMs);
+  const { valid: supported, attributionMatchesScene } = responseSceneValidity(response?.evidence, scene, record.events);
+  if (
+    !attributionMatchesScene &&
+    (correction.behavior !== "uncertain_exchange" || !correction.uncertaintyReasons.includes("conflicting_context"))
+  )
+    throw new Error("Correction must retain conflicting canonical response scene attribution uncertainty");
   if (!supported) {
     if (correction.behavior !== "uncertain_exchange")
       throw new Error(
@@ -160,6 +183,8 @@ export const decide = internalMutation({
     if (!result.ok) throw new Error(`Invalid parent decision: ${result.issues.map(issue => issue.message).join("; ")}`);
     const decision = result.value;
     if (decision.proposalId !== row.proposal.proposalId) throw new Error("Decision must identify stored proposal");
+    if (saved.timingUnverifiedIds.has(row._id) && decision.decision !== "rejected")
+      throw new Error("Review is blocked: speech timing is unverified; reject this proposal to exclude it");
     if (decision.correction) {
       // Parent testimony can resolve uncertainty or correct interpretation, but cannot create a new exchange.
       if (!decision.parentContext) throw new Error("Corrections require an explicit parent_review explanation");
@@ -225,6 +250,14 @@ export const complete = internalMutation({
     metadata(args, saved.proposals.length === 0);
     if (saved.proposals.some(row => !saved.decisions.some(decision => decision.proposalRowId === row._id)))
       throw new Error("Review is incomplete");
+    if (
+      saved.proposals.some(
+        row =>
+          saved.timingUnverifiedIds.has(row._id) &&
+          !saved.decisions.some(item => item.proposalRowId === row._id && item.decision.decision === "rejected"),
+      )
+    )
+      throw new Error("Review is blocked: speech timing is unverified");
     if (args.repairLevel === "verified" && saved.decisions.some(row => row.decision.decision !== "accepted"))
       throw new Error("Verified review requires unchanged acceptances");
     if (saved.review) {
@@ -254,6 +287,7 @@ export const acceptAll = internalMutation({
   returns: v.id("sessionReviews"),
   handler: async (ctx, args) => {
     const saved = await batch(ctx, args.sessionId, args.analysisId);
+    if (saved.timingUnverifiedIds.size) throw new Error("Review is blocked: speech timing is unverified");
     metadata(args, saved.proposals.length === 0);
     if (saved.decisions.some(row => row.decision.decision !== "accepted"))
       throw new Error("Accept-all requires an unchanged summary");
@@ -317,17 +351,32 @@ export const forPlanning = internalQuery({
       if (!analysis || analysis.status !== "ready")
         return { blocked: true, reason: "Analysis is incomplete", evidence: [] };
       const saved = await batch(ctx, sessionId, analysis._id);
+
       if (
         !saved.review ||
         saved.review.analysisId !== analysis._id ||
         saved.proposals.some(row => !saved.decisions.some(decision => decision.proposalRowId === row._id))
       )
         return { blocked: true, reason: "Parent review is incomplete", evidence: [] };
+      if (
+        saved.proposals.some(
+          row =>
+            saved.timingUnverifiedIds.has(row._id) &&
+            !saved.decisions.some(item => item.proposalRowId === row._id && item.decision.decision === "rejected"),
+        )
+      )
+        return { blocked: true, reason: "Speech timing is unverified", evidence: [] };
       const rows = await ctx.db
         .query("reviewedEvidence")
         .withIndex("by_analysis", q => q.eq("analysisId", analysis._id))
         .take(limit + 1);
       if (rows.length > limit) throw new Error("Evidence exceeds 1000-row completeness limit");
+      for (const proposal of saved.proposals) {
+        const decision = saved.decisions.find(item => item.proposalRowId === proposal._id)!;
+        const linked = rows.filter(row => row.proposalRowId === proposal._id);
+        if (linked.length !== (decision.decision.decision === "rejected" ? 0 : 1))
+          throw new Error("Invalid reviewed evidence completeness");
+      }
       for (const row of rows) {
         const decision = saved.decisions.find(
           item => item._id === row.decisionId && item.proposalRowId === row.proposalRowId,
@@ -338,6 +387,22 @@ export const forPlanning = internalQuery({
         // the validated immutable proposal without rewriting historical decisions.
         const proposal = saved.proposals.find(item => item._id === row.proposalRowId);
         if (!proposal) throw new Error("Invalid reviewed proposal linkage");
+        const expectedObservation =
+          decision.decision.correction ?? reviewedObserverClaim(proposal.proposal.observation);
+        // Older acceptances may have retained raw model prose, but all structured
+        // claims and canonical links must still match the immutable decision.
+        const actualObservation =
+          decision.decision.decision === "accepted" ? reviewedObserverClaim(row.observation) : row.observation;
+        if (
+          row.sessionId !== sessionId ||
+          row.exchangeAtMs !== proposal.proposal.exchangeAtMs ||
+          stable(row.sources) !== stable(proposal.proposal.sources) ||
+          stable(actualObservation) !== stable(expectedObservation) ||
+          stable(row.parentContext ?? null) !== stable(decision.decision.parentContext ?? null) ||
+          row.reviewedAt !== decision.decision.reviewedAt ||
+          row.interpretationProvenance !== (decision.decision.decision === "corrected" ? "parent_review" : "observer")
+        )
+          throw new Error("Invalid reviewed evidence provenance");
         evidence.push(
           decision.decision.decision === "accepted"
             ? { ...row, observation: reviewedObserverClaim(proposal.proposal.observation) }
@@ -385,9 +450,17 @@ export const inspect = internalQuery({
       sessionId,
       analysisId: analysis?._id ?? null,
       status: analysis?.status ?? "not_started",
-      qualification:
-        session.recordStatus === "incomplete" ? "Known incomplete record: some evidence may be missing." : null,
-      proposals: saved?.proposals.map(row => ({ id: row._id, proposal: row.proposal })) ?? [],
+      qualification: saved?.timingUnverifiedIds.size
+        ? "Saved proposals have unverified speech timing. Reject undecided affected proposals to exclude them, then finish review. Acceptance and correction are unavailable for these proposals. Historical decisions remain final; previously endorsed invalid evidence still blocks planning."
+        : session.recordStatus === "incomplete"
+          ? "Known incomplete record: some evidence may be missing."
+          : null,
+      proposals:
+        saved?.proposals.map(row => ({
+          id: row._id,
+          proposal: row.proposal,
+          ...(saved.timingUnverifiedIds.has(row._id) ? { resolution: "reject_only" } : {}),
+        })) ?? [],
       decisions: saved?.decisions.map(row => ({ proposalRowId: row.proposalRowId, decision: row.decision })) ?? [],
       review: saved?.review
         ? {

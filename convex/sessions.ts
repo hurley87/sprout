@@ -1,3 +1,4 @@
+import { sessionSpeechInterval } from "../lib/evidence-timing";
 import { internalMutation, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { endingReason, evidence, timeline } from "./schema";
@@ -37,6 +38,7 @@ export const activate = mutation({
 });
 
 export const appendEvent = mutation({
+  returns: v.id("sessionEvents"),
   args: {
     sessionId: v.id("sessions"),
     eventKey: v.string(),
@@ -83,6 +85,32 @@ export const appendEvent = mutation({
         speech.lastObservedAtMs < speech.firstObservedAtMs
       )
         throw new Error("lastObservedAtMs must follow firstObservedAtMs");
+    }
+    if (evidence?.type === "utterance") {
+      for (const timing of [evidence.providerTiming, evidence.sessionTiming]) {
+        if (!timing) continue;
+        nonnegative(timing.startMs, "timing.startMs");
+        nonnegative(timing.endMs, "timing.endMs");
+        if (timing.endMs < timing.startMs) throw new Error("timing.endMs must follow timing.startMs");
+      }
+      if (evidence.sessionTiming?.provenance === "source_input_bound") {
+        const timing = evidence.sessionTiming;
+        nonnegative(timing.inputScene.displayedAtMs, "inputScene.displayedAtMs");
+        if (
+          !Number.isSafeInteger(timing.sourceId) ||
+          timing.sourceId < 1 ||
+          timing.sourceId !== evidence.providerTiming?.sourceId ||
+          timing.inputScene.displayedAtMs > timing.startMs ||
+          evidence.firstObservedAtMs === undefined ||
+          evidence.lastObservedAtMs === undefined ||
+          timing.startMs > evidence.firstObservedAtMs ||
+          timing.endMs < evidence.lastObservedAtMs
+        )
+          throw new Error("Source input bound must contain receipt times and retain its source and scene fence");
+      }
+      if (evidence.sessionTiming?.provenance === "source_timeline_bound" && !sessionSpeechInterval(evidence))
+        throw new Error("Source timeline bound must retain its causal anchor, source and receipt envelope");
+      if (evidence.responseScene) nonnegative(evidence.responseScene.displayedAtMs, "responseScene.displayedAtMs");
     }
     if (timeline?.type === "microphone_speech_stopped") {
       nonnegative(timeline.quietMs, "quietMs");

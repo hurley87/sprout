@@ -2239,7 +2239,7 @@ describe("answer-check turn synchronization", () => {
     expect(INSTRUCTIONS).toContain("The pause is only for counts: reply straight away to everything else");
     // The old contract made GPT-Live reply to every answer at once.
     expect(INSTRUCTIONS).not.toContain("after the child answers, always reply");
-    expect(PROMPT_VERSION).toBe("counting-jev-8");
+    expect(PROMPT_VERSION).toBe("counting-jev-9");
   });
   it("sends nothing while the utterance settles or Jev is deciding", async () => {
     let answer!: (result: AnswerResult) => void;

@@ -50,10 +50,12 @@ function Claim({ claim }: { claim: ObservationClaim }) {
 
 function DecisionForm({
   proposal,
+  rejectOnly,
   disabled,
   save,
 }: {
   proposal: ObserverProposal;
+  rejectOnly: boolean;
   disabled: boolean;
   save: (decision: Omit<ParentDecision, "reviewedAt">) => void;
 }) {
@@ -73,11 +75,13 @@ function DecisionForm({
   return (
     <fieldset disabled={disabled}>
       <legend>Your decision</legend>
-      <button className="download-button" onClick={() => save({ ...base, decision: "accepted" })}>
+      {rejectOnly && <p>Speech timing is unverified. Reject this proposal to exclude it from learning evidence.</p>}
+      <button className="download-button" disabled={rejectOnly} onClick={() => save({ ...base, decision: "accepted" })}>
         Accept unchanged
       </button>{" "}
       <button
         className="download-button"
+        disabled={rejectOnly}
         onClick={() => {
           setMode("corrected");
           setNote("");
@@ -97,6 +101,7 @@ function DecisionForm({
       <div className="review-actions" aria-label="Correction choices">
         <button
           className="download-button"
+          disabled={rejectOnly}
           onClick={() => {
             setMode("corrected");
             setHelp(true);
@@ -116,6 +121,7 @@ function DecisionForm({
         </button>
         <button
           className="download-button"
+          disabled={rejectOnly}
           onClick={() => {
             setMode("corrected");
             setNote("");
@@ -125,6 +131,7 @@ function DecisionForm({
         </button>
         <button
           className="download-button"
+          disabled={rejectOnly}
           onClick={() => {
             setMode("corrected");
             setNote("");
@@ -385,7 +392,11 @@ function ReviewPanel({
   const scope = snapshot?.analysisId ? { sessionId, analysisId: snapshot.analysisId } : null;
   const decisions = new Map(snapshot?.decisions.map(row => [row.proposalRowId, row.decision]));
   const allDecided = snapshot?.proposals.every(row => decisions.has(row.id));
-  const unchanged = snapshot?.decisions.every(row => row.decision.decision === "accepted");
+  const timingInvalid = snapshot?.proposals.some(row => row.resolution === "reject_only");
+  const timingResolved = snapshot?.proposals.every(
+    row => row.resolution !== "reject_only" || decisions.get(row.id)?.decision === "rejected",
+  );
+  const unchanged = !timingInvalid && snapshot?.decisions.every(row => row.decision.decision === "accepted");
   return (
     <section aria-label="Parent observation review" className="parent-review">
       <h3>Today’s observations</h3>
@@ -525,7 +536,11 @@ function ReviewPanel({
             {snapshot.proposals.map(row => (
               <article key={row.id} aria-label={`Observation ${row.proposal.proposalId}`}>
                 <h4>Observation {snapshot.proposals.indexOf(row) + 1}</h4>
-                <p>{reviewedObserverClaim(row.proposal.observation).description}</p>
+                <p>
+                  {row.resolution === "reject_only"
+                    ? "Saved proposal has unverified speech timing; its conclusion is unsupported."
+                    : reviewedObserverClaim(row.proposal.observation).description}
+                </p>
                 <details>
                   <summary>Original proposal details</summary>
                   <p>Original Observer proposal · {row.proposal.proposalId}</p>
@@ -588,6 +603,7 @@ function ReviewPanel({
                 ) : (
                   <DecisionForm
                     proposal={row.proposal}
+                    rejectOnly={row.resolution === "reject_only"}
                     disabled={disabled || Boolean(snapshot.review)}
                     save={decision => void write({ operation: "decide", ...scope, proposalRowId: row.id, decision })}
                   />
@@ -636,6 +652,7 @@ function ReviewPanel({
                 className="download-button"
                 disabled={
                   !allDecided ||
+                  !timingResolved ||
                   (!unchanged && repair === "verified") ||
                   (!snapshot.proposals.length && !acknowledgeEmpty)
                 }

@@ -4,6 +4,7 @@ import { internal } from "../convex/_generated/api";
 import schema from "../convex/schema";
 import { observationFixtures, type SyntheticObservationFixture } from "./fixtures/observation-contracts";
 import type { ObserverProposal } from "../lib/observation-contracts";
+import { sourceTimelineBound } from "../lib/evidence-timing";
 import { reviewedObserverClaim } from "../lib/reviewed-observation";
 
 async function fixture(
@@ -89,6 +90,205 @@ async function expectNoReviewWrites(f: Awaited<ReturnType<typeof fixture>>) {
   expect(await f.t.run(ctx => ctx.db.get(f.rows[0]._id))).toEqual(f.rows[0]);
 }
 
+// Exercise the production bound constructor, not a guessed provider/session offset.
+function prepareTiming(
+  source: SyntheticObservationFixture,
+  provenance: "mapped_provider" | "source_input_bound" | "source_timeline_bound",
+  tied = false,
+  laterScene = false,
+) {
+  const scene = source.record.events.find(event => event.evidence?.type === "scene_displayed")!;
+  const response = source.record.events.find(event => event.evidence?.type === "utterance")!;
+  if (scene.evidence?.type !== "scene_displayed" || response.evidence?.type !== "utterance")
+    throw new Error("fixture evidence");
+  const speech = response.evidence;
+  speech.providerTiming = { clock: "provider", sourceId: 1, startMs: 50600, endMs: 50800 };
+  speech.firstObservedAtMs = speech.lastObservedAtMs = 2000;
+  speech.responseScene = {
+    provenance: "application_transcript_context",
+    sceneId: scene.evidence.sceneId,
+    displayedAtMs: scene.atMs,
+    status: "stable",
+  };
+  const startMs = tied ? scene.atMs : 1700;
+  const inputScene = { sceneId: scene.evidence.sceneId, displayedAtMs: scene.atMs };
+  if (provenance === "mapped_provider") {
+    speech.sessionTiming = { clock: "session", provenance, startMs, endMs: 2000 };
+  } else if (provenance === "source_input_bound") {
+    speech.sessionTiming = { clock: "session", provenance, sourceId: 1, startMs, endMs: 2000, inputScene };
+  } else {
+    // For a later scene the original input fence deliberately names another display.
+    const initialScene = laterScene ? { sceneId: "initial-scene", displayedAtMs: 100 } : inputScene;
+    if (laterScene)
+      source.record.events.unshift({
+        ...scene,
+        _id: "initial-scene-event",
+        atMs: 100,
+        evidence: { ...scene.evidence, sceneId: initialScene.sceneId },
+      });
+    speech.sessionTiming = sourceTimelineBound(
+      speech.providerTiming,
+      startMs - 50600,
+      laterScene ? 100 : scene.atMs,
+      initialScene,
+      2000,
+    );
+    if (!speech.sessionTiming) throw new Error("production bound");
+  }
+}
+
+it.each([
+  ["mapped_provider", false, false],
+  ["source_input_bound", false, false],
+  ["source_input_bound", true, false],
+  ["source_timeline_bound", false, false],
+  ["source_timeline_bound", true, false],
+  ["source_timeline_bound", false, true],
+] as const)("publishes then corrects %s timing (tied=%s, later scene=%s)", async (provenance, tied, laterScene) => {
+  const f = await fixture(undefined, 1, source => prepareTiming(source, provenance, tied, laterScene));
+  const correction = { ...f.original.observation, statedTotal: 2, outcome: "incorrect" as const };
+  const id = await f.decide(correct(correction));
+  expect(await f.decide(correct(correction))).toBe(id);
+  await expect(f.decide(correct({ ...correction, statedTotal: 1 }))).rejects.toThrow("immutable");
+  await f.t.mutation(internal.parent_review.complete, { ...f.scope, repairLevel: "light_correction" });
+  expect(await f.gate()).toMatchObject({
+    blocked: false,
+    evidence: [{ observation: correction, sources: f.original.sources, interpretationProvenance: "parent_review" }],
+  });
+  expect(await f.t.run(ctx => ctx.db.get(f.rows[0]._id))).toEqual(f.rows[0]);
+});
+
+it.each(["mapped_provider", "source_input_bound", "source_timeline_bound"] as const)(
+  "keeps scene ambiguity fail-closed for %s parent corrections",
+  async provenance => {
+    for (const defect of [
+      "competing_display",
+      "start_transition",
+      "end_transition",
+      "mid_transition",
+      "wrong_identity",
+      "wrong_display_time",
+      "missing_timing",
+      "changed_context",
+    ] as const) {
+      const f = await fixture("ambiguous-speaker", 1, source => {
+        prepareTiming(source, provenance, provenance !== "mapped_provider");
+        const scene = source.record.events.find(event => event.evidence?.type === "scene_displayed")!;
+        const response = source.record.events.find(event => event.evidence?.type === "utterance")!;
+        if (response.evidence?.type !== "utterance") throw new Error("response");
+        const speech = response.evidence;
+        if (defect === "competing_display") source.record.events.push({ ...scene, _id: "competing-display" });
+        if (defect === "start_transition" || defect === "end_transition" || defect === "mid_transition")
+          source.record.events.push({
+            ...scene,
+            _id: "real-transition",
+            atMs:
+              defect === "start_transition"
+                ? speech.sessionTiming!.startMs
+                : defect === "end_transition"
+                  ? speech.sessionTiming!.endMs
+                  : 1800,
+          });
+        if (defect === "wrong_identity" || defect === "wrong_display_time") {
+          if (speech.sessionTiming?.provenance !== "mapped_provider") {
+            if (defect === "wrong_identity") speech.sessionTiming!.inputScene.sceneId = "wrong-scene";
+            else speech.sessionTiming!.inputScene.displayedAtMs -= 1;
+          } else {
+            if (defect === "wrong_identity") speech.responseScene!.sceneId = "wrong-scene";
+            else speech.responseScene!.displayedAtMs -= 1;
+          }
+        }
+        if (defect === "missing_timing") delete speech.sessionTiming;
+        if (defect === "changed_context") speech.responseScene!.status = "changed";
+        source.proposal!.observation.uncertaintyReasons.push("conflicting_context");
+      });
+      const concrete = {
+        ...f.original.observation,
+        behavior: "quantity_identification" as const,
+        outcome: "correct" as const,
+        speakerAttribution: "child_or_nearby_speaker" as const,
+        statedTotal: 3,
+        uncertaintyReasons: [],
+      };
+      await expect(f.decide(correct(concrete))).rejects.toThrow(/canonical scene|scene attribution/);
+      await expect(
+        f.decide(correct({ ...f.original.observation, uncertaintyReasons: ["ambiguous_speaker"] })),
+      ).rejects.toThrow(/scene timing uncertainty|scene attribution/);
+      await expectNoReviewWrites(f);
+      await f.decide(correct(f.original.observation));
+      await f.t.mutation(internal.parent_review.complete, { ...f.scope, repairLevel: "substantial_repair" });
+      expect(await f.gate()).toMatchObject({
+        blocked: false,
+        evidence: [
+          {
+            observation: {
+              behavior: "uncertain_exchange",
+              uncertaintyReasons: ["ambiguous_speaker", "conflicting_context"],
+            },
+          },
+        ],
+      });
+    }
+  },
+);
+
+it("does not extend the input-fence tie exception to a later provider-timeline bound", async () => {
+  const f = await fixture("ambiguous-speaker", 1, source => {
+    prepareTiming(source, "source_timeline_bound", true, true);
+    source.proposal!.observation.uncertaintyReasons.push("missing_scene_context");
+  });
+  await expect(
+    f.decide(
+      correct({
+        ...f.original.observation,
+        behavior: "quantity_identification",
+        outcome: "correct",
+        speakerAttribution: "child_or_nearby_speaker",
+        statedTotal: 3,
+        uncertaintyReasons: [],
+      }),
+    ),
+  ).rejects.toThrow("uniquely displayed canonical scene");
+  await expectNoReviewWrites(f);
+});
+
+it("allows explicit parent speech and assistance testimony while keeping production scene provenance", async () => {
+  const f = await fixture("ambiguous-speaker", 1, source => {
+    prepareTiming(source, "source_timeline_bound", true);
+    const speech = source.record.events.find(event => event.evidence?.type === "utterance")!.evidence;
+    if (speech?.type !== "utterance") throw new Error("speech");
+    speech.recognition = "needs_confirmation";
+    source.proposal!.observation.uncertaintyReasons.push("unclear_speech");
+  });
+  const correction = {
+    ...f.original.observation,
+    behavior: "quantity_identification" as const,
+    outcome: "incorrect" as const,
+    speakerAttribution: "child_or_nearby_speaker" as const,
+    statedTotal: 2,
+    uncertaintyReasons: [],
+  };
+  await f.decide({
+    ...correct(correction),
+    parentContext: {
+      provenance: "parent_review",
+      note: "I listened: the child said two, and I had helped.",
+      assistance: ["parent_reported_assistance"],
+    },
+  });
+  await f.t.mutation(internal.parent_review.complete, { ...f.scope, repairLevel: "substantial_repair" });
+  expect(await f.gate()).toMatchObject({
+    blocked: false,
+    evidence: [
+      {
+        observation: correction,
+        interpretationProvenance: "parent_review",
+        parentContext: { assistance: ["parent_reported_assistance"] },
+      },
+    ],
+  });
+});
+
 it("rejects a self-consistent wrong target atomically and keeps it out of planning", async () => {
   const f = await fixture();
   await expect(
@@ -140,7 +340,10 @@ it("cannot resolve missing or ambiguous scene timing into concrete performance o
     },
     source => {
       const response = source.record.events.find(event => event.evidence?.type === "utterance")!;
-      if (response.evidence?.type === "utterance") delete response.evidence.startMs;
+      if (response.evidence?.type === "utterance") {
+        delete response.evidence.startMs;
+        delete response.evidence.sessionTiming;
+      }
     },
     source => {
       source.record.events[0].atMs = 1700;
@@ -516,4 +719,264 @@ it("rolls back earlier inserts if a later accept-all decision fails validation",
   expect(await f.t.run(ctx => ctx.db.query("parentDecisions").take(10))).toEqual([]);
   expect(await f.t.run(ctx => ctx.db.query("reviewedEvidence").take(10))).toEqual([]);
   expect(await f.t.run(ctx => ctx.db.query("sessionReviews").take(10))).toEqual([]);
+});
+
+it("reads legacy proposals conservatively and blocks planning/approval without rewriting historical rows", async () => {
+  const f = await fixture();
+  await f.decide(accept());
+  await f.t.mutation(internal.parent_review.complete, { ...f.scope, repairLevel: "verified" });
+  // Simulate an already-reviewed historical snapshot produced before clock labels.
+  await removeLegacyTiming(f);
+  const history = () =>
+    f.t.run(async ctx => ({
+      events: await ctx.db
+        .query("sessionEvents")
+        .withIndex("by_session_order", q => q.eq("sessionId", f.scope.sessionId))
+        .take(100),
+      proposals: await ctx.db
+        .query("observerProposals")
+        .withIndex("by_analysis_ordinal", q => q.eq("analysisId", f.scope.analysisId))
+        .take(100),
+      decisions: await ctx.db
+        .query("parentDecisions")
+        .withIndex("by_analysis", q => q.eq("analysisId", f.scope.analysisId))
+        .take(100),
+      reviewed: await ctx.db
+        .query("reviewedEvidence")
+        .withIndex("by_analysis", q => q.eq("analysisId", f.scope.analysisId))
+        .take(100),
+    }));
+  const before = await history();
+  const view = JSON.parse(await f.t.query(internal.parent_review.inspect, { sessionId: f.scope.sessionId }));
+  expect(view).toMatchObject({ status: "ready", qualification: expect.stringContaining("unverified speech timing") });
+  expect(view.proposals).toHaveLength(1);
+  expect(view.proposals[0].resolution).toBe("reject_only");
+  expect(await f.gate()).toEqual({ blocked: true, reason: "Speech timing is unverified", evidence: [] });
+  await expect(f.t.mutation(internal.parent_review.acceptAll, f.scope)).rejects.toThrow("speech timing is unverified");
+  expect(await history()).toEqual(before);
+});
+
+it("validates parent correction scene against mapped time despite divergent provider offsets", async () => {
+  const f = await fixture("correct-total-without-spoken-count", 1, source => {
+    const response = source.record.events.find(event => event.evidence?.type === "utterance")!;
+    if (response.evidence?.type !== "utterance") throw new Error("fixture");
+    response.evidence.startMs = 50600;
+    response.evidence.endMs = 50800;
+    source.record.events.push({
+      _id: "later-scene",
+      atMs: 43640,
+      evidence: {
+        type: "scene_displayed",
+        sceneId: "later",
+        targetQuantity: 4,
+        items: [{ emoji: "🦆", label: "duck" }],
+        arrangement: "row",
+      },
+    });
+  });
+  await f.decide(correct({ ...f.original.observation, statedTotal: 2, outcome: "incorrect" }));
+  await f.t.mutation(internal.parent_review.complete, { ...f.scope, repairLevel: "light_correction" });
+  expect(await f.gate()).toMatchObject({
+    blocked: false,
+    evidence: [expect.objectContaining({ interpretationProvenance: "parent_review" })],
+  });
+});
+
+async function removeLegacyTiming(f: Awaited<ReturnType<typeof fixture>>, onlyEventId?: string) {
+  await f.t.run(async ctx => {
+    const events = await ctx.db
+      .query("sessionEvents")
+      .withIndex("by_session_order", q => q.eq("sessionId", f.scope.sessionId))
+      .take(100);
+    for (const event of events) {
+      if (event.evidence?.type === "utterance" && (!onlyEventId || event._id === onlyEventId)) {
+        const evidence = { ...event.evidence };
+        delete evidence.sessionTiming;
+        await ctx.db.patch(event._id, { evidence });
+      }
+    }
+    const analysis = await ctx.db.get(f.scope.analysisId);
+    const snapshot = JSON.parse(analysis!.inputSnapshot!);
+    for (const event of snapshot.events)
+      if (event.evidence?.type === "utterance" && (!onlyEventId || event._id === onlyEventId))
+        delete event.evidence.sessionTiming;
+    await ctx.db.patch(f.scope.analysisId, { inputSnapshot: JSON.stringify(snapshot) });
+  });
+}
+
+it("lets a parent reject legacy timing failures and complete review without evidence or historical rewrites", async () => {
+  const f = await fixture();
+  await removeLegacyTiming(f);
+  const before = await f.t.query(internal.parent_review.get, f.scope);
+  await expect(
+    f.t.mutation(internal.parent_review.complete, { ...f.scope, repairLevel: "light_correction" }),
+  ).rejects.toThrow("incomplete");
+  expect(await f.gate()).toMatchObject({ blocked: true, reason: "Parent review is incomplete", evidence: [] });
+  await expect(f.decide(accept())).rejects.toThrow("speech timing is unverified");
+  await expect(f.decide(correct(f.original.observation))).rejects.toThrow("speech timing is unverified");
+  const decisionId = await f.decide(reject());
+  expect(await f.decide(reject())).toBe(decisionId);
+  await expect(f.t.mutation(internal.parent_review.complete, { ...f.scope, repairLevel: "verified" })).rejects.toThrow(
+    "unchanged acceptances",
+  );
+  await f.t.mutation(internal.parent_review.complete, { ...f.scope, repairLevel: "light_correction" });
+  expect(await f.gate()).toEqual({ blocked: false, reason: null, evidence: [] });
+  expect((await f.t.query(internal.parent_review.get, f.scope)).proposals).toEqual(before.proposals);
+  expect(await f.t.run(ctx => ctx.db.query("reviewedEvidence").take(10))).toEqual([]);
+  await expect(f.decide(accept())).rejects.toThrow("speech timing is unverified");
+});
+
+it("keeps completed rejected legacy proposals out of planning without changing their decisions", async () => {
+  const f = await fixture();
+  await f.decide(reject());
+  await f.t.mutation(internal.parent_review.complete, { ...f.scope, repairLevel: "light_correction" });
+  await removeLegacyTiming(f);
+  const before = await f.t.query(internal.parent_review.get, f.scope);
+  expect(await f.gate()).toEqual({ blocked: false, reason: null, evidence: [] });
+  await f.t.mutation(internal.parent_review.complete, { ...f.scope, repairLevel: "light_correction" });
+  expect(await f.t.query(internal.parent_review.get, f.scope)).toEqual(before);
+});
+
+it("plans from valid accepted evidence alongside rejected timing-invalid evidence", async () => {
+  const valid = await fixture();
+  // Use the same database for two prerequisite sessions.
+  await valid.decide(accept());
+  await valid.t.mutation(internal.parent_review.complete, { ...valid.scope, repairLevel: "verified" });
+  const second = await valid.t.run(async ctx => {
+    const source = structuredClone(observationFixtures[0]);
+    const sessionId = await ctx.db.insert("sessions", {
+      state: "ended",
+      recordStatus: "complete",
+      createdAt: 1,
+      nextEventOrder: source.record.events.length,
+    });
+    const ids = new Map<string, string>();
+    for (const [order, event] of source.record.events.entries()) {
+      if (event.evidence?.type === "utterance") delete event.evidence.sessionTiming;
+      ids.set(
+        event._id,
+        await ctx.db.insert("sessionEvents", {
+          sessionId,
+          order,
+          eventKey: `${order}`,
+          atMs: event.atMs,
+          evidence: event.evidence,
+        }),
+      );
+    }
+    const events = await ctx.db
+      .query("sessionEvents")
+      .withIndex("by_session_order", q => q.eq("sessionId", sessionId))
+      .take(100);
+    const inputSnapshot = JSON.stringify({
+      sessionId,
+      state: "ended",
+      recordStatus: "complete",
+      recording: null,
+      events: events.map(event => ({
+        _id: event._id,
+        order: event.order,
+        atMs: event.atMs,
+        evidence: event.evidence ?? null,
+        timeline: event.timeline ?? null,
+      })),
+    });
+    const analysisId = await ctx.db.insert("observerAnalyses", {
+      sessionId,
+      status: "ready",
+      attempt: 1,
+      inputSnapshot,
+    });
+    const proposal = source.proposal!;
+    proposal.sessionId = sessionId;
+    proposal.proposalId = "legacy";
+    proposal.sources = proposal.sources.map(item =>
+      "eventId" in item ? { ...item, eventId: ids.get(item.eventId)! } : item,
+    );
+    const proposalRowId = await ctx.db.insert("observerProposals", { sessionId, analysisId, ordinal: 0, proposal });
+    return { sessionId, analysisId, proposalRowId };
+  });
+  await valid.t.mutation(internal.parent_review.decide, { ...second, decision: reject("legacy") });
+  await valid.t.mutation(internal.parent_review.complete, {
+    sessionId: second.sessionId,
+    analysisId: second.analysisId,
+    repairLevel: "light_correction",
+  });
+  const result = await valid.t.query(internal.parent_review.forPlanning, {
+    sessionIds: [valid.scope.sessionId, second.sessionId],
+  });
+  expect(result).toMatchObject({ blocked: false, reason: null, evidence: [{ proposalRowId: valid.rows[0]._id }] });
+  expect(result.evidence).toHaveLength(1);
+});
+
+it("cannot bypass unrelated proposal corruption or stale snapshots through legacy rejection", async () => {
+  const f = await fixture();
+  await removeLegacyTiming(f);
+  await f.t.run(ctx => ctx.db.patch(f.rows[0]._id, { proposal: { ...f.original, exchangeAtMs: 99999 } }));
+  await expect(f.decide(reject())).rejects.toThrow("Invalid stored proposal provenance");
+  expect(await f.t.run(ctx => ctx.db.query("parentDecisions").take(10))).toEqual([]);
+  const stale = await fixture();
+  await stale.t.run(async ctx => {
+    const event = await ctx.db
+      .query("sessionEvents")
+      .withIndex("by_session_order", q => q.eq("sessionId", stale.scope.sessionId))
+      .first();
+    await ctx.db.patch(event!._id, { atMs: 99999 });
+  });
+  await expect(stale.decide(reject())).rejects.toThrow("Stale analysis");
+});
+
+it("blocks corrupt stored rejection linkage and missing or altered reviewed evidence", async () => {
+  const rejected = await fixture();
+  await rejected.decide(reject());
+  await rejected.t.mutation(internal.parent_review.complete, { ...rejected.scope, repairLevel: "light_correction" });
+  await removeLegacyTiming(rejected);
+  await rejected.t.run(async ctx => {
+    const row = await ctx.db.query("parentDecisions").first();
+    await ctx.db.patch(row!._id, { decision: { ...row!.decision, proposalId: "wrong" } });
+  });
+  await expect(rejected.gate()).rejects.toThrow("Invalid stored decision provenance");
+  const accepted = await fixture();
+  await accepted.decide(accept());
+  await accepted.t.mutation(internal.parent_review.complete, { ...accepted.scope, repairLevel: "verified" });
+  await accepted.t.run(async ctx => {
+    const row = await ctx.db.query("reviewedEvidence").first();
+    await ctx.db.patch(row!._id, { exchangeAtMs: 99999 });
+  });
+  await expect(accepted.gate()).rejects.toThrow("Invalid reviewed evidence provenance");
+  await accepted.t.run(async ctx => {
+    const row = await ctx.db.query("reviewedEvidence").first();
+    await ctx.db.delete(row!._id);
+  });
+  await expect(accepted.gate()).rejects.toThrow("Invalid reviewed evidence completeness");
+});
+
+it("resolves mixed valid and rejected legacy proposals within one analysis", async () => {
+  const f = await fixture(undefined, 2, source => {
+    const response = source.record.events.find(event => event.evidence?.type === "utterance")!;
+    source.record.events.push({ ...structuredClone(response), _id: "second-response", atMs: response.atMs + 300 });
+  });
+  await f.t.run(async ctx => {
+    const events = await ctx.db
+      .query("sessionEvents")
+      .withIndex("by_session_order", q => q.eq("sessionId", f.scope.sessionId))
+      .take(100);
+    const response = events.at(-1)!;
+    const proposal = structuredClone(f.rows[1].proposal);
+    proposal.exchangeAtMs = response.atMs;
+    proposal.sources = proposal.sources.map((source: ObserverProposal["sources"][number]) =>
+      source.role === "response" ? { ...source, eventId: response._id } : source,
+    );
+    await ctx.db.patch(f.rows[1]._id, { proposal });
+  });
+  const response = f.original.sources.find(source => source.role === "response")!;
+  if (!("eventId" in response)) throw new Error("fixture");
+  await removeLegacyTiming(f, response.eventId);
+  await f.decide(accept("p1"), 1);
+  await expect(f.t.mutation(internal.parent_review.acceptAll, f.scope)).rejects.toThrow("speech timing is unverified");
+  expect(await f.gate()).toMatchObject({ blocked: true, evidence: [] });
+  await f.decide(reject());
+  await f.t.mutation(internal.parent_review.complete, { ...f.scope, repairLevel: "light_correction" });
+  expect(await f.gate()).toMatchObject({ blocked: false, evidence: [{ proposalRowId: f.rows[1]._id }] });
+  expect((await f.gate()).evidence).toHaveLength(1);
 });

@@ -1,7 +1,8 @@
+import { recognitionRecovery, type Recovery } from "./recognition-recovery";
 import { COUNTING_SCENES } from "./counting-scenes.mjs";
 
 export const MODEL = "gpt-live-1";
-export const PROMPT_VERSION = "counting-jev-8";
+export const PROMPT_VERSION = "counting-jev-9";
 export const TIMING = { wrap: 270_000, goodbye: 300_000, finish: 308_000, hard: 360_000, startup: 30_000 };
 
 // The only phrase Sprout is asked to say when a lesson ends early, so the app
@@ -21,6 +22,7 @@ export const SCENES: readonly Scene[] = COUNTING_SCENES;
 export const LAST_SCENE = SCENES.length - 1;
 
 export type ReplacementSeed = {
+  recovery?: Recovery;
   sceneIndex: number;
   decision: "ADVANCE" | "STAY" | "UNAVAILABLE";
   evaluatedSceneIndex: number;
@@ -32,6 +34,7 @@ export type ReplacementSeed = {
 export type EvaluationMeaning = "met_advancement_criterion" | "did_not_meet_advancement_criterion" | "unavailable";
 export type EvaluationAction = "ADVANCE" | "STAY" | "UNAVAILABLE";
 export type EvaluationResultContext = {
+  recovery?: Recovery;
   evaluatedAnswer: string;
   evaluatedScene: Scene;
   transcriptRevision: number;
@@ -46,7 +49,19 @@ export function parseReplacementSeed(value: unknown): ReplacementSeed | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const seed = value as Record<string, unknown>;
   if (
-    Object.keys(seed).length !== 6 ||
+    Object.keys(seed).some(
+      key =>
+        ![
+          "sceneIndex",
+          "decision",
+          "evaluatedSceneIndex",
+          "childUtterance",
+          "transcriptRevision",
+          "answerVersion",
+          "recovery",
+        ].includes(key),
+    ) ||
+    (seed.recovery !== undefined && !["clarification", "instructional_support"].includes(seed.recovery as string)) ||
     !Number.isInteger(seed.sceneIndex) ||
     (seed.sceneIndex as number) < 0 ||
     (seed.sceneIndex as number) > LAST_SCENE ||
@@ -70,6 +85,7 @@ export function parseReplacementSeed(value: unknown): ReplacementSeed | null {
   )
     return null;
   return {
+    ...(seed.recovery === undefined ? {} : { recovery: seed.recovery as Recovery }),
     sceneIndex: seed.sceneIndex as number,
     decision: seed.decision as ReplacementSeed["decision"],
     evaluatedSceneIndex: seed.evaluatedSceneIndex as number,
@@ -82,6 +98,7 @@ export function parseReplacementSeed(value: unknown): ReplacementSeed | null {
 /** Trusted screen/outcome context stays separate from the child's untrusted text. */
 export function replacementSessionInput(seed: ReplacementSeed) {
   const context = evaluationResultContext({
+    recovery: seed.recovery,
     evaluatedAnswer: seed.childUtterance,
     evaluatedScene: sceneAt(seed.evaluatedSceneIndex),
     transcriptRevision: seed.transcriptRevision,
@@ -129,7 +146,10 @@ export function evaluationResultContext(result: EvaluationResultContext) {
   }[result.action];
   const feedback = {
     ADVANCE: `Briefly acknowledge the child's answer about the ${objectName(result.evaluatedScene)} by saying exactly "That's right, ${result.evaluatedScene.quantity === 1 ? "there's" : "there are"} ${COUNT_WORDS[result.evaluatedScene.quantity]} ${objectName(result.evaluatedScene)}." This confirms only the group the child just counted, not the new group. Then ask exactly "How many ${OBJECTS[result.displayedScene.object].plural} do you see?" Do not introduce the new group with its count or count it aloud.`,
-    STAY: `Do not claim the child was wrong or explain why. Help without giving a number, for example "Count them one at a time." Then ask "How many ${OBJECTS[result.displayedScene.object].plural} do you see?" Do not count the group aloud or give the total.`,
+    STAY:
+      (result.recovery ?? recognitionRecovery(answer)) === "clarification"
+        ? `Recognition is unconfirmed; this is not evidence of a counting mistake. Say "I want to make sure I heard you. Could you say your number again?" Do not give a counting hint, suggest an answer, or reveal the total.`
+        : `Do not claim the child was wrong or explain why. Help without giving a number, for example "Count them one at a time." Then ask "How many ${OBJECTS[result.displayedScene.object].plural} do you see?" Do not count the group aloud or give the total.`,
     UNAVAILABLE: `Do not judge the answer right or wrong. Ask "How many ${OBJECTS[result.displayedScene.object].plural} do you see?" Do not count the group aloud or give the total.`,
   }[result.action];
   const display = `The screen ${result.displayedScene.id === result.evaluatedScene.id ? "has not changed" : "has changed"}; currently displayed: ${result.displayedScene.quantity} ${objectName(result.displayedScene)} (${result.displayedScene.id}).`;

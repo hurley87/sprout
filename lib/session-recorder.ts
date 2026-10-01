@@ -5,11 +5,42 @@ export type Evidence =
       type: "utterance";
       speaker: "child_or_nearby_speaker" | "sprout" | "unknown";
       text: string;
+      /** Legacy/provider offsets. Never compare with application atMs without an explicit mapping. */
       startMs?: number;
       endMs?: number;
       state: "finalized" | "interrupted";
       firstObservedAtMs?: number;
       lastObservedAtMs?: number;
+      providerTiming?: { clock: "provider"; startMs: number; endMs: number; sourceId?: number };
+      /** Mapped speech, or a conservative envelope of source input through transcript receipt. */
+      sessionTiming?:
+        | { clock: "session"; provenance: "mapped_provider"; startMs: number; endMs: number }
+        | {
+            clock: "session";
+            provenance: "source_input_bound";
+            startMs: number;
+            endMs: number;
+            sourceId: number;
+            inputScene: { sceneId: string; displayedAtMs: number };
+          }
+        | {
+            clock: "session";
+            provenance: "source_timeline_bound";
+            startMs: number;
+            endMs: number;
+            sourceId: number;
+            /** Source creation cannot precede its browser request. May predate canonical zero. */
+            sourceRequestedAtMs: number;
+            inputOpenedAtMs: number;
+            inputScene: { sceneId: string; displayedAtMs: number };
+          };
+      responseScene?: {
+        provenance: "application_transcript_context";
+        sceneId: string;
+        displayedAtMs: number;
+        status: "stable" | "changed";
+      };
+      recognition?: "needs_confirmation" | "no_ambiguity_detected";
     }
   | {
       type: "scene_displayed";

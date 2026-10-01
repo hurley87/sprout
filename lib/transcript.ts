@@ -1,3 +1,4 @@
+import type { Evidence } from "./session-recorder";
 import { GOODBYE_PHRASE } from "./lesson";
 
 /** Silence longer than this starts a new utterance. */
@@ -67,6 +68,10 @@ export type RecordedUtterance = {
   startMs: number;
   endMs: number;
   delivered: boolean;
+  context?: Pick<
+    Extract<Evidence, { type: "utterance" }>,
+    "providerTiming" | "sessionTiming" | "responseScene" | "recognition"
+  >;
   firstObservedAtMs: number;
   lastObservedAtMs: number;
 };
@@ -80,20 +85,62 @@ export class UtteranceAccumulator {
     endMs: number,
     delivered: boolean,
     observedAtMs = 0,
+    context?: RecordedUtterance["context"],
   ): RecordedUtterance | null {
     let completed: RecordedUtterance | null = null;
-    if (this.open && startMs - this.open.endMs > UTTERANCE_GAP_MS) completed = this.take();
+    if (
+      this.open &&
+      (startMs - this.open.endMs > UTTERANCE_GAP_MS ||
+        this.open.context?.providerTiming?.sourceId !== context?.providerTiming?.sourceId)
+    )
+      completed = this.take();
     if (!this.open)
       this.open = {
         text: "",
         startMs,
         endMs,
         delivered,
+        context: context ? structuredClone(context) : undefined,
         firstObservedAtMs: observedAtMs,
         lastObservedAtMs: observedAtMs,
       };
+    if (this.open.context?.responseScene && this.open.context.responseScene.sceneId !== context?.responseScene?.sceneId)
+      this.open.context.responseScene.status = "changed";
+    if (this.open.context?.providerTiming) {
+      this.open.context.providerTiming.startMs = Math.min(this.open.startMs, startMs);
+      this.open.context.providerTiming.endMs = Math.max(this.open.endMs, endMs);
+    }
+    // Every fragment must have the same independently fenced source. Never
+    // recover trust after one fragment lacks a bound or changes its identity.
+    const prior = this.open.context?.sessionTiming;
+    const next = context?.sessionTiming;
+    if (
+      prior &&
+      next &&
+      prior.provenance === "source_input_bound" &&
+      next.provenance === "source_input_bound" &&
+      prior.sourceId === next.sourceId &&
+      prior.startMs === next.startMs
+    ) {
+      prior.endMs = Math.max(prior.endMs, next.endMs);
+    } else if (
+      prior?.provenance === "source_timeline_bound" &&
+      next?.provenance === "source_timeline_bound" &&
+      prior.sourceId === next.sourceId &&
+      prior.sourceRequestedAtMs === next.sourceRequestedAtMs &&
+      prior.inputOpenedAtMs === next.inputOpenedAtMs &&
+      prior.inputScene.sceneId === next.inputScene.sceneId &&
+      prior.inputScene.displayedAtMs === next.inputScene.displayedAtMs
+    ) {
+      prior.startMs = Math.min(prior.startMs, next.startMs);
+      prior.endMs = Math.max(prior.endMs, next.endMs);
+    } else if (prior?.provenance === "mapped_provider" && next?.provenance === "mapped_provider") {
+      prior.startMs = Math.min(prior.startMs, next.startMs);
+      prior.endMs = Math.max(prior.endMs, next.endMs);
+    } else if (this.open.context) delete this.open.context.sessionTiming;
     this.open.lastObservedAtMs = observedAtMs;
     this.open.text += delta;
+    this.open.startMs = Math.min(this.open.startMs, startMs);
     this.open.endMs = Math.max(this.open.endMs, endMs);
     this.open.delivered &&= delivered;
     return completed;

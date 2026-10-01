@@ -345,3 +345,50 @@ it("keeps the live browser start timestamp despite delayed persistence", async (
   await t.mutation(api.sessions.activate, { sessionId, startedAt: 999999 });
   expect((await t.query(api.sessions.getRecord, { sessionId }))?.session.startedAt).toBe(123456);
 });
+
+it("persists separate provider provenance and response context without inventing mapped timing", async () => {
+  const t = makeTest();
+  const sessionId = await t.mutation(api.sessions.create, {});
+  await t.mutation(api.sessions.activate, { sessionId });
+  const evidence = {
+    type: "utterance",
+    speaker: "child_or_nearby_speaker",
+    text: "Eight",
+    state: "finalized",
+    startMs: 35800,
+    endMs: 36000,
+    firstObservedAtMs: 33014,
+    lastObservedAtMs: 33014,
+    providerTiming: { clock: "provider", startMs: 35800, endMs: 36000, sourceId: 1 },
+    responseScene: {
+      provenance: "application_transcript_context",
+      sceneId: "butterfly-garden",
+      displayedAtMs: 16590,
+      status: "stable",
+    },
+    recognition: "needs_confirmation",
+  } as const;
+  await t.mutation(api.sessions.appendEvent, { sessionId, eventKey: "butterfly", atMs: 35515, evidence });
+  const record = await t.query(api.sessions.getRecord, { sessionId });
+  expect(record?.events[0].evidence).toEqual(evidence);
+  await expect(
+    t.mutation(api.sessions.appendEvent, {
+      sessionId,
+      eventKey: "invalid",
+      atMs: 35515,
+      evidence: { ...evidence, providerTiming: { ...evidence.providerTiming, endMs: 35000 } },
+    }),
+  ).rejects.toThrow("timing.endMs must follow timing.startMs");
+  await expect(
+    t.mutation(api.sessions.appendEvent, {
+      sessionId,
+      eventKey: "invalid-mapping",
+      atMs: 35515,
+      evidence: {
+        ...evidence,
+        sessionTiming: { clock: "session", provenance: "mapped_provider", startMs: 33000, endMs: 32000 },
+      },
+    }),
+  ).rejects.toThrow("timing.endMs must follow timing.startMs");
+  expect((await t.query(api.sessions.getRecord, { sessionId }))?.events).toHaveLength(1);
+});

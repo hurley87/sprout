@@ -15,8 +15,7 @@ function fixture() {
   }));
   const response = sources.find(source => source.evidence.type === "utterance")!;
   if (response.evidence.type !== "utterance") throw new Error("Expected synthetic utterance");
-  response.evidence.startMs = 12000;
-  response.evidence.endMs = 14000;
+  response.evidence.sessionTiming = { clock: "session", provenance: "mapped_provider", startMs: 12000, endMs: 14000 };
   return { proposal, sources, response, speech: response.evidence };
 }
 
@@ -40,8 +39,7 @@ it.each([
   [12000, 11000],
 ])("falls back to the exchange event for invalid speech bounds %s–%s", (startMs, endMs) => {
   const { proposal, sources, speech } = fixture();
-  speech.startMs = startMs;
-  speech.endMs = endMs;
+  speech.sessionTiming = { clock: "session", provenance: "mapped_provider", startMs: startMs!, endMs: endMs! };
   expect(reviewPlaybackAtMs(proposal, sources)).toBe(20000);
 });
 
@@ -62,10 +60,10 @@ it("requires a cited response and never chooses unrelated or generated speech", 
 
 it("retains zero speech start and the existing recording clamps", () => {
   const { proposal, sources, speech } = fixture();
-  speech.startMs = 0;
+  speech.sessionTiming!.startMs = 0;
   const recording = { startOffsetMs: 2000, durationMs: 30000 };
   expect(recordingOffsetSeconds(reviewPlaybackAtMs(proposal, sources), recording)).toBe(0);
-  speech.startMs = 40000;
-  speech.endMs = 42000;
+  speech.sessionTiming!.startMs = 40000;
+  speech.sessionTiming!.endMs = 42000;
   expect(recordingOffsetSeconds(reviewPlaybackAtMs(proposal, sources), recording)).toBe(30);
 });

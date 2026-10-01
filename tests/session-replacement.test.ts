@@ -25,9 +25,15 @@ function setup(decision: ReplacementSeed["decision"] = "ADVANCE", evaluate?: Eva
   let resolve!: (id: number) => void;
   let reject!: (error: Error) => void;
   const order: string[] = [];
+  const inputFenceSources: number[] = [];
   const transport: Transport = {
     activeSourceId: 1,
     start: vi.fn(async () => {}),
+    openInput: vi.fn(fence => {
+      fence(transport.activeSourceId!);
+      inputFenceSources.push(transport.activeSourceId!);
+      return true;
+    }),
     send: vi.fn(() => order.push("instruction")),
     setOutputBlocked: vi.fn(blocked => order.push(blocked ? "blocked" : "permitted")),
     stopMedia: vi.fn(),
@@ -65,6 +71,7 @@ function setup(decision: ReplacementSeed["decision"] = "ADVANCE", evaluate?: Eva
     session,
     transport,
     order,
+    inputFenceSources,
     child,
     transcript,
     fragments,
@@ -85,6 +92,7 @@ async function promotedWithOldClock(decision: ReplacementSeed["decision"], evalu
   await Promise.resolve();
   await Promise.resolve();
   expect(f.transport.activateSource).toHaveBeenCalledWith(2);
+  expect(f.inputFenceSources).toEqual([1, 2]);
   return { ...f, hidden };
 }
 async function held(decision: ReplacementSeed["decision"] = "ADVANCE") {
@@ -209,6 +217,7 @@ it.each(["ADVANCE", "STAY", "UNAVAILABLE"] as const)(
     expect(f.transport.prepareReplacement).toHaveBeenCalledExactlyOnceWith(
       {
         sceneIndex: decision === "ADVANCE" ? 1 : 0,
+        ...(decision === "STAY" ? { recovery: "instructional_support" } : {}),
         evaluatedSceneIndex: 0,
         decision,
         childUtterance: "One",

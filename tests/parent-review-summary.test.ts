@@ -102,3 +102,26 @@ it.each(["not_started", "pending", "running", "failed"] as const)(
     expect(observationSummary({ ...fixture(), status })).toEqual([]);
   },
 );
+
+it("does not present legacy unsupported totals as endorsed conclusions", () => {
+  const state = fixture();
+  state.proposals[0].resolution = "reject_only";
+  const before = structuredClone(state);
+  expect(observationSummary(state)[0]).toEqual({
+    text: "Saved observation has unverified speech timing.",
+    detail: "Its conclusion cannot be used as learning evidence. Reject it if undecided, then finish review.",
+  });
+  expect(observationSummary(state)[1].text).toBe("The displayed quantities 2, 3 were identified correctly.");
+  state.decisions.push({
+    proposalRowId: "row-1",
+    decision: {
+      kind: "parent_decision",
+      proposalId: "p1",
+      decision: "rejected",
+      rejectionReason: "Unverified timing",
+      reviewedAt: 1,
+    },
+  });
+  expect(observationSummary(state)[0].text).toBe("Excluded from reviewed evidence: Unverified timing");
+  expect(state.proposals).toEqual(before.proposals);
+});
