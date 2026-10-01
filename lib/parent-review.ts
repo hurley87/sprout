@@ -1,3 +1,4 @@
+import { sessionSpeechInterval } from "./evidence-timing";
 import { validateParentDecision, type ObserverProposal, type ParentDecision } from "./observation-contracts";
 import type { Evidence } from "./session-recorder";
 import { isDurableSessionReference } from "./durable-session-reference";
@@ -8,7 +9,7 @@ export type ReviewSnapshot = {
   analysisId: string | null;
   status: "not_started" | "pending" | "running" | "failed" | "ready";
   qualification: string | null;
-  proposals: { id: string; proposal: ObserverProposal }[];
+  proposals: { id: string; proposal: ObserverProposal; resolution?: "reject_only" }[];
   decisions: { proposalRowId: string; decision: ParentDecision }[];
   review: { repairLevel: RepairLevel; note?: string; emptyAcknowledged: boolean; completedAt: number } | null;
   sources: { id: string; eventKey: string; atMs: number; evidence: Evidence }[];
@@ -19,18 +20,16 @@ export function reviewPlaybackAtMs(proposal: ObserverProposal, sources: ReviewSn
   const response = proposal.sources.find(source => source.role === "response" && "eventId" in source);
   const evidence =
     response && "eventId" in response ? sources.find(source => source.id === response.eventId)?.evidence : undefined;
-  // Missing/invalid speech context retains the approximate exchange-event fallback.
-  if (
-    evidence?.type === "utterance" &&
-    evidence.speaker !== "sprout" &&
-    typeof evidence.startMs === "number" &&
-    Number.isFinite(evidence.startMs) &&
-    evidence.startMs >= 0 &&
-    typeof evidence.endMs === "number" &&
-    Number.isFinite(evidence.endMs) &&
-    evidence.endMs >= evidence.startMs
-  ) {
-    return evidence.startMs;
+  const interval = sessionSpeechInterval(evidence);
+  if (evidence?.type === "utterance" && evidence.speaker !== "sprout") {
+    if (interval) return interval.startMs;
+    // Arrival is an approximate review anchor, never an acoustic timestamp.
+    if (
+      typeof evidence.firstObservedAtMs === "number" &&
+      Number.isFinite(evidence.firstObservedAtMs) &&
+      evidence.firstObservedAtMs >= 0
+    )
+      return evidence.firstObservedAtMs;
   }
   return proposal.exchangeAtMs;
 }

@@ -21,6 +21,51 @@ export const evidence = v.union(
     state: v.union(v.literal("finalized"), v.literal("interrupted")),
     firstObservedAtMs: v.optional(v.number()),
     lastObservedAtMs: v.optional(v.number()),
+    providerTiming: v.optional(
+      v.object({
+        clock: v.literal("provider"),
+        startMs: v.number(),
+        endMs: v.number(),
+        sourceId: v.optional(v.number()),
+      }),
+    ),
+    sessionTiming: v.optional(
+      v.union(
+        v.object({
+          clock: v.literal("session"),
+          provenance: v.literal("mapped_provider"),
+          startMs: v.number(),
+          endMs: v.number(),
+        }),
+        v.object({
+          clock: v.literal("session"),
+          provenance: v.literal("source_input_bound"),
+          startMs: v.number(),
+          endMs: v.number(),
+          sourceId: v.number(),
+          inputScene: v.object({ sceneId: v.string(), displayedAtMs: v.number() }),
+        }),
+        v.object({
+          clock: v.literal("session"),
+          provenance: v.literal("source_timeline_bound"),
+          startMs: v.number(),
+          endMs: v.number(),
+          sourceId: v.number(),
+          sourceRequestedAtMs: v.number(),
+          inputOpenedAtMs: v.number(),
+          inputScene: v.object({ sceneId: v.string(), displayedAtMs: v.number() }),
+        }),
+      ),
+    ),
+    responseScene: v.optional(
+      v.object({
+        provenance: v.literal("application_transcript_context"),
+        sceneId: v.string(),
+        displayedAtMs: v.number(),
+        status: v.union(v.literal("stable"), v.literal("changed")),
+      }),
+    ),
+    recognition: v.optional(v.union(v.literal("needs_confirmation"), v.literal("no_ambiguity_detected"))),
   }),
   v.object({
     type: v.literal("scene_displayed"),

@@ -25,6 +25,19 @@ function fixture(
     statedTotal?: number;
   } = {},
 ): SyntheticObservationFixture {
+  // These synthetic fixtures explicitly supply a verified session-clock mapping.
+  // Real provider and legacy offsets must never acquire this label by inference.
+  if (
+    response.evidence?.type === "utterance" &&
+    response.evidence.startMs !== undefined &&
+    response.evidence.endMs !== undefined
+  )
+    response.evidence.sessionTiming = {
+      clock: "session",
+      provenance: "mapped_provider",
+      startMs: response.evidence.startMs,
+      endMs: response.evidence.endMs,
+    };
   const record: CanonicalObservationRecord = {
     session: { _id: "sessions_synthetic", state: "ended", recordStatus: "complete" },
     events: [

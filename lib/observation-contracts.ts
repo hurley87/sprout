@@ -1,3 +1,4 @@
+import { responseSceneValidity, sessionSpeechInterval } from "./evidence-timing";
 import type { Evidence } from "./session-recorder";
 
 export type ObservationBehavior = "quantity_identification" | "counting_aloud_with_total" | "uncertain_exchange";
@@ -96,13 +97,25 @@ const stringArray = (value: unknown, choices: readonly string[]) =>
   value.length <= choices.length &&
   new Set(value).size === value.length &&
   value.every(item => oneOf(item, choices));
-const spokenNumbers: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5 };
+const spokenNumbers: Record<string, number> = {
+  zero: 0,
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+};
 function spokenNumberTokens(text: string) {
   return (
     text
       .toLowerCase()
-      .match(/\b(?:one|two|three|four|five|[1-5])\b/g)
-      ?.map(token => (/^[1-5]$/.test(token) ? Number(token) : spokenNumbers[token])) ?? []
+      .match(/\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|\d{1,3})\b/g)
+      ?.map(token => (/^\d+$/.test(token) ? Number(token) : spokenNumbers[token])) ?? []
   );
 }
 
@@ -346,8 +359,10 @@ export function validateObserverProposal(
         event?.evidence?.type === "support" &&
         (!responseEvent ||
           responseEvent.evidence?.type !== "utterance" ||
-          typeof responseEvent.evidence.startMs !== "number" ||
-          event.atMs > responseEvent.evidence.startMs)
+          !sessionSpeechInterval(responseEvent.evidence) ||
+          (sessionSpeechInterval(responseEvent.evidence)!.provenance !== "mapped_provider"
+            ? event.atMs >= sessionSpeechInterval(responseEvent.evidence)!.startMs
+            : event.atMs > sessionSpeechInterval(responseEvent.evidence)!.startMs))
       ) {
         issues.push({
           path: "observation.support.sourceEventIds",
@@ -396,7 +411,13 @@ export function validateObserverProposal(
   }
   if (responseEvent?.evidence?.type === "utterance") {
     for (const source of normalizedSources) {
-      if (source.role === "recording_support" && source.sessionStartMs > (responseEvent.evidence.endMs ?? -1)) {
+      if (
+        source.role === "recording_support" &&
+        (!sessionSpeechInterval(responseEvent.evidence) ||
+          (sessionSpeechInterval(responseEvent.evidence)!.provenance !== "mapped_provider"
+            ? source.sessionEndMs >= sessionSpeechInterval(responseEvent.evidence)!.startMs
+            : source.sessionStartMs > sessionSpeechInterval(responseEvent.evidence)!.endMs))
+      ) {
         issues.push({
           path: "sources",
           message: "recording support must occur before or during the referenced response",
@@ -405,35 +426,43 @@ export function validateObserverProposal(
     }
   }
   if (responseEvent?.evidence?.type === "utterance" && observation) {
-    const { startMs, endMs } = responseEvent.evidence;
-    const hasSpeechInterval =
-      typeof startMs === "number" &&
-      Number.isFinite(startMs) &&
-      startMs >= 0 &&
-      typeof endMs === "number" &&
-      Number.isFinite(endMs) &&
-      endMs >= startMs;
-    const scenesBeforeSpeech = hasSpeechInterval ? displayedScenes.filter(event => event.atMs < startMs) : [];
-    const latestPriorSceneAt = Math.max(...scenesBeforeSpeech.map(event => event.atMs), -1);
-    const latestPriorScenes = scenesBeforeSpeech.filter(event => event.atMs === latestPriorSceneAt);
-    const transitionsDuringSpeech = hasSpeechInterval
-      ? displayedScenes.some(event => event.atMs >= startMs && event.atMs <= endMs)
-      : false;
-    const citedSceneIsCurrent = latestPriorScenes.length === 1 && latestPriorScenes[0]._id === sceneEvent?._id;
+    const {
+      hasSpeechInterval,
+      transitionsDuringSpeech,
+      citedSceneIsCurrent,
+      fenceMatchesScene,
+      attributionMatchesScene,
+    } = responseSceneValidity(responseEvent.evidence, sceneEvent, displayedScenes);
+    if (!attributionMatchesScene) {
+      if (
+        observation.behavior !== "uncertain_exchange" ||
+        !observation.uncertaintyReasons.includes("conflicting_context")
+      )
+        issues.push({ path: "sources", message: "response scene attribution conflicts with the cited scene" });
+    }
+    if (
+      responseEvent.evidence.recognition === "needs_confirmation" &&
+      (observation.behavior !== "uncertain_exchange" || !observation.uncertaintyReasons.includes("unclear_speech"))
+    ) {
+      issues.push({
+        path: "observation",
+        message: "unconfirmed recognition cannot establish learner difficulty or a determinate answer",
+      });
+    }
     if (observation.behavior !== "uncertain_exchange") {
       if (!hasSpeechInterval) {
         issues.push({
           path: "sources",
           message: "a concrete behavior requires trustworthy speech start and end timestamps",
         });
-      } else if (transitionsDuringSpeech || !citedSceneIsCurrent) {
+      } else if (transitionsDuringSpeech || !citedSceneIsCurrent || !fenceMatchesScene) {
         issues.push({
           path: "sources",
           message: "a concrete behavior requires the uniquely displayed scene throughout the response interval",
         });
       }
     } else if (
-      (!hasSpeechInterval || transitionsDuringSpeech || !citedSceneIsCurrent) &&
+      (!hasSpeechInterval || transitionsDuringSpeech || !citedSceneIsCurrent || !fenceMatchesScene) &&
       !observation.uncertaintyReasons.includes("missing_scene_context") &&
       !observation.uncertaintyReasons.includes("conflicting_context")
     ) {

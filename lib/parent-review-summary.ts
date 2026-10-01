@@ -28,6 +28,10 @@ export function observationSummary(snapshot: ReviewSnapshot): { text: string; de
   for (const row of snapshot.proposals) {
     const decision = decisions.get(row.id);
     const claim = decision?.correction ?? row.proposal.observation;
+    if (row.resolution === "reject_only" && decision?.decision !== "rejected") {
+      groups.push({ claim, decision, quantities: [], key: `timing:${row.id}` });
+      continue;
+    }
     // Corrections/rejections remain separate; recorded support source identities must also match.
     const mergeable =
       (!decision || decision.decision === "accepted") &&
@@ -47,7 +51,12 @@ export function observationSummary(snapshot: ReviewSnapshot): { text: string; de
         key,
       });
   }
-  return groups.map(({ claim, decision, quantities }) => {
+  return groups.map(({ claim, decision, quantities, key }) => {
+    if (key.startsWith("timing:"))
+      return {
+        text: "Saved observation has unverified speech timing.",
+        detail: "Its conclusion cannot be used as learning evidence. Reject it if undecided, then finish review.",
+      };
     const unique = [...new Set(quantities)];
     const text =
       decision?.decision === "rejected"

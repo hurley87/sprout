@@ -34,6 +34,7 @@ const snapshot = JSON.stringify({
         text: "One, two, three",
         startMs: 1500,
         endMs: 2200,
+        sessionTiming: { clock: "session", provenance: "mapped_provider", startMs: 1500, endMs: 2200 },
         state: "finalized",
       },
     },

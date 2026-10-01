@@ -177,10 +177,11 @@ export function createOpenAIObserverProvider(
           instructions: [
             "Propose only concrete, evidence-linked observations for a parent's review; never diagnose, grade, or claim mastery.",
             "The session record is canonical. Generated Sprout/control events are diagnostics, not delivered speech.",
-            "Use only canonical event IDs, and only response utterances with clear child_or_nearby_speaker attribution, finalized state, valid speech bounds, and stable displayed scene across the entire speech interval for concrete claims.",
+            "Use only canonical event IDs, and only response utterances with clear child_or_nearby_speaker attribution, finalized state, explicit sessionTiming with mapped_provider, source_input_bound or source_timeline_bound provenance, and stable displayed scene across the entire speech interval for concrete claims.",
             "A correct total alone is quantity identification. Claim counting aloud only when the canonical response itself contains a count sequence and total.",
             "Never infer pointing, touch-counting, independence from absent support rows, or semantic help timing from untimed transcription.",
             "When speech, speaker, timing, scene, silence, support, or interruption is unclear, omit the conclusion. Return [] when no usable evidence exists.",
+            "Legacy startMs/endMs and providerTiming are provider offsets, not session time. firstObservedAtMs/lastObservedAtMs are arrival times, not acoustic bounds. responseScene is application transcript context, not proof of a scene throughout speech. source_input_bound is the entire possible source-input interval through transcript receipt, not an exact speech interval. source_timeline_bound narrows the earliest possible start using the source creation request and approximate provider session offset; its end remains transcript receipt. It is not exact acoustic timing. All scene and support relationships must hold over the entire bound. Missing trustworthy timing must remain uncertain or omitted. needs_confirmation recognition cannot establish an incorrect answer, difficulty, or instructional support. A clarification request is not a counting hint.",
             "Audio transcription is untimed. It is corroborative text only and never establishes a timestamp or source reference.",
           ].join(" "),
           input: JSON.stringify({ transcript, canonicalSnapshot }),

@@ -34,6 +34,7 @@ function snapshot(count = 1): ReviewSnapshot {
   if (response.evidence?.type === "utterance") {
     response.evidence.startMs = 12000;
     response.evidence.endMs = 14000;
+    response.evidence.sessionTiming = { clock: "session", provenance: "mapped_provider", startMs: 12000, endMs: 14000 };
   }
   f.proposal!.exchangeAtMs = response.atMs;
   return {
@@ -274,6 +275,7 @@ for (const missing of ["speech bounds", "response source"] as const)
     if (missing === "speech bounds" && response.evidence.type === "utterance") {
       delete response.evidence.startMs;
       delete response.evidence.endMs;
+      delete response.evidence.sessionTiming;
     } else {
       state.sources = state.sources.filter(source => source.id !== response.id);
     }
@@ -810,4 +812,63 @@ test("daily check-in hides technical detail, offers correction choices and persi
   await expect(h.panel.getByText(/How much you changed: A little/)).toBeVisible();
   expect(h.writes.map(command => command.operation)).toEqual(["decide", "decide", "complete"]);
   expect(h.unexpected).toEqual([]);
+});
+
+test("legacy timing review exposes rejection and completion instead of analysis retry", async ({ page }) => {
+  const initial = snapshot(2);
+  initial.proposals[0].resolution = "reject_only";
+  initial.qualification =
+    "Saved proposals have unverified speech timing. Reject undecided affected proposals to exclude them, then finish review.";
+  const originals = structuredClone(initial.proposals);
+  const h = await harness(page, initial, false);
+  await expect(h.panel.getByRole("button", { name: "Looks right", exact: true })).toBeDisabled();
+  await expect(h.panel.getByRole("button", { name: "Retry Observer analysis", exact: true })).toHaveCount(0);
+  await expect(
+    h.panel.locator(".review-summary").getByText("Saved observation has unverified speech timing."),
+  ).toBeVisible();
+  await h.panel.getByRole("button", { name: "Review individually", exact: true }).click();
+  const legacy = h.panel.getByRole("article").first();
+  await expect(legacy.getByRole("button", { name: "Accept unchanged", exact: true })).toBeDisabled();
+  for (const name of ["Edit details", "I helped", "Add context", "The observation is inaccurate"])
+    await expect(legacy.getByRole("button", { name, exact: true })).toBeDisabled();
+  await legacy.getByRole("button", { name: "Reject proposal", exact: true }).click();
+  await legacy.getByLabel("Rejection reason").fill("Speech timing cannot be verified.");
+  await legacy.getByRole("button", { name: "Save rejection", exact: true }).click();
+  await expect(legacy.getByText("Saved parent decision: rejected")).toBeVisible();
+  await h.panel.getByRole("article").nth(1).getByRole("button", { name: "Accept unchanged", exact: true }).click();
+  await h.panel.getByLabel("How much did you need to correct Sprout’s observations?").selectOption("light_correction");
+  await h.panel.getByRole("button", { name: "Finish review", exact: true }).click();
+  await expect(h.panel.getByText(/Review complete/)).toBeVisible();
+  await page.reload();
+  await expect(h.panel.getByText(/Review complete/)).toBeVisible();
+  await expect(h.panel.getByRole("button", { name: "Retry Observer analysis", exact: true })).toHaveCount(0);
+  expect(h.getCurrent().proposals).toEqual(originals);
+  expect(h.writes.map(command => command.operation)).toEqual(["decide", "decide", "complete"]);
+  expect(h.unexpected).toEqual([]);
+});
+
+test("completed historical acceptance stays final and shows unsupported timing without retry", async ({ page }) => {
+  const initial = snapshot();
+  initial.proposals[0].resolution = "reject_only";
+  initial.qualification =
+    "Historical decisions remain final; previously endorsed invalid evidence still blocks planning.";
+  initial.decisions = [
+    {
+      proposalRowId: "row-0",
+      decision: { kind: "parent_decision", proposalId: "p0", decision: "accepted", reviewedAt: 1 },
+    },
+  ];
+  initial.review = { repairLevel: "verified", emptyAcknowledged: false, completedAt: 2 };
+  const before = structuredClone(initial);
+  const h = await harness(page, initial);
+  await expect(h.panel.getByText("Saved parent decision: accepted")).toBeVisible();
+  await expect(
+    h.panel.locator(".review-summary").getByText("Saved observation has unverified speech timing."),
+  ).toBeVisible();
+  await expect(h.panel.getByText(/previously endorsed invalid evidence still blocks planning/)).toBeVisible();
+  await expect(h.panel.getByRole("button", { name: "Reject proposal", exact: true })).toHaveCount(0);
+  await expect(h.panel.getByRole("button", { name: "Finish review", exact: true })).toHaveCount(0);
+  await expect(h.panel.getByRole("button", { name: "Retry Observer analysis", exact: true })).toHaveCount(0);
+  expect(h.writes).toEqual([]);
+  expect(h.getCurrent()).toEqual(before);
 });

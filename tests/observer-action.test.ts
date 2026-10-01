@@ -47,6 +47,7 @@ it("claims a saved partial record, analyzes mocked recording bytes, validates an
         text: "Three",
         startMs: 500,
         endMs: 700,
+        sessionTiming: { clock: "session", provenance: "mapped_provider", startMs: 500, endMs: 700 },
         state: "finalized",
       },
     });

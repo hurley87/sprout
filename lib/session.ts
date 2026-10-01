@@ -1,3 +1,5 @@
+import { sourceTimelineBound } from "./evidence-timing";
+import { isolatedTotal, recognitionRecovery, type Recovery } from "./recognition-recovery";
 import {
   RecordingQueue,
   type SessionRecorder,
@@ -82,7 +84,9 @@ export interface Transport {
   setStartupDiagnosticSink?(sink: (stage: StartupStage) => void): void;
   setMicrophoneDiagnosticSink?(sink: (event: MicrophoneDiagnostic) => void): void;
   start(onEvent: (event: ProviderEvent) => void, onFailure: (message: string) => void): Promise<void>;
-  startRecording?(): void;
+  startRecording?(canonicalClockOrigin?: number): void;
+  /** Synchronously fence a previously silent source before enabling its microphone. */
+  openInput?(fence: (sourceId: number) => void): boolean;
   recording?(): Promise<SessionAudioRecording | null>;
   send(command: ClientCommand): void;
   /** Silence provider audio without stopping playback or provider events. */
@@ -153,6 +157,7 @@ type DeferredStay = {
   vadGraceUntil?: number;
 };
 type AnswerResponseGate = {
+  recovery?: Recovery;
   sceneIndex: number;
   transcriptRevision: number;
   answerVersion: string;
@@ -179,6 +184,8 @@ export class LessonSession {
   readonly events: Diagnostic[] = [];
   readonly createdAt = Date.now();
   startedAt?: number;
+  private canonicalClockOrigin?: number;
+  private inputBound?: { sourceId: number; startMs: number; inputScene: { sceneId: string; displayedAtMs: number } };
   private startupTimer?: ReturnType<typeof setTimeout>;
   private phaseTimers: ReturnType<typeof setTimeout>[] = [];
   private closeTimer?: ReturnType<typeof setTimeout>;
@@ -242,6 +249,8 @@ export class LessonSession {
   private recordingStarted = false;
   private evidenceOrder = 0;
   private timelineOrder = 0;
+  private displayedContext?: { sceneId: string; displayedAtMs: number };
+  private confirmation?: { sceneIndex: number; total: number; answerVersion: string };
   private canonical = { child: new UtteranceAccumulator(), sprout: new UtteranceAccumulator() };
   private utteranceTimers: Partial<Record<"child" | "sprout", ReturnType<typeof setTimeout>>> = {};
   private recording = new RecordingQueue(
@@ -256,16 +265,28 @@ export class LessonSession {
     return this.recording.drain();
   }
 
-  private record(evidence: Evidence) {
+  private sessionAtMs() {
+    return this.canonicalClockOrigin === undefined
+      ? 0
+      : Math.max(0, Math.floor(performance.now() - this.canonicalClockOrigin));
+  }
+
+  private openSourceInput() {
+    if (!this.ready || !this.displayedContext) return;
+    this.transport.openInput?.(sourceId => {
+      this.inputBound = { sourceId, startMs: this.sessionAtMs(), inputScene: { ...this.displayedContext! } };
+    });
+  }
+
+  private record(evidence: Evidence, atMs = this.sessionAtMs()) {
     if (!this.recorder) return;
     if (this.startedAt === undefined) throw new Error("Canonical evidence requires a live session start");
     const eventKey = `evidence_${++this.evidenceOrder}`;
     // Canonical evidence shares the provider session.started origin with audio.
-    const atMs = Date.now() - this.startedAt;
     this.recording.enqueue("append", () => this.recorder!.append(eventKey, atMs, evidence));
   }
 
-  private timeline(event: TimelineEvent, atMs = this.startedAt === undefined ? 0 : Date.now() - this.startedAt) {
+  private timeline(event: TimelineEvent, atMs = this.sessionAtMs()) {
     if (!this.recorder || this.startedAt === undefined || this.snapshot.status === "ended") return;
     const eventKey = `timeline_${++this.timelineOrder}`;
     this.recording.enqueue("appendTimeline", () => this.recorder!.appendTimeline(eventKey, atMs, event));
@@ -337,9 +358,26 @@ export class LessonSession {
       startMs: utterance.startMs,
       endMs: utterance.endMs,
       state,
+      ...utterance.context,
+      ...(speaker === "child"
+        ? ({
+            recognition:
+              this.recovery(utterance.text, `${utterance.startMs}:${utterance.text.trim()}`) === "clarification"
+                ? "needs_confirmation"
+                : "no_ambiguity_detected",
+          } as const)
+        : {}),
       firstObservedAtMs: utterance.firstObservedAtMs,
       lastObservedAtMs: utterance.lastObservedAtMs,
     });
+  }
+
+  private recovery(text: string, answerVersion: string): Recovery {
+    const prior = this.confirmation;
+    return recognitionRecovery(
+      text,
+      prior?.sceneIndex === this.snapshot.sceneIndex && prior.answerVersion !== answerVersion ? prior.total : undefined,
+    );
   }
 
   private captureTranscript(event: TranscriptEvent) {
@@ -353,12 +391,47 @@ export class LessonSession {
     const delivered =
       event.speaker === "child" ||
       (!this.answerResponseGate && this.transport.delivered?.(event.startMs, event.endMs) === true);
+    const sessionTiming =
+      event.speaker === "child" && this.inputBound && event.sourceId === this.inputBound.sourceId
+        ? event.sourceRequestedAt === undefined
+          ? {
+              clock: "session" as const,
+              provenance: "source_input_bound" as const,
+              ...this.inputBound,
+              endMs: Math.ceil(performance.now() - this.canonicalClockOrigin!),
+            }
+          : sourceTimelineBound(
+              event,
+              event.sourceRequestedAt - this.canonicalClockOrigin!,
+              this.inputBound.startMs,
+              this.inputBound.inputScene,
+              Math.ceil(performance.now() - this.canonicalClockOrigin!),
+            )
+        : undefined;
     const completed = this.canonical[event.speaker].append(
       event.delta,
       event.startMs,
       event.endMs,
       delivered,
-      Date.now() - this.startedAt!,
+      this.sessionAtMs(),
+      {
+        ...(sessionTiming ? { sessionTiming } : {}),
+        providerTiming: {
+          clock: "provider",
+          startMs: event.startMs,
+          endMs: event.endMs,
+          ...(event.sourceId === undefined ? {} : { sourceId: event.sourceId }),
+        },
+        ...(this.displayedContext
+          ? {
+              responseScene: {
+                provenance: "application_transcript_context",
+                ...this.displayedContext,
+                status: "stable",
+              } as const,
+            }
+          : {}),
+      },
     );
     if (completed) this.flushUtterance(event.speaker, "finalized", completed);
     clearTimeout(this.utteranceTimers[event.speaker]);
@@ -730,12 +803,13 @@ export class LessonSession {
     clearTimeout(this.startupTimer);
     this.ready = true;
     this.startedAt = Date.now();
+    this.canonicalClockOrigin = performance.now();
     this.startup("startup.live_ready");
     const startedAt = this.startedAt;
     if (this.recorder) this.recording.enqueue("activate", () => this.recorder!.activate(startedAt));
     this.timeline({ type: "playback_gate_changed", state: "permitted", reason: "session_started" });
     try {
-      this.transport.startRecording?.();
+      this.transport.startRecording?.(this.canonicalClockOrigin);
     } catch (error) {
       if (this.recorder)
         this.recording.enqueue("capture", async () => {
@@ -747,6 +821,7 @@ export class LessonSession {
     // painted, record that it is present at Live start; diagnostics retain its actual paint time.
     if (this.initialSceneDisplayed) this.recordDisplayedScene();
     this.update({ status: "active" });
+    this.openSourceInput();
     this.sendInitialInstruction();
     if (this.expireIfOverdue()) return;
     const phases: [number, () => void][] = [
@@ -851,6 +926,8 @@ export class LessonSession {
             answer_bearing: mentionsNumber(utterance.text),
           });
           // Keep transition-period speech out of the next answer window too.
+          // The canonical source fence remains valid. Reset only the answer
+          // window; display changes cannot establish a new input/queue fence.
           this.childSpeech = new TranscriptWindow();
           return;
         }
@@ -1287,6 +1364,7 @@ export class LessonSession {
       childUtterance: gate.childUtterance,
       transcriptRevision: gate.transcriptRevision,
       answerVersion: gate.answerVersion,
+      ...(gate.decision === "STAY" && gate.recovery ? { recovery: gate.recovery } : {}),
     };
     this.log("replacement.triggered", {
       ...this.replacementIdentity(gate),
@@ -1381,6 +1459,12 @@ export class LessonSession {
         delete this.utteranceTimers[speaker];
         this.flushUtterance(speaker, "finalized");
       }
+      // Each provider source has its own disabled microphone clone. Keep the
+      // old source's fence available while its utterances flush, then fence
+      // the promoted source independently against the currently displayed
+      // scene before enabling its input.
+      this.inputBound = undefined;
+      this.openSourceInput();
       this.childSpeech = new TranscriptWindow();
       this.sproutSpeech = new TranscriptWindow();
       this.latest = null;
@@ -1393,6 +1477,7 @@ export class LessonSession {
       this.displayedRelease = null;
       this.cancelNoTranscriptRecovery();
       const content = evaluationResultContext({
+        recovery: seed.recovery,
         evaluatedAnswer: seed.childUtterance,
         evaluatedScene: sceneAt(seed.evaluatedSceneIndex),
         transcriptRevision: seed.transcriptRevision,
@@ -1953,6 +2038,7 @@ export class LessonSession {
       this.startDeferredVadGrace(this.microphoneSpeechStartedAt, "active_speech_at_decision");
     this.log("answer.release_deferred", { answer_version: answerVersion, scene: sceneAt(sceneIndex).id });
     this.answerResponseGate.decision = decision;
+    this.answerResponseGate.recovery = this.recovery(evaluatedAnswer, answerVersion);
     this.observeResponseGate("decision_deferred");
     this.scheduleDeferredStayRelease();
   }
@@ -2022,6 +2108,7 @@ export class LessonSession {
       this.append(
         "session.instructions.append",
         evaluationResultContext({
+          recovery: this.answerResponseGate?.recovery,
           evaluatedAnswer: deferred.evaluatedAnswer,
           evaluatedScene: sceneAt(deferred.sceneIndex),
           transcriptRevision: deferred.transcriptRevision,
@@ -2478,6 +2565,11 @@ export class LessonSession {
     if (!record || record.status !== "resolved") return;
     record.applicationAction = action;
     record.applicationFeedbackSent = true;
+    if (action === "STAY" && this.answerResponseGate?.recovery === "clarification") {
+      const total = isolatedTotal(record.utterance);
+      if (total !== undefined)
+        this.confirmation = { sceneIndex: record.sceneIndex, total, answerVersion: record.answerVersion };
+    } else if (action === "ADVANCE") this.confirmation = undefined;
     record.displayStatus = action === "ADVANCE" ? "confirmed" : "not_applicable";
     record.displayedSceneIndex = this.snapshot.sceneIndex;
     this.recordMissingContextAcks(record);
@@ -2499,6 +2591,7 @@ export class LessonSession {
       this.initialSceneDisplayed = true;
       this.startup("startup.initial_scene_displayed");
       if (this.ready) this.recordDisplayedScene();
+      this.openSourceInput();
       this.sendInitialInstruction();
       return;
     }
@@ -2539,14 +2632,18 @@ export class LessonSession {
   }
 
   private recordDisplayedScene() {
+    this.displayedContext = { sceneId: this.scene.id, displayedAtMs: this.sessionAtMs() };
     const object = OBJECTS[this.scene.object];
-    this.record({
-      type: "scene_displayed",
-      sceneId: this.scene.id,
-      targetQuantity: this.scene.quantity,
-      items: Array.from({ length: this.scene.quantity }, () => ({ emoji: object.emoji, label: object.singular })),
-      arrangement: "Centered flex row, wrapping in display order",
-    });
+    this.record(
+      {
+        type: "scene_displayed",
+        sceneId: this.scene.id,
+        targetQuantity: this.scene.quantity,
+        items: Array.from({ length: this.scene.quantity }, () => ({ emoji: object.emoji, label: object.singular })),
+        arrangement: "Centered flex row, wrapping in display order",
+      },
+      this.displayedContext.displayedAtMs,
+    );
   }
 
   private scheduleDisplayedRelease() {

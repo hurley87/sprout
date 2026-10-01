@@ -76,6 +76,9 @@ type LiveSource = {
   remote?: MediaStream;
   observer?: OutputActivityObserver;
   recordingSource?: MediaStreamAudioSourceNode;
+  inputTracks?: MediaStreamTrack[];
+  inputOpened?: boolean;
+  requestedAt?: number;
   ready: boolean;
   sessionStarted: boolean;
   retired: boolean;
@@ -103,6 +106,7 @@ export class BrowserTransport implements Transport {
   private captureError?: Error;
   private captureStartedAt?: number;
   private captureDurationMs = 0;
+  private captureStartOffsetMs = 0;
   private chunks: Blob[] = [];
   private completed?: Promise<SessionAudioRecording | null>;
   private finishCapture?: (recording: SessionAudioRecording | null) => void;
@@ -292,7 +296,13 @@ export class BrowserTransport implements Transport {
 
   private emit(source: LiveSource, event: ProviderEvent) {
     if (this.authoritative(source)) {
-      this.onEvent?.({ ...event, sourceId: source.id });
+      this.onEvent?.({
+        ...event,
+        sourceId: source.id,
+        ...(event.type === "transcript" && source.requestedAt !== undefined
+          ? { sourceRequestedAt: source.requestedAt }
+          : {}),
+      });
       this.reportVoiceActivity();
     }
   }
@@ -385,6 +395,18 @@ export class BrowserTransport implements Transport {
     return this.authoritative(source);
   }
 
+  /** Invoke the application fence before enabling any source input. Each cloned
+   * track has supplied only silence since attachment, including during warmup. */
+  openInput(fence: (sourceId: number) => void): boolean {
+    const source = this.current;
+    if (!source || !this.authoritative(source) || !source.inputTracks?.length) return false;
+    if (source.inputOpened) return true;
+    fence(source.id);
+    source.inputOpened = true;
+    for (const track of source.inputTracks) track.enabled = true;
+    return true;
+  }
+
   /** Invalidate authority before teardown callbacks, then stop all media and
    * close the connection so this source cannot keep receiving microphone audio. */
   retireSource(id: LiveSourceId) {
@@ -406,6 +428,7 @@ export class BrowserTransport implements Transport {
     source.observer?.close();
     source.recordingSource?.disconnect();
     source.remote?.getTracks().forEach(track => track.stop());
+    source.inputTracks?.forEach(track => track.stop());
     source.channel?.close();
     source.peer.close();
     this.connections.delete(source.id);
@@ -480,7 +503,14 @@ export class BrowserTransport implements Transport {
       if (["failed", "disconnected", "closed"].includes(peer.connectionState))
         this.fail(source, "The voice connection was lost. This attempt has ended; you can start a new lesson.");
     };
-    for (const track of this.mic!.getAudioTracks()) peer.addTrack(track, this.mic!);
+    // The original microphone remains available to recording and local VAD.
+    // Pending sources must never accumulate child input before promotion.
+    source.inputTracks = this.mic!.getAudioTracks().map(track => {
+      const input = track.clone();
+      input.enabled = false;
+      peer.addTrack(input, this.mic!);
+      return input;
+    });
     const channel = (source.channel = peer.createDataChannel("oai-events"));
     channel.onmessage = ({ data }) => {
       if (!this.live(source)) return;
@@ -533,6 +563,7 @@ export class BrowserTransport implements Transport {
     if (!sdp) throw new Error("The browser could not prepare its microphone connection.");
     if (source.timing) source.timing.provider_request_started_at = performance.now();
     if (!seed) this.startup("startup.provider_request_started");
+    source.requestedAt = performance.now();
     const response = await fetch("/api/live", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -628,7 +659,7 @@ export class BrowserTransport implements Transport {
         !!this.current && this.authoritative(this.current) && this.playbackReady && !this.outputBlocked ? 1 : 0;
   }
 
-  startRecording() {
+  startRecording(canonicalClockOrigin?: number) {
     if (this.captureStartedAt !== undefined || this.cancelled) return;
     if (this.captureError) throw this.captureError;
     if (!this.mix) throw new Error("Recording mix is unavailable");
@@ -657,13 +688,15 @@ export class BrowserTransport implements Transport {
           : {
               blob,
               mimeType: blob.type,
-              startOffsetMs: 0,
+              startOffsetMs: this.captureStartOffsetMs,
               durationMs: this.captureDurationMs,
             },
       );
       recorder.ondataavailable = recorder.onerror = recorder.onstop = null;
     };
     this.captureStartedAt = performance.now();
+    this.captureStartOffsetMs =
+      canonicalClockOrigin === undefined ? 0 : Math.max(0, Math.floor(this.captureStartedAt - canonicalClockOrigin));
     try {
       recorder.start();
     } catch (error) {

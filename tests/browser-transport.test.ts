@@ -1,4 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { convexTest } from "convex-test";
+import schema from "../convex/schema";
+import { api } from "../convex/_generated/api";
+import { LessonSession } from "../lib/session";
+import {
+  validateObserverProposal,
+  type CanonicalObservationRecord,
+  type ObserverProposal,
+} from "../lib/observation-contracts";
+import type { EvaluateAnswer } from "../lib/answer";
+import { responseSceneValidity, sessionSpeechInterval } from "../lib/evidence-timing";
+import type { SessionRecorder } from "../lib/session-recorder";
+import { UTTERANCE_GAP_MS } from "../lib/transcript";
 import { REPLACEMENT_TIMEOUT_MS, BrowserTransport, microphoneTrackSettings } from "../lib/browser-transport";
 
 afterEach(() => {
@@ -50,7 +63,16 @@ function audioElement() {
 
 function liveConnection(autoStarted = true) {
   const remoteTrack = { stop: vi.fn() } as unknown as MediaStreamTrack;
-  const micTrack = { stop: vi.fn() } as unknown as MediaStreamTrack;
+  const inputTrack = { enabled: true, stop: vi.fn() } as unknown as MediaStreamTrack;
+  const inputs: MediaStreamTrack[] = [];
+  const micTrack = {
+    stop: vi.fn(),
+    clone: vi.fn(() => {
+      const track = inputs.length ? ({ enabled: true, stop: vi.fn() } as unknown as MediaStreamTrack) : inputTrack;
+      inputs.push(track);
+      return track;
+    }),
+  } as unknown as MediaStreamTrack;
   class Stream {
     constructor(private tracks: MediaStreamTrack[]) {}
     getTracks() {
@@ -97,7 +119,7 @@ function liveConnection(autoStarted = true) {
     "fetch",
     vi.fn(async () => ({ ok: true, json: async () => ({ transport: { sdp: "answer" } }) })),
   );
-  return { channel, peer, remoteTrack, micTrack };
+  return { channel, peer, remoteTrack, micTrack, inputTrack, inputs };
 }
 
 describe("BrowserTransport output gating", () => {
@@ -831,3 +853,555 @@ it("gate cancellation signal immediately retires pending B without stopping A", 
   expect(transport.activeSourceId).toBe(1);
   transport.close();
 });
+
+async function recordedBrowserLesson(
+  evaluator: EvaluateAnswer = async () => ({ status: "unavailable", reason: "synthetic", latencyMs: 1 }),
+  startupDelayMs = 2000,
+) {
+  vi.useFakeTimers();
+  const connection = liveConnection(false);
+  const transport = new BrowserTransport(audioElement() as unknown as HTMLAudioElement);
+  const record: CanonicalObservationRecord = {
+    session: { _id: "recorded-browser-session", state: "ended", recordStatus: "complete" },
+    events: [],
+  };
+  const recorder: SessionRecorder = {
+    create: async () => record.session._id,
+    activate: async () => {},
+    append: async (key, atMs, evidence) => {
+      record.events.push({ _id: key, atMs, evidence });
+    },
+    appendTimeline: async () => {},
+    attachRecording: async () => {},
+    markIncomplete: async () => {},
+    finalize: async () => {},
+  };
+  const session = new LessonSession(transport, evaluator, vi.fn(), undefined, recorder);
+  await session.start();
+  // A realistic startup interval, measured by production before /api/live.
+  // No test-supplied session timing or provider/browser clock mapping.
+  await vi.advanceTimersByTimeAsync(startupDelayMs);
+  connection.channel.onmessage?.({ data: JSON.stringify({ type: "session.started" }) });
+  expect(connection.inputTrack.enabled).toBe(false);
+  await vi.advanceTimersByTimeAsync(100);
+  session.displayed(0);
+  expect(connection.inputTrack.enabled).toBe(true);
+  const say = (text: string, startMs = 1000) =>
+    connection.channel.onmessage?.({
+      data: JSON.stringify({
+        type: "session.input_transcript.delta",
+        delta: text,
+        start_ms: startMs,
+        end_ms: startMs + 200,
+        // Provider JSON must never be able to supply these trust labels.
+        sourceId: 999,
+        sourceRequestedAt: -999999,
+        sessionTiming: { provenance: "mapped_provider", startMs: 1, endMs: 2 },
+      }),
+    });
+  const flush = async () => {
+    await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS);
+    await session.recordingSettled();
+  };
+  const proposal = (): ObserverProposal => {
+    const scene = record.events.find(event => event.evidence?.type === "scene_displayed")!;
+    const response = record.events.find(event => event.evidence?.type === "utterance")!;
+    return {
+      kind: "observer_proposal",
+      proposalId: "real-recorder-output",
+      sessionId: record.session._id,
+      exchangeAtMs: response.atMs,
+      observation: {
+        behavior: "quantity_identification",
+        outcome: "correct",
+        speakerAttribution: "child_or_nearby_speaker",
+        statedTotal: 1,
+        countSequenceObserved: false,
+        targetQuantity: 1,
+        description: "Said One about one duck.",
+        support: { status: "not_established", kinds: [], sourceEventIds: [] },
+        uncertaintyReasons: [],
+      },
+      sources: [
+        { eventId: scene._id, role: "scene" },
+        { eventId: response._id, role: "response" },
+      ],
+    };
+  };
+  return { connection, transport, session, record, say, flush, proposal };
+}
+
+it("publishes concrete evidence from actual transport, LessonSession and recorder output without a provider clock offset", async () => {
+  const f = await recordedBrowserLesson();
+  await vi.advanceTimersByTimeAsync(1000);
+  f.say("One");
+  await f.flush();
+  const speech = f.record.events.find(e => e.evidence?.type === "utterance")!.evidence;
+  expect(speech).toMatchObject({
+    providerTiming: { sourceId: 1, startMs: 1000 },
+    firstObservedAtMs: 1100,
+    sessionTiming: {
+      provenance: "source_timeline_bound",
+      sourceId: 1,
+      sourceRequestedAtMs: -2000,
+      inputOpenedAtMs: 100,
+      startMs: 100,
+      endMs: 1100,
+    },
+  });
+  expect(validateObserverProposal(f.proposal(), f.record)).toMatchObject({ ok: true });
+  // Support must precede every possible start, rather than just receipt.
+  const proposal = f.proposal();
+  proposal.observation.support = { status: "recorded", kinds: ["hint"], sourceEventIds: ["support"] };
+  proposal.sources.push({ eventId: "support", role: "support" });
+  f.record.events.push({
+    _id: "support",
+    atMs: 99,
+    evidence: { type: "support", source: "parent", mode: "spoken", description: "Count them." },
+  });
+  expect(validateObserverProposal(proposal, f.record).ok).toBe(true);
+  f.record.events.at(-1)!.atMs = 101;
+  expect(validateObserverProposal(proposal, f.record).ok).toBe(false);
+  f.session.end("parent_stop");
+  await f.session.recordingSettled();
+});
+
+it("keeps genuine scene ambiguity uncertain even if VAD and arrival agree about the current scene", async () => {
+  const f = await recordedBrowserLesson();
+  await vi.advanceTimersByTimeAsync(1000);
+  // Source input has spanned a transition. No nearest-VAD matching can remove
+  // older buffered audio from the possible input interval.
+  f.record.events.push({
+    _id: "transition",
+    atMs: 500,
+    evidence: { type: "scene_displayed", sceneId: "other", targetQuantity: 2, items: [], arrangement: "row" },
+  });
+  f.session.receive({ type: "microphone.speech_started" });
+  f.say("One");
+  f.session.receive({ type: "microphone.speech_stopped", quietMs: 900 });
+  await f.flush();
+  const proposal = f.proposal();
+  expect(validateObserverProposal(proposal, f.record).ok).toBe(false);
+  proposal.observation = {
+    behavior: "uncertain_exchange",
+    outcome: "uncertain",
+    speakerAttribution: "child_or_nearby_speaker",
+    countSequenceObserved: false,
+    description: "Scene timing is ambiguous.",
+    support: { status: "not_established", kinds: [], sourceEventIds: [] },
+    uncertaintyReasons: ["conflicting_context"],
+  };
+  expect(validateObserverProposal(proposal, f.record).ok).toBe(true);
+  f.session.end("parent_stop");
+  await f.session.recordingSettled();
+});
+
+it("fences each replacement independently and never supplies microphone audio to a warmup source", async () => {
+  const f = await recordedBrowserLesson();
+  const b = liveConnection();
+  const id = await f.transport.prepareReplacement(seed);
+  expect(f.connection.inputs[1].enabled).toBe(false);
+  expect(f.connection.inputs[0].enabled).toBe(true);
+  expect(f.transport.activateSource(id)).toBe(true);
+  expect(f.connection.inputs[0].stop).toHaveBeenCalledOnce();
+  expect(f.connection.inputs[1].enabled).toBe(false);
+  const fence = vi.fn((sourceId: number) => {
+    expect(sourceId).toBe(id);
+    expect(f.connection.inputs[1].enabled).toBe(false);
+  });
+  f.transport.openInput(fence);
+  f.transport.openInput(fence);
+  expect(fence).toHaveBeenCalledOnce();
+  expect(f.connection.inputs[1].enabled).toBe(true);
+  b.channel.onmessage?.({
+    data: JSON.stringify({ type: "session.input_transcript.delta", delta: "One", start_ms: 0, end_ms: 100 }),
+  });
+  await f.flush();
+  // Promotion without LessonSession's fence cannot reuse A's bound for B.
+  expect(f.record.events.find(e => e.evidence?.type === "utterance")?.evidence).not.toHaveProperty("sessionTiming");
+  expect(validateObserverProposal(f.proposal(), f.record).ok).toBe(false);
+  f.session.end("parent_stop");
+  await f.session.recordingSettled();
+});
+
+const advances: EvaluateAnswer = async () => ({
+  status: "evaluated",
+  probability: 0.99,
+  model: "synthetic",
+  latencyMs: 1,
+});
+
+function proposalForResponse(f: Awaited<ReturnType<typeof recordedBrowserLesson>>, text: string): ObserverProposal {
+  const response = f.record.events.find(event => event.evidence?.type === "utterance" && event.evidence.text === text)!;
+  const context = response.evidence?.type === "utterance" ? response.evidence.responseScene : undefined;
+  const scene = f.record.events.find(
+    event => event.evidence?.type === "scene_displayed" && event.evidence.sceneId === context?.sceneId,
+  )!;
+  const total = text === "One" ? 1 : text === "Two" ? 2 : 3;
+  const proposal = f.proposal();
+  proposal.exchangeAtMs = response.atMs;
+  proposal.observation.statedTotal = total;
+  proposal.observation.targetQuantity = total;
+  proposal.observation.description = `Said ${text} for ${total} objects.`;
+  proposal.sources = [
+    { eventId: scene._id, role: "scene" },
+    { eventId: response._id, role: "response" },
+  ];
+  return proposal;
+}
+
+it("keeps One -> Two -> Three concrete on consecutive scenes with one real provider source", async () => {
+  const f = await recordedBrowserLesson(advances);
+  await vi.advanceTimersByTimeAsync(1000);
+  f.say("One", 1000);
+  await f.flush();
+  expect(f.session.snapshot.sceneIndex).toBe(1);
+  // An app commit changes the snapshot, but the response and canonical scene
+  // stay on the display it answered, including before/after the next display.
+  expect(validateObserverProposal(proposalForResponse(f, "One"), f.record).ok).toBe(true);
+  f.session.displayed(1);
+  expect(validateObserverProposal(proposalForResponse(f, "One"), f.record).ok).toBe(true);
+  await vi.advanceTimersByTimeAsync(1000);
+  f.say("Two", 6000);
+  await f.flush();
+  expect(f.session.snapshot.sceneIndex).toBe(2);
+  expect(validateObserverProposal(proposalForResponse(f, "Two"), f.record).ok).toBe(true);
+  f.session.displayed(2);
+  await vi.advanceTimersByTimeAsync(1000);
+  f.say("Three", 9500);
+  await f.flush();
+  expect(f.session.snapshot.sceneIndex).toBe(3);
+  expect(validateObserverProposal(proposalForResponse(f, "Three"), f.record).ok).toBe(true);
+  f.session.displayed(3);
+  for (const text of ["One", "Two", "Three"]) {
+    expect(validateObserverProposal(proposalForResponse(f, text), f.record).ok).toBe(true);
+  }
+  const two = f.record.events.find(e => e.evidence?.type === "utterance" && e.evidence.text === "Two")!;
+  expect(two.evidence).toMatchObject({
+    sessionTiming: { sourceId: 1, inputOpenedAtMs: 100, startMs: 4000, endMs: 4600 },
+    responseScene: { sceneId: "duck-friends", status: "stable" },
+  });
+  expect(fetch).toHaveBeenCalledOnce();
+  expect(f.transport.activeSourceId).toBe(1);
+  f.session.end("parent_stop");
+  await f.session.recordingSettled();
+});
+
+it("keeps genuinely delayed old speech ambiguous after a normal display, even with matching local VAD", async () => {
+  const f = await recordedBrowserLesson(advances);
+  await vi.advanceTimersByTimeAsync(1000);
+  f.say("One", 1000);
+  await f.flush();
+  f.session.displayed(1);
+  await vi.advanceTimersByTimeAsync(1000);
+  f.session.receive({ type: "microphone.speech_started" });
+  f.say("Two", 3000); // Old timeline position, delayed until the new display.
+  f.session.receive({ type: "microphone.speech_stopped", quietMs: 900 });
+  await f.flush();
+  const proposal = proposalForResponse(f, "Two");
+  expect(validateObserverProposal(proposal, f.record).ok).toBe(false);
+  proposal.observation = {
+    behavior: "uncertain_exchange",
+    outcome: "uncertain",
+    speakerAttribution: "child_or_nearby_speaker",
+    countSequenceObserved: false,
+    description: "Delayed speech crosses a display boundary.",
+    support: { status: "not_established", kinds: [], sourceEventIds: [] },
+    uncertaintyReasons: ["conflicting_context"],
+  };
+  expect(validateObserverProposal(proposal, f.record).ok).toBe(true);
+  f.session.end("parent_stop");
+  await f.session.recordingSettled();
+});
+
+it("requires support before the narrowed lower bound on later scenes", async () => {
+  const f = await recordedBrowserLesson(advances);
+  await vi.advanceTimersByTimeAsync(1000);
+  f.say("One", 1000);
+  await f.flush();
+  f.session.displayed(1);
+  await vi.advanceTimersByTimeAsync(1000);
+  f.say("Two", 6000);
+  await f.flush();
+  const proposal = proposalForResponse(f, "Two");
+  proposal.observation.support = { status: "recorded", kinds: ["hint"], sourceEventIds: ["help"] };
+  proposal.sources.push({ eventId: "help", role: "support" });
+  const help = {
+    _id: "help",
+    atMs: 3999,
+    evidence: {
+      type: "support" as const,
+      source: "parent" as const,
+      mode: "spoken" as const,
+      description: "Count them.",
+    },
+  };
+  f.record.events.push(help);
+  expect(validateObserverProposal(proposal, f.record).ok).toBe(true);
+  for (const atMs of [4000, 4100, 4600]) {
+    help.atMs = atMs;
+    expect(validateObserverProposal(proposal, f.record).ok).toBe(false);
+  }
+  f.record.recording = { recordingId: "synthetic-recording", startOffsetMs: 0, durationMs: 10000 };
+  proposal.sources = proposal.sources.filter(source => source.role !== "support");
+  proposal.observation.support = {
+    status: "recorded",
+    kinds: ["hint"],
+    sourceEventIds: [],
+    recordingSourceIds: ["recording-help"],
+  };
+  const recordingHelp = {
+    role: "recording_support" as const,
+    sourceId: "recording-help",
+    provenance: "recording_review" as const,
+    sessionId: f.record.session._id,
+    recordingId: "synthetic-recording",
+    recordingStartMs: 3800,
+    recordingEndMs: 3999,
+    sessionStartMs: 3800,
+    sessionEndMs: 3999,
+  };
+  proposal.sources.push(recordingHelp);
+  expect(validateObserverProposal(proposal, f.record).ok).toBe(true);
+  for (const endMs of [4000, 4100, 4600]) {
+    recordingHelp.recordingEndMs = recordingHelp.sessionEndMs = endMs;
+    expect(validateObserverProposal(proposal, f.record).ok).toBe(false);
+  }
+  f.session.end("parent_stop");
+  await f.session.recordingSettled();
+});
+
+it("fails closed on impossible provider offsets", async () => {
+  const f = await recordedBrowserLesson();
+  await vi.advanceTimersByTimeAsync(1000);
+  f.say("One", 50000); // Farther in the timeline than this source could exist.
+  await f.flush();
+  expect(sessionSpeechInterval(f.record.events.find(e => e.evidence?.type === "utterance")!.evidence)).toBeUndefined();
+  expect(validateObserverProposal(f.proposal(), f.record).ok).toBe(false);
+  f.session.end("parent_stop");
+  await f.session.recordingSettled();
+});
+
+it("retains self-corrections within a scene and refuses corrections that cross displays", async () => {
+  const f = await recordedBrowserLesson();
+  await vi.advanceTimersByTimeAsync(1000);
+  f.say("Two", 2500);
+  await vi.advanceTimersByTimeAsync(100);
+  f.say(" no, One", 2600);
+  await f.flush();
+  const response = f.record.events.find(e => e.evidence?.type === "utterance")!;
+  const scene = f.record.events.find(e => e.evidence?.type === "scene_displayed")!;
+  expect(response.evidence).toMatchObject({ text: "Two no, One", sessionTiming: { startMs: 500, endMs: 1200 } });
+  expect(responseSceneValidity(response.evidence, scene, [scene]).valid).toBe(true);
+  // Use real production capture across displays: change the displayed scene
+  // through app advancement before an adjacent provider correction fragment.
+  f.session.end("parent_stop");
+  await f.session.recordingSettled();
+  const g = await recordedBrowserLesson(advances);
+  await vi.advanceTimersByTimeAsync(1000);
+  g.say("One", 1000);
+  // Commit can precede canonical flush; advance the evaluator fallback only.
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(g.session.snapshot.sceneIndex).toBe(1);
+  g.session.displayed(1);
+  g.say(" no, Two", 1200);
+  await g.flush();
+  const corrected = g.record.events.find(e => e.evidence?.type === "utterance")!;
+  expect(corrected.evidence).toMatchObject({ text: "One no, Two", responseScene: { status: "changed" } });
+  expect(
+    responseSceneValidity(
+      corrected.evidence,
+      g.record.events[0],
+      g.record.events.filter(e => e.evidence?.type === "scene_displayed"),
+    ).valid,
+  ).toBe(false);
+  const proposal = g.proposal();
+  expect(validateObserverProposal(proposal, g.record).ok).toBe(false);
+  g.session.end("parent_stop");
+  await g.session.recordingSettled();
+});
+
+it("records a promoted replacement with its own request anchor and microphone fence", async () => {
+  const f = await recordedBrowserLesson(advances);
+  await vi.advanceTimersByTimeAsync(1000);
+  f.say("One", 1000);
+  await f.flush();
+  const b = liveConnection(false);
+  // Stale generated output exercises the production replacement path. No
+  // test code opens input or manufactures a LessonSession fence for B.
+  f.connection.channel.onmessage?.({
+    data: JSON.stringify({
+      type: "session.output_transcript.delta",
+      delta: "stale",
+      start_ms: 5000,
+      end_ms: 5100,
+    }),
+  });
+  f.session.displayed(1);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(b.peer.setRemoteDescription).toHaveBeenCalledOnce();
+  expect(f.connection.inputs[1].enabled).toBe(false);
+  b.channel.onmessage?.({
+    data: JSON.stringify({
+      type: "session.input_transcript.delta",
+      delta: "hidden warmup",
+      start_ms: 0,
+      end_ms: 100,
+    }),
+  });
+  b.channel.onmessage?.({ data: JSON.stringify({ type: "session.started" }) });
+  await vi.advanceTimersByTimeAsync(1);
+  expect(f.transport.activeSourceId).toBe(2);
+  expect(f.connection.inputs[1].enabled).toBe(true);
+  expect(f.connection.inputs[0].stop).toHaveBeenCalledOnce();
+  await vi.advanceTimersByTimeAsync(1000);
+  b.channel.onmessage?.({
+    data: JSON.stringify({
+      type: "session.input_transcript.delta",
+      delta: "Two",
+      start_ms: 900,
+      end_ms: 1000,
+    }),
+  });
+  // Retired source callbacks cannot supply new evidence or source anchors.
+  f.say("retired", 6000);
+  await f.flush();
+  const response = f.record.events.find(e => e.evidence?.type === "utterance" && e.evidence.text === "Two")!;
+  expect(response.evidence).toMatchObject({
+    providerTiming: { sourceId: 2, startMs: 900 },
+    sessionTiming: { provenance: "source_timeline_bound", sourceId: 2, sourceRequestedAtMs: 3600, startMs: 4500 },
+  });
+  expect(validateObserverProposal(proposalForResponse(f, "Two"), f.record).ok).toBe(true);
+  expect(f.record.events.some(e => e.evidence?.type === "utterance" && /hidden|retired/.test(e.evidence.text))).toBe(
+    false,
+  );
+  f.session.end("parent_stop");
+  await f.session.recordingSettled();
+});
+
+it("does not recover trust after an invalid adjacent correction fragment", async () => {
+  const f = await recordedBrowserLesson();
+  await vi.advanceTimersByTimeAsync(1000);
+  f.say("One", 2500);
+  f.say(" no, Two", -1);
+  f.say(" no, One", 2600);
+  await f.flush();
+  const response = f.record.events.find(e => e.evidence?.type === "utterance")!;
+  expect(response.evidence).toMatchObject({ text: "One no, Two no, One" });
+  expect(sessionSpeechInterval(response.evidence)).toBeUndefined();
+  expect(validateObserverProposal(f.proposal(), f.record).ok).toBe(false);
+  f.session.end("parent_stop");
+  await f.session.recordingSettled();
+});
+
+it("keeps an interrupted response from establishing a concrete observation", async () => {
+  const f = await recordedBrowserLesson();
+  await vi.advanceTimersByTimeAsync(1000);
+  f.say("One", 2500);
+  f.session.end("parent_stop");
+  await f.session.recordingSettled();
+  const response = f.record.events.find(e => e.evidence?.type === "utterance")!;
+  expect(response.evidence).toMatchObject({ state: "interrupted" });
+  expect(validateObserverProposal(f.proposal(), f.record).ok).toBe(false);
+});
+
+it("validates responses before evaluator commits and preserves attribution after commits and displays", async () => {
+  let resolve!: (value: Awaited<ReturnType<EvaluateAnswer>>) => void;
+  const f = await recordedBrowserLesson(
+    () =>
+      new Promise(done => {
+        resolve = done;
+      }),
+  );
+  for (const [index, text, providerStart] of [
+    [0, "One", 1000],
+    [1, "Two", 6000],
+    [2, "Three", 9500],
+  ] as const) {
+    await vi.advanceTimersByTimeAsync(1000);
+    f.say(text, providerStart);
+    await f.flush();
+    expect(f.session.snapshot.sceneIndex).toBe(index);
+    expect(validateObserverProposal(proposalForResponse(f, text), f.record).ok).toBe(true);
+    resolve({ status: "evaluated", probability: 0.99, model: "synthetic", latencyMs: 1 });
+    await vi.advanceTimersByTimeAsync(1);
+    expect(f.session.snapshot.sceneIndex).toBe(index + 1);
+    expect(validateObserverProposal(proposalForResponse(f, text), f.record).ok).toBe(true);
+    f.session.displayed(index + 1);
+    expect(validateObserverProposal(proposalForResponse(f, text), f.record).ok).toBe(true);
+  }
+  expect(fetch).toHaveBeenCalledOnce();
+  f.session.end("parent_stop");
+  await f.session.recordingSettled();
+});
+
+it("round-trips real recorder bounds through Convex and rejects mismatched persisted anchors", async () => {
+  const f = await recordedBrowserLesson(advances);
+  await vi.advanceTimersByTimeAsync(1000);
+  f.say("One", 1000);
+  await f.flush();
+  f.session.displayed(1);
+  await vi.advanceTimersByTimeAsync(1000);
+  f.say("Two", 6000);
+  await f.flush();
+  const t = convexTest(schema, import.meta.glob("../convex/**/*.ts"));
+  const sessionId = await t.mutation(api.sessions.create, {});
+  await t.mutation(api.sessions.activate, { sessionId });
+  for (const event of f.record.events) {
+    await t.mutation(api.sessions.appendEvent, {
+      sessionId,
+      eventKey: event._id,
+      atMs: event.atMs,
+      evidence: event.evidence,
+    });
+  }
+  const persisted = await t.query(api.sessions.getRecord, { sessionId });
+  expect(persisted?.events.map(e => e.evidence)).toEqual(f.record.events.map(e => e.evidence));
+  const response = structuredClone(
+    f.record.events.find(e => e.evidence?.type === "utterance" && e.evidence.text === "Two")!,
+  );
+  if (
+    response.evidence?.type !== "utterance" ||
+    response.evidence.sessionTiming?.provenance !== "source_timeline_bound"
+  )
+    throw new Error("expected real bound");
+  for (const mutation of ["source", "anchor", "start", "receipt"] as const) {
+    const evidence = structuredClone(response.evidence);
+    if (evidence.sessionTiming?.provenance !== "source_timeline_bound") throw new Error("expected bound");
+    if (mutation === "source") evidence.sessionTiming.sourceId = 99;
+    if (mutation === "anchor") evidence.sessionTiming.sourceRequestedAtMs += 1;
+    if (mutation === "start") evidence.sessionTiming.startMs += 1;
+    if (mutation === "receipt") evidence.sessionTiming.endMs -= 1;
+    await expect(
+      t.mutation(api.sessions.appendEvent, {
+        sessionId,
+        eventKey: `invalid-${mutation}`,
+        atMs: response.atMs,
+        evidence,
+      }),
+    ).rejects.toThrow("Source timeline bound");
+  }
+  f.session.end("parent_stop");
+  await f.session.recordingSettled();
+});
+
+it.each([0, 2000, 6000])(
+  "keeps successive scene evidence with a measured %i ms source startup",
+  async startupDelayMs => {
+    const f = await recordedBrowserLesson(advances, startupDelayMs);
+    for (const [index, text, sourceElapsed] of [
+      [0, "One", 500],
+      [1, "Two", 4000],
+      [2, "Three", 7500],
+    ] as const) {
+      await vi.advanceTimersByTimeAsync(1000);
+      f.say(text, startupDelayMs + sourceElapsed);
+      await f.flush();
+      expect(validateObserverProposal(proposalForResponse(f, text), f.record).ok).toBe(true);
+      f.session.displayed(index + 1);
+    }
+    expect(fetch).toHaveBeenCalledOnce();
+    f.session.end("parent_stop");
+    await f.session.recordingSettled();
+  },
+);
