@@ -86,6 +86,7 @@ it("excludes startup delay from canonical timestamps while retaining the diagnos
     type: "utterance",
     speaker: "child_or_nearby_speaker",
     text: "hello",
+    transcriptFragments: [{ key: "transcript_1", textStart: 0, textEnd: 5 }],
     providerTiming: { clock: "provider", startMs: 250, endMs: 350 },
     responseScene: {
       provenance: "application_transcript_context",
@@ -178,6 +179,10 @@ it.each<EndReason>([
       type: "utterance",
       speaker: "child_or_nearby_speaker",
       text: "hello there",
+      transcriptFragments: [
+        { key: "transcript_1", textStart: 0, textEnd: 6 },
+        { key: "transcript_2", textStart: 6, textEnd: 11 },
+      ],
       providerTiming: { clock: "provider", startMs: 0, endMs: 200 },
       recognition: "needs_confirmation",
       firstObservedAtMs: 0,
@@ -673,14 +678,14 @@ it("preserves VAD, evaluation, committed advancement and actual display on one c
     1350,
     {
       type: "answer_evaluation_requested",
-      correlationKey: "0:100:one",
+      correlationKey: "0|1|100:one|unknown-source",
       sceneIndex: 0,
       turnSignal: "microphone_vad",
       turnEndToRequestMs: 250,
     },
   ]);
   expect(calls().find(call => call[2].type === "answer_evaluation_resolved")?.[2]).toMatchObject({
-    correlationKey: "0:100:one",
+    correlationKey: "0|1|100:one|unknown-source",
     status: "evaluated",
     probability: 1,
     latencyMs: 1,
@@ -700,7 +705,10 @@ it("preserves VAD, evaluation, committed advancement and actual display on one c
     calls()
       .find(call => call[2].type === "scene_advance_committed")
       ?.slice(1),
-  ).toEqual([committedAt, { type: "scene_advance_committed", fromScene: 0, toScene: 1, correlationKey: "0:100:one" }]);
+  ).toEqual([
+    committedAt,
+    { type: "scene_advance_committed", fromScene: 0, toScene: 1, correlationKey: "0|1|100:one|unknown-source" },
+  ]);
   expect(vi.mocked(recorder.append).mock.calls.filter(call => call[2].type === "scene_displayed")).toHaveLength(1);
   await vi.advanceTimersByTimeAsync(80);
   session.displayed(1);
@@ -764,7 +772,7 @@ it.each(["timeout", "request_failed", "cancelled"])(
     expect(timeline.filter(event => event.type === "answer_evaluation_resolved")).toEqual([
       expect.objectContaining({
         type: "answer_evaluation_resolved",
-        correlationKey: "0:0:one",
+        correlationKey: "0|1|0:one|unknown-source",
         status: "unavailable",
         reason,
         decision: reason === "cancelled" ? "STALE" : "UNAVAILABLE",

@@ -87,6 +87,26 @@ export const appendEvent = mutation({
         throw new Error("lastObservedAtMs must follow firstObservedAtMs");
     }
     if (evidence?.type === "utterance") {
+      if (evidence.transcriptFragments) {
+        let textEnd = 0;
+        const keys = new Set<string>();
+        if (evidence.speaker !== "child_or_nearby_speaker") throw new Error("Fragment identity requires child speech");
+        for (const fragment of evidence.transcriptFragments) {
+          if (
+            !fragment.key.trim() ||
+            keys.has(fragment.key) ||
+            !Number.isSafeInteger(fragment.textStart) ||
+            !Number.isSafeInteger(fragment.textEnd) ||
+            fragment.textStart !== textEnd ||
+            fragment.textEnd < fragment.textStart ||
+            fragment.textEnd > evidence.text.length
+          )
+            throw new Error("Invalid transcript fragment identity");
+          keys.add(fragment.key);
+          textEnd = fragment.textEnd;
+        }
+        if (textEnd !== evidence.text.length) throw new Error("Fragment identity must cover the utterance");
+      }
       for (const timing of [evidence.providerTiming, evidence.sessionTiming]) {
         if (!timing) continue;
         nonnegative(timing.startMs, "timing.startMs");
@@ -131,6 +151,25 @@ export const appendEvent = mutation({
     )
       throw new Error("Invalid sceneIndex");
     if (timeline?.type === "evaluation_control") {
+      if (timeline.responseIdentity) {
+        const identity = timeline.responseIdentity;
+        if (
+          !timeline.correlationKey?.trim() ||
+          !timeline.answerVersion?.trim() ||
+          !Number.isSafeInteger(timeline.transcriptRevision) ||
+          (timeline.transcriptRevision ?? 0) < 1 ||
+          timeline.sceneIndex === undefined ||
+          identity.fragmentKeys.some(key => !key.trim()) ||
+          new Set(identity.fragmentKeys).size !== identity.fragmentKeys.length ||
+          (identity.sourceStatus === "known" &&
+            (!Number.isSafeInteger(timeline.sourceId) || (timeline.sourceId ?? 0) < 1 || !identity.fragmentKeys.length))
+        )
+          throw new Error("Invalid evaluated response identity");
+        if (identity.evaluatedScene) {
+          if (!identity.evaluatedScene.sceneId.trim()) throw new Error("Evaluated scene identity is required");
+          nonnegative(identity.evaluatedScene.displayedAtMs, "evaluatedScene.displayedAtMs");
+        }
+      }
       if (!timeline.action.trim()) throw new Error("Control action is required");
       for (const [field, value] of Object.entries({
         sceneIndex: timeline.sceneIndex,

@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { getFunctionName } from "convex/server";
 import { api } from "../convex/_generated/api";
 import { ConvexSessionRecorder } from "../lib/convex-session-recorder";
+import type { Evidence, TimelineEvent } from "../lib/session-recorder";
 const { mutation, query } = vi.hoisted(() => ({ mutation: vi.fn(), query: vi.fn() }));
 vi.mock("convex/browser", () => ({
   ConvexHttpClient: class {
@@ -161,4 +162,55 @@ it("passes the live start clock and separate timeline payload through the durabl
     atMs: 100,
     timeline,
   });
+});
+
+it("retains canonical fragment joins and evaluation identities across adapter writes and reads", async () => {
+  const { recorder } = await setup();
+  const evidence: Evidence = {
+    type: "utterance",
+    speaker: "child_or_nearby_speaker",
+    text: "Three",
+    state: "finalized",
+    transcriptFragments: [{ key: "transcript_3", textStart: 0, textEnd: 5 }],
+    providerTiming: { clock: "provider", startMs: 50600, endMs: 50800, sourceId: 1 },
+  };
+  const timeline: TimelineEvent = {
+    type: "evaluation_control",
+    action: "evaluation_result",
+    correlationKey: "2|3|50600:Three|1",
+    sourceId: 1,
+    transcriptRevision: 3,
+    answerVersion: "50600:Three",
+    sceneIndex: 2,
+    responseIdentity: {
+      provenance: "application_evaluation",
+      fragmentKeys: ["transcript_3"],
+      sourceStatus: "known",
+      evaluatedScene: { sceneId: "butterfly-garden", displayedAtMs: 16590 },
+    },
+  };
+  await recorder.append("speech", 45575, evidence);
+  await recorder.appendTimeline("result", 43075, timeline);
+  expect(mutation).toHaveBeenNthCalledWith(2, api.sessions.appendEvent, {
+    sessionId: "session-test",
+    eventKey: "speech",
+    atMs: 45575,
+    evidence,
+  });
+  expect(mutation).toHaveBeenNthCalledWith(3, api.sessions.appendEvent, {
+    sessionId: "session-test",
+    eventKey: "result",
+    atMs: 43075,
+    timeline,
+  });
+  const events = [
+    { eventKey: "speech", order: 0, atMs: 45575, evidence },
+    { eventKey: "result", order: 1, atMs: 43075, timeline },
+  ];
+  query.mockResolvedValue({
+    session: { _id: "session-test", state: "ended", recordStatus: "pending", createdAt: 100 },
+    events,
+    recordingUrl: null,
+  });
+  expect((await recorder.getRecord("session-test"))?.events).toEqual(events);
 });

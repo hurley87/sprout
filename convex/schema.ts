@@ -21,6 +21,7 @@ export const evidence = v.union(
     state: v.union(v.literal("finalized"), v.literal("interrupted")),
     firstObservedAtMs: v.optional(v.number()),
     lastObservedAtMs: v.optional(v.number()),
+    transcriptFragments: v.optional(v.array(v.object({ key: v.string(), textStart: v.number(), textEnd: v.number() }))),
     providerTiming: v.optional(
       v.object({
         clock: v.literal("provider"),
@@ -133,6 +134,14 @@ export const timeline = v.union(
     transcriptRevision: v.optional(v.number()),
     answerVersion: v.optional(v.string()),
     sourceId: v.optional(v.number()),
+    responseIdentity: v.optional(
+      v.object({
+        provenance: v.literal("application_evaluation"),
+        fragmentKeys: v.array(v.string()),
+        sourceStatus: v.union(v.literal("known"), v.literal("missing"), v.literal("mixed")),
+        evaluatedScene: v.optional(v.object({ sceneId: v.string(), displayedAtMs: v.number() })),
+      }),
+    ),
     delegationId: v.optional(v.string()),
     offsetMs: v.optional(v.number()),
     origin: v.optional(v.union(v.literal("application"), v.literal("delegation"), v.literal("both"))),

@@ -7,6 +7,7 @@ import {
   type Evidence,
   type TimelineEvent,
   type SessionAudioRecording,
+  type EvaluatedResponseIdentity,
 } from "./session-recorder";
 import {
   CORRECTION_WINDOW_MS,
@@ -116,6 +117,7 @@ type EvaluationRecord = GateIdentity & {
   key: string;
   utterance: string;
   sourceId?: number;
+  responseIdentity: EvaluatedResponseIdentity;
   status: "scheduled" | "in_flight" | "resolved" | "superseded";
   result?: AnswerResult;
   applicationAction?: "ADVANCE" | "STAY" | "UNAVAILABLE" | "SUPERSEDED";
@@ -218,6 +220,7 @@ export class LessonSession {
   private speechEpoch = 0;
   private transcriptEpoch = -1;
   private transcriptRevision = 0;
+  private transcriptFragmentOrder = 0;
   private latestSourceId?: number;
   private childTranscriptHistory: ChildTranscriptHistoryEntry[] = [];
   private scheduledEvaluation?: { sceneIndex: number; revision: number; version: string; path: string };
@@ -306,6 +309,7 @@ export class LessonSession {
             transcriptRevision: record.transcriptRevision,
             answerVersion: record.answerVersion,
             ...(record.sourceId === undefined ? {} : { sourceId: record.sourceId }),
+            responseIdentity: record.responseIdentity,
             origin: record.origin,
             status: record.status,
             displayStatus: record.displayStatus,
@@ -359,6 +363,9 @@ export class LessonSession {
       endMs: utterance.endMs,
       state,
       ...utterance.context,
+      ...(speaker === "child" && utterance.transcriptFragments
+        ? { transcriptFragments: utterance.transcriptFragments }
+        : {}),
       ...(speaker === "child"
         ? ({
             recognition:
@@ -380,7 +387,7 @@ export class LessonSession {
     );
   }
 
-  private captureTranscript(event: TranscriptEvent) {
+  private captureTranscript(event: TranscriptEvent, fragmentKey?: string) {
     if (!this.ready) return;
     // A transcript from either speaker ends the other speaker's canonical turn,
     // even when the incoming Sprout speech cannot be recorded as delivered.
@@ -432,6 +439,7 @@ export class LessonSession {
             }
           : {}),
       },
+      fragmentKey,
     );
     if (completed) this.flushUtterance(event.speaker, "finalized", completed);
     clearTimeout(this.utteranceTimers[event.speaker]);
@@ -838,7 +846,11 @@ export class LessonSession {
       this.startup("startup.first_provider_output");
       this.startup("startup.first_tutor_transcript");
     }
-    this.captureTranscript(event);
+    // Allocate before capture: ignored transition fragments are still canonical
+    // speech, but cannot inherit an earlier answer's evaluation identity.
+    const fragmentKey =
+      event.speaker === "child" && this.ready ? `transcript_${++this.transcriptFragmentOrder}` : undefined;
+    this.captureTranscript(event, fragmentKey);
     const fromChild = event.speaker === "child";
     this.log(fromChild ? "transcript.child_or_nearby_speaker" : "transcript.sprout", {
       delta: event.delta,
@@ -848,7 +860,14 @@ export class LessonSession {
       playbackVerified: false,
     });
     const speech = fromChild ? this.childSpeech : this.sproutSpeech;
-    const utterance = speech.append(event.delta, event.startMs, event.endMs);
+    const utterance = speech.append(
+      event.delta,
+      event.startMs,
+      event.endMs,
+      fragmentKey
+        ? { key: fragmentKey, ...(event.sourceId === undefined ? {} : { sourceId: event.sourceId }) }
+        : undefined,
+    );
     if (fromChild) this.sproutReply = "";
     else if (!this.answerResponseGate) {
       this.lastSproutDeltaAt = Date.now();
@@ -889,6 +908,7 @@ export class LessonSession {
       if (this.displayedRelease) this.scheduleDisplayedRelease();
     }
     if (fromChild) {
+      const previousSourceId = this.latestSourceId;
       this.latestSourceId = event.sourceId;
       this.cancelReplacementForChild("newer_transcript");
       const sourceIsolationRequired = this.answerResponseGate?.sourceIsolationRequired === true;
@@ -964,6 +984,7 @@ export class LessonSession {
           },
           "transcript_revision",
           true,
+          previousSourceId,
         );
       this.transcriptRevision++;
       if (invalidatesPendingAnswer)
@@ -1698,7 +1719,7 @@ export class LessonSession {
     const finalDeltaAt = this.lastDeltaAt;
     const turnEndAt = this.turnEndAt;
     const transcriptRevision = this.transcriptRevision;
-    const correlationKey = `${sceneIndex}:${version}`;
+    const correlationKey = record.key;
     const requestedAt = Date.now();
     this.timeline({
       type: "answer_evaluation_requested",
@@ -1762,6 +1783,7 @@ export class LessonSession {
         transcriptRevision,
         evaluation.signal,
         result,
+        record,
         !cancellationRecorded,
       );
     };
@@ -1842,6 +1864,7 @@ export class LessonSession {
     transcriptRevision: number,
     evaluationSignal: AbortSignal,
     result: AnswerResult,
+    record: EvaluationRecord,
     recordResult = true,
   ) {
     // The question was about a moment that may have passed: the child may have
@@ -1866,29 +1889,25 @@ export class LessonSession {
     // Stale results need no release: newer speech gets its own decision, and a
     // scene change or wrap-up tells GPT-Live itself.
     const releasing = !stale && !advancing;
-    const record = this.evaluationRecords.get(
-      this.evaluationKey(sceneIndex, transcriptRevision, version, this.latestSourceId),
-    );
-    if (record) {
-      record.result = result;
-      record.status = stale ? "superseded" : "resolved";
-      record.applicationAction = stale
-        ? "SUPERSEDED"
-        : result.status === "unavailable"
-          ? "UNAVAILABLE"
-          : advancing
-            ? "ADVANCE"
-            : "STAY";
-      this.evaluationControl(record, stale ? "result_superseded" : "evaluation_result", {
-        result: stale ? "STALE" : result.status,
-        applicationAction: record.applicationAction,
-        reason: staleReason,
-      });
-    }
+    // Retain the requested record even after source replacement or map eviction.
+    record.result = result;
+    record.status = stale ? "superseded" : "resolved";
+    record.applicationAction = stale
+      ? "SUPERSEDED"
+      : result.status === "unavailable"
+        ? "UNAVAILABLE"
+        : advancing
+          ? "ADVANCE"
+          : "STAY";
+    this.evaluationControl(record, stale ? "result_superseded" : "evaluation_result", {
+      result: stale ? "STALE" : result.status,
+      applicationAction: record.applicationAction,
+      reason: staleReason,
+    });
     if (recordResult)
       this.timeline({
         type: "answer_evaluation_resolved",
-        correlationKey: `${sceneIndex}:${version}`,
+        correlationKey: record.key,
         sceneIndex,
         status: result.status,
         latencyMs: result.latencyMs,
@@ -2178,6 +2197,7 @@ export class LessonSession {
 
   /** The application, not the model, commits the next deterministic scene. */
   private advance(answerVersion: string) {
+    const evaluationRecord = this.answerResponseGate ? this.findEvaluationRecord(this.answerResponseGate) : undefined;
     this.log("advance.committed", {
       scene_index: this.snapshot.sceneIndex,
       transcript_revision: this.answerResponseGate?.transcriptRevision,
@@ -2187,11 +2207,7 @@ export class LessonSession {
     if (this.answerResponseGate) {
       this.answerResponseGate.decision = "ADVANCE";
       this.answerResponseGate.sceneCommittedAt = Date.now();
-      const record = this.findEvaluationRecord({
-        sceneIndex: this.answerResponseGate.sceneIndex,
-        transcriptRevision: this.answerResponseGate.transcriptRevision,
-        answerVersion: this.answerResponseGate.answerVersion,
-      });
+      const record = evaluationRecord;
       if (record) {
         record.displayStatus = "waiting";
         this.evaluationControl(record, "scene_commit", { applicationAction: "ADVANCE", result: "evaluated" });
@@ -2203,7 +2219,9 @@ export class LessonSession {
       type: "scene_advance_committed",
       fromScene: this.snapshot.sceneIndex,
       toScene: sceneIndex,
-      correlationKey: `${this.snapshot.sceneIndex}:${answerVersion}`,
+      correlationKey:
+        evaluationRecord?.key ??
+        this.evaluationKey(this.snapshot.sceneIndex, this.transcriptRevision, answerVersion, this.latestSourceId),
     });
     const gate = this.answerResponseGate;
     this.pending = {
@@ -2239,6 +2257,20 @@ export class LessonSession {
     const key = this.evaluationKey(sceneIndex, transcriptRevision, answerVersion, sourceId);
     let record = this.evaluationRecords.get(key);
     if (!record) {
+      const fragments =
+        transcriptRevision === this.transcriptRevision &&
+        answerVersion === `${this.latest?.startMs}:${this.latest?.text.trim()}`
+          ? (this.latest?.fragments ?? [])
+          : [];
+      const sources = new Set(fragments.map(fragment => fragment.sourceId));
+      const sourceStatus =
+        sources.size > 1
+          ? "mixed"
+          : !fragments.length ||
+              !this.latest?.fragmentsComplete ||
+              [...sources].some(source => !Number.isSafeInteger(source) || (source ?? 0) < 1)
+            ? "missing"
+            : "known";
       record = {
         key,
         sceneIndex,
@@ -2246,6 +2278,14 @@ export class LessonSession {
         answerVersion,
         utterance,
         sourceId,
+        responseIdentity: {
+          provenance: "application_evaluation",
+          fragmentKeys: fragments.map(fragment => fragment.key),
+          sourceStatus,
+          ...(this.displayedContext?.sceneId === sceneAt(sceneIndex).id
+            ? { evaluatedScene: { ...this.displayedContext } }
+            : {}),
+        },
         status: "scheduled",
         displayStatus: "not_applicable",
         applicationFeedbackSent: false,
@@ -2390,7 +2430,7 @@ export class LessonSession {
     if (record.applicationFeedbackSent) this.sendLinkedEvaluationResult(record, id);
   }
 
-  private supersedeEvaluation(identity: GateIdentity, reason: string, notify: boolean, sourceId = this.latestSourceId) {
+  private supersedeEvaluation(identity: GateIdentity, reason: string, notify: boolean, sourceId?: number) {
     const record = this.evaluationRecords.get(
       this.evaluationKey(identity.sceneIndex, identity.transcriptRevision, identity.answerVersion, sourceId),
     );

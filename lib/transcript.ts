@@ -7,23 +7,40 @@ export const UTTERANCE_GAP_MS = 2500;
 export const WINDOW_CHARS = 500;
 
 /** Speech so far in one utterance, identified by when that utterance began. */
-export type Utterance = { text: string; startMs: number };
+type AnswerFragment = { key: string; sourceId?: number };
+export type Utterance = { text: string; startMs: number; fragments?: AnswerFragment[]; fragmentsComplete?: boolean };
 
 /** The recent speech of one speaker, rebuilt from provider transcript deltas. */
 export class TranscriptWindow {
   private text = "";
   private startMs = 0;
   private lastEndMs = -Infinity;
+  private fragments: { identity?: AnswerFragment; textEnd: number }[] = [];
 
   /** Returns the current utterance, so a fresh one never inherits an old negation. */
-  append(delta: string, startMs: number, endMs: number): Utterance {
+  append(delta: string, startMs: number, endMs: number, identity?: AnswerFragment): Utterance {
     if (startMs - this.lastEndMs > UTTERANCE_GAP_MS) {
       this.text = "";
       this.startMs = startMs;
+      this.fragments = [];
     }
+    const removed = Math.max(0, this.text.length + delta.length - WINDOW_CHARS);
+    if (delta.length) this.fragments.push({ identity, textEnd: this.text.length + delta.length });
+    this.fragments = this.fragments
+      .map(fragment => ({ ...fragment, textEnd: fragment.textEnd - removed }))
+      .filter(fragment => fragment.textEnd > 0);
     this.text = (this.text + delta).slice(-WINDOW_CHARS);
     this.lastEndMs = endMs;
-    return { text: this.text, startMs: this.startMs };
+    return {
+      text: this.text,
+      startMs: this.startMs,
+      ...(identity
+        ? {
+            fragments: this.fragments.flatMap(fragment => (fragment.identity ? [{ ...fragment.identity }] : [])),
+            fragmentsComplete: this.fragments.every(fragment => fragment.identity !== undefined),
+          }
+        : {}),
+    };
   }
 }
 
@@ -74,6 +91,7 @@ export type RecordedUtterance = {
   >;
   firstObservedAtMs: number;
   lastObservedAtMs: number;
+  transcriptFragments?: Extract<Evidence, { type: "utterance" }>["transcriptFragments"];
 };
 
 /** Full canonical text is separate from the bounded diagnostic/answer window. */
@@ -86,6 +104,7 @@ export class UtteranceAccumulator {
     delivered: boolean,
     observedAtMs = 0,
     context?: RecordedUtterance["context"],
+    fragmentKey?: string,
   ): RecordedUtterance | null {
     let completed: RecordedUtterance | null = null;
     if (
@@ -139,6 +158,13 @@ export class UtteranceAccumulator {
       prior.endMs = Math.max(prior.endMs, next.endMs);
     } else if (this.open.context) delete this.open.context.sessionTiming;
     this.open.lastObservedAtMs = observedAtMs;
+    if (fragmentKey && delta.length) {
+      (this.open.transcriptFragments ??= []).push({
+        key: fragmentKey,
+        textStart: this.open.text.length,
+        textEnd: this.open.text.length + delta.length,
+      });
+    }
     this.open.text += delta;
     this.open.startMs = Math.min(this.open.startMs, startMs);
     this.open.endMs = Math.max(this.open.endMs, endMs);

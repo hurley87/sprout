@@ -1,5 +1,16 @@
 import type { EndReason } from "./session";
 
+/** A join to canonical transcript fragments, never an acoustic scene assertion. */
+export type EvaluatedResponseIdentity = {
+  provenance: "application_evaluation";
+  /** One answer window can include fragments from several canonical utterances. */
+  fragmentKeys: string[];
+  /** Missing includes contributors without canonical fragment or provider identity. */
+  sourceStatus: "known" | "missing" | "mixed";
+  /** The confirmed display evaluated by the app, independent of speech timing. */
+  evaluatedScene?: { sceneId: string; displayedAtMs: number };
+};
+
 export type Evidence =
   | {
       type: "utterance";
@@ -11,6 +22,8 @@ export type Evidence =
       state: "finalized" | "interrupted";
       firstObservedAtMs?: number;
       lastObservedAtMs?: number;
+      /** Immutable fragment joins to evaluation_control.responseIdentity. No evaluation is implied. */
+      transcriptFragments?: { key: string; textStart: number; textEnd: number }[];
       providerTiming?: { clock: "provider"; startMs: number; endMs: number; sourceId?: number };
       /** Mapped speech, or a conservative envelope of source input through transcript receipt. */
       sessionTiming?:
@@ -98,6 +111,7 @@ export type TimelineEvent =
       transcriptRevision?: number;
       answerVersion?: string;
       sourceId?: number;
+      responseIdentity?: EvaluatedResponseIdentity;
       delegationId?: string;
       offsetMs?: number;
       origin?: "application" | "delegation" | "both";
