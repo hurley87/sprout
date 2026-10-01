@@ -301,9 +301,24 @@ remain unverified.
 The saved-session inspector includes an explicit parent review panel. Browser recovery uses the existing
 latest-session reference and never creates or resumes a lesson. Status reads distinguish not started,
 pending, running, failed, and READY; only an explicitly empty READY batch can be acknowledged as empty.
-The proposed summary lists the immutable proposal descriptions. Each original and saved decision remains
-visible with canonical utterance/scene/support context and exchange time. Recording playback uses the
-existing full recording and subtracts its `startOffsetMs`; positions remain approximate.
+The daily check-in starts with a deterministic summary of structured proposals, preserving differences
+in support, uncertainty, outcome and parent correction. Compatible correct quantity-identification
+claims can share a quantity list; corrections and rejections stay separate. Original free-text proposals
+remain inspectable rather than being promoted into new summary conclusions. “Looks right” uses the
+existing atomic accept-all operation. Both individual acceptance and accept-all store the shared
+`reviewedObserverClaim` description derived from the validated structured fields, matching the summary.
+Raw model descriptions remain on immutable proposals for inspection, but do not enter accepted planner
+evidence. The planning read also projects legacy accepted rows through that same helper without
+rewriting history. Explicit parent corrections retain their supplied text/context; correction forms
+start from the structured description so assistance shortcuts do not copy unchecked model prose.
+“Make a correction” and individual review expose assistance,
+speaker rejection, inaccurate-observation and context shortcuts plus the detailed controls. Canonical
+utterance/scene/support context, originals, audio and technical inspection use collapsed disclosures.
+Recording playback uses the cited utterance start when valid and subtracts `startOffsetMs` once.
+“Nothing / A little / A lot” map to the existing repair levels; Nothing still requires unchanged
+acceptances. Optional “How did the lesson go?” feedback reuses the completion note, separately from
+learning evidence. It must be supplied before completion and remains visible after reload; completed
+reviews and decisions retain their existing immutable rules. No daily-evaluation schema is introduced.
 
 `POST /api/parent-review` accepts a discriminated command: `get {sessionId}`, `decide
 {sessionId, analysisId, proposalRowId, decision}`, `acceptAll {sessionId, analysisId, note?}`, or

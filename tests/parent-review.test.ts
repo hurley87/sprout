@@ -4,6 +4,7 @@ import { internal } from "../convex/_generated/api";
 import schema from "../convex/schema";
 import { observationFixtures, type SyntheticObservationFixture } from "./fixtures/observation-contracts";
 import type { ObserverProposal } from "../lib/observation-contracts";
+import { reviewedObserverClaim } from "../lib/reviewed-observation";
 
 async function fixture(
   name = "correct-total-without-spoken-count",
@@ -212,13 +213,34 @@ it("accepts unchanged with backend time, canonical row provenance, idempotency a
     analysisId: f.scope.analysisId,
     exchangeAtMs: f.original.exchangeAtMs,
     sources: f.original.sources,
-    observation: f.original.observation,
+    observation: reviewedObserverClaim(f.original.observation),
     interpretationProvenance: "observer",
   });
   expect(gate.evidence[0].reviewedAt).toBeGreaterThan(11);
   expect(await f.t.run(ctx => ctx.db.get(f.rows[0]._id))).toEqual(f.rows[0]);
   await expect(f.decide(reject())).rejects.toThrow("Conflicting repeated");
   await expect(f.decide({ ...accept(), reviewedAt: 0 })).rejects.toThrow("backend-owned");
+});
+
+it("keeps legacy accepted narrative out of planner output without rewriting saved history", async () => {
+  const f = await fixture();
+  await f.t.mutation(internal.parent_review.acceptAll, f.scope);
+  const legacy = "The child mastered counting and independently touch-counted every object.";
+  const storedId = await f.t.run(async ctx => {
+    const row = (await ctx.db.query("reviewedEvidence").take(10))[0];
+    await ctx.db.patch(row._id, { observation: { ...row.observation, description: legacy } });
+    return row._id;
+  });
+  expect(await f.gate()).toMatchObject({
+    blocked: false,
+    evidence: [
+      {
+        observation: reviewedObserverClaim(f.original.observation),
+      },
+    ],
+  });
+  expect((await f.t.run(ctx => ctx.db.get(storedId)))?.observation.description).toBe(legacy);
+  expect(await f.t.run(ctx => ctx.db.get(f.rows[0]._id))).toEqual(f.rows[0]);
 });
 
 it("stores help and pointing as parent testimony without inventing Observer evidence", async () => {

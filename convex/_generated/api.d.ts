@@ -10,8 +10,8 @@
 
 import type * as observer from "../observer.js";
 import type * as observer_action from "../observer_action.js";
-import type * as parent_review_action from "../parent_review_action.js";
 import type * as parent_review from "../parent_review.js";
+import type * as parent_review_action from "../parent_review_action.js";
 import type * as sessions from "../sessions.js";
 
 import type {

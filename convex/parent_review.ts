@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
+import { reviewedObserverClaim } from "../lib/reviewed-observation";
 import {
   validateObserverProposal,
   validateParentDecision,
@@ -199,7 +200,7 @@ export const decide = internalMutation({
         decisionId,
         exchangeAtMs: row.proposal.exchangeAtMs,
         sources: row.proposal.sources,
-        observation: decision.correction ?? row.proposal.observation,
+        observation: decision.correction ?? reviewedObserverClaim(row.proposal.observation),
         ...(decision.parentContext ? { parentContext: decision.parentContext } : {}),
         reviewedAt: decision.reviewedAt,
         interpretationProvenance: decision.decision === "corrected" ? "parent_review" : "observer",
@@ -284,7 +285,7 @@ export const acceptAll = internalMutation({
         decisionId,
         exchangeAtMs: row.proposal.exchangeAtMs,
         sources: row.proposal.sources,
-        observation: row.proposal.observation,
+        observation: reviewedObserverClaim(row.proposal.observation),
         reviewedAt,
         interpretationProvenance: "observer",
       });
@@ -333,7 +334,15 @@ export const forPlanning = internalQuery({
         );
         if (!decision || decision.decision.decision === "rejected")
           throw new Error("Invalid reviewed evidence linkage");
-        evidence.push(row);
+        // Legacy accepted rows may still contain raw model prose. Project from
+        // the validated immutable proposal without rewriting historical decisions.
+        const proposal = saved.proposals.find(item => item._id === row.proposalRowId);
+        if (!proposal) throw new Error("Invalid reviewed proposal linkage");
+        evidence.push(
+          decision.decision.decision === "accepted"
+            ? { ...row, observation: reviewedObserverClaim(proposal.proposal.observation) }
+            : row,
+        );
       }
     }
     return { blocked: false, reason: null, evidence };

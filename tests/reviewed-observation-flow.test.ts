@@ -9,6 +9,7 @@ import { recordingOffsetSeconds } from "../lib/session-recorder";
 import { reviewPlaybackAtMs, type ReviewSnapshot } from "../lib/parent-review";
 import { reconcileReviewWrite, type ReviewWrite } from "../lib/parent-review-reconciliation";
 import { observationFixtures } from "./fixtures/observation-contracts";
+import { observationSummary } from "../lib/parent-review-summary";
 
 const rpc = vi.hoisted(() => ({ mutation: vi.fn(), query: vi.fn(), action: vi.fn() }));
 vi.mock("convex/browser", () => ({
@@ -278,16 +279,50 @@ it("failed provider and duplicate triggers remain blocked until explicit retry a
   expect(await f.gate()).toEqual({ blocked: false, reason: null, evidence: [] });
 });
 
-it("exposes the free-text interpretation limitation while retaining the parent gate", async () => {
-  const f = await flow();
-  const unsupported = "The child mastered counting and independently touch-counted every object.";
-  f.rewriteDescription(unsupported);
-  await f.flush();
-  // Shape/reference validation cannot prove narrative truth. This is a documented
-  // limitation, not a test claiming these forbidden interpretations are acceptable.
-  expect((await f.read()).proposals[0].proposal.observation.description).toBe(unsupported);
-  expect(await f.gate()).toMatchObject({ blocked: true, evidence: [] });
-});
+it.each(["acceptAll", "decide"] as const)(
+  "%s approves only the displayed structured claim, preserving raw narrative",
+  async operation => {
+    const f = await flow();
+    const unsupported = "The child mastered counting and independently touch-counted every object.";
+    f.rewriteDescription(unsupported);
+    await f.flush();
+    const before = await f.read();
+    const displayed = observationSummary(before)[0].text;
+    expect(displayed).toBe("The displayed quantity 3 was identified correctly.");
+    expect(before.proposals[0].proposal.observation.description).toBe(unsupported);
+    expect(await f.gate()).toMatchObject({ blocked: true, evidence: [] });
+    const scope = { sessionId: f.sessionId, analysisId: before.analysisId! };
+    if (operation === "acceptAll") {
+      expect((await f.write({ operation, ...scope })).status).toBe(200);
+    } else {
+      expect(
+        (
+          await f.write({
+            operation,
+            ...scope,
+            proposalRowId: before.proposals[0].id,
+            decision: {
+              kind: "parent_decision",
+              proposalId: before.proposals[0].proposal.proposalId,
+              decision: "accepted",
+            },
+          })
+        ).status,
+      ).toBe(200);
+      expect(await f.gate()).toMatchObject({ blocked: true, evidence: [] });
+      expect((await f.write({ operation: "complete", ...scope, repairLevel: "verified" })).status).toBe(200);
+    }
+    const gate = await f.gate();
+    expect(gate.blocked).toBe(false);
+    expect(gate.evidence[0].observation).toEqual({
+      ...before.proposals[0].proposal.observation,
+      description: displayed,
+    });
+    const stored = await f.t.run(ctx => ctx.db.query("reviewedEvidence").take(10));
+    expect(stored[0].observation).toEqual(gate.evidence[0].observation);
+    expect((await f.read()).proposals).toEqual(before.proposals);
+  },
+);
 
 it.each([
   "counting-aloud-with-total",

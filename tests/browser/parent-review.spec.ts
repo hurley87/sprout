@@ -9,12 +9,15 @@ for (const viewport of [
 ])
   test(`synthetic review presentation at ${viewport.width}px`, async ({ page }, testInfo) => {
     await page.setViewportSize(viewport);
-    const h = await harness(page);
+    const h = await harness(page, snapshot(), false);
+    await expect(h.panel.getByRole("button", { name: "Looks right" })).toBeVisible();
+    await h.panel.screenshot({ path: testInfo.outputPath(`check-in-${viewport.width}.png`) });
+    await expandReview(page, h.panel);
     const article = h.panel.getByRole("article");
-    await article.getByText("Supporting canonical exchange").click();
+    await article.getByText("Check this exchange").click();
     await expect(article.getByText(/Scene actually displayed/)).toBeVisible();
     await expect(article.getByRole("button", { name: "Play exchange" })).toBeVisible();
-    await article.getByRole("button", { name: "Light correction" }).click();
+    await article.getByRole("button", { name: "Edit details" }).click();
     await expect(article.getByLabel("I provided assistance")).toBeVisible();
     await expect(article.getByLabel("I observed pointing or touch-counting")).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -47,7 +50,7 @@ function snapshot(count = 1): ReviewSnapshot {
     review: null,
   };
 }
-async function harness(page: Page, initial = snapshot()) {
+async function harness(page: Page, initial = snapshot(), expand = true) {
   let current = initial;
   const writes: ReviewCommand[] = [];
   let failWrite = false;
@@ -191,6 +194,7 @@ async function harness(page: Page, initial = snapshot()) {
   await page.goto("/");
   const panel = page.getByRole("region", { name: "Parent observation review" });
   await expect(panel).toBeVisible();
+  if (expand && initial.status === "ready") await expandReview(page, panel);
   return {
     panel,
     writes,
@@ -215,13 +219,20 @@ async function harness(page: Page, initial = snapshot()) {
   };
 }
 
+async function expandReview(page: Page, panel: ReturnType<Page["getByRole"]>) {
+  await panel.locator(".individual-review > summary").click();
+  for (const detail of await panel.getByText("Original proposal details", { exact: true }).all()) await detail.click();
+  await page.getByText("Check the recording", { exact: true }).click();
+  await page.getByText("Developer inspection", { exact: true }).click();
+}
+
 test("inspects canonical sources, seeks with start offset and accepts unchanged after reload", async ({ page }) => {
   const h = await harness(page);
-  await expect(h.panel.getByText("Observer analysis: ready")).toBeVisible();
+  await expect(h.panel.getByText("Today’s observations")).toBeVisible();
   await expect(h.panel.getByText(/Known incomplete/)).toBeVisible();
   const article = h.panel.getByRole("article");
   await expect(article.getByText(/Behavior: quantity identification/)).toBeVisible();
-  await article.getByText("Supporting canonical exchange").click();
+  await article.getByText("Check this exchange").click();
   await expect(article.getByText(/Event key key-1/)).toBeVisible();
   await expect(article.getByText(/Three/)).toBeVisible();
   await expect(article.getByText(/Scene actually displayed/)).toBeVisible();
@@ -246,11 +257,12 @@ test("inspects canonical sources, seeks with start offset and accepts unchanged 
   expect(eventPosition).toBeLessThan(19);
   await article.getByRole("button", { name: "Accept unchanged", exact: true }).click();
   await expect(article.getByText("Saved parent decision: accepted")).toBeVisible();
-  await expect(article.getByRole("button", { name: "Light correction" })).toHaveCount(0);
+  await expect(article.getByRole("button", { name: "Edit details" })).toHaveCount(0);
   await h.panel.getByRole("button", { name: "Finish review", exact: true }).click();
-  await expect(h.panel.getByText(/Review complete · verified/)).toBeVisible();
+  await expect(h.panel.getByText(/Review complete · How much you changed: Nothing/)).toBeVisible();
   await page.reload();
-  await expect(h.panel.getByText(/Review complete · verified/)).toBeVisible();
+  await expect(h.panel.getByText(/Review complete · How much you changed: Nothing/)).toBeVisible();
+  await expandReview(page, h.panel);
   await expect(h.panel.getByText("Original Observer proposal · p0")).toBeVisible();
   expect(h.unexpected).toEqual([]);
 });
@@ -283,8 +295,8 @@ for (const missing of ["speech bounds", "response source"] as const)
 
 test("accept-all is one explicit write and survives reload", async ({ page }) => {
   const h = await harness(page, snapshot(2));
-  await h.panel.getByRole("button", { name: "Accept all unchanged and finish" }).click();
-  await expect(h.panel.getByText(/Review complete · verified/)).toBeVisible();
+  await h.panel.getByRole("button", { name: "Looks right" }).click();
+  await expect(h.panel.getByText(/Review complete · How much you changed: Nothing/)).toBeVisible();
   expect(h.writes.map(x => x.operation)).toEqual(["acceptAll"]);
   await page.reload();
   await expect(h.panel.getByText("Saved parent decision: accepted")).toHaveCount(2);
@@ -298,7 +310,7 @@ test("saves assistance/pointing correction, rejection and mixed review with note
   const articles = h.panel.getByRole("article");
   await articles.nth(0).getByRole("button", { name: "Accept unchanged", exact: true }).click();
   await expect(articles.nth(0).getByText("Saved parent decision: accepted")).toBeVisible();
-  await articles.nth(1).getByRole("button", { name: "Light correction" }).click();
+  await articles.nth(1).getByRole("button", { name: "Edit details" }).click();
   await articles.nth(1).getByLabel("Corrected observation").fill("Identified the total after my help.");
   await articles.nth(1).getByLabel("I provided assistance").check();
   await articles.nth(1).getByLabel("I observed pointing or touch-counting").check();
@@ -314,29 +326,30 @@ test("saves assistance/pointing correction, rejection and mixed review with note
     });
     expect(command.decision.correction?.support).toEqual(snapshot().proposals[0].proposal.observation.support);
   }
-  await expect(h.panel.getByRole("button", { name: "Accept all unchanged and finish" })).toBeDisabled();
+  await expect(h.panel.getByRole("button", { name: "Looks right" })).toBeDisabled();
   await expect(h.panel.getByRole("button", { name: "Finish review", exact: true })).toBeDisabled();
   await articles.nth(2).getByRole("button", { name: "Reject proposal" }).click();
   await articles.nth(2).getByLabel("Rejection reason").fill("That was the parent speaking.");
   await articles.nth(2).getByRole("button", { name: "Save rejection" }).click();
   await expect(articles.nth(2).getByText("Saved parent decision: rejected")).toBeVisible();
-  await h.panel.getByLabel("Parent repair level").selectOption("light_correction");
-  await h.panel.getByLabel("Optional review note").fill("One correction and one rejection.");
+  await h.panel.getByLabel("How much did you need to correct Sprout’s observations?").selectOption("light_correction");
+  await h.panel.getByLabel("How did the lesson go? (optional)").fill("One correction and one rejection.");
   await h.panel.getByRole("button", { name: "Finish review", exact: true }).click();
-  await expect(h.panel.getByText(/Review complete · light correction/)).toBeVisible();
+  await expect(h.panel.getByText(/Review complete · How much you changed: A little/)).toBeVisible();
   await page.reload();
+  await expandReview(page, h.panel);
   await expect(h.panel.getByText("Original Observer proposal · p1")).toBeVisible();
-  await expect(h.panel.getByText("Identified the total after my help.")).toBeVisible();
+  await expect(h.panel.getByText("Identified the total after my help.", { exact: true })).toBeVisible();
   await expect(h.panel.getByText(/Reason: That was the parent/)).toBeVisible();
-  await expect(h.panel.getByText(/Review note: One correction/)).toBeVisible();
+  await expect(h.panel.getByText(/Lesson feedback: One correction/)).toBeVisible();
   expect(h.unexpected).toEqual([]);
 });
 
 test("empty READY needs explicit acknowledgment and never writes decisions", async ({ page }) => {
   const h = await harness(page, snapshot(0));
-  await expect(h.panel.getByText(/READY summary: no usable observations/)).toBeVisible();
+  await expect(h.panel.getByText(/No usable observations were found/)).toBeVisible();
   await expect(h.panel.getByRole("button", { name: "Finish review", exact: true })).toBeDisabled();
-  await h.panel.getByLabel("I acknowledge this empty READY summary").check();
+  await h.panel.getByLabel("I checked this summary with no observations").check();
   await h.panel.getByRole("button", { name: "Finish review", exact: true }).click();
   await expect(h.panel.getByText("Empty summary explicitly acknowledged.")).toBeVisible();
   expect(h.writes).toEqual([
@@ -354,11 +367,20 @@ for (const status of ["not_started", "pending", "running", "failed"] as const)
   test(`${status} is distinct from empty READY; explicit retry refreshes saved state`, async ({ page }) => {
     const initial = { ...snapshot(0), status, analysisId: status === "not_started" ? null : "analysis-saved" };
     const h = await harness(page, initial);
-    await expect(h.panel.getByText(`Observer analysis: ${status.replaceAll("_", " ")}`)).toBeVisible();
+    await expect(
+      h.panel.getByText(
+        {
+          not_started: "Observations have not been prepared yet.",
+          pending: "Waiting to prepare observations…",
+          running: "Preparing observations…",
+          failed: "Observations could not be prepared.",
+        }[status],
+      ),
+    ).toBeVisible();
     await expect(h.panel.getByRole("button", { name: "Finish review", exact: true })).toHaveCount(0);
-    await expect(h.panel.getByLabel("I acknowledge this empty READY summary")).toHaveCount(0);
+    await expect(h.panel.getByLabel("I checked this summary with no observations")).toHaveCount(0);
     await h.panel.getByRole("button", { name: "Retry Observer analysis" }).click();
-    await expect(h.panel.getByText("Observer analysis: pending")).toBeVisible();
+    await expect(h.panel.getByText("Waiting to prepare observations…")).toBeVisible();
     expect(h.writes).toEqual([]);
     expect(h.unexpected).toEqual([]);
   });
@@ -422,10 +444,10 @@ test("late read from previous inspection does not replace recovered session iden
   await page.evaluate(() => localStorage.setItem("sprout.latest-session-reference.v1", "new-session"));
   h.delayReads(null);
   await page.reload();
-  await expect(h.panel.getByText(/READY summary: no usable observations/)).toBeVisible();
+  await expect(h.panel.getByText(/No usable observations were found/)).toBeVisible();
   release();
   await expect(h.panel.getByText("Original Observer proposal · p0")).toHaveCount(0);
-  await h.panel.getByLabel("I acknowledge this empty READY summary").check();
+  await h.panel.getByLabel("I checked this summary with no observations").check();
   await h.panel.getByRole("button", { name: "Finish review", exact: true }).click();
   expect(h.writes[0].sessionId).toBe("new-session");
 });
@@ -442,7 +464,7 @@ test("missing scene timing stays uncertain through parent correction", async ({ 
     uncertaintyReasons: ["missing_scene_context"],
   };
   const h = await harness(page, state);
-  await h.panel.getByRole("button", { name: "Light correction" }).click();
+  await h.panel.getByRole("button", { name: "Edit details" }).click();
   await expect(h.panel.getByLabel("Observed behavior")).toBeDisabled();
   await h.panel.getByLabel("Parent explanation").fill("I can identify the speaker, but not the scene timing.");
   await h.panel.getByLabel("Speaker interpretation").selectOption("child_or_nearby_speaker");
@@ -472,7 +494,7 @@ test("spoken counting and recorded help remain distinct from a correct total alo
   await expect(h.panel.getByRole("article").getByText(/Behavior: counting aloud with total/)).toBeVisible();
   await expect(h.panel.getByText(/Spoken count sequence: Observed/)).toBeVisible();
   await expect(h.panel.getByText(/Recorded support: recorded · hint, counting together/)).toBeVisible();
-  await h.panel.getByText("Supporting canonical exchange").click();
+  await h.panel.getByText("Check this exchange").click();
   await expect(h.panel.getByText(/Try starting with one; count with me/)).toBeVisible();
   expect(h.writes).toEqual([]);
 });
@@ -485,7 +507,7 @@ test("initial read and Observer retry failures remain safe and recover explicitl
   await expect(h.panel.getByRole("button", { name: "Finish review", exact: true })).toHaveCount(0);
   h.failReads(false);
   await h.panel.getByRole("button", { name: "Refresh review" }).click();
-  await expect(h.panel.getByText("Observer analysis: failed")).toBeVisible();
+  await expect(h.panel.getByText("Observations could not be prepared.")).toBeVisible();
   await page.route("**/api/observer/retry", route =>
     route.fulfill({ status: 409, json: { error: "private provider diagnostic" } }),
   );
@@ -494,7 +516,7 @@ test("initial read and Observer retry failures remain safe and recover explicitl
   await expect(h.panel.getByText(/private provider diagnostic/)).toHaveCount(0);
   await page.unroute("**/api/observer/retry");
   await h.panel.getByRole("button", { name: "Retry Observer analysis" }).click();
-  await expect(h.panel.getByText("Observer analysis: pending")).toBeVisible();
+  await expect(h.panel.getByText("Waiting to prepare observations…")).toBeVisible();
   expect(h.writes).toEqual([]);
 });
 
@@ -521,7 +543,7 @@ test("stale rejection conflicts with saved acceptance and recovers into completi
   expect(h.getCurrent().decisions).toEqual(persisted.decisions);
   await h.panel.getByRole("button", { name: "Refresh review" }).click();
   await h.panel.getByRole("button", { name: "Finish review", exact: true }).click();
-  await expect(h.panel.getByText(/Review complete · verified/)).toBeVisible();
+  await expect(h.panel.getByText(/Review complete · How much you changed: Nothing/)).toBeVisible();
   expect(h.writes.map(command => command.operation)).toEqual(["decide", "complete"]);
   expect(h.getCurrent().proposals).toEqual(originals);
 });
@@ -569,7 +591,7 @@ for (const operation of ["complete", "acceptAll"] as const)
     ];
     const h = await harness(page, initial);
     await expect(h.panel.getByText("Saved parent decision: accepted")).toBeVisible();
-    await h.panel.getByLabel("Optional review note").fill("Attempted note");
+    await h.panel.getByLabel("How did the lesson go? (optional)").fill("Attempted note");
     const persisted = structuredClone(initial);
     persisted.review = {
       repairLevel: "light_correction",
@@ -580,13 +602,13 @@ for (const operation of ["complete", "acceptAll"] as const)
     h.setCurrent(persisted);
     await h.panel
       .getByRole("button", {
-        name: operation === "complete" ? "Finish review" : "Accept all unchanged and finish",
+        name: operation === "complete" ? "Finish review" : "Looks right",
         exact: true,
       })
       .click();
     await expect(h.panel.getByRole("alert")).toContainText("Save conflict");
-    await expect(h.panel.getByText(/Review complete · light correction/)).toBeVisible();
-    await expect(h.panel.getByText("Review note: Other tab's note")).toBeVisible();
+    await expect(h.panel.getByText(/Review complete · How much you changed: A little/)).toBeVisible();
+    await expect(h.panel.getByText("Lesson feedback: Other tab's note")).toBeVisible();
     await expect(h.panel.getByRole("button", { name: "Retry identical save" })).toHaveCount(0);
     expect(h.getCurrent().review).toEqual(persisted.review);
     expect(h.writes).toHaveLength(1);
@@ -618,21 +640,23 @@ for (const decision of ["corrected", "rejected"] as const)
     ];
     const stored = structuredClone(persisted.decisions);
     h.setCurrent(persisted);
-    await h.panel.getByRole("button", { name: "Accept all unchanged and finish" }).click();
+    await h.panel.getByRole("button", { name: "Looks right" }).click();
     await expect(h.panel.getByRole("alert")).toContainText("Save conflict");
     await expect(h.panel.getByText(`Saved parent decision: ${decision}`)).toBeVisible();
     await expect(h.panel.getByRole("button", { name: "Retry identical save" })).toHaveCount(0);
     await h.panel.getByRole("article").nth(1).getByRole("button", { name: "Accept unchanged", exact: true }).click();
-    await h.panel.getByLabel("Parent repair level").selectOption("substantial_repair");
+    await h.panel
+      .getByLabel("How much did you need to correct Sprout’s observations?")
+      .selectOption("substantial_repair");
     await h.panel.getByRole("button", { name: "Finish review", exact: true }).click();
-    await expect(h.panel.getByText(/Review complete · substantial repair/)).toBeVisible();
+    await expect(h.panel.getByText(/Review complete · How much you changed: A lot/)).toBeVisible();
     expect(h.getCurrent().decisions[0]).toEqual(stored[0]);
     expect(h.getCurrent().proposals).toEqual(originals);
   });
 
 test("partial accept-all without completion keeps exact note locked until identical retry", async ({ page }) => {
   const h = await harness(page, snapshot(2));
-  await h.panel.getByLabel("Optional review note").fill("Original bulk note");
+  await h.panel.getByLabel("How did the lesson go? (optional)").fill("Original bulk note");
   const partial = snapshot(2);
   partial.decisions = [
     {
@@ -642,29 +666,29 @@ test("partial accept-all without completion keeps exact note locked until identi
   ];
   h.setCurrent(partial);
   h.failNextWrite(false);
-  await h.panel.getByRole("button", { name: "Accept all unchanged and finish" }).click();
+  await h.panel.getByRole("button", { name: "Looks right" }).click();
   await expect(h.panel.getByRole("button", { name: "Retry identical save" })).toBeEnabled();
   await expect(h.panel.getByRole("button", { name: "Accept unchanged", exact: true })).toBeDisabled();
-  await expect(h.panel.getByLabel("Optional review note")).toBeDisabled();
+  await expect(h.panel.getByLabel("How did the lesson go? (optional)")).toBeDisabled();
   h.failReads(true);
   await h.panel.getByRole("button", { name: "Refresh review" }).click();
   await expect(h.panel.getByRole("button", { name: "Retry identical save" })).toBeDisabled();
   h.failReads(false);
   await h.panel.getByRole("button", { name: "Refresh review" }).click();
   await h.panel.getByRole("button", { name: "Retry identical save" }).click();
-  await expect(h.panel.getByText(/Review complete · verified/)).toBeVisible();
+  await expect(h.panel.getByText(/Review complete · How much you changed: Nothing/)).toBeVisible();
   expect(h.writes[1]).toEqual(h.writes[0]);
   expect(h.getCurrent().decisions[0].decision.reviewedAt).toBe(50);
 });
 
 test("lost empty completion response resolves stored acknowledgment and note", async ({ page }) => {
   const h = await harness(page, snapshot(0));
-  await h.panel.getByLabel("I acknowledge this empty READY summary").check();
-  await h.panel.getByLabel("Optional review note").fill("Empty checked");
+  await h.panel.getByLabel("I checked this summary with no observations").check();
+  await h.panel.getByLabel("How did the lesson go? (optional)").fill("Empty checked");
   h.failNextWrite();
   await h.panel.getByRole("button", { name: "Finish review", exact: true }).click();
   await expect(h.panel.getByText("Empty summary explicitly acknowledged.")).toBeVisible();
-  await expect(h.panel.getByText("Review note: Empty checked")).toBeVisible();
+  await expect(h.panel.getByText("Lesson feedback: Empty checked")).toBeVisible();
   await expect(h.panel.getByRole("button", { name: "Retry identical save" })).toHaveCount(0);
   expect(h.writes).toHaveLength(1);
 });
@@ -680,16 +704,16 @@ for (const operation of ["complete", "acceptAll"] as const)
         },
       ];
     const h = await harness(page, initial);
-    await expect(h.panel.getByText("Observer analysis: ready")).toBeVisible();
-    await h.panel.getByLabel("Optional review note").fill("Original completion");
+    await expect(h.panel.getByText("Today’s observations")).toBeVisible();
+    await h.panel.getByLabel("How did the lesson go? (optional)").fill("Original completion");
     h.failNextWrite();
     await h.panel
       .getByRole("button", {
-        name: operation === "complete" ? "Finish review" : "Accept all unchanged and finish",
+        name: operation === "complete" ? "Finish review" : "Looks right",
         exact: true,
       })
       .click();
-    await expect(h.panel.getByText("Review note: Original completion")).toBeVisible();
+    await expect(h.panel.getByText("Lesson feedback: Original completion")).toBeVisible();
     await expect(h.panel.getByRole("button", { name: "Retry identical save" })).toHaveCount(0);
     await expect(h.panel.getByRole("alert")).toHaveCount(0);
     expect(h.writes).toHaveLength(1);
@@ -724,12 +748,66 @@ test("late failed write from an unmounted panel cannot lock a new inspection", a
   h.setCurrent({ ...snapshot(0), sessionId: "new-session", analysisId: "new-analysis" });
   await page.evaluate(() => localStorage.setItem("sprout.latest-session-reference.v1", "new-session"));
   await page.reload();
-  await expect(h.panel.getByText(/READY summary: no usable observations/)).toBeVisible();
+  await expect(h.panel.getByText(/No usable observations were found/)).toBeVisible();
   release();
   h.delayWrites(null);
-  await h.panel.getByLabel("I acknowledge this empty READY summary").check();
+  await h.panel.getByLabel("I checked this summary with no observations").check();
   await h.panel.getByRole("button", { name: "Finish review", exact: true }).click();
-  await expect(h.panel.getByText(/Review complete · verified/)).toBeVisible();
+  await expect(h.panel.getByText(/Review complete · How much you changed: Nothing/)).toBeVisible();
   expect(h.writes[1].sessionId).toBe("new-session");
   await expect(h.panel.getByRole("button", { name: "Retry identical save" })).toHaveCount(0);
+});
+
+test("raw model narrative stays inspectable and is never prefilled as a parent correction", async ({ page }) => {
+  const initial = snapshot();
+  const unsupported = "The child mastered counting and independently touch-counted every object.";
+  initial.proposals[0].proposal.observation.description = unsupported;
+  const originals = structuredClone(initial.proposals);
+  const h = await harness(page, initial, false);
+  const displayed = "The displayed quantity 3 was identified correctly.";
+  await expect(h.panel.locator(".review-summary").getByText(displayed, { exact: true })).toBeVisible();
+  await expect(h.panel.getByText(unsupported, { exact: true })).not.toBeVisible();
+  await h.panel.getByRole("button", { name: "Make a correction", exact: true }).click();
+  const article = h.panel.getByRole("article");
+  await article.getByText("Original proposal details", { exact: true }).click();
+  await expect(article.getByText(unsupported, { exact: true })).toBeVisible();
+  await article.getByRole("button", { name: "I helped", exact: true }).click();
+  await expect(article.getByLabel("Corrected observation")).toHaveValue(displayed);
+  await article.getByRole("button", { name: "Save correction", exact: true }).click();
+  const command = h.writes[0];
+  expect(command.operation).toBe("decide");
+  if (command.operation === "decide") {
+    expect(command.decision.correction?.description).toBe(displayed);
+    expect(command.decision.parentContext?.assistance).toEqual(["parent_reported_assistance"]);
+  }
+  expect(h.getCurrent().proposals).toEqual(originals);
+  expect(h.unexpected).toEqual([]);
+});
+
+test("daily check-in hides technical detail, offers correction choices and persists lesson feedback", async ({
+  page,
+}) => {
+  const h = await harness(page, snapshot(2), false);
+  await expect(h.panel.getByRole("heading", { name: "Today’s observations" })).toBeVisible();
+  await expect(h.panel.getByText("Original Observer proposal · p0")).not.toBeVisible();
+  await expect(page.getByLabel("Full-session recording")).not.toBeVisible();
+  await h.panel.getByRole("button", { name: "Make a correction", exact: true }).click();
+  const first = h.panel.getByRole("article").first();
+  await expect(first.getByRole("button", { name: "The observation is inaccurate", exact: true })).toBeVisible();
+  await expect(first.getByRole("button", { name: "Add context", exact: true })).toBeVisible();
+  await first.getByRole("button", { name: "I helped", exact: true }).click();
+  await expect(first.getByLabel("I provided assistance")).toBeChecked();
+  await first.getByRole("button", { name: "Save correction", exact: true }).click();
+  const second = h.panel.getByRole("article").nth(1);
+  await second.getByRole("button", { name: "The speaker was someone else", exact: true }).click();
+  await expect(second.getByLabel("Rejection reason")).toHaveValue("The speaker was someone else.");
+  await second.getByRole("button", { name: "Save rejection", exact: true }).click();
+  await h.panel.getByLabel("How much did you need to correct Sprout’s observations?").selectOption("light_correction");
+  await h.panel.getByLabel("How did the lesson go? (optional)").fill("A short, happy lesson.");
+  await h.panel.getByRole("button", { name: "Finish review", exact: true }).click();
+  await page.reload();
+  await expect(h.panel.getByText("Lesson feedback: A short, happy lesson.")).toBeVisible();
+  await expect(h.panel.getByText(/How much you changed: A little/)).toBeVisible();
+  expect(h.writes.map(command => command.operation)).toEqual(["decide", "decide", "complete"]);
+  expect(h.unexpected).toEqual([]);
 });

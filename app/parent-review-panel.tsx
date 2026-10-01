@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import type { ObservationClaim, ObserverProposal, ParentDecision } from "../lib/observation-contracts";
 import { reviewPlaybackAtMs, type RepairLevel, type ReviewCommand, type ReviewSnapshot } from "../lib/parent-review";
 import { reconcileReviewWrite, type ReviewWrite } from "../lib/parent-review-reconciliation";
+import { observationSummary, repairLabels } from "../lib/parent-review-summary";
+import { reviewedObserverClaim } from "../lib/reviewed-observation";
 import { EvidenceDetail } from "./evidence-detail";
 
 const label = (value: string) => value.replaceAll("_", " ");
@@ -56,7 +58,7 @@ function DecisionForm({
   save: (decision: Omit<ParentDecision, "reviewedAt">) => void;
 }) {
   const [mode, setMode] = useState<"corrected" | "rejected" | null>(null);
-  const [description, setDescription] = useState(proposal.observation.description);
+  const [description, setDescription] = useState(reviewedObserverClaim(proposal.observation).description);
   const [note, setNote] = useState("");
   const [help, setHelp] = useState(false);
   const [pointing, setPointing] = useState(false);
@@ -70,7 +72,7 @@ function DecisionForm({
   const base = { kind: "parent_decision" as const, proposalId: proposal.proposalId };
   return (
     <fieldset disabled={disabled}>
-      <legend>Decision for {proposal.proposalId}</legend>
+      <legend>Your decision</legend>
       <button className="download-button" onClick={() => save({ ...base, decision: "accepted" })}>
         Accept unchanged
       </button>{" "}
@@ -81,7 +83,7 @@ function DecisionForm({
           setNote("");
         }}
       >
-        Light correction
+        Edit details
       </button>{" "}
       <button
         className="download-button"
@@ -92,6 +94,45 @@ function DecisionForm({
       >
         Reject proposal
       </button>
+      <div className="review-actions" aria-label="Correction choices">
+        <button
+          className="download-button"
+          onClick={() => {
+            setMode("corrected");
+            setHelp(true);
+            setNote("I helped with this response.");
+          }}
+        >
+          I helped
+        </button>
+        <button
+          className="download-button"
+          onClick={() => {
+            setMode("rejected");
+            setNote("The speaker was someone else.");
+          }}
+        >
+          The speaker was someone else
+        </button>
+        <button
+          className="download-button"
+          onClick={() => {
+            setMode("corrected");
+            setNote("");
+          }}
+        >
+          The observation is inaccurate
+        </button>
+        <button
+          className="download-button"
+          onClick={() => {
+            setMode("corrected");
+            setNote("");
+          }}
+        >
+          Add context
+        </button>
+      </div>
       {mode && (
         <form
           onSubmit={event => {
@@ -135,9 +176,7 @@ function DecisionForm({
         >
           {mode === "corrected" && (
             <>
-              <p>
-                Target quantity and source identities stay canonical. Parent interpretation is attributed separately.
-              </p>
+              <p>Describe what needs changing. The displayed quantity stays tied to the recording.</p>
               <label>
                 Corrected observation{" "}
                 <textarea
@@ -224,7 +263,7 @@ function DecisionForm({
                 <input type="checkbox" checked={pointing} onChange={e => setPointing(e.target.checked)} /> I observed
                 pointing or touch-counting
               </label>
-              <p>Newly reported help and pointing are parent context, not Observer-recorded support.</p>
+              <p>Your help and pointing are saved as context you supplied.</p>
             </>
           )}
           <label>
@@ -268,6 +307,7 @@ function ReviewPanel({
   const [refreshed, setRefreshed] = useState(false);
   const [repair, setRepair] = useState<RepairLevel>("verified");
   const [note, setNote] = useState("");
+  const [individual, setIndividual] = useState(false);
   const [acknowledgeEmpty, setAcknowledgeEmpty] = useState(false);
   const alive = useRef(false);
   const lock = useRef(false);
@@ -348,8 +388,20 @@ function ReviewPanel({
   const unchanged = snapshot?.decisions.every(row => row.decision.decision === "accepted");
   return (
     <section aria-label="Parent observation review" className="parent-review">
-      <h3>Parent observation review</h3>
-      <p>Observer analysis: {snapshot ? label(snapshot.status) : "Loading"}</p>
+      <h3>Today’s observations</h3>
+      {(!snapshot || snapshot.status !== "ready") && (
+        <p role="status">
+          {!snapshot
+            ? "Loading observations…"
+            : snapshot.status === "failed"
+              ? "Observations could not be prepared."
+              : snapshot.status === "not_started"
+                ? "Observations have not been prepared yet."
+                : snapshot.status === "pending"
+                  ? "Waiting to prepare observations…"
+                  : "Preparing observations…"}
+        </p>
+      )}
       {snapshot?.qualification && <p role="status">{snapshot.qualification}</p>}
       {error && <p role="alert">{error}</p>}
       {retryMessage && <p role="status">{retryMessage}</p>}
@@ -382,8 +434,8 @@ function ReviewPanel({
         <>
           <p>
             {snapshot.status === "failed"
-              ? "Observer analysis failed safely. No observations are approved."
-              : "No READY summary is available. This is not an empty reviewed summary."}
+              ? "Analysis failed. No observations are approved."
+              : "Review will be available when observations are ready. There is no successful empty summary to confirm yet."}
           </p>
           {canRetry && (
             <button
@@ -423,96 +475,135 @@ function ReviewPanel({
       )}
       {snapshot?.status === "ready" && scope && (
         <>
-          <h4>Proposed summary</h4>
           {snapshot.proposals.length ? (
-            <ul>
-              {snapshot.proposals.map(row => (
-                <li key={row.id}>{row.proposal.observation.description}</li>
-              ))}
-            </ul>
-          ) : (
-            <p>READY summary: no usable observations. Acknowledgment creates no evidence.</p>
-          )}
-          <p>Original proposals remain visible. Saved decisions are immutable; only identical retries are allowed.</p>
-          {snapshot.proposals.map(row => (
-            <article key={row.id} aria-label={`Observation ${row.proposal.proposalId}`}>
-              <h4>Original Observer proposal · {row.proposal.proposalId}</h4>
-              <Claim claim={row.proposal.observation} />
-              <p>Exchange: {row.proposal.exchangeAtMs} ms from session start</p>
-              {hasRecording && (
-                <button
-                  className="download-button"
-                  onClick={() => seek(reviewPlaybackAtMs(row.proposal, snapshot.sources))}
-                >
-                  Play exchange
-                </button>
-              )}
-              <details>
-                <summary>Supporting canonical exchange</summary>
-                <p>
-                  Generated provider speech is not proof of delivered speech. Recording playback positions are
-                  approximate.
-                </p>
-                {row.proposal.sources.map((source, i) => {
-                  if (!("eventId" in source))
-                    return (
-                      <p key={i}>
-                        Recording-reviewed support: {source.sessionStartMs}–{source.sessionEndMs} ms (recording{" "}
-                        {source.recordingStartMs}–{source.recordingEndMs} ms) · {source.provenance}
-                      </p>
-                    );
-                  const event = snapshot.sources.find(event => event.id === source.eventId);
-                  return (
-                    <div key={i}>
-                      <p>
-                        {label(source.role)} · Canonical ID {source.eventId} · Event key{" "}
-                        {event?.eventKey ?? "Unavailable"} · {event?.atMs ?? "Unavailable"} ms
-                      </p>
-                      {event ? <EvidenceDetail evidence={event.evidence} /> : <p>Canonical context unavailable.</p>}
-                    </div>
-                  );
-                })}
-              </details>
-              {decisions.has(row.id) ? (
-                <div>
-                  <h4>Saved parent decision: {decisions.get(row.id)!.decision}</h4>
-                  {decisions.get(row.id)!.correction && <Claim claim={decisions.get(row.id)!.correction!} />}
-                  {decisions.get(row.id)!.rejectionReason && <p>Reason: {decisions.get(row.id)!.rejectionReason}</p>}
-                  {decisions.get(row.id)!.parentContext && (
-                    <>
-                      <p>Parent explanation: {decisions.get(row.id)!.parentContext!.note}</p>
-                      <p>
-                        Parent-reported help:{" "}
-                        {decisions.get(row.id)!.parentContext!.assistance?.map(label).join(", ") || "None reported"} ·
-                        Pointing or touch-counting:{" "}
-                        {decisions.get(row.id)!.parentContext!.pointingOrTouchCounting
-                          ? "Reported by parent"
-                          : "Not reported"}
-                      </p>
-                    </>
-                  )}
+            <div className="review-summary">
+              {observationSummary(snapshot).map((item, index) => (
+                <div key={index}>
+                  <p className="review-summary-text">{item.text}</p>
+                  <p>{item.detail}</p>
                 </div>
-              ) : (
-                <DecisionForm
-                  proposal={row.proposal}
-                  disabled={disabled || Boolean(snapshot.review)}
-                  save={decision => void write({ operation: "decide", ...scope, proposalRowId: row.id, decision })}
-                />
-              )}
-            </article>
-          ))}
+              ))}
+              <p className="review-qualification">
+                Recorded totals alone do not establish counting aloud or independence. Spoken counting does not
+                establish tracking each object.
+              </p>
+            </div>
+          ) : (
+            <p>
+              No usable observations were found. Confirm below that you checked this empty summary; it creates no
+              learning evidence.
+            </p>
+          )}
+          {!snapshot.review && Boolean(snapshot.proposals.length) && (
+            <div className="review-actions">
+              <button
+                className="download-button"
+                disabled={disabled || !unchanged || repair !== "verified"}
+                onClick={() =>
+                  void write({ operation: "acceptAll", ...scope, ...(note.trim() ? { note: note.trim() } : {}) })
+                }
+              >
+                Looks right
+              </button>
+              <button className="download-button" disabled={disabled} onClick={() => setIndividual(true)}>
+                Make a correction
+              </button>
+              <button className="download-button" onClick={() => setIndividual(value => !value)}>
+                Review individually
+              </button>
+            </div>
+          )}
+          <details
+            open={individual}
+            className="individual-review"
+            onToggle={event => setIndividual(event.currentTarget.open)}
+          >
+            <summary>
+              {snapshot.review ? "View reviewed observations" : "Individual observations & corrections"}
+            </summary>
+            <p>Saved decisions are final. Check the details before saving a correction or rejection.</p>
+            {snapshot.proposals.map(row => (
+              <article key={row.id} aria-label={`Observation ${row.proposal.proposalId}`}>
+                <h4>Observation {snapshot.proposals.indexOf(row) + 1}</h4>
+                <p>{reviewedObserverClaim(row.proposal.observation).description}</p>
+                <details>
+                  <summary>Original proposal details</summary>
+                  <p>Original Observer proposal · {row.proposal.proposalId}</p>
+                  <Claim claim={row.proposal.observation} />
+                  <p>Exchange: {row.proposal.exchangeAtMs} ms from session start</p>
+                </details>
+                {hasRecording && (
+                  <button
+                    className="download-button"
+                    onClick={() => seek(reviewPlaybackAtMs(row.proposal, snapshot.sources))}
+                  >
+                    Play exchange
+                  </button>
+                )}
+                <details>
+                  <summary>Check this exchange</summary>
+                  <p>
+                    Generated provider speech is not proof of delivered speech. Recording playback positions are
+                    approximate.
+                  </p>
+                  {row.proposal.sources.map((source, i) => {
+                    if (!("eventId" in source))
+                      return (
+                        <p key={i}>
+                          Recording-reviewed support: {source.sessionStartMs}–{source.sessionEndMs} ms (recording{" "}
+                          {source.recordingStartMs}–{source.recordingEndMs} ms) · {source.provenance}
+                        </p>
+                      );
+                    const event = snapshot.sources.find(event => event.id === source.eventId);
+                    return (
+                      <div key={i}>
+                        <p>
+                          {label(source.role)} · Canonical ID {source.eventId} · Event key{" "}
+                          {event?.eventKey ?? "Unavailable"} · {event?.atMs ?? "Unavailable"} ms
+                        </p>
+                        {event ? <EvidenceDetail evidence={event.evidence} /> : <p>Canonical context unavailable.</p>}
+                      </div>
+                    );
+                  })}
+                </details>
+                {decisions.has(row.id) ? (
+                  <div>
+                    <h4>Saved parent decision: {decisions.get(row.id)!.decision}</h4>
+                    {decisions.get(row.id)!.correction && <Claim claim={decisions.get(row.id)!.correction!} />}
+                    {decisions.get(row.id)!.rejectionReason && <p>Reason: {decisions.get(row.id)!.rejectionReason}</p>}
+                    {decisions.get(row.id)!.parentContext && (
+                      <>
+                        <p>Parent explanation: {decisions.get(row.id)!.parentContext!.note}</p>
+                        <p>
+                          Parent-reported help:{" "}
+                          {decisions.get(row.id)!.parentContext!.assistance?.map(label).join(", ") || "None reported"} ·
+                          Pointing or touch-counting:{" "}
+                          {decisions.get(row.id)!.parentContext!.pointingOrTouchCounting
+                            ? "Reported by parent"
+                            : "Not reported"}
+                        </p>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <DecisionForm
+                    proposal={row.proposal}
+                    disabled={disabled || Boolean(snapshot.review)}
+                    save={decision => void write({ operation: "decide", ...scope, proposalRowId: row.id, decision })}
+                  />
+                )}
+              </article>
+            ))}
+          </details>
           {snapshot.review ? (
             <div role="status">
-              <p>
-                Review complete · {label(snapshot.review.repairLevel)} ·{" "}
-                {new Date(snapshot.review.completedAt).toISOString()}
-              </p>
-              {snapshot.review.note && <p>Review note: {snapshot.review.note}</p>}
+              <p>Review complete · How much you changed: {repairLabels[snapshot.review.repairLevel]}</p>
+              {snapshot.review.note && <p>Lesson feedback: {snapshot.review.note}</p>}
               {snapshot.review.emptyAcknowledged && <p>Empty summary explicitly acknowledged.</p>}
             </div>
           ) : (
             <fieldset disabled={disabled}>
-              <legend>Finish parent review</legend>
+              <legend>Finish your check-in</legend>
               {!snapshot.proposals.length && (
                 <label>
                   <input
@@ -520,22 +611,27 @@ function ReviewPanel({
                     checked={acknowledgeEmpty}
                     onChange={e => setAcknowledgeEmpty(e.target.checked)}
                   />{" "}
-                  I acknowledge this empty READY summary
+                  I checked this summary with no observations
                 </label>
               )}
               <label>
-                Parent repair level{" "}
+                How much did you need to correct Sprout’s observations?{" "}
                 <select value={repair} onChange={e => setRepair(e.target.value as RepairLevel)}>
                   <option value="verified" disabled={!unchanged}>
-                    Verified unchanged
+                    Nothing
                   </option>
-                  <option value="light_correction">Light correction</option>
-                  <option value="substantial_repair">Substantial parent repair</option>
+                  <option value="light_correction">A little</option>
+                  <option value="substantial_repair">A lot</option>
                 </select>
               </label>
               <label>
-                Optional review note <textarea maxLength={1000} value={note} onChange={e => setNote(e.target.value)} />
+                How did the lesson go? (optional){" "}
+                <textarea maxLength={1000} value={note} onChange={e => setNote(e.target.value)} />
               </label>
+              <p>
+                Lesson feedback is saved with this review, separately from learning evidence. Add it before finishing;
+                completed reviews are final.
+              </p>
               <button
                 className="download-button"
                 disabled={
@@ -555,17 +651,6 @@ function ReviewPanel({
               >
                 Finish review
               </button>
-              {Boolean(snapshot.proposals.length) && (
-                <button
-                  className="download-button"
-                  disabled={!unchanged}
-                  onClick={() =>
-                    void write({ operation: "acceptAll", ...scope, ...(note.trim() ? { note: note.trim() } : {}) })
-                  }
-                >
-                  Accept all unchanged and finish
-                </button>
-              )}
             </fieldset>
           )}
         </>

@@ -81,14 +81,18 @@ failed-refresh recovery, conflicting/lost completion metadata, accept-all confli
 duplicate scheduled attempts and 1000-row bounds. Bridge tests exercise missing/wrong capability, loopback
 and origin guards, forged timestamps/sources, wrong session/analysis/proposal provenance and safe error redaction.
 
-**Open semantic finding:** the limitation test supplies a model description saying “The child mastered
-counting and independently touch-counted every object.” Valid quantity-identification fields and canonical
-references permit READY publication. No parent approval or planning evidence is produced by that test.
-The parent gate works, but structured-output/reference validation does not enforce the truth of free text.
-No production fix is included. Root review must decide whether to constrain descriptions, add conservative
-semantic rejection, or evaluate another bounded mitigation before declaring the no-visual/mastery criteria met.
-Support-kind interpretation is likewise semantic; a referenced support row establishes identity/time, not
-that the model characterized the audible help correctly. Provider accuracy is not established by these tests.
+**Semantic finding and review mitigation:** a model description saying “The child mastered
+counting and independently touch-counted every object” can still pass READY publication with valid
+quantity-identification fields and canonical references. The approval regression now exercises both
+accept-all and individual acceptance through the real bridge: only the deterministic displayed
+structured description enters stored accepted evidence and planner output. The raw proposal remains
+unchanged and inspectable. Legacy accepted rows are projected through the same helper at the planner
+boundary, without rewriting historical records. Parent corrections retain explicit parent text and
+context; correction forms start from the structured description rather than unchecked model prose.
+This closes the summary/approval mismatch; it does not prove raw model narrative truth or satisfy the
+remaining real-provider/manual acceptance gates. Support-kind interpretation is likewise semantic;
+a referenced support row establishes identity/time, not that the model characterized audible help
+correctly. Provider accuracy is not established by these tests.
 
 ## Visual inspection
 
@@ -179,3 +183,46 @@ and separate parent context rather than inventing support rows to make a product
 After these checks, obtain the parent/builder's manual assessment of the actual intended workflow and separately
 resolve the semantic finding and child-speech/alignment feasibility gates. Keep issue #5 open until remaining
 acceptance requirements are met; passing this local verification slice does not authorize closing it.
+
+## Daily check-in presentation follow-up (2026-09-30)
+
+The parent view now begins with “Today's observations”, deterministically presenting structured
+claims rather than summarizing free-text model conclusions. Compatible correct totals may share a
+quantity list; differing help, uncertainty, outcomes, corrected observations and rejections remain
+distinct. Original proposals are unchanged and available in individual review. “Looks right” retains
+atomic accept-all/completion. Correction discovery includes “I helped”, speaker rejection, inaccurate
+observation and added context, with detailed correction/rejection controls retained.
+
+Recording, canonical speech/scenes/help, source identities and developer diagnostics are collapsed.
+Repair choices read Nothing / A little / A lot, mapped to the same persisted values. Optional lesson
+feedback uses the existing completion note, does not become learning evidence, must be entered before
+completion, and stays visible with repair metadata after reload. The seven-day evaluation product is
+not implemented. No backend/schema change, deployment, provider request or real session read was made.
+The original presentation follow-up did not constrain accepted evidence. The approval fix below
+now prevents raw model descriptions from entering accepted planner evidence; provider/manual gates remain open.
+
+Follow-up checks: 33 unit files / 661 tests passed; all 69 browser tests passed against the
+existing server at `127.0.0.1:3000` using a temporary config (removed after verification).
+Typecheck, lint, production build and `git diff --check` passed. Synthetic Chromium captures
+were inspected at [1280×900](verification/issue-5/check-in-1280.png) and
+[390×844](verification/issue-5/check-in-390.png); primary controls wrap without horizontal overflow.
+Browser checks retain response-start / recording-offset seeking, save-conflict and lost-response
+reconciliation, identical retries, immutable completion metadata, empty acknowledgment, and
+late-session protection. These are local mock results; provider interpretation, acoustic
+alignment and the previously listed manual acceptance gates remain unverified.
+
+## Approval evidence alignment fix (2026-09-30)
+
+The shared structured-description helper is used by the parent summary, individual review and
+accepted evidence storage. Bulk and individual approval keep all structured fields and provenance,
+while excluding raw model prose from the accepted description. Planning normalizes older accepted
+rows using their validated original proposal. Historical proposals/decisions remain unchanged,
+rejected rows remain excluded, and explicit parent corrections retain their text and context.
+The correction shortcut regression verifies that “I helped” starts from the displayed structured
+claim instead of copying unsupported model wording. No schema migration or deployment was run.
+
+Fix verification: all 33 unit files / 663 tests and all 70 browser tests passed. Typecheck,
+lint, production build and whitespace checks passed. The two approval regressions failed before
+the implementation, then passed with exact stored evidence and unchanged-original assertions.
+Legacy-row projection and safe assistance defaults have regression coverage. Browser verification
+used the existing local server and mocked service calls; no live provider result is claimed.
