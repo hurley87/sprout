@@ -138,6 +138,12 @@ means no durable attempt exists and subsequent adapter operations report failure
 interrupted speech and finalization, but browser suspension/unload can prevent pending network writes;
 already committed evidence survives. There is no unload durability guarantee in this slice.
 
+The provider adapter derives `exchangeAtMs` from the cited canonical response event when timestamp
+bookkeeping is the proposal's only validation error. It first requires every other claim/reference check
+to pass, then revalidates the proposal with the canonical event time. Backend publication still checks
+the timestamp against its saved snapshot. Review playback separately uses the utterance's valid start
+time and applies the recording offset once.
+
 `lib/observation-contracts.ts` defines runtime-validated Observer proposals against persisted
 session-event IDs, and a separate parent-decision shape for later review work. Proposal timestamps use
 the session-relative `atMs` clock. For concrete performance claims, validation uses the utterance's

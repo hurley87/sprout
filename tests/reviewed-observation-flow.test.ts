@@ -136,6 +136,9 @@ async function flow(name = "correct-total-without-spoken-count", partial = false
     gate,
     retry,
     network,
+    rewriteExchangeAtMs: (exchangeAtMs: number) => {
+      proposals = proposals.map(value => ({ ...(value as NonNullable<typeof source.proposal>), exchangeAtMs }));
+    },
     setFailure: (value: boolean) => {
       failTranscription = value;
     },
@@ -148,6 +151,20 @@ async function flow(name = "correct-total-without-spoken-count", partial = false
     },
   };
 }
+
+it("publishes and reviews the canonical event time when the model supplies speech start", async () => {
+  const f = await flow();
+  f.rewriteExchangeAtMs(1700);
+  await f.flush();
+  const saved = await f.read();
+  expect(saved.status).toBe("ready");
+  expect(saved.proposals[0].proposal.exchangeAtMs).toBe(1800);
+  expect(reviewPlaybackAtMs(saved.proposals[0].proposal, saved.sources)).toBe(1700);
+  expect(
+    (await f.write({ operation: "acceptAll", sessionId: f.sessionId, analysisId: saved.analysisId! })).status,
+  ).toBe(200);
+  expect((await f.gate()).evidence[0].exchangeAtMs).toBe(1800);
+});
 
 it.each([false, true])(
   "carries saved audio through Observer, mixed review and planning (partial: %s)",

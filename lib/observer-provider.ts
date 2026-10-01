@@ -254,7 +254,18 @@ export async function analyzeSavedRecording(args: {
   };
   return raw.map(proposal => {
     const normalized = normalizeNullOptionals(proposal);
-    const validated = validateObserverProposal(normalized, record);
+    let validated = validateObserverProposal(normalized, record);
+    // Timestamp bookkeeping belongs to the app. Repair only this field after
+    // every other claim/reference check passes, then run the full validator again.
+    // Publication still validates the resulting timestamp against its own snapshot.
+    if (!validated.ok && validated.issues.every(issue => issue.path === "exchangeAtMs")) {
+      const candidate = normalized as ObserverProposal;
+      const response = candidate.sources.find(source => source.role === "response" && "eventId" in source);
+      const event =
+        response && "eventId" in response ? record.events.find(event => event._id === response.eventId) : undefined;
+      if (event?.evidence?.type === "utterance" && event.evidence.speaker !== "sprout")
+        validated = validateObserverProposal({ ...candidate, exchangeAtMs: event.atMs }, record);
+    }
     if (!validated.ok)
       throw new ObserverProviderError(
         `Observer cited invalid evidence: ${validated.issues.map(issue => `${issue.path} ${issue.message}`).join("; ")}`,

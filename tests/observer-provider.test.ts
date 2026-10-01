@@ -160,10 +160,13 @@ it("accepts explicit empty evidence without turning provider failure into empty 
 
 it("rejects cross-session, untimed/cross-scene and support-inventing proposals", async () => {
   for (const invalid of [
-    { ...proposal, sessionId: "sessions_other" },
-    { ...proposal, sources: [{ eventId: "response", role: "response" }] },
+    { ...proposal, exchangeAtMs: 1500, sessionId: "sessions_other" },
+    { ...proposal, exchangeAtMs: 1500, sources: [{ eventId: "response", role: "response" }] },
+    { ...proposal, exchangeAtMs: 1500, sources: [{ eventId: "invented", role: "response" }] },
+    { ...proposal, exchangeAtMs: 1500, sources: [{ eventId: "scene", role: "response" }] },
     {
       ...proposal,
+      exchangeAtMs: 1500,
       observation: {
         ...proposal.observation,
         support: { status: "recorded", kinds: ["hint"], sourceEventIds: ["invented"], recordingSourceIds: [] },
@@ -180,6 +183,19 @@ it("rejects cross-session, untimed/cross-scene and support-inventing proposals",
       }),
     ).rejects.toThrow(ObserverProviderError);
   }
+});
+
+it.each([1500, 0, 1700000000000])("derives canonical response time when the model returns %i", async exchangeAtMs => {
+  const input = { ...proposal, exchangeAtMs };
+  const result = await analyzeSavedRecording({
+    provider: provider([input]),
+    audio: new Blob(["synthetic"]),
+    mimeType: "audio/webm",
+    canonicalSnapshot: snapshot,
+    signal: new AbortController().signal,
+  });
+  expect(result).toEqual([proposal]);
+  expect(input.exchangeAtMs).toBe(exchangeAtMs);
 });
 
 it("rejects a provider count proposal when the canonical response has an incomplete sequence", async () => {
