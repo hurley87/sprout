@@ -1,7 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LessonSession, RESPONSE_GATE_RECOVERY_MS, STALE_OUTPUT_REPLACEMENT_MS, type Transport } from "../lib/session";
 import { sceneAt, type ReplacementSeed } from "../lib/lesson";
-import { CORRECTION_WINDOW_MS, TRANSCRIPT_FALLBACK_MS, type AnswerResult, type EvaluateAnswer } from "../lib/answer";
+import {
+  CORRECTION_WINDOW_MS,
+  EVALUATION_TIMEOUT_MS,
+  TRANSCRIPT_TAIL_MS,
+  TRANSCRIPT_FALLBACK_MS,
+  type AnswerResult,
+  type EvaluateAnswer,
+} from "../lib/answer";
 import { UTTERANCE_GAP_MS } from "../lib/transcript";
 
 beforeEach(() => vi.useFakeTimers());
@@ -375,7 +382,7 @@ it("normal quiet wins while replacement prepares and aborts B", async () => {
   expect(f.transport.retireSource).toHaveBeenCalledWith(2);
 });
 
-it("no replacement while Jev is pending even with extended hidden output", async () => {
+it("no replacement while Jev is pending before its deadline, even with hidden output", async () => {
   let finish!: (result: AnswerResult) => void;
   const f = setup(
     "ADVANCE",
@@ -386,7 +393,7 @@ it("no replacement while Jev is pending even with extended hidden output", async
   );
   f.child();
   f.fragments();
-  await vi.advanceTimersByTimeAsync(3000);
+  await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS + EVALUATION_TIMEOUT_MS - 1);
   expect(f.transport.prepareReplacement).not.toHaveBeenCalled();
   expect(event(f.session, "answer.evaluated")).toHaveLength(0);
   finish(result("ADVANCE"));

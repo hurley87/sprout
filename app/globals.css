@@ -35,18 +35,6 @@ summary:focus-visible {
   overflow: hidden;
   background: radial-gradient(ellipse at 50% 45%, #edf2d9 0%, transparent 60%);
 }
-.brand {
-  font-size: 26px;
-  font-weight: 700;
-  letter-spacing: -1px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.brand > span {
-  color: #719347;
-  font-size: 34px;
-}
 .welcome {
   margin: 32px auto 0;
   max-width: 600px;
@@ -89,13 +77,6 @@ summary:focus-visible {
   top: 47px;
   font-size: 27px;
 }
-.eyebrow {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 2.5px;
-  color: #6f805d;
-  margin: 32px 0 17px;
-}
 h1 {
   white-space: pre-line;
   font-family: Georgia, serif;
@@ -133,16 +114,11 @@ h1 {
   color: #73796b;
   margin: 23px auto;
 }
+.welcome > label.parent-note {
+  display: block;
+}
 .parent-note p + p {
   margin-top: 8px;
-}
-footer {
-  text-align: center;
-  margin-top: 40px;
-  font-family: Georgia, serif;
-  font-style: italic;
-  font-size: 14px;
-  color: #89907d;
 }
 .end-button {
   position: absolute;
@@ -165,6 +141,46 @@ footer {
 }
 .play-space .character {
   flex-shrink: 0;
+  margin-bottom: 18px;
+}
+.voice-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 0;
+  min-height: 22px;
+  font-size: 14px;
+  color: #64725e;
+}
+.voice-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #92998b;
+}
+.voice-status[data-activity="listening"] .voice-dot {
+  background: #719347;
+  box-shadow: 0 0 0 4px #71934718;
+}
+.voice-status[data-activity="speaking"] .voice-dot {
+  background: #294936;
+  animation: voice-pulse 1s ease-in-out infinite;
+}
+@keyframes voice-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px #29493612;
+  }
+  50% {
+    box-shadow: 0 0 0 5px #29493624;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .voice-status[data-activity="speaking"] .voice-dot {
+    animation: none;
+    box-shadow: 0 0 0 4px #29493624;
+  }
 }
 .scene {
   min-height: 180px;
@@ -174,11 +190,9 @@ footer {
   justify-content: center;
   gap: clamp(18px, 4vw, 60px);
   padding: 24px;
-  border-radius: 90px;
   max-width: 950px;
   width: 100%;
   margin: 0 auto;
-  background: #e2eacf80;
 }
 .scene > span {
   font-size: clamp(64px, 8vw, 105px);

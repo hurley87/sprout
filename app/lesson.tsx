@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchEvaluateAnswer } from "@/lib/answer";
 import { ConvexSessionRecorder } from "@/lib/convex-session-recorder";
-import { BrowserTransport } from "@/lib/browser-transport";
+import { BrowserTransport, type VoiceActivity } from "@/lib/browser-transport";
 import { OBJECTS, objectName, sceneAt } from "@/lib/lesson";
 import { LessonSession, type Diagnostic, type Snapshot } from "@/lib/session";
 import { SessionInspector } from "./session-inspector";
@@ -28,6 +28,7 @@ export default function Lesson({ debug }: { debug: boolean }) {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [diagnosticEvents, setDiagnosticEvents] = useState<readonly Diagnostic[]>([]);
   const [microphoneDiagnostics, setMicrophoneDiagnostics] = useState(false);
+  const [voiceActivity, setVoiceActivity] = useState<VoiceActivity>("unavailable");
   const [endedAttempt, setEndedAttempt] = useState<{ ref?: DurableSessionRef; reader: SessionRecordReader } | null>(
     null,
   );
@@ -63,7 +64,7 @@ export default function Lesson({ debug }: { debug: boolean }) {
   }, []);
 
   useEffect(() => {
-    if (!snapshot || !["active", "wrapping", "goodbye"].includes(snapshot.status)) return;
+    if (!snapshot || snapshot.status === "ended") return;
     const current = session.current;
     let second = 0;
     const first = requestAnimationFrame(() => {
@@ -79,6 +80,7 @@ export default function Lesson({ debug }: { debug: boolean }) {
     if (!audio.current || (session.current && session.current.snapshot.status !== "ended")) return;
     session.current?.dispose();
     setEndedAttempt(null);
+    setVoiceActivity("unavailable");
     const recorder = new ConvexSessionRecorder(ref => {
       if (session.current !== current) return;
       const stored = saveBrowserSessionReference(ref);
@@ -87,7 +89,9 @@ export default function Lesson({ debug }: { debug: boolean }) {
         setEndedAttempt(attempt => (attempt ? { ...attempt, ref } : attempt));
     });
     const current = new LessonSession(
-      new BrowserTransport(audio.current, microphoneDiagnostics),
+      new BrowserTransport(audio.current, microphoneDiagnostics, activity => {
+        if (session.current === current) setVoiceActivity(activity);
+      }),
       fetchEvaluateAnswer,
       snapshot => {
         if (session.current === current) {
@@ -124,26 +128,34 @@ export default function Lesson({ debug }: { debug: boolean }) {
           {snapshot.recordingError}
         </p>
       )}
-      <header className="brand">
-        <span aria-hidden="true">✳</span> sprout
-      </header>
       {live ? (
         <>
           <button className="end-button" onClick={() => session.current?.end("parent_stop")}>
             End lesson
           </button>
-          <section className="play-space" aria-label="Counting garden">
-            <div className="character" role="img" aria-label="Sprout">
-              <span className="leaf">🌱</span>
-              <span className="face">◡</span>
-            </div>
-            {snapshot.status === "starting" ? (
-              <p className="connecting" role="status">
-                Getting ready to play…
+          <section className="play-space" aria-label="Counting lesson">
+            <div className="tutor">
+              <div className="character" role="img" aria-label="Sprout">
+                <span className="leaf">🌱</span>
+                <span className="face">◡</span>
+              </div>
+              <p
+                className="voice-status"
+                data-activity={snapshot.status === "starting" ? "unavailable" : voiceActivity}
+              >
+                <span className="voice-dot" aria-hidden="true" />
+                <span>
+                  {snapshot.status === "starting"
+                    ? "Connecting…"
+                    : voiceActivity === "speaking"
+                      ? "Speaking"
+                      : voiceActivity === "listening"
+                        ? "Listening"
+                        : "Connected"}
+                </span>
               </p>
-            ) : (
-              <Scene index={snapshot.sceneIndex} />
-            )}
+            </div>
+            <Scene index={snapshot.sceneIndex} />
           </section>
         </>
       ) : (
@@ -152,8 +164,7 @@ export default function Lesson({ debug }: { debug: boolean }) {
             <span className="leaf">🌱</span>
             <span className="face">◡</span>
           </div>
-          <p className="eyebrow">A LITTLE TIME TO WONDER</p>
-          <h1>{snapshot ? "Bye for now." : "Small discoveries.\nTogether."}</h1>
+          <h1>{snapshot ? "Bye for now." : "Let’s count together."}</h1>
           {snapshot?.error ? (
             <p className="error" role="alert">
               {snapshot.error}
@@ -162,12 +173,12 @@ export default function Lesson({ debug }: { debug: boolean }) {
             <p className="intro">
               {snapshot
                 ? "The microphone and voice playback are off."
-                : "A gentle counting adventure with Sprout. Just your voice, a few little friends, and room to think."}
+                : "Count ducks, butterflies, and strawberries. Say your answers out loud."}
             </p>
           )}
           {snapshot?.reason === "page_hidden" && (
             <p className="parent-note">
-              The lesson ended because the page was hidden. Keep this window open during play.
+              The lesson ended because the page was hidden. Keep this tab visible during the lesson.
             </p>
           )}
           <button className="start-button" onClick={() => start()}>
@@ -180,13 +191,14 @@ export default function Lesson({ debug }: { debug: boolean }) {
               checked={microphoneDiagnostics}
               onChange={event => setMicrophoneDiagnostics(event.target.checked)}
             />{" "}
-            Include microphone turn measurements in this attempt’s local diagnostic download
+            Include microphone timing in the diagnostic download
           </label>
           <div className="parent-note">
-            <p>For a parent and child · About 5 minutes · Quantities 1–5</p>
+            <p>For a parent and child · About 5 minutes · Count from 1 to 5</p>
             <p>
-              Stay together, allow the microphone, and keep this tab visible. Sprout is an AI voice; audio is sent to
-              OpenAI during play and retained in Sprout’s private session record for review. You can end at any time.
+              Stay with your child, allow microphone access, and keep this tab visible. The tutor uses an AI voice.
+              Audio is sent to OpenAI during the lesson and saved in a private session record for review. You can end
+              the lesson at any time.
             </p>
           </div>
           {endedAttempt && (
@@ -221,7 +233,6 @@ export default function Lesson({ debug }: { debug: boolean }) {
           )}
         </section>
       )}
-      {!live && <footer>One small adventure at a time.</footer>}
       {debug && <JevDiagnostics events={diagnosticEvents} />}
     </main>
   );

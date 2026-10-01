@@ -147,14 +147,14 @@ describe("browser side of the evaluation seam", () => {
     expect(result).toMatchObject({ status: "evaluated", probability: 0.91, model: "jev-1.13.0" });
     expect(result.latencyMs).toBeGreaterThanOrEqual(0);
   });
-  it("accepts an answer just before the four-second deadline", async () => {
-    timedFetch(EVALUATION_TIMEOUT_MS - 1);
+  it.each([250, EVALUATION_TIMEOUT_MS - 1])("accepts a normal answer at %i ms without fallback", async duration => {
+    timedFetch(duration);
     const pending = fetchEvaluateAnswer(ask, signal());
-    await vi.advanceTimersByTimeAsync(EVALUATION_TIMEOUT_MS - 1);
+    await vi.advanceTimersByTimeAsync(duration);
     expect(await pending).toMatchObject({
       status: "evaluated",
       probability: 0.91,
-      latencyMs: EVALUATION_TIMEOUT_MS - 1,
+      latencyMs: duration,
     });
   });
   it("reports a check that exceeds the deadline as a timeout with latency", async () => {

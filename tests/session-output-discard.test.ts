@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { LessonSession, RESPONSE_GATE_RECOVERY_MS, type Transport } from "../lib/session";
-import type { AnswerResult, EvaluateAnswer } from "../lib/answer";
+import { EVALUATION_TIMEOUT_MS, TRANSCRIPT_TAIL_MS, type AnswerResult, type EvaluateAnswer } from "../lib/answer";
 import type { ClientCommand } from "../lib/events";
 import { UTTERANCE_GAP_MS } from "../lib/transcript";
 
@@ -183,6 +183,43 @@ it.each([
   await vi.advanceTimersByTimeAsync(0);
   expect(f.sent.map(item => item.source)).toEqual([2]);
   expect(events(f.session, "answer.response_gate_released")[0].detail).toMatchObject({ decision, wait_ms: 251 });
+});
+
+it("recovers the evaluator deadline on fresh neutral output while keeping stale output discarded", async () => {
+  const f = setup();
+  f.child();
+  f.transcript("sprout", "stale correctness praise");
+  await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS + EVALUATION_TIMEOUT_MS + 1);
+  expect(events(f.session, "answer.evaluated").at(-1)?.detail).toMatchObject({
+    unavailable: "timeout",
+    decision: "UNAVAILABLE",
+    latency_ms: EVALUATION_TIMEOUT_MS,
+  });
+  expect(f.session.snapshot.sceneIndex).toBe(0);
+  expect(f.transport.prepareReplacement).toHaveBeenCalledWith(
+    expect.objectContaining({ decision: "UNAVAILABLE", sceneIndex: 0, childUtterance: "One" }),
+    expect.any(AbortSignal),
+  );
+  expect(f.sent).toEqual([]);
+  expect(f.transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
+  f.finishEvaluation(); // Late ADVANCE cannot replace the committed timeout.
+  await vi.advanceTimersByTimeAsync(0);
+  expect(f.session.snapshot.sceneIndex).toBe(0);
+  expect(f.transport.prepareReplacement).toHaveBeenCalledOnce();
+  f.ready();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(f.sent).toHaveLength(1);
+  expect(f.sent[0]).toMatchObject({
+    source: 2,
+    command: { content: expect.stringContaining("Do not judge the answer right or wrong.") },
+  });
+  expect(f.transport.activeSourceId).toBe(2);
+  expect(f.transport.discardOutput).toHaveBeenCalledOnce();
+  expect(f.transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
+  expect(events(f.session, "answer.response_gate_released").at(-1)?.detail).toMatchObject({
+    decision: "UNAVAILABLE",
+    timeout_to_release_ms: 1,
+  });
 });
 
 it("retains answer corrections after output discard and prepares only the revised outcome", async () => {

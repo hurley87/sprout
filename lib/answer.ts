@@ -53,8 +53,8 @@ export const TRANSCRIPT_TAIL_MS = 250;
 /** Time after detected turn end or the latest transcript to allow a correction before committing a scene. */
 export const CORRECTION_WINDOW_MS = 250;
 
-/** An evaluation that outlives its usefulness must never reach the lesson. */
-export const EVALUATION_TIMEOUT_MS = 4000;
+/** Interactive deadline; recent successes are ~250 ms. Slow checks retry neutrally. */
+export const EVALUATION_TIMEOUT_MS = 1500;
 
 export type AnswerResult =
   | { status: "evaluated"; probability: number; model: string; latencyMs: number }

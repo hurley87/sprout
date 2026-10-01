@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
+import { EVALUATION_TIMEOUT_MS } from "../../lib/answer";
 
 // Every parent-review read is mocked, including saved-record recovery tests.
 test.beforeEach(async ({ page }) => {
@@ -32,6 +33,8 @@ type TestState = {
   recordingsStarted: number;
   peerCount: number;
   persistence: string[];
+  outputEnergy: number;
+  outputContext?: AudioContext;
   releaseMic?: () => void;
 };
 
@@ -75,6 +78,7 @@ async function mockLive(page: Page, pendingMic = false, pendingReplacement = fal
         recordingsStarted: 0,
         peerCount: 0,
         persistence: [],
+        outputEnergy: 0,
         commands: [],
         shownAt: {},
         tracks: [],
@@ -95,9 +99,16 @@ async function mockLive(page: Page, pendingMic = false, pendingReplacement = fal
       const NativeAudioContext = window.AudioContext;
       Object.defineProperty(window, "AudioContext", {
         value: class extends NativeAudioContext {
+          observedStream?: MediaStream;
+          createMediaStreamSource(stream: MediaStream): MediaStreamAudioSourceNode {
+            this.observedStream = stream;
+            return super.createMediaStreamSource(stream);
+          }
           createAnalyser(): AnalyserNode {
             const analyser = super.createAnalyser();
-            analyser.getFloatTimeDomainData = samples => samples.fill(0);
+            if (this.observedStream?.getAudioTracks()[0] !== state.tracks[0]) state.outputContext = this;
+            analyser.getFloatTimeDomainData = samples =>
+              samples.fill(this.observedStream?.getAudioTracks()[0] === state.tracks[0] ? 0 : state.outputEnergy);
             return analyser;
           }
         },
@@ -184,6 +195,126 @@ async function begin(page: Page) {
   await expect.poll(async () => (await commands(page)).length).toBeGreaterThan(0);
 }
 
+test("shows the initial scene before microphone/Live readiness and starts one session and greeting", async ({
+  page,
+}) => {
+  await mockLive(page, true);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Start counting together" }).click();
+  await expect(page.locator('[data-scene="hello-duck"]')).toBeVisible();
+  await expect(page.locator(".voice-status")).toHaveText("Connecting…");
+  expect(await commands(page)).toEqual([]);
+  expect(await page.evaluate(() => window.sproutTest.peerCount)).toBe(0);
+  await expect.poll(() => page.evaluate(() => Boolean(window.sproutTest.releaseMic))).toBe(true);
+  await page.evaluate(() => window.sproutTest.releaseMic?.());
+  await expect.poll(async () => (await commands(page)).length).toBe(1);
+  await emit(page, { type: "session.started" });
+  expect(await page.evaluate(() => window.sproutTest.peerCount)).toBe(1);
+  expect((await sentContent(page)).filter(content => content.startsWith("Start the lesson now"))).toHaveLength(1);
+  expect(await page.evaluate(() => Object.keys(window.sproutTest.shownAt))).toEqual(["hello-duck"]);
+  await page.getByRole("button", { name: "End lesson" }).click();
+  await expect.poll(() => tracksStopped(page)).toBe(true);
+  await page.getByText("Parent testing notes").click();
+  const pending = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download attempt diagnostics" }).click();
+  const download = await pending;
+  const report = JSON.parse(await readFile((await download.path())!, "utf8"));
+  expect(report.startup.initial_scene_displayed_at).toBeLessThan(report.startup.live_ready_at);
+  expect(report.startup.initial_instruction_sent_at).toBeGreaterThanOrEqual(report.startup.live_ready_at);
+  expect(report.startup.first_provider_output_at).toBeNull();
+  await test.info().attach("mocked-startup-diagnostics", {
+    body: JSON.stringify(report.startup, null, 2),
+    contentType: "application/json",
+  });
+});
+
+test("keeps the early scene valid during provider failure and retries with one fresh session", async ({ page }) => {
+  await mockLive(page);
+  let release!: () => void;
+  let requested!: () => void;
+  const pending = new Promise<void>(resolve => {
+    release = resolve;
+  });
+  const requestStarted = new Promise<void>(resolve => {
+    requested = resolve;
+  });
+  await page.route("**/api/live", async route => {
+    requested();
+    await pending;
+    await route.fulfill({ status: 502, json: { error: "Voice setup failed" } });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Start counting together" }).click();
+  await requestStarted;
+  await expect(page.locator('[data-scene="hello-duck"]')).toBeVisible();
+  await expect(page.locator(".voice-status")).toHaveText("Connecting…");
+  expect(await commands(page)).toEqual([]);
+  release();
+  await expect(page.getByRole("alert").filter({ hasText: "Voice setup failed" })).toBeVisible();
+  await expect(page.locator("[data-scene]")).toHaveCount(0);
+  await expect.poll(() => tracksStopped(page)).toBe(true);
+  expect(await commands(page)).toEqual([]);
+  await page.unroute("**/api/live");
+  await page.route("**/api/live", route =>
+    route.fulfill({ json: { session: { id: "retry" }, transport: { sdp: "test" } } }),
+  );
+  await page.getByRole("button", { name: "Start a new lesson" }).click();
+  // The mock exposes only the first peer's emit callback; each retry still emits
+  // its own provider started event from setRemoteDescription.
+  await expect.poll(async () => (await commands(page)).length).toBe(1);
+  expect(await page.evaluate(() => window.sproutTest.peerCount)).toBe(2);
+  await page.getByRole("button", { name: "End lesson" }).click();
+});
+
+test("voice indicator follows audible media, ignores transcripts, and stops with the lesson", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await mockLive(page);
+  await begin(page);
+  const indicator = page.locator(".voice-status");
+  await expect(indicator).toHaveText("Listening");
+  await emit(page, { type: "session.output_transcript.delta", delta: "Hi!", start_ms: 0, end_ms: 100 });
+  await expect(indicator).toHaveText("Listening");
+  await page.evaluate(() => {
+    window.sproutTest.outputEnergy = 0.1;
+  });
+  await expect(indicator).toHaveText("Speaking");
+  await page.screenshot({ path: test.info().outputPath("voice-speaking.png") });
+  await page.evaluate(() => {
+    document.querySelector("audio")!.muted = true;
+  });
+  await expect(indicator).toHaveText("Listening");
+  await page.evaluate(() => {
+    document.querySelector("audio")!.muted = false;
+  });
+  await expect(indicator).toHaveText("Speaking");
+  await page.evaluate(() => window.sproutTest.outputContext!.suspend());
+  await expect(indicator).toHaveText("Connected");
+  await page.evaluate(() => window.sproutTest.outputContext!.resume());
+  await expect(indicator).toHaveText("Speaking");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  expect(await indicator.locator(".voice-dot").evaluate(element => getComputedStyle(element).animationName)).toBe(
+    "none",
+  );
+  // Keep incoming PCM active while the application blocks playback to check an answer.
+  await say(page, "One!");
+  await expect(indicator).toHaveText("Listening");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: test.info().outputPath("voice-listening-mobile.png") });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.evaluate(() => {
+    window.sproutTest.outputEnergy = 0;
+  });
+  await expect(indicator).toHaveText("Listening");
+  await page.getByRole("button", { name: "End lesson" }).click();
+  await expect(indicator).toHaveCount(0);
+  await page.evaluate(() => {
+    window.sproutTest.outputEnergy = 0.1;
+  });
+  await expect(page.locator(".voice-status")).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
 test("parent start, committed scene, stop, late actions, and diagnostics export", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
@@ -229,7 +360,7 @@ test("parent start, committed scene, stop, late actions, and diagnostics export"
 test("opt-in microphone measurements appear in the local download", async ({ page }) => {
   await mockLive(page);
   await page.goto("/");
-  const checkbox = page.getByRole("checkbox", { name: /Include microphone turn measurements/ });
+  const checkbox = page.getByRole("checkbox", { name: /Include microphone timing/ });
   await expect(checkbox).not.toBeChecked();
   await checkbox.check();
   await page.getByRole("button", { name: "Start counting together" }).click();
@@ -384,6 +515,18 @@ test("a timed-out evaluation keeps the scene and releases GPT-Live neutrally", a
   expect((await releases(page))[0]).toContain("Do not judge the answer right or wrong");
   expect((await releases(page))[0]).not.toContain("Respond to the child's answer");
   await expect(page.locator('[data-scene="hello-duck"]')).toBeVisible();
+  await page.getByRole("button", { name: "End lesson" }).click();
+  await page.getByText("Parent testing notes").click();
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download attempt diagnostics" }).click();
+  const path = await (await download).path();
+  const report = JSON.parse(await readFile(path!, "utf8"));
+  const detail = (type: string) => report.events.findLast((event: { type: string }) => event.type === type).detail;
+  expect(detail("answer.requesting").timeout_ms).toBe(EVALUATION_TIMEOUT_MS);
+  expect(detail("answer.timeout").elapsed_ms).toBeGreaterThanOrEqual(EVALUATION_TIMEOUT_MS);
+  expect(detail("answer.evaluated")).toMatchObject({ decision: "UNAVAILABLE", unavailable: "timeout" });
+  expect(detail("answer.evaluated").latency_ms).toBeLessThan(EVALUATION_TIMEOUT_MS + 500);
+  expect(detail("answer.response_gate_released").timeout_to_release_ms).toBeLessThan(100);
 });
 
 test("fragmented child stop releases the microphone immediately", async ({ page }) => {
@@ -612,7 +755,8 @@ test("inspects pending then complete canonical evidence, seeks audio, retries an
   expect(creates).toEqual([{}, { retryOf: "attempt-1" }]);
   expect(records.get("attempt-2")?.session._id).not.toBe("attempt-1");
   expect(records.get("attempt-1")).toEqual(original);
-  expect(await page.evaluate(() => window.sproutTest.recordingsStarted)).toBe(2);
+  // The scene is visible during connection setup; wait for actual recording readiness.
+  await expect.poll(() => page.evaluate(() => window.sproutTest.recordingsStarted)).toBe(2);
   expect(
     await page.evaluate(() => window.sproutTest.tracks.slice(0, 2).every(track => track.readyState === "ended")),
   ).toBe(true);

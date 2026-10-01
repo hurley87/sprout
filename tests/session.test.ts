@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ADVANCE_THRESHOLD,
   CORRECTION_WINDOW_MS,
+  EVALUATION_TIMEOUT_MS,
   MICROPHONE_QUIET_MS,
   TRANSCRIPT_FALLBACK_MS as SETTLE_MS,
   TRANSCRIPT_TAIL_MS,
@@ -151,6 +152,154 @@ function expectAnswerResponseHeld(session: LessonSession, transport: Transport) 
 }
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
+
+describe("interactive evaluator deadline", () => {
+  it.each([250, EVALUATION_TIMEOUT_MS - 1])(
+    "uses the normal result at %i ms without timeout fallback",
+    async latencyMs => {
+      const evaluator: EvaluateAnswer = async () => {
+        await new Promise(resolve => setTimeout(resolve, latencyMs));
+        return { ...evaluated(CONFIDENT), latencyMs };
+      };
+      const { session, transport } = setup(true, evaluator);
+      mic(session, "microphone.speech_started");
+      deliver(session, speech("One"));
+      mic(session, "microphone.speech_stopped");
+      await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS + latencyMs + 1);
+      expect(session.snapshot.sceneIndex).toBe(1);
+      session.displayed(1);
+      expect(transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
+      expect(session.events.findLast(event => event.type === "answer.evaluated")).toMatchObject({
+        at: TRANSCRIPT_TAIL_MS + latencyMs,
+        detail: { decision: "ADVANCE", latency_ms: latencyMs, stale: false },
+      });
+      await vi.advanceTimersByTimeAsync(EVALUATION_TIMEOUT_MS);
+      expect(session.events.filter(event => event.type === "answer.timeout")).toHaveLength(0);
+      expect(session.events.filter(event => event.type === "answer.evaluated")).toHaveLength(1);
+    },
+  );
+
+  async function pendingButterflyAnswer() {
+    let complete!: (result: AnswerResult) => void;
+    let signal!: AbortSignal;
+    let calls = 0;
+    const evaluator: EvaluateAnswer = vi.fn((_request, pendingSignal) => {
+      if (++calls !== 3) return Promise.resolve(evaluated(CONFIDENT));
+      signal = pendingSignal;
+      // Deliberately ignores abort: a late provider success must stay harmless.
+      return new Promise<AnswerResult>(resolve => (complete = resolve));
+    });
+    const { session, transport } = setup(true, evaluator);
+    for (let scene = 0; scene < 2; scene++) {
+      deliver(session, speech(scene === 0 ? "One" : "Two", scene * 10_000));
+      await settle(CORRECTION_WINDOW_MS);
+      session.displayed(scene + 1);
+    }
+    vi.mocked(transport.send).mockClear();
+    vi.mocked(transport.setOutputBlocked).mockClear();
+    mic(session, "microphone.speech_started");
+    deliver(session, speech("3", 20_000));
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS);
+    return { session, transport, complete, signal };
+  }
+
+  it("commits UNAVAILABLE at the deadline, keeps the butterflies, and releases a neutral retry promptly", async () => {
+    const { session, transport, signal } = await pendingButterflyAnswer();
+    const request = session.events.findLast(event => event.type === "answer.requesting")!;
+    expect(request.detail).toMatchObject({
+      version: "20000:3",
+      timeout_ms: EVALUATION_TIMEOUT_MS,
+      timeout_deadline_at: request.at + EVALUATION_TIMEOUT_MS,
+    });
+    await vi.advanceTimersByTimeAsync(EVALUATION_TIMEOUT_MS - 1);
+    expect(signal.aborted).toBe(false);
+    expect(transport.send).not.toHaveBeenCalled();
+    expect(transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
+    await vi.advanceTimersByTimeAsync(2);
+    expect(signal.aborted).toBe(true);
+    expect(session.snapshot).toMatchObject({ sceneIndex: 2, status: "active" });
+    expect(session.events.findLast(event => event.type === "answer.timeout")).toMatchObject({
+      at: request.at + EVALUATION_TIMEOUT_MS,
+      detail: { version: "20000:3", elapsed_ms: EVALUATION_TIMEOUT_MS },
+    });
+    expect(session.events.findLast(event => event.type === "answer.evaluated")).toMatchObject({
+      at: request.at + EVALUATION_TIMEOUT_MS,
+      detail: {
+        utterance: "3",
+        unavailable: "timeout",
+        decision: "UNAVAILABLE",
+        latency_ms: EVALUATION_TIMEOUT_MS,
+        stale: false,
+        advancing: false,
+        releasing: true,
+      },
+    });
+    const retry = vi.mocked(transport.send).mock.calls[0][0];
+    expect(retry).toMatchObject({
+      type: "session.instructions.append",
+      content: expect.stringContaining("committed UNAVAILABLE"),
+    });
+    expect(retry).toMatchObject({ content: expect.stringContaining("Do not judge the answer right or wrong.") });
+    expect(retry).toMatchObject({ content: expect.stringContaining('Ask "How many butterflies do you see?"') });
+    expect(transport.send).toHaveBeenCalledOnce();
+    expect(transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
+    expect(vi.mocked(transport.send).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(transport.setOutputBlocked).mock.invocationCallOrder[1],
+    );
+    expect(session.events.findLast(event => event.type === "answer.response_gate_released")?.detail).toMatchObject({
+      answer_version: "20000:3",
+      decision: "UNAVAILABLE",
+      timeout_to_release_ms: 1,
+    });
+    const outcomes = session.events.filter(
+      event =>
+        event.type === "evaluation.evaluation_result" &&
+        (event.detail as { answerVersion?: string }).answerVersion === "20000:3",
+    );
+    expect(outcomes).toHaveLength(1);
+    expect(outcomes[0].detail).toMatchObject({ status: "resolved", applicationAction: "UNAVAILABLE" });
+    await vi.advanceTimersByTimeAsync(RESPONSE_GATE_RECOVERY_MS);
+    expect(session.snapshot.status).toBe("active");
+    expect(transport.stopMedia).not.toHaveBeenCalled();
+    expect(transport.close).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])("ignores a late ADVANCE after timeout (newer retry: %s)", async newerRetry => {
+    const { session, transport, complete } = await pendingButterflyAnswer();
+    await vi.advanceTimersByTimeAsync(EVALUATION_TIMEOUT_MS + 1);
+    if (newerRetry) {
+      deliver(session, speech("3 butterflies", 30_000));
+      await settle(CORRECTION_WINDOW_MS);
+      session.displayed(3);
+    }
+    const sceneIndex = session.snapshot.sceneIndex;
+    const decisions = session.events.filter(event => event.type === "answer.evaluated");
+    const sent = vi.mocked(transport.send).mock.calls.length;
+    complete(evaluated(CONFIDENT));
+    await vi.advanceTimersByTimeAsync(EVALUATION_TIMEOUT_MS);
+    expect(session.snapshot.sceneIndex).toBe(sceneIndex);
+    expect(session.events.filter(event => event.type === "answer.evaluated")).toEqual(decisions);
+    expect(transport.send).toHaveBeenCalledTimes(sent);
+    expect(session.events.findLast(event => event.type === "answer.result_ignored")?.detail).toMatchObject({
+      sceneIndex: 2,
+      revision: 3,
+      version: "20000:3",
+      decision: "STALE",
+      reason: "evaluation_already_resolved",
+    });
+  });
+
+  it("clears the deadline when an in-flight answer is cancelled", async () => {
+    const { session, transport, signal } = await pendingButterflyAnswer();
+    session.end("parent_stop");
+    expect(signal.aborted).toBe(true);
+    vi.mocked(transport.send).mockClear();
+    await vi.advanceTimersByTimeAsync(EVALUATION_TIMEOUT_MS + 1);
+    expect(session.events.filter(event => event.type === "answer.timeout")).toHaveLength(0);
+    expect(transport.send).not.toHaveBeenCalled();
+  });
+});
 
 describe("application lifecycle", () => {
   it("does not start the lesson clock or greet before session.started and display", () => {
@@ -2090,7 +2239,7 @@ describe("answer-check turn synchronization", () => {
     expect(INSTRUCTIONS).toContain("The pause is only for counts: reply straight away to everything else");
     // The old contract made GPT-Live reply to every answer at once.
     expect(INSTRUCTIONS).not.toContain("after the child answers, always reply");
-    expect(PROMPT_VERSION).toBe("counting-jev-5");
+    expect(PROMPT_VERSION).toBe("counting-jev-8");
   });
   it("sends nothing while the utterance settles or Jev is deciding", async () => {
     let answer!: (result: AnswerResult) => void;
@@ -2098,7 +2247,7 @@ describe("answer-check turn synchronization", () => {
     const { session, transport } = setup(true, pending);
     vi.mocked(transport.send).mockClear();
     deliver(session, speech("Five!"));
-    await settle(5000);
+    await settle(EVALUATION_TIMEOUT_MS - 1);
     expect(transport.send).not.toHaveBeenCalled();
     answer(evaluated(0.02));
     await vi.advanceTimersByTimeAsync(0);
@@ -2272,7 +2421,7 @@ describe("answer-check turn synchronization", () => {
   it.each(["timeout", "request_failed", "http_502", "unreadable_answer"])(
     "releases GPT-Live when the evaluation is unavailable (%s) rather than leaving it waiting",
     async reason => {
-      const latencyMs = reason === "timeout" ? 4000 : 3000;
+      const latencyMs = reason === "timeout" ? EVALUATION_TIMEOUT_MS : 3000;
       const failing: EvaluateAnswer = async () => ({ status: "unavailable", reason, latencyMs });
       const { session, transport } = setup(true, failing);
       vi.mocked(transport.send).mockClear();
@@ -2359,10 +2508,11 @@ describe("answer-check turn synchronization", () => {
     let answer!: (result: AnswerResult) => void;
     const pending: EvaluateAnswer = () => new Promise<AnswerResult>(resolve => (answer = resolve));
     const { session, transport } = setup(true, pending);
+    await vi.advanceTimersByTimeAsync(TIMING.wrap - SETTLE_MS - 100);
     vi.mocked(transport.send).mockClear();
     deliver(session, speech("Five!", 260_000));
     await settle();
-    vi.advanceTimersByTime(TIMING.wrap);
+    vi.advanceTimersByTime(100);
     answer({ status: "unavailable", reason: "timeout", latencyMs: 4000 });
     await vi.advanceTimersByTimeAsync(0);
     expect(released(transport)).toHaveLength(0);
@@ -2618,13 +2768,10 @@ describe("response gate media investigation and bounded recovery", () => {
     session.dispose();
   });
 
-  it.each(["fragmented", "missing-evaluation", "missing-display", "child-activity"])(
+  it.each(["fragmented", "missing-display", "child-activity"])(
     "stops media within the fixed budget for %s",
     async mode => {
-      const { session, transport } = setup(
-        true,
-        mode === "missing-evaluation" ? () => new Promise(() => {}) : answering(CONFIDENT),
-      );
+      const { session, transport } = setup(true, answering(CONFIDENT));
       deliver(session, speech("One"));
       const started = Date.now();
       if (mode === "child-activity") session.receive({ type: "microphone.activity_started" });

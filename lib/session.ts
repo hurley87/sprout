@@ -8,6 +8,7 @@ import {
 } from "./session-recorder";
 import {
   CORRECTION_WINDOW_MS,
+  EVALUATION_TIMEOUT_MS,
   MICROPHONE_QUIET_MS,
   TRANSCRIPT_FALLBACK_MS,
   TRANSCRIPT_TAIL_MS,
@@ -17,6 +18,7 @@ import {
 } from "./answer";
 import type { ClientCommand, ProviderEvent, TranscriptEvent } from "./events";
 import type { MicrophoneDiagnostic } from "./browser-transport";
+import { startupTiming, type StartupStage } from "./startup-diagnostics";
 
 import {
   LAST_SCENE,
@@ -77,6 +79,7 @@ export type Snapshot = {
 export type Diagnostic = { at: number; type: string; detail?: unknown };
 
 export interface Transport {
+  setStartupDiagnosticSink?(sink: (stage: StartupStage) => void): void;
   setMicrophoneDiagnosticSink?(sink: (event: MicrophoneDiagnostic) => void): void;
   start(onEvent: (event: ProviderEvent) => void, onFailure: (message: string) => void): Promise<void>;
   startRecording?(): void;
@@ -168,6 +171,7 @@ type AnswerResponseGate = {
   decision?: GateDecision;
   sceneCommittedAt?: number;
   sceneDisplayedAt?: number;
+  evaluationTimedOutAt?: number;
 };
 
 export class LessonSession {
@@ -231,6 +235,10 @@ export class LessonSession {
   private closed = false;
   private ending = false;
   private ready = false;
+  private startupStages = new Set<StartupStage>();
+  private startupEvents: Diagnostic[] = [];
+  private initialInstruction?: string;
+  private initialSceneDisplayed = false;
   private recordingStarted = false;
   private evidenceOrder = 0;
   private timelineOrder = 0;
@@ -451,8 +459,9 @@ export class LessonSession {
   }
 
   async start() {
-    if (this.recordingStarted) return;
+    if (this.recordingStarted || this.snapshot.status === "ended") return;
     this.recordingStarted = true;
+    this.transport.setStartupDiagnosticSink?.(stage => this.startup(stage));
     this.transport.setMicrophoneDiagnosticSink?.(event => {
       if (!this.closed && this.snapshot.status !== "ended") this.log(event.type, event.detail);
     });
@@ -463,6 +472,10 @@ export class LessonSession {
         this.update({ durableSessionRef });
       });
     this.log("attempt.started", { model: MODEL, prompt: PROMPT_VERSION });
+    this.startupEvents.push(this.events[this.events.length - 1]);
+    this.initialInstruction = `Start the lesson now in English. Say only: "Hi! How many ${OBJECTS[this.scene.object].plural} do you see?" Do not introduce yourself or ask to play a game. ${sceneContext(this.scene)} Then pause and listen.`;
+    this.pending = { kind: "greeting", sceneIndex: 0 };
+    this.startup("startup.lesson_state_ready");
     this.changed(this.snapshot);
     this.startupTimer = setTimeout(
       () => this.fail("Microphone or voice setup took too long. Check browser permission and try again."),
@@ -476,6 +489,22 @@ export class LessonSession {
     } catch (error) {
       this.fail(error instanceof Error ? error.message : "Sprout could not start. Please try again.");
     }
+  }
+
+  private startup(stage: StartupStage) {
+    if (this.closed || this.snapshot.status === "ended" || this.startupStages.has(stage)) return;
+    this.startupStages.add(stage);
+    this.log(stage);
+    this.startupEvents.push(this.events[this.events.length - 1]);
+  }
+
+  private sendInitialInstruction() {
+    if (!this.ready || !this.initialSceneDisplayed || !this.initialInstruction || this.snapshot.status === "ended")
+      return;
+    const instruction = this.initialInstruction;
+    // Consume before dispatch so repeated readiness/display callbacks cannot duplicate it.
+    this.initialInstruction = undefined;
+    if (this.append("session.instructions.append", instruction)) this.startup("startup.initial_instruction_sent");
   }
 
   private update(patch: Partial<Snapshot>) {
@@ -547,6 +576,10 @@ export class LessonSession {
     }
     switch (event.type) {
       case "output.activity":
+        if (event.state === "active" && this.ready) {
+          this.startup("startup.first_provider_output");
+          this.startup("startup.first_tutor_speech");
+        }
         if (this.outputActivity === event.state) return;
         this.outputActivity = event.state;
         if (event.state === "active") this.discardStaleOutput("blocked_output_media");
@@ -697,6 +730,7 @@ export class LessonSession {
     clearTimeout(this.startupTimer);
     this.ready = true;
     this.startedAt = Date.now();
+    this.startup("startup.live_ready");
     const startedAt = this.startedAt;
     if (this.recorder) this.recording.enqueue("activate", () => this.recorder!.activate(startedAt));
     this.timeline({ type: "playback_gate_changed", state: "permitted", reason: "session_started" });
@@ -709,8 +743,12 @@ export class LessonSession {
         });
     }
     this.log("lesson.started");
-    this.pending = { kind: "greeting", sceneIndex: 0 };
+    // Canonical evidence/audio keep their Live origin. If the visual was already
+    // painted, record that it is present at Live start; diagnostics retain its actual paint time.
+    if (this.initialSceneDisplayed) this.recordDisplayedScene();
     this.update({ status: "active" });
+    this.sendInitialInstruction();
+    if (this.expireIfOverdue()) return;
     const phases: [number, () => void][] = [
       [TIMING.wrap, () => this.wrap()],
       [TIMING.goodbye, () => this.goodbye()],
@@ -721,6 +759,10 @@ export class LessonSession {
   }
 
   private heard(event: TranscriptEvent) {
+    if (event.speaker === "sprout" && event.delta.trim()) {
+      this.startup("startup.first_provider_output");
+      this.startup("startup.first_tutor_transcript");
+    }
     this.captureTranscript(event);
     const fromChild = event.speaker === "child";
     this.log(fromChild ? "transcript.child_or_nearby_speaker" : "transcript.sprout", {
@@ -991,6 +1033,7 @@ export class LessonSession {
       decision: undefined,
       sceneCommittedAt: undefined,
       sceneDisplayedAt: undefined,
+      evaluationTimedOutAt: undefined,
     };
     this.log("answer.response_gate_updated", {
       scene_index: this.snapshot.sceneIndex,
@@ -1138,6 +1181,9 @@ export class LessonSession {
       reason,
       wait_ms: Date.now() - gate.startedAt,
       context_sent_at: contextSentAt,
+      ...(gate.evaluationTimedOutAt === undefined
+        ? {}
+        : { timeout_to_release_ms: Date.now() - gate.evaluationTimedOutAt }),
       output_transcript_quiet_blocked_release: gate.outputQuietBlockedRelease === true,
       output_quiet_at: gate.outputQuietAt ? gate.outputQuietAt - this.createdAt : null,
       eligible_at: gate.eligibleAt === undefined ? null : gate.eligibleAt - this.createdAt,
@@ -1584,6 +1630,8 @@ export class LessonSession {
       speech_epoch: this.speechEpoch,
       transcript_epoch: this.transcriptEpoch,
       turn_end_at: turnEndAt - this.createdAt,
+      timeout_ms: EVALUATION_TIMEOUT_MS,
+      timeout_deadline_at: requestedAt + EVALUATION_TIMEOUT_MS - this.createdAt,
       transcript_to_request_ms: Date.now() - finalDeltaAt,
       turn_end_to_request_ms: Date.now() - turnEndAt,
       ...(this.vadDetectionMs === undefined ? {} : { vad_detection_ms: this.vadDetectionMs }),
@@ -1592,7 +1640,33 @@ export class LessonSession {
     const evaluation = new AbortController();
     this.evaluation = evaluation;
     let cancellationRecorded = false;
+    let finished = false;
     const finish = (result: AnswerResult) => {
+      if (finished) {
+        // This answer identity already has its authoritative outcome. Never
+        // let an abort-insensitive evaluator overwrite its record or decision.
+        this.log("answer.result_ignored", {
+          correlation_key: record.key,
+          sceneIndex,
+          revision: transcriptRevision,
+          version,
+          decision: "STALE",
+          reason: "evaluation_already_resolved",
+          elapsed_ms: Date.now() - requestedAt,
+        });
+        return;
+      }
+      finished = true;
+      clearTimeout(deadline);
+      if (result.status === "unavailable" && result.reason === "timeout" && !evaluation.signal.aborted)
+        this.log("answer.timeout", {
+          sceneIndex,
+          revision: transcriptRevision,
+          version,
+          timeout_ms: EVALUATION_TIMEOUT_MS,
+          timeout_deadline_at: requestedAt + EVALUATION_TIMEOUT_MS - this.createdAt,
+          elapsed_ms: Date.now() - requestedAt,
+        });
       if (this.evaluation === evaluation) this.evaluation = undefined;
       this.decide(
         utterance,
@@ -1606,9 +1680,18 @@ export class LessonSession {
         !cancellationRecorded,
       );
     };
+    // Bound application waiting as well as fetch: abort alone cannot settle an
+    // evaluator that ignores cancellation. Commit UNAVAILABLE before aborting
+    // so the existing revision/scene guards and neutral release path apply.
+    const deadline = setTimeout(() => {
+      finish({ status: "unavailable", reason: "timeout", latencyMs: Date.now() - requestedAt });
+      evaluation.abort();
+    }, EVALUATION_TIMEOUT_MS);
     evaluation.signal.addEventListener(
       "abort",
       () => {
+        clearTimeout(deadline);
+        if (finished) return;
         cancellationRecorded = true;
         this.timeline({
           type: "answer_evaluation_resolved",
@@ -1750,7 +1833,9 @@ export class LessonSession {
     // An unavailable check leaves the scene alone without judging the child.
     if (advancing) {
       this.deferAdvance(sceneIndex, version, transcriptRevision, utterance.text.trim());
-    } else if (releasing)
+    } else if (releasing) {
+      if (result.status === "unavailable" && result.reason === "timeout" && this.answerResponseGate)
+        this.answerResponseGate.evaluationTimedOutAt = Date.now();
       this.deferStay(
         sceneIndex,
         version,
@@ -1758,6 +1843,7 @@ export class LessonSession {
         utterance.text.trim(),
         result.status === "unavailable" ? "UNAVAILABLE" : "STAY",
       );
+    }
   }
 
   private deferAdvance(sceneIndex: number, answerVersion: string, transcriptRevision: number, evaluatedAnswer: string) {
@@ -2409,14 +2495,14 @@ export class LessonSession {
     if (!pending || pending.sceneIndex !== sceneIndex) return;
     this.pending = null;
     this.log("scene.displayed", this.scene);
-    const object = OBJECTS[this.scene.object];
-    this.record({
-      type: "scene_displayed",
-      sceneId: this.scene.id,
-      targetQuantity: this.scene.quantity,
-      items: Array.from({ length: this.scene.quantity }, () => ({ emoji: object.emoji, label: object.singular })),
-      arrangement: "Centered flex row, wrapping in display order",
-    });
+    if (pending.kind === "greeting") {
+      this.initialSceneDisplayed = true;
+      this.startup("startup.initial_scene_displayed");
+      if (this.ready) this.recordDisplayedScene();
+      this.sendInitialInstruction();
+      return;
+    }
+    this.recordDisplayedScene();
     if (pending.answerVersion)
       this.log("advance.displayed", {
         scene_index: pending.sceneIndex - 1,
@@ -2432,12 +2518,6 @@ export class LessonSession {
       }
     }
     switch (pending.kind) {
-      case "greeting":
-        this.append(
-          "session.instructions.append",
-          `Greet the child now in English: introduce yourself as Sprout and invite them to play. ${sceneContext(this.scene)} Then pause and listen.`,
-        );
-        return;
       case "advance":
         if (!pending.gateIdentity || !this.gateMatches(pending.gateIdentity)) return;
         this.displayedRelease = {
@@ -2456,6 +2536,17 @@ export class LessonSession {
         throw new Error(`Unhandled pending display: ${JSON.stringify(unhandled)}`);
       }
     }
+  }
+
+  private recordDisplayedScene() {
+    const object = OBJECTS[this.scene.object];
+    this.record({
+      type: "scene_displayed",
+      sceneId: this.scene.id,
+      targetQuantity: this.scene.quantity,
+      items: Array.from({ length: this.scene.quantity }, () => ({ emoji: object.emoji, label: object.singular })),
+      arrangement: "Centered flex row, wrapping in display order",
+    });
   }
 
   private scheduleDisplayedRelease() {
@@ -2623,6 +2714,7 @@ export class LessonSession {
       promptVersion: PROMPT_VERSION,
       createdAt: new Date(this.createdAt).toISOString(),
       liveStartedAtMs: this.startedAt === undefined ? null : this.startedAt - this.createdAt,
+      startup: startupTiming(this.startupEvents),
       ending: this.snapshot.reason,
       browser,
       note: "Prototype diagnostics only. Transcript timing is approximate; speaker identity and audio delivery are unverified. This download excludes the separately retained session audio and contains no learning conclusions.",

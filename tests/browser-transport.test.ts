@@ -65,6 +65,7 @@ function liveConnection(autoStarted = true) {
     onmessage: null as ((event: { data: string }) => void) | null,
     onerror: null,
     onclose: null,
+    onopen: null as (() => void) | null,
     send: vi.fn(),
     close: vi.fn(),
   };
@@ -283,6 +284,77 @@ function captureMocks() {
   vi.stubGlobal("MediaRecorder", Recorder);
   return { sources, gain, mix, context, recorders };
 }
+
+function deferred<T = void>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(complete => {
+    resolve = complete;
+  });
+  return { promise, resolve };
+}
+
+it("overlaps recording resume with connection setup and joins media, SDP, provider start and channel readiness once", async () => {
+  const { peer, channel } = liveConnection();
+  const { context } = captureMocks();
+  const media = deferred();
+  const sdp = deferred();
+  context.resume.mockImplementation(() => media.promise);
+  channel.readyState = "connecting";
+  peer.setRemoteDescription.mockImplementation(async () => {
+    channel.onmessage?.({ data: JSON.stringify({ type: "session.started" }) });
+    sdp.resolve();
+  });
+  const events = vi.fn();
+  const diagnostic = vi.fn();
+  const transport = new BrowserTransport(audioElement() as unknown as HTMLAudioElement);
+  transport.setStartupDiagnosticSink(diagnostic);
+  const starting = transport.start(events, vi.fn());
+  await sdp.promise;
+  // SDP/provider setup finishes while recording resume is deliberately unresolved.
+  expect(fetch).toHaveBeenCalledOnce();
+  expect(events.mock.calls.filter(([event]) => event.type === "session.started")).toHaveLength(0);
+  expect(diagnostic).toHaveBeenCalledWith("startup.provider_request_started");
+  expect(diagnostic).not.toHaveBeenCalledWith("startup.media_ready");
+  media.resolve();
+  await starting;
+  expect(events.mock.calls.filter(([event]) => event.type === "session.started")).toHaveLength(0);
+  channel.readyState = "open";
+  channel.onopen?.();
+  channel.onopen?.();
+  channel.onmessage?.({ data: JSON.stringify({ type: "session.started" }) });
+  expect(events.mock.calls.filter(([event]) => event.type === "session.started")).toHaveLength(1);
+  expect(peer.createOffer).toHaveBeenCalledOnce();
+  channel.onmessage?.({ data: JSON.stringify({ type: "session.output_audio.delta" }) });
+  expect(diagnostic).toHaveBeenCalledWith("startup.first_provider_output");
+  transport.close();
+});
+
+it("closes parallel startup safely while media resume is delayed, ignoring late completions", async () => {
+  const { peer, channel, micTrack } = liveConnection();
+  const { context } = captureMocks();
+  const media = deferred();
+  const sdp = deferred();
+  context.resume.mockImplementation(() => media.promise);
+  peer.setRemoteDescription.mockImplementation(async () => {
+    channel.onmessage?.({ data: JSON.stringify({ type: "session.started" }) });
+    sdp.resolve();
+  });
+  const events = vi.fn();
+  const failures = vi.fn();
+  const transport = new BrowserTransport(audioElement() as unknown as HTMLAudioElement);
+  const starting = transport.start(events, failures);
+  await sdp.promise;
+  transport.close();
+  media.resolve();
+  await starting;
+  channel.onmessage?.({ data: JSON.stringify({ type: "session.started" }) });
+  channel.onopen?.();
+  expect(events.mock.calls.filter(([event]) => event.type === "session.started")).toHaveLength(0);
+  expect(micTrack.stop).toHaveBeenCalledOnce();
+  expect(peer.close).toHaveBeenCalledOnce();
+  expect(context.close).toHaveBeenCalledOnce();
+  expect(failures).not.toHaveBeenCalled();
+});
 
 it("only forwards microphone settings when the attempt explicitly opts in", async () => {
   const { micTrack } = liveConnection();
@@ -662,7 +734,9 @@ it("SDP and A events cannot qualify B; B started qualifies without promotion or 
   emitB({ type: "session.started" });
   const id = await preparing;
   expect(id).toBe(2);
-  expect(events.mock.calls.slice(count)).toEqual([[expect.objectContaining({ type: "session.started" })]]);
+  // Initial readiness was already emitted for A. Repeated A readiness and all
+  // pending B events stay out of the lesson; neither can promote B implicitly.
+  expect(events.mock.calls.slice(count)).toEqual([]);
   expect(transport.activeSourceId).toBe(1);
   expect(audio.srcObject).toBe(streamA);
   expect(a.peer.close).not.toHaveBeenCalled();

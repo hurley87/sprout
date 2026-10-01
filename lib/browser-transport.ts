@@ -4,6 +4,7 @@ import type { Transport } from "./session";
 import { MicrophoneTurnDetector, type MicrophoneMeasurement } from "./microphone-turn";
 import { OutputActivityObserver } from "./output-activity";
 import { parseReplacementSeed, type ReplacementSeed } from "./lesson";
+import type { StartupStage } from "./startup-diagnostics";
 
 export const REPLACEMENT_TIMEOUT_MS = 30_000;
 /** All timestamps are browser performance.now() milliseconds in one document.
@@ -29,6 +30,7 @@ const serverError = (body: unknown) =>
 
 /** Application-owned identity; provider event IDs never select authority. */
 export type LiveSourceId = number;
+export type VoiceActivity = "speaking" | "listening" | "unavailable";
 
 export type MicrophoneDiagnostic =
   | { type: "microphone.track_settings"; detail: Record<string, number | boolean | string> }
@@ -75,6 +77,7 @@ type LiveSource = {
   observer?: OutputActivityObserver;
   recordingSource?: MediaStreamAudioSourceNode;
   ready: boolean;
+  sessionStarted: boolean;
   retired: boolean;
   outputDiscarded?: boolean;
   timing?: ReplacementTiming;
@@ -104,20 +107,77 @@ export class BrowserTransport implements Transport {
   private completed?: Promise<SessionAudioRecording | null>;
   private finishCapture?: (recording: SessionAudioRecording | null) => void;
   private playbackReady = false;
+  private initialMediaReady = false;
+  private initialStartedEmitted = false;
+  private startupDiagnosticSink?: (stage: StartupStage) => void;
   private outputBlocked = false;
   private turnDetector?: MicrophoneTurnDetector;
+  private voiceActivity: VoiceActivity = "unavailable";
+  private voiceListeners: (() => void)[] = [];
   // The single record of "this attempt is over", set by stopMedia(). Late
   // callbacks and resolved awaits check it instead of tracking their own flags.
   private abort = new AbortController();
   constructor(
     private audio: HTMLAudioElement,
     private microphoneDiagnostics = false,
+    private onVoiceActivity?: (activity: VoiceActivity) => void,
   ) {}
+
+  /** UI feedback uses local media and playback gates, never transcript arrival. */
+  private reportVoiceActivity = () => {
+    const source = this.current;
+    let activity: VoiceActivity = "unavailable";
+    if (!this.cancelled && source?.sessionStarted && this.authoritative(source)) {
+      const microphoneOpen = this.mic
+        ?.getAudioTracks()
+        .some(track => track.readyState === "live" && track.enabled && !track.muted);
+      const playbackSilent = this.outputBlocked || this.audio.muted || this.audio.paused || this.audio.volume === 0;
+      if (this.playbackReady && !playbackSilent && source.activity.state === "active") activity = "speaking";
+      else if (
+        microphoneOpen &&
+        (this.outputBlocked || (this.playbackReady && (playbackSilent || source.activity.state === "quiet")))
+      )
+        activity = "listening";
+    }
+    if (activity === this.voiceActivity) return;
+    this.voiceActivity = activity;
+    this.onVoiceActivity?.(activity);
+  };
+
+  private watchVoiceMedia(target: EventTarget, events: string[]) {
+    if (!this.onVoiceActivity) return;
+    for (const event of events) {
+      target.addEventListener(event, this.reportVoiceActivity);
+      this.voiceListeners.push(() => target.removeEventListener(event, this.reportVoiceActivity));
+    }
+  }
 
   private diagnosticSink?: (event: MicrophoneDiagnostic) => void;
 
   setMicrophoneDiagnosticSink(sink: (event: MicrophoneDiagnostic) => void) {
     if (this.microphoneDiagnostics && !this.cancelled) this.diagnosticSink = sink;
+  }
+
+  setStartupDiagnosticSink(sink: (stage: StartupStage) => void) {
+    if (!this.cancelled) this.startupDiagnosticSink = sink;
+  }
+
+  private startup(stage: StartupStage) {
+    if (!this.cancelled) this.startupDiagnosticSink?.(stage);
+  }
+
+  private publishInitialReady(source: LiveSource) {
+    if (
+      this.initialStartedEmitted ||
+      !this.initialMediaReady ||
+      !source.ready ||
+      !source.sessionStarted ||
+      source.channel?.readyState !== "open" ||
+      !this.authoritative(source)
+    )
+      return;
+    this.initialStartedEmitted = true;
+    this.emit(source, { type: "session.started" });
   }
 
   get activeSourceId(): LiveSourceId | undefined {
@@ -138,7 +198,9 @@ export class BrowserTransport implements Transport {
     if (this.mic || this.onEvent || this.cancelled) throw new Error("Transport already started or ended");
     this.onEvent = onEvent;
     this.onFailure = onFailure;
+    this.watchVoiceMedia(this.audio, ["playing", "pause", "volumechange", "emptied"]);
     this.audio.autoplay = true;
+    this.startup("startup.media_started");
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       video: false,
@@ -148,10 +210,30 @@ export class BrowserTransport implements Transport {
       return;
     }
     this.mic = stream;
+    this.startup("startup.microphone_ready");
+    for (const track of stream.getAudioTracks()) this.watchVoiceMedia(track, ["mute", "unmute", "ended"]);
     if (this.microphoneDiagnostics) {
       const track = stream.getAudioTracks()[0];
       if (track) this.diagnosticSink?.({ type: "microphone.track_settings", detail: microphoneTrackSettings(track) });
     }
+    for (const track of stream.getAudioTracks()) {
+      track.onended = () => {
+        if (!this.cancelled) onFailure("The microphone stopped. Check microphone access and start a new lesson.");
+      };
+    }
+    const source = this.createSource();
+    this.current = source;
+    this.emit(source, source.activity);
+    if (!this.live(source)) return;
+    // The microphone is required for the SDP offer. Recording resume and VAD
+    // setup are independent of network setup, so neither serializes the other.
+    await Promise.all([this.setupMedia(stream, onEvent), this.connectSource(source)]);
+    if (!this.live(source)) return;
+    this.initialMediaReady = true;
+    this.publishInitialReady(source);
+  }
+
+  private async setupMedia(stream: MediaStream, onEvent: (event: ProviderEvent) => void) {
     try {
       if (typeof MediaRecorder === "undefined") throw new Error("MediaRecorder is unavailable");
       this.context = new AudioContext();
@@ -197,16 +279,7 @@ export class BrowserTransport implements Transport {
           detail: { reason: "web_audio_initialization_failed" },
         });
     }
-    for (const track of stream.getAudioTracks()) {
-      track.onended = () => {
-        if (!this.cancelled) onFailure("The microphone stopped. Check microphone access and start a new lesson.");
-      };
-    }
-    const source = this.createSource();
-    this.current = source;
-    this.emit(source, source.activity);
-    if (!this.live(source)) return;
-    await this.connectSource(source);
+    this.startup("startup.media_ready");
   }
 
   private live(source: LiveSource) {
@@ -218,7 +291,10 @@ export class BrowserTransport implements Transport {
   }
 
   private emit(source: LiveSource, event: ProviderEvent) {
-    if (this.authoritative(source)) this.onEvent?.({ ...event, sourceId: source.id });
+    if (this.authoritative(source)) {
+      this.onEvent?.({ ...event, sourceId: source.id });
+      this.reportVoiceActivity();
+    }
   }
 
   private fail(source: LiveSource, message: string) {
@@ -235,6 +311,7 @@ export class BrowserTransport implements Transport {
       abort: new AbortController(),
       peer: new RTCPeerConnection(),
       ready: false,
+      sessionStarted: false,
       retired: false,
       activity: { type: "output.activity", state: "unavailable" },
     };
@@ -324,6 +401,7 @@ export class BrowserTransport implements Transport {
       this.audio.srcObject = null;
       this.syncRecordingGate();
     }
+    this.reportVoiceActivity();
     source.abort.abort();
     source.observer?.close();
     source.recordingSource?.disconnect();
@@ -340,6 +418,7 @@ export class BrowserTransport implements Transport {
     this.audio.srcObject = remote;
     this.playbackReady = false;
     this.syncRecordingGate();
+    this.reportVoiceActivity();
     try {
       if (this.context && this.remoteGain) {
         source.recordingSource = this.context.createMediaStreamSource(remote);
@@ -354,6 +433,7 @@ export class BrowserTransport implements Transport {
         if (this.authoritative(source) && source.remote === remote && !source.outputDiscarded) {
           this.playbackReady = true;
           this.syncRecordingGate();
+          this.reportVoiceActivity();
         }
       })
       .catch(() => {
@@ -366,6 +446,7 @@ export class BrowserTransport implements Transport {
   }
 
   private async connectSource(source: LiveSource, seed?: ReplacementSeed) {
+    if (!seed) this.startup("startup.live_connection_started");
     const peer = source.peer;
     peer.ontrack = ({ track }) => {
       if (!this.live(source) || source.outputDiscarded) {
@@ -411,6 +492,22 @@ export class BrowserTransport implements Transport {
         return;
       }
       const event = parseProviderEvent(raw);
+      if (
+        !seed &&
+        this.authoritative(source) &&
+        typeof raw === "object" &&
+        raw !== null &&
+        "type" in raw &&
+        typeof raw.type === "string" &&
+        raw.type.startsWith("session.output")
+      )
+        this.startup("startup.first_provider_output");
+      if (event?.type === "session.started") source.sessionStarted = true;
+      if (!seed && event?.type === "session.started") {
+        this.startup("startup.provider_session_started");
+        this.publishInitialReady(source);
+        return;
+      }
       if (source.timing && event?.type === "session.started" && source.timing.session_started_at === undefined) {
         source.timing.session_started_at = performance.now();
         source.started?.();
@@ -423,15 +520,19 @@ export class BrowserTransport implements Transport {
     };
     channel.onerror = () => this.fail(source, "The voice connection reported an error. Please start a new lesson.");
     channel.onclose = () => this.fail(source, "The voice connection closed. Please start a new lesson.");
+    if (!seed) channel.onopen = () => this.publishInitialReady(source);
     const offer = await peer.createOffer();
     if (!this.live(source)) return;
+    if (!seed) this.startup("startup.offer_ready");
     await peer.setLocalDescription(offer);
     if (!this.live(source)) return;
     await this.gatherIce(peer, source.abort.signal);
     if (!this.live(source)) return;
+    if (!seed) this.startup("startup.ice_ready");
     const sdp = peer.localDescription?.sdp;
     if (!sdp) throw new Error("The browser could not prepare its microphone connection.");
     if (source.timing) source.timing.provider_request_started_at = performance.now();
+    if (!seed) this.startup("startup.provider_request_started");
     const response = await fetch("/api/live", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -439,6 +540,7 @@ export class BrowserTransport implements Transport {
       signal: source.abort.signal,
     });
     if (!this.live(source)) return;
+    if (!seed) this.startup("startup.provider_response_received");
     const body: unknown = await response.json().catch(() => null);
     if (!this.live(source)) return;
     if (!response.ok) throw new Error(serverError(body) ?? "Sprout could not connect to the voice service.");
@@ -448,7 +550,11 @@ export class BrowserTransport implements Transport {
     await peer.setRemoteDescription({ type: "answer", sdp: answer.sdp });
     if (this.live(source)) {
       if (source.timing) source.timing.remote_description_applied_at = performance.now();
-      else source.ready = true; // Preserve initial start() behavior.
+      else {
+        source.ready = true;
+        this.startup("startup.remote_description_applied");
+        this.publishInitialReady(source);
+      }
     }
   }
 
@@ -501,6 +607,7 @@ export class BrowserTransport implements Transport {
     source.recordingSource?.disconnect();
     source.remote?.getTracks().forEach(track => track.stop());
     source.activity = { type: "output.activity", state: "unavailable" };
+    this.reportVoiceActivity();
     return true;
   }
 
@@ -511,6 +618,7 @@ export class BrowserTransport implements Transport {
       // isolate the next provider response. The track stays live.
       this.audio.muted = blocked || !this.current || this.current.outputDiscarded === true;
       this.syncRecordingGate();
+      this.reportVoiceActivity();
     }
   }
 
@@ -590,7 +698,11 @@ export class BrowserTransport implements Transport {
   stopMedia() {
     if (this.cancelled) return;
     this.abort.abort();
+    this.reportVoiceActivity();
+    this.voiceListeners.forEach(remove => remove());
+    this.voiceListeners = [];
     this.diagnosticSink = undefined;
+    this.startupDiagnosticSink = undefined;
     for (const source of this.connections.values()) this.retireSource(source.id);
     this.audio.muted = true;
     if (this.audio.srcObject) this.audio.pause();

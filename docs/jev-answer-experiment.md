@@ -107,7 +107,7 @@ Four further guards stop a decision from being applied to the wrong moment:
 - Each `(utterance start, text)` version is evaluated at most once, so an unchanged answer is never re-judged. A revision is a new version and is judged again.
 - A result is discarded as stale if, while it was in flight, the child said more, the scene changed, or the lesson left the active state.
 - Nothing is evaluated while a scene is waiting to be displayed, on the last scene, during wrap-up or goodbye, or when the transcript guard has recognised a stop request.
-- Evaluation has a bounded **4 s** timeout, increased from the original 3 s after live Jev responses approached the old limit. Timeout, cancellation and request failure are represented as unavailable outcomes, distinct from a completed negative decision. Unavailable means no advance and neutral recovery, not incorrect-answer scaffolding.
+- Evaluation now has a bounded **1.5 s** interactive timeout (see the 2026-10-01 update below). The historical experiments used 4 s, increased from the original 3 s after live Jev responses approached the old limit. Timeout, cancellation and request failure are represented as unavailable outcomes, distinct from a completed negative decision. Unavailable means no advance and neutral recovery, not incorrect-answer scaffolding.
 
 In the 36 sessions, 17 of the 70 evaluations were built from speech that arrived as more than one transcript row, each judged once as joined text. There were no duplicate evaluations and no partial-utterance evaluations.
 
@@ -224,6 +224,50 @@ The run did **not** include a clear intentionally incorrect answer or an explici
 - `npm run build` — pass.
 - `npm run test:browser` — could not start its configured Next.js server because another dev server was already running from this checkout (PID 51077); no browser tests ran in this invocation.
 - `npm run format:check` — pass.
+
+### Interactive timeout recovery (2026-10-01)
+
+`EVALUATION_TIMEOUT_MS` in `lib/answer.ts` changes from 4,000 to 1,500 ms.
+The browser request and application session use that same constant. The session
+also settles a still-pending evaluator at the deadline, then aborts the request;
+it does not depend on abort settling the evaluator promise. Results completed
+before the deadline retain the existing probability, latency and scene policy.
+
+The latest demo reported successful calls around 250 ms and a butterfly timeout
+at 4,001 ms. Inspection of the saved September 30 issue-40 targeted runs and
+retries found 21 non-stale successful evaluations: minimum 143 ms, median 234 ms,
+p95 272 ms, maximum 310 ms, with no timeout in those artifacts. The separate
+September 23 route benchmark had p95 309 ms and maximum 380 ms.
+1,500 ms leaves headroom above these samples while prioritizing a conversational
+retry over waiting for historical intermittent multi-second successes. These
+samples are not a service latency guarantee; slower successes now fall back.
+
+Timeout commits `UNAVAILABLE`, preserves the scene, and sends the existing
+instruction to ask the same counting question without judging the previous
+answer right or wrong. The scene/revision/answer-version guards still apply.
+Each evaluation settles once; any subsequent result is logged as
+`answer.result_ignored` with `STALE` and the original correlation key, and never
+re-enters the decision path or overwrites its evaluation record. Cancellation
+clears the deadline without committing timeout recovery.
+
+Diagnostics record start and `timeout_deadline_at` on `answer.requesting`, actual
+occurrence and elapsed time on `answer.timeout`, final `UNAVAILABLE` and
+`latency_ms` on `answer.evaluated`, and `timeout_to_release_ms` on
+`answer.response_gate_released`. Deadlines use the existing session clock.
+
+Focused tests in `tests/evaluate.test.ts` and `tests/session.test.ts` cover 250 ms
+and just-before-deadline success, a hanging butterfly evaluation, neutral retry,
+prompt gate release, cancellation, and late ADVANCE both before and after a
+newer retry. `tests/session-output-discard.test.ts` also exercises an actual
+deadline while stale Live output is discarded: recovery uses a fresh instructed
+source and late success cannot advance the scene.
+
+Evaluator waiting is bounded at 1.5 s on an executing browser event loop.
+Existing independent holds remain: transcript fallback before evaluation,
+child activity, output transcript quiet, and preparation of a fresh Live source.
+The gate's unchanged 15-second recovery budget still stops the lesson if these
+holds cannot recover. No billed live rerun or acoustic timing claim is included.
+The standalone diagnostic benchmark retains its historical 4-second probe budget.
 
 ### Other limitations
 
