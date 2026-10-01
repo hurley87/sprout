@@ -1,6 +1,7 @@
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { endingReason, evidence, timeline } from "./schema";
+import { makeFunctionReference, type FunctionReference } from "convex/server";
 
 function nonnegative(value: number, name: string) {
   if (!Number.isFinite(value) || value < 0) throw new Error(`${name} must be a nonnegative finite number`);
@@ -221,6 +222,40 @@ export const attachRecording = mutation({
       ...(session.recordStatus === "pending" ? { recordStatus: "complete" as const } : {}),
     });
     return sessionId;
+  },
+});
+
+/** Server-capability-gated entry point uses this internal mutation to schedule analysis. */
+export const scheduleObserver = internalMutation({
+  args: { sessionId: v.id("sessions") },
+  returns: v.string(),
+  handler: async (ctx, { sessionId }) => {
+    const session = await ctx.db.get(sessionId);
+    if (!session || session.state !== "ended" || session.recordStatus === "pending" || !session.recording)
+      throw new Error("Observer analysis requires an ended, assembled saved recording");
+    const analysis = await ctx.db
+      .query("observerAnalyses")
+      .withIndex("by_session", q => q.eq("sessionId", sessionId))
+      .unique();
+    if (!analysis) {
+      await ctx.db.insert("observerAnalyses", { sessionId, status: "pending", attempt: 0 });
+      await ctx.scheduler.runAfter(
+        0,
+        makeFunctionReference("observer_action:analyze") as unknown as FunctionReference<"action", "internal">,
+        { sessionId, expectedAttempt: 1 },
+      );
+      return "scheduled";
+    }
+    if (analysis.status === "ready") return analysis.status;
+    if (analysis.status === "running" && (analysis.leaseUntil ?? 0) > Date.now()) return analysis.status;
+    if (analysis.attempt >= 5 && analysis.status === "failed")
+      throw new Error("Observer analysis has exhausted its five attempts");
+    await ctx.scheduler.runAfter(
+      0,
+      makeFunctionReference("observer_action:analyze") as unknown as FunctionReference<"action", "internal">,
+      { sessionId, expectedAttempt: analysis.attempt + 1 },
+    );
+    return "scheduled";
   },
 });
 

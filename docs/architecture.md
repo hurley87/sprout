@@ -138,6 +138,85 @@ means no durable attempt exists and subsequent adapter operations report failure
 interrupted speech and finalization, but browser suspension/unload can prevent pending network writes;
 already committed evidence survives. There is no unload durability guarantee in this slice.
 
+The provider adapter derives `exchangeAtMs` from the cited canonical response event when timestamp
+bookkeeping is the proposal's only validation error. It first requires every other claim/reference check
+to pass, then revalidates the proposal with the canonical event time. Backend publication still checks
+the timestamp against its saved snapshot. Review playback separately uses the utterance's valid start
+time and applies the recording offset once.
+
+`lib/observation-contracts.ts` defines runtime-validated Observer proposals against persisted
+session-event IDs, and a separate parent-decision shape for later review work. Proposal timestamps use
+the session-relative `atMs` clock. For concrete performance claims, validation uses the utterance's
+`startMs`/`endMs` interval, not its event `atMs` (which is recorded when the completed utterance is
+flushed). The cited scene must be the uniquely timestamped scene already displayed before speech
+starts, with no scene transition during the interval. Missing speech bounds, equal-time ordering, or a
+transition during speech requires an uncertain claim or omission. These checks establish consistency
+with recorded timestamps; they cannot prove acoustic alignment or what was perceptually visible. A
+correct total without a spoken count is quantity identification; counting
+aloud requires the complete canonical spoken sequence from one through the displayed target quantity,
+as well as the stated total. A short or incomplete sequence is insufficient. Recorded support can cite either canonical support
+events or a `recording_review` source with the canonical recording ID, recording-relative interval, and
+matching session-relative interval. Validation requires the same session, a complete record with an
+available recording, an interval inside the recording duration, and an exact mapping through
+`startOffsetMs`. This permits a proposal to preserve audible help context when no structured support row
+exists, without creating a delivered support event. Missing or insufficient evidence remains
+`not_established` or an uncertain proposal; it does not imply independence. Recording citations validate
+identity and timing metadata, not whether help was semantically audible, correctly attributed, or helpful.
+Parent-reported assistance, pointing, and touch-counting retain separate `parent_review` provenance and
+cannot be inferred from the recording source or rewrite the original proposal. Synthetic fixtures are
+contract examples, not delivered evidence or provider results.
+
+### Durable analysis lifecycle (implemented)
+
+`observerAnalyses` stores one run per session, independently of live session state and record integrity.
+The run moves through pending, running, ready, or failed; attempts claim it atomically for a five-minute
+lease and may recover an expired owner up to five total attempts. A valid fifth lease remains running;
+when it expires, the next claim settles the run as failed with an explicit exhaustion reason and clears
+its ownership and lease. Repeated claims return that saved terminal failure without starting a sixth
+attempt. An exhausted run produces no proposals and leaves parent review pending. Active sessions and
+ended records still marked pending are ineligible. An incomplete record may be analyzed, but its run
+carries an explicit record-level qualification derived from the canonical integrity snapshot on every new
+attempt. A retry against an incomplete record retains that qualification through success or failure; a
+retry against a complete record clears stale qualification. This does not require uncertainty for
+otherwise supported completed exchanges. The claim snapshots canonical ordered event content, recording
+identity/metadata, and record integrity. Publication re-fetches those inputs and refuses a changed
+snapshot.
+
+Backend-only claim, failure, and publication operations own attempt tokens. The read query exposes only
+run status, qualification/failure, and proposals. Publication validates each proposal against canonical
+backend records, writes the complete batch and ready state transactionally, and accepts an empty batch as
+a ready result. Invalid batches write nothing. The original proposal rows are immutable: retries after a
+failure do not overwrite them, and repeated successful publication returns the saved batch. Stale or
+expired attempt tokens cannot complete or fail the current attempt. Parent decisions remain separate and no run state approves evidence.
+
+This local prototype supports at most 1,000 canonical events per analyzed session and at most 1,000
+proposals per publication. Claim checks for an overflow event and rejects the session rather than
+snapshotting a partial record. Publication rejects oversized fresh batches before writing; proposal
+reads and successful retries return the complete saved batch, while pre-existing rows beyond the limit
+produce an explicit error. Public recording attachment persists audio without scheduling provider work.
+After durable assembly, the recorder notifies a loopback-guarded Next.js route. That route invokes a
+public Node action which checks the server-only `OBSERVER_SERVER_CAPABILITY` against Convex runtime
+configuration before an internal mutation schedules analysis. Direct public attachment and retry calls
+cannot schedule analysis without that capability. Duplicate triggers and active/ready runs reuse
+lifecycle state before any provider call. The same route can reschedule a failed run, recover an expired
+owner, or start analysis for an older saved recording after a reload. If automatic notification fails,
+the saved record remains available for retry. Pending records remain ineligible; complete and
+known-incomplete ended records with recordings can be analyzed. Local Next.js and Convex Node runtimes
+must be configured with the same high-entropy capability before enabling provider analysis; no secret
+is set by this change. The provider path, limits, API compatibility evidence and remaining
+alignment/suitability gates are documented in [Observer provider feasibility](observer-provider-feasibility.md).
+The parent review UI and bridge are implemented; durable review operations are described in section 5.
+Local full-flow verification and remaining semantic/provider/manual gates are recorded in
+[issue #5 verification](issue-5-verification.md).
+
+The browser persists only the latest durable session ID, after Convex creates the record. On reload, a
+read-only Convex client fetches that record directly; inspection does not create a session or restore
+microphone/controller state. The canonical transcript, events, and recording remain in Convex. A missing
+or malformed local reference is reported, an inaccessible record is reported as unavailable, and a
+pending record remains qualified without an Observer retry. Complete and incomplete ended records with
+audio can reach the trusted retry route. This is a single latest-record pointer, not a history dashboard;
+starting another durable attempt replaces the pointer while leaving earlier Convex records intact.
+
 Record what was actually displayed, not just a requested visual action. Distinguish a spoken or interrupted prompt from text generated but never played. If delivery or scene context cannot be established, the Observer must qualify or omit the conclusion.
 
 Support descriptions can include no help observed, a light prompt, a choice, modeling/counting together, parent-reported assistance, or unknown. A fresh example after teaching retains the context of earlier help.
@@ -164,6 +243,125 @@ A failed Observer run leaves analysis failed and review pending; it cannot silen
 A review is final once the next plan has been generated from it. Anything missed is added in the next day's review rather than by regenerating plans.
 
 Do not generate the next daily plan while the preceding session's analysis or review remains incomplete, including after a technical retry. Show the blocking state to the parent.
+
+### Durable parent review
+
+`parent_review.decide` is an internal mutation taking the session ID, analysis ID, actual
+`observerProposals` row ID, and a ParentDecision input without `reviewedAt`. It resolves the
+proposal, source exchange IDs and session-relative timestamp from the stored row and revalidates
+the complete canonical record against the analysis snapshot. Client-provided sources, analysis
+provenance, and review timestamps are not accepted. Decisions use backend wall-clock review time;
+proposals, transcripts, delivered scenes and original sources remain unchanged.
+
+`parentDecisions` records accepted, corrected or rejected decisions. `reviewedEvidence` stores only
+accepted/corrected observations with references to their decision, stored proposal, analysis,
+session and original sources/timestamp. Corrections require an explicit `parent_review` note.
+They may resolve recorded uncertainty or correct an interpretation (including removing mistaken
+support), but cannot introduce support event/recording identities or new exchange identities.
+Changed interpretation is attributed to `parent_review` on the evidence row. Newly reported help,
+pointing and touch-counting belong in the separately attributed `parentContext`, never in
+Observer-recorded support. The corrected observation's support describes recorded support;
+consumers must retain parentContext alongside it, and `not_established` never means independent.
+Runtime checks enforce claim shape, outcome consistency, prototype quantity bounds, source and
+text bounds, correction/rejection exclusivity and a nonempty rejection reason.
+
+`parent_review.complete` requires READY analysis and a decision for every stored proposal, and
+records repair level (`verified`, `light_correction`, `substantial_repair`) plus an optional note
+of at most 1,000 characters in `sessionReviews`. Verified requires unchanged acceptances.
+An empty READY batch requires `acknowledgeEmpty: true`, records acknowledgment and creates no
+evidence. Incomplete records can contribute valid completed exchanges; incomplete/failed analysis
+cannot be acknowledged as a successful empty review. All reads detect overflow beyond the existing
+1,000-event/proposal/decision/evidence bounds rather than completing a truncated batch.
+
+`parent_review.acceptAll` accepts the unchanged summary and completes review in one transaction,
+reusing existing unchanged acceptances. Any correction, rejection or invalid stored proposal makes
+the whole operation fail without writes. Identical decision/completion retries return their
+existing IDs and preserve original timestamps; conflicting repeats fail. This slice provides no
+editing/replacement operation, even before planning. A future explicit revision operation may be
+added before plan consumption, but must replace decision/evidence consistently and enforce the
+finality boundary. No planner or plan-consumption marker exists yet; completion does not claim
+that a plan was generated. The documented rule that review becomes final after plan generation
+remains a requirement for the later planner slice.
+
+`parent_review.get` exposes stored row IDs, decisions and per-session completion for internal
+inspection. `parent_review.forPlanning` accepts 1–100 unique prerequisite session IDs and returns
+`{ blocked, reason, evidence }`. It returns no evidence at all if any supplied session lacks READY
+analysis or complete parent review, including technical retries; rejected/pending proposals never
+enter it. A changed canonical snapshot throws and therefore also blocks planning. The later planner
+must supply the full prerequisite session set and use this interface; this slice does not select
+experiment history or infer profiles, mastery or adaptations.
+
+Review mutations and the planning gate remain internal. The parent UI reaches them only through
+the capability-gated bridge described below. Local generated API typing is updated by hand; no
+Convex CLI or deployment is needed for local tests. Live schema deployment and provider suitability
+remain unverified.
+
+### Parent review bridge and inspection (issue #5, commit 5)
+
+The saved-session inspector includes an explicit parent review panel. Browser recovery uses the existing
+latest-session reference and never creates or resumes a lesson. Status reads distinguish not started,
+pending, running, failed, and READY; only an explicitly empty READY batch can be acknowledged as empty.
+The daily check-in starts with a deterministic summary of structured proposals, preserving differences
+in support, uncertainty, outcome and parent correction. Compatible correct quantity-identification
+claims can share a quantity list; corrections and rejections stay separate. Original free-text proposals
+remain inspectable rather than being promoted into new summary conclusions. “Looks right” uses the
+existing atomic accept-all operation. Both individual acceptance and accept-all store the shared
+`reviewedObserverClaim` description derived from the validated structured fields, matching the summary.
+Raw model descriptions remain on immutable proposals for inspection, but do not enter accepted planner
+evidence. The planning read also projects legacy accepted rows through that same helper without
+rewriting history. Explicit parent corrections retain their supplied text/context; correction forms
+start from the structured description so assistance shortcuts do not copy unchecked model prose.
+“Make a correction” and individual review expose assistance,
+speaker rejection, inaccurate-observation and context shortcuts plus the detailed controls. Canonical
+utterance/scene/support context, originals, audio and technical inspection use collapsed disclosures.
+Recording playback uses the cited utterance start when valid and subtracts `startOffsetMs` once.
+“Nothing / A little / A lot” map to the existing repair levels; Nothing still requires unchanged
+acceptances. Optional “How did the lesson go?” feedback reuses the completion note, separately from
+learning evidence. It must be supplied before completion and remains visible after reload; completed
+reviews and decisions retain their existing immutable rules. No daily-evaluation schema is introduced.
+
+`POST /api/parent-review` accepts a discriminated command: `get {sessionId}`, `decide
+{sessionId, analysisId, proposalRowId, decision}`, `acceptAll {sessionId, analysisId, note?}`, or
+`complete {sessionId, analysisId, repairLevel, note?, acknowledgeEmpty?}`. Decisions omit `reviewedAt`;
+parent explanations use `parentContext` with `parent_review` provenance. The same-origin loopback guard
+runs before body parsing or RPC. Bodies and the public action's serialized command are bounded to 16 KiB,
+with strict field validation; notes are at most 1000 characters. This is the existing local prototype
+security model, not an authenticated parent account system.
+
+The Next server supplies `OBSERVER_SERVER_CAPABILITY` to `parent_review_action.request`; the public
+Convex action validates it before **every** internal read or write, independently of Next validation.
+It routes writes to existing `parent_review.decide`, `acceptAll`, and `complete`. The internal
+`parent_review.inspect` read shares the same canonical snapshot/proposal validation as `get` for READY
+records, and also supports pre-READY status reads. Its JSON return is bounded to 2 MB. The browser view
+contains only analysis status, incomplete qualification, proposals, decisions, completion metadata and
+canonical evidence sources (`id`, `eventKey`, `atMs`, `evidence`). Backend event IDs resolve actual
+proposal references even though the original recording inspector uses event keys. Neither capability,
+provider diagnostics, attempt tokens, nor internal snapshots enter this view. Route failures use fixed
+safe messages, never raw backend errors. No Convex CLI or deployment is necessary for mocked tests.
+
+Correction controls preserve canonical target quantity and source identities, permit attributed parent
+interpretation/speaker corrections, and keep missing/ambiguous scene timing uncertain. Newly reported
+assistance and pointing/touch-counting go only into parent context. Saved decisions remain immutable;
+identical retries are idempotent and accept-all cannot replace corrections/rejections. Accept-all is an
+explicit atomic acceptance and verified completion. Otherwise completion requires all decisions,
+repair level, and optional note; verified completion requires unchanged acceptances. Empty completion
+requires acknowledgment and creates no evidence. No next lesson or planner is called.
+
+During a write the panel prevents duplicate actions. An uncertain response triggers a saved-state read
+and reconciles the exact intended payload against a same-session, same-analysis READY snapshot.
+An identical persisted decision or full completion clears uncertainty without a duplicate write;
+comparison ignores backend-owned review/completion timestamps but preserves all input values.
+A different immutable decision or completion (including note, repair level or empty acknowledgment)
+shows a conflict and the actual saved result, discards the impossible retry, and permits remaining
+review actions. Accept-all also conflicts with stored corrections/rejections; partial unchanged
+acceptances without completion remain unresolved. Original proposals and saved decisions never change.
+If no authoritative result establishes the outcome, retain the exact original payload and block
+competing decisions/completion/Observer retry. A successful refresh enables only that identical retry;
+a failed refresh or changed analysis/proposal identity keeps it disabled. Reads/writes from an unmounted
+session panel cannot update the next inspection, and reads verify the returned session identity.
+Synthetic browser tests mock every review, Observer retry, recording and Convex service call. Actual
+capability configuration, deployed RPC validation and live recording/provider review remain deployment
+and full-flow verification work for the next slice.
 
 ## 6. Planning rules
 
@@ -192,7 +390,7 @@ During play, a new theme can replace the original setting while preserving the o
 
 ## 7. Stack and feasibility gate
 
-Retain the proposed Next.js/React/TypeScript application and Convex persistence. The experiment runs locally on the builder's MacBook; Vercel deployment is deferred. The repository contains the slice 1 GPT-Live-1 voice prototype ([baseline findings](gpt-live-baseline.md)) and the standalone Convex session-record foundation; live evidence persistence is wired; Observer and planner integrations are not implemented.
+Retain the proposed Next.js/React/TypeScript application and Convex persistence. The experiment runs locally on the builder's MacBook; Vercel deployment is deferred. The repository contains the slice 1 GPT-Live-1 voice prototype ([baseline findings](gpt-live-baseline.md)) and the standalone Convex session-record foundation; live evidence persistence, the saved-file Observer adapter, and parent review are implemented and locally tested. Live Observer acceptance remains open; the planner is not implemented.
 
 GPT-Live 1 is the initial voice candidate. OpenAI documents the model as `gpt-live-1`. Vercel documents Jev as `typesafe-ai/jev`; the prototype calls TypeSafe's own API directly and pins `jev-1.13.0`, because the advance threshold is calibrated against that version. Suitability for this child's speech is still unestablished: the results so far come from synthetic adult speech. Sources checked 2026-09-22: [GPT-Live 1](https://developers.openai.com/api/docs/models/gpt-live-1), [Jev](https://vercel.com/ai-gateway/models/jev).
 
@@ -208,7 +406,12 @@ Use what this test reveals to decide where Jev fits. Do not commit to per-uttera
 
 That test led to one bounded use of Jev, kept after the [answer experiment](jev-answer-experiment.md): a single Noul question decides whether the child's count matches the displayed scene, and the application — not the live model — advances the scene. The probability is a control signal only and never becomes stored learner evidence. Jev has no other runtime responsibility; `choice` and `score` remain unused.
 
-The post-session Observer and planner need structured, validated output; their exact models are not yet selected. Model confidence values are not a substitute for evidence or parent review.
+The post-session Observer uses the candidate adapter documented below with structured output and canonical validation. Its model suitability remains unverified; the planner model is not selected. Model confidence values are not a substitute for evidence or parent review.
+
+Issue #5's provider feasibility decision and documented first candidate path are in
+[Observer provider feasibility](observer-provider-feasibility.md). The recommendation is a saved-file
+transcription stage followed by a text model with Structured Outputs and local cross-validation;
+API compatibility is documented, while model suitability and timestamp alignment remain unverified.
 
 ## 8. Implementation constraints and verification
 
@@ -270,7 +473,10 @@ workflow is intentionally not required for the MVP. Local prototype diagnostic d
 Retry is available only for a fetched ended durable attempt. It disposes the old runtime and creates
 a fresh transport, recorder, controller, and linked session (`retryOf`), preserving the original record.
 Start a new lesson creates an unlinked attempt. The ended reference and reader are held independently
-of the live controller; late updates from old controllers cannot replace the new attempt's UI.
+of the live controller; late updates from old controllers cannot replace the new attempt's UI. The latest
+durable ID is also saved in browser storage and recovered by a fresh read-only recorder after reload, so
+the saved record, recording seek controls, and trusted Observer retry remain available without creating
+a new lesson. Only the ID is stored locally; active lesson state is never resumed.
 
 ### Conversation timeline (commit 5)
 

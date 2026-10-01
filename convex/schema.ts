@@ -142,4 +142,47 @@ export default defineSchema({
   })
     .index("by_session_order", ["sessionId", "order"])
     .index("by_session_key", ["sessionId", "eventKey"]),
+  observerAnalyses: defineTable({
+    sessionId: v.id("sessions"),
+    status: v.union(v.literal("pending"), v.literal("running"), v.literal("ready"), v.literal("failed")),
+    attempt: v.number(),
+    attemptToken: v.optional(v.string()),
+    leaseUntil: v.optional(v.number()),
+    inputSnapshot: v.optional(v.string()),
+    qualification: v.optional(v.string()),
+    failure: v.optional(v.string()),
+    completedAt: v.optional(v.number()),
+  }).index("by_session", ["sessionId"]),
+  parentDecisions: defineTable({
+    sessionId: v.id("sessions"),
+    analysisId: v.id("observerAnalyses"),
+    proposalRowId: v.id("observerProposals"),
+    decision: v.any(),
+  }).index("by_analysis", ["analysisId"]),
+  reviewedEvidence: defineTable({
+    sessionId: v.id("sessions"),
+    analysisId: v.id("observerAnalyses"),
+    proposalRowId: v.id("observerProposals"),
+    decisionId: v.id("parentDecisions"),
+    exchangeAtMs: v.number(),
+    sources: v.any(),
+    observation: v.any(),
+    parentContext: v.optional(v.any()),
+    reviewedAt: v.number(),
+    interpretationProvenance: v.union(v.literal("observer"), v.literal("parent_review")),
+  }).index("by_analysis", ["analysisId"]),
+  sessionReviews: defineTable({
+    sessionId: v.id("sessions"),
+    analysisId: v.id("observerAnalyses"),
+    repairLevel: v.union(v.literal("verified"), v.literal("light_correction"), v.literal("substantial_repair")),
+    note: v.optional(v.string()),
+    emptyAcknowledged: v.boolean(),
+    completedAt: v.number(),
+  }).index("by_session", ["sessionId"]),
+  observerProposals: defineTable({
+    analysisId: v.id("observerAnalyses"),
+    sessionId: v.id("sessions"),
+    ordinal: v.number(),
+    proposal: v.any(),
+  }).index("by_analysis_ordinal", ["analysisId", "ordinal"]),
 });

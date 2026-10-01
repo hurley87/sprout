@@ -30,6 +30,20 @@ without a running deployment. The live lesson records lifecycle, displayed scene
 through Convex. Configure `NEXT_PUBLIC_CONVEX_URL` for the browser recorder; recording failures are
 shown while the lesson continues. Sprout playback attribution and support capture are deferred.
 
+Ended records are analyzed after the recording attachment is durably committed. The internal Convex
+action needs server-side `OPENAI_API_KEY`; `OPENAI_OBSERVER_MODEL` optionally selects a text model,
+defaulting to the unvalidated `gpt-6-astra` evaluation candidate. Never use a `NEXT_PUBLIC_*` key.
+Provider analysis is initiated through a loopback-guarded Next.js route and a backend action that requires the matching
+server-only `OBSERVER_SERVER_CAPABILITY` in both the Next.js and Convex Node runtimes. Public audio attachment only
+persists the recording; after durable assembly, the recorder notifies that route to start automatic analysis. If this
+notification fails, the saved record remains available for explicit retry. Configure the same high-entropy capability
+on both servers before enabling analysis; never set it in a `NEXT_PUBLIC_*` variable. No capability is configured or
+deployed by this repository change.
+
+The browser keeps only the latest durable session ID so the local inspector can reopen that saved record after reload. Session evidence and audio stay in Convex. The inspector offers a loopback-guarded retry for failed, expired, or not-yet-requested saved-record analysis without starting a live lesson. Active controller and microphone state are not restored; missing or invalid references and pending/incomplete records are identified explicitly.
+See [Observer provider feasibility](docs/observer-provider-feasibility.md) for limits, evidence rules,
+and the remaining synthetic evaluation gate. No live-provider suitability result is claimed.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

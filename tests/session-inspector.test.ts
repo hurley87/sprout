@@ -57,7 +57,13 @@ it("renders every persisted evidence type in canonical timestamp order", () => {
     retryOf: "attempt-1",
     startedAt: 2000,
     endedAt: 3000,
-    recording: { url: "https://audio.invalid/full", mimeType: "audio/webm", startOffsetMs: 0, durationMs: 20000 },
+    recording: {
+      recordingId: "attempt-1:recording",
+      url: "https://audio.invalid/full",
+      mimeType: "audio/webm",
+      startOffsetMs: 0,
+      durationMs: 20000,
+    },
     events: [
       {
         eventKey: "scene",
@@ -144,7 +150,13 @@ it.each([
 it("shows generated conversation as analysis without implying learner delivery and retains seeking", () => {
   const html = render({
     ...record,
-    recording: { url: "https://audio.invalid/full", mimeType: "audio/webm", startOffsetMs: 0, durationMs: 20000 },
+    recording: {
+      recordingId: "attempt-1:recording",
+      url: "https://audio.invalid/full",
+      mimeType: "audio/webm",
+      startOffsetMs: 0,
+      durationMs: 20000,
+    },
     events: [
       {
         eventKey: "generated",

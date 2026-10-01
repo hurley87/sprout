@@ -183,4 +183,4 @@ The intended application stack remains Next.js, React, TypeScript, Convex, and V
 
 Do not build the full memory pipeline until the voice feasibility gate is met. Add Jev only if that test identifies a concrete need for a separate controller.
 
-This document specifies intended behavior. The repository contains only the slice 1 voice prototype; this documentation does not claim the rest of the described product has been implemented.
+This document specifies intended behavior. The repository implements the voice prototype, durable recording, candidate Observer adapter, parent review and reviewed-evidence gate. [Issue #5 verification](issue-5-verification.md) distinguishes local checks from outstanding semantic, provider and manual acceptance. Profile inference, planning and later slices remain unimplemented.

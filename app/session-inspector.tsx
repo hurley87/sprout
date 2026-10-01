@@ -4,52 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import {
   recordingOffsetSeconds,
   type DurableSessionRef,
-  type Evidence,
   type TimelineEvent,
   type InspectableSessionRecord,
   type SessionRecordReader,
 } from "@/lib/session-recorder";
 
-function EvidenceDetail({ evidence }: { evidence: Evidence }) {
-  switch (evidence.type) {
-    case "utterance":
-      return (
-        <>
-          <p>
-            {evidence.speaker} · {evidence.state}: {evidence.text}
-          </p>
-          <p>
-            Provider utterance: {evidence.startMs ?? "unknown"}–{evidence.endMs ?? "unknown"} ms
-          </p>
-          <p>
-            Observed: {evidence.firstObservedAtMs ?? "unknown"}–{evidence.lastObservedAtMs ?? "unknown"} ms
-          </p>
-        </>
-      );
-    case "scene_displayed":
-      return (
-        <>
-          <p>
-            Scene actually displayed: {evidence.sceneId} · Target quantity: {evidence.targetQuantity}
-          </p>
-          <ol>
-            {evidence.items.map((item, index) => (
-              <li key={index}>
-                {item.emoji} {item.label}
-              </li>
-            ))}
-          </ol>
-          <p>Arrangement/context: {evidence.arrangement}</p>
-        </>
-      );
-    case "support":
-      return (
-        <p>
-          Support · {evidence.source} · {evidence.mode}: {evidence.description}
-        </p>
-      );
-  }
-}
+import { EvidenceDetail } from "./evidence-detail";
+import { ParentReviewPanel } from "./parent-review-panel";
 
 function TimelineDetail({ event }: { event: TimelineEvent }) {
   switch (event.type) {
@@ -153,62 +114,80 @@ export function SessionRecordView({ record }: { record: InspectableSessionRecord
   }
   return (
     <>
-      <p>Session: {record.id}</p>
-      <p>
-        Lifecycle: {record.state} · Ending reason: {record.endingReason ?? "Unavailable"}
-      </p>
-      <p role="status">{integrity[record.recordStatus][0]}</p>
-      <p>{integrity[record.recordStatus][1]}</p>
-      <p>Created: {new Date(record.createdAt).toISOString()}</p>
-      <p>Started: {record.startedAt === undefined ? "Unavailable" : new Date(record.startedAt).toISOString()}</p>
-      <p>Ended: {record.endedAt === undefined ? "Unavailable" : new Date(record.endedAt).toISOString()}</p>
-      {record.retryOf && <p>Retry of {record.retryOf}</p>}
-      {record.recording ? (
-        <>
-          <p>
-            Full-session audio available · {record.recording.mimeType} · {record.recording.durationMs} ms
-          </p>
-          <audio ref={audio} controls src={record.recording.url} aria-label="Full-session recording" />
-          <p>Evidence times start at session.started = 0 ms. Playback positions are approximate.</p>
-          {playError && <p role="alert">Playback could not start. Use the audio player to try again.</p>}
-        </>
-      ) : (
-        <p>Full-session audio unavailable.</p>
+      {record.state === "ended" && (
+        <ParentReviewPanel
+          key={record.id}
+          sessionId={record.id}
+          seek={seek}
+          hasRecording={Boolean(record.recording)}
+          canRetry={record.recordStatus !== "pending" && Boolean(record.recording)}
+        />
       )}
-      <h3>Canonical evidence timeline and conversation analysis</h3>
-      <p>
-        Generated text describes provider output; full recording retains the captured audio. Analysis events are not
-        learner evidence.
-      </p>
-      {!record.events.length && <p>No durable evidence events recorded.</p>}
-      <ol>
-        {[...record.events]
-          .sort((a, b) => a.atMs - b.atMs || a.order - b.order)
-          .map(event => (
-            <li key={event.eventKey}>
-              <p>
-                Event {event.order} · {event.atMs} ms from session.started
-              </p>
-              {event.evidence && (
-                <>
-                  <p>Learner-experience evidence</p>
-                  <EvidenceDetail evidence={event.evidence} />
-                </>
-              )}
-              {event.timeline && (
-                <>
-                  <p>Conversation analysis</p>
-                  <TimelineDetail event={event.timeline} />
-                </>
-              )}
-              {record.recording && (
-                <button className="download-button" onClick={() => seek(event.atMs)}>
-                  Play from here
-                </button>
-              )}
-            </li>
-          ))}
-      </ol>
+      <p role="status">{integrity[record.recordStatus][0]}</p>
+      {record.recordStatus !== "complete" && <p>{integrity[record.recordStatus][1]}</p>}
+      <details className="recording-review">
+        <summary>Check the recording</summary>
+        <details className="developer-inspection">
+          <summary>Developer inspection</summary>
+          <p>Session: {record.id}</p>
+          <p>
+            Lifecycle: {record.state} · Ending reason: {record.endingReason ?? "Unavailable"}
+          </p>
+          <p>{integrity[record.recordStatus][1]}</p>
+          <p>Created: {new Date(record.createdAt).toISOString()}</p>
+          <p>Started: {record.startedAt === undefined ? "Unavailable" : new Date(record.startedAt).toISOString()}</p>
+          <p>Ended: {record.endedAt === undefined ? "Unavailable" : new Date(record.endedAt).toISOString()}</p>
+          {record.retryOf && <p>Retry of {record.retryOf}</p>}
+        </details>
+        {record.recording ? (
+          <>
+            <p>
+              Full-session audio available · {record.recording.mimeType} · {record.recording.durationMs} ms
+            </p>
+            <audio ref={audio} controls src={record.recording.url} aria-label="Full-session recording" />
+            <p>Evidence times start at session.started = 0 ms. Playback positions are approximate.</p>
+            {playError && <p role="alert">Playback could not start. Use the audio player to try again.</p>}
+          </>
+        ) : (
+          <p>Full-session audio unavailable.</p>
+        )}
+        <h3>Recorded speech, scenes and help</h3>
+        <p>
+          Generated text describes provider output; full recording retains the captured audio. Analysis events are not
+          learner evidence.
+        </p>
+        {!record.events.length && <p>No durable evidence events recorded.</p>}
+        <ol>
+          {[...record.events]
+            .sort((a, b) => a.atMs - b.atMs || a.order - b.order)
+            .map(event => (
+              <li key={event.eventKey}>
+                <p>
+                  Event {event.order} · {event.atMs} ms from session.started
+                </p>
+                {event.evidence && (
+                  <>
+                    <p>Learner-experience evidence</p>
+                    <EvidenceDetail evidence={event.evidence} />
+                  </>
+                )}
+                {event.timeline && (
+                  <>
+                    <details>
+                      <summary>Conversation analysis</summary>
+                      <TimelineDetail event={event.timeline} />
+                    </details>
+                  </>
+                )}
+                {record.recording && (
+                  <button className="download-button" onClick={() => seek(event.atMs)}>
+                    Play from here
+                  </button>
+                )}
+              </li>
+            ))}
+        </ol>
+      </details>
     </>
   );
 }
@@ -249,8 +228,7 @@ export function SessionInspector({
   }, [sessionRef, reader, revision]);
   return (
     <section className="diagnostics" aria-label="Durable session record">
-      <h2>Durable session record</h2>
-      <p>Private builder/developer inspection · Canonical persisted evidence</p>
+      <h2>Daily check-in</h2>
       {loading && <p role="status">Loading durable session record…</p>}
       {!sessionRef || (!loading && !record) ? (
         <p>
