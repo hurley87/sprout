@@ -100,6 +100,88 @@ function liveConnection(autoStarted = true) {
 }
 
 describe("BrowserTransport output gating", () => {
+  it("permanently discards stale output while retaining child input and routes the next response only through B", async () => {
+    const audio = audioElement();
+    const a = liveConnection();
+    const events = vi.fn();
+    const transport = new BrowserTransport(audio as unknown as HTMLAudioElement);
+    await transport.start(events, vi.fn());
+    a.peer.ontrack?.({ track: a.remoteTrack });
+    expect(transport.discardOutput()).toBe(true);
+    expect(audio.srcObject).toBeNull();
+    expect(audio.muted).toBe(true);
+    expect(a.remoteTrack.stop).toHaveBeenCalledOnce();
+    expect(a.peer.close).not.toHaveBeenCalled();
+    expect(a.channel.close).not.toHaveBeenCalled();
+    expect(a.micTrack.stop).not.toHaveBeenCalled();
+    a.channel.onmessage?.({
+      data: JSON.stringify({ type: "session.input_transcript.delta", delta: "no, two", start_ms: 0, end_ms: 100 }),
+    });
+    expect(events).toHaveBeenCalledWith(expect.objectContaining({ speaker: "child", delta: "no, two", sourceId: 1 }));
+    const lateTrack = { stop: vi.fn() } as unknown as MediaStreamTrack;
+    a.peer.ontrack?.({ track: lateTrack });
+    transport.setOutputBlocked(false);
+    expect(lateTrack.stop).toHaveBeenCalledOnce();
+    expect(audio.srcObject).toBeNull();
+    expect(audio.muted).toBe(true);
+    const b = liveConnection();
+    const id = await transport.prepareReplacement(seed);
+    b.peer.ontrack?.({ track: b.remoteTrack });
+    expect(audio.srcObject).toBeNull();
+    expect(transport.activateSource(id)).toBe(true);
+    transport.send({
+      type: "session.instructions.append",
+      event_id: "outcome",
+      content: "Current scene",
+      delegation_id: null,
+    });
+    transport.setOutputBlocked(false);
+    expect(audio.srcObject).not.toBeNull();
+    expect(audio.muted).toBe(false);
+    expect(b.channel.send).toHaveBeenCalledOnce();
+    expect(a.channel.send).not.toHaveBeenCalled();
+    const count = events.mock.calls.length;
+    a.channel.onmessage?.({
+      data: JSON.stringify({ type: "session.output_transcript.delta", delta: "late A", start_ms: 0, end_ms: 100 }),
+    });
+    expect(events).toHaveBeenCalledTimes(count);
+    transport.close();
+  });
+
+  it("discards before track arrival and rejects late play completion", async () => {
+    const audio = audioElement();
+    let resolvePlay!: () => void;
+    audio.play.mockImplementation(
+      () =>
+        new Promise(resolve => {
+          resolvePlay = resolve;
+        }),
+    );
+    const a = liveConnection();
+    const failures = vi.fn();
+    const transport = new BrowserTransport(audio as unknown as HTMLAudioElement);
+    await transport.start(vi.fn(), failures);
+    a.peer.ontrack?.({ track: a.remoteTrack });
+    transport.discardOutput();
+    resolvePlay();
+    await Promise.resolve();
+    expect(audio.srcObject).toBeNull();
+    expect(audio.muted).toBe(true);
+    expect(failures).not.toHaveBeenCalled();
+    transport.close();
+
+    const early = liveConnection();
+    const nextAudio = audioElement();
+    const next = new BrowserTransport(nextAudio as unknown as HTMLAudioElement);
+    await next.start(vi.fn(), failures);
+    expect(next.discardOutput()).toBe(true);
+    early.peer.ontrack?.({ track: early.remoteTrack });
+    expect(early.remoteTrack.stop).toHaveBeenCalledOnce();
+    expect(nextAudio.play).not.toHaveBeenCalled();
+    expect(nextAudio.srcObject).toBeNull();
+    next.close();
+  });
+
   it("blocks before the remote track arrives, then unblocks during continuous playback", async () => {
     const audio = audioElement();
     const { channel, peer, remoteTrack } = liveConnection();

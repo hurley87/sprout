@@ -464,7 +464,9 @@ test("continuous experiment microphone has low nonzero PCM and real outbound aud
 
 // Exercise the production LessonSession -> BrowserTransport handoff, including
 // provider callbacks, real peers and the recording/playback mix.
-test("integrated stale ADVANCE retires A and instructs B before permission", async ({ page }) => {
+test("integrated stale ADVANCE discards A without transcript quiet and instructs B before permission", async ({
+  page,
+}) => {
   await fixture(page);
   await page.evaluate(`(() => {
     window.sourceA = window.transport.current;
@@ -485,6 +487,17 @@ test("integrated stale ADVANCE retires A and instructs B before permission", asy
     window.transport.startRecording();
   })()`);
   await expect.poll(() => page.evaluate("Boolean(window.transport.pending)"), { timeout: 8000 }).toBe(true);
+  expect(
+    await page.evaluate("window.sourceA.outputDiscarded && document.querySelector('audio').srcObject === null"),
+  ).toBe(true);
+  expect(
+    await page.evaluate(
+      "window.session.events.find(event => event.type === 'replacement.triggered').detail.threshold_ms",
+    ),
+  ).toBe(0);
+  expect(
+    await page.evaluate("window.session.events.some(event => event.type === 'answer.response_gate_deadline_updated')"),
+  ).toBe(false);
   await expect.poll(() => page.evaluate("window.providers[1]?.channel?.readyState")).toBe("open");
   expect(await page.evaluate("window.session.snapshot.sceneIndex")).toBe(1);
   expect(await page.evaluate("document.querySelector('audio').muted")).toBe(true);
@@ -536,7 +549,7 @@ test("integrated stale ADVANCE retires A and instructs B before permission", asy
     const decoded = await window.context.decodeAudioData(await recording.blob.arrayBuffer());
     const pcm = decoded.getChannelData(0); const rate = decoded.sampleRate;
     const rms = samples => Math.sqrt(samples.reduce((sum, x) => sum + x*x, 0) / samples.length);
-    return {blocked: rms(pcm.slice(rate * 0.3, rate)), permitted: rms(pcm.slice(-rate * 0.15))};
+    return {blocked: rms(pcm.slice(0, rate * 0.2)), permitted: rms(pcm.slice(-rate * 0.15))};
   })()`);
   expect(rms.blocked).toBeLessThan(0.001);
   expect(rms.permitted).toBeGreaterThan(0.01);
@@ -620,18 +633,17 @@ for (const activity of ["transcript", "non_answer", "microphone.activity_started
       await page.waitForTimeout(2700);
       expect(await page.evaluate("document.querySelector('audio').muted")).toBe(true);
       await page.evaluate("window.session.receive({type: 'microphone.activity_discarded'})");
-      await expect
-        .poll(() =>
-          page.evaluate(
-            "window.session.events.some(event => event.type === 'answer.response_gate_released' && event.detail.reason === 'output_transcript_quiet')",
-          ),
-        )
-        .toBe(true);
+      await expect.poll(() => page.evaluate("window.transport.pending?.channel?.readyState")).toBe("open");
+      await page.evaluate("window.providers[2].channel.send(JSON.stringify({type: 'session.started'}))");
+      await expect.poll(() => page.evaluate("window.transport.activeSourceId")).toBe(3);
       expect(
         await page.evaluate(
-          "window.transport.activeSourceId === 1 && window.sourceA.peer.connectionState === 'connected'",
+          "window.session.events.find(event => event.type === 'answer.response_gate_released').detail.reason",
         ),
-      ).toBe(true);
+      ).toBe("replacement_source");
+      expect(await page.evaluate("window.sourceA.retired && window.sourceA.peer.connectionState === 'closed'")).toBe(
+        true,
+      );
     }
     await page.evaluate(
       "window.session.dispose(); window.providers.forEach(source => { source.peer.close(); source.tone.stop(); }); window.context.close()",

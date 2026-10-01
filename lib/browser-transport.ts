@@ -76,6 +76,7 @@ type LiveSource = {
   recordingSource?: MediaStreamAudioSourceNode;
   ready: boolean;
   retired: boolean;
+  outputDiscarded?: boolean;
   timing?: ReplacementTiming;
   started?: () => void;
   rejectReadiness?: (error: Error) => void;
@@ -334,7 +335,7 @@ export class BrowserTransport implements Transport {
 
   private attachPlayback(source: LiveSource) {
     const remote = source.remote;
-    if (!remote || !this.authoritative(source)) return;
+    if (!remote || !this.authoritative(source) || source.outputDiscarded) return;
     this.audio.muted = this.outputBlocked;
     this.audio.srcObject = remote;
     this.playbackReady = false;
@@ -350,13 +351,13 @@ export class BrowserTransport implements Transport {
     void this.audio
       .play()
       .then(() => {
-        if (this.authoritative(source) && source.remote === remote) {
+        if (this.authoritative(source) && source.remote === remote && !source.outputDiscarded) {
           this.playbackReady = true;
           this.syncRecordingGate();
         }
       })
       .catch(() => {
-        if (source.remote === remote)
+        if (source.remote === remote && !source.outputDiscarded)
           this.fail(
             source,
             "The browser blocked Sprout's voice playback. Allow sound for this site, then start a new lesson.",
@@ -367,7 +368,7 @@ export class BrowserTransport implements Transport {
   private async connectSource(source: LiveSource, seed?: ReplacementSeed) {
     const peer = source.peer;
     peer.ontrack = ({ track }) => {
-      if (!this.live(source)) {
+      if (!this.live(source) || source.outputDiscarded) {
         track.stop();
         return;
       }
@@ -377,14 +378,14 @@ export class BrowserTransport implements Transport {
       source.remote?.getTracks().forEach(oldTrack => oldTrack.stop());
       source.activity = { type: "output.activity", state: "unavailable" };
       this.emit(source, source.activity);
-      if (!this.live(source)) {
+      if (!this.live(source) || source.outputDiscarded) {
         track.stop();
         return;
       }
       const remote = (source.remote = new MediaStream([track]));
       try {
         source.observer = new OutputActivityObserver(remote, event => {
-          if (this.live(source) && source.remote === remote) {
+          if (this.live(source) && source.remote === remote && !source.outputDiscarded) {
             source.activity = event;
             this.emit(source, event);
           }
@@ -483,12 +484,32 @@ export class BrowserTransport implements Transport {
     source.channel.send(JSON.stringify(command));
   }
 
+  /** Permanently discard this source's decoded/buffered output. Keep its
+   * microphone and data channel alive for answer revisions until replacement.
+   * This is local isolation, not a provider cancellation acknowledgment. */
+  discardOutput(): boolean {
+    const source = this.current;
+    if (!source || !this.authoritative(source)) return false;
+    source.outputDiscarded = true; // Invalidate late track/play/observer callbacks first.
+    this.outputBlocked = true;
+    this.playbackReady = false;
+    this.audio.muted = true;
+    this.audio.pause();
+    this.audio.srcObject = null;
+    this.syncRecordingGate();
+    source.observer?.close();
+    source.recordingSource?.disconnect();
+    source.remote?.getTracks().forEach(track => track.stop());
+    source.activity = { type: "output.activity", state: "unavailable" };
+    return true;
+  }
+
   setOutputBlocked(blocked: boolean) {
     if (!this.cancelled) {
       this.outputBlocked = blocked;
       // Muting does not clear the receiver's jitter/decoder buffers, nor
       // isolate the next provider response. The track stays live.
-      this.audio.muted = blocked || !this.current;
+      this.audio.muted = blocked || !this.current || this.current.outputDiscarded === true;
       this.syncRecordingGate();
     }
   }
