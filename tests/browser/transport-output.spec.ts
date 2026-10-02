@@ -378,20 +378,25 @@ test("integrated stale ADVANCE discards A without transcript quiet and instructs
   page,
 }) => {
   await fixture(page);
-  await page.evaluate(`(() => {
+  await page.evaluate("window.providers[0].channel.send(JSON.stringify({type:'session.started'}))");
+  await expect.poll(() => page.evaluate("window.transport.current.sessionStarted")).toBe(true);
+  await page.evaluate(`(async () => {
     window.sourceA = window.transport.current;
     window.lateA = window.sourceA.channel.onmessage;
     window.commandsA = []; window.commandsB = []; window.sendState = [];
     window.providers[0].channel.onmessage = ({data}) => window.commandsA.push(JSON.parse(data));
     window.session = new window.LessonSession(window.transport, async () => ({status: 'evaluated', probability: 1, model: 'test', latencyMs: 1}), snapshot => {
-      if (snapshot.sceneIndex === 1) setTimeout(() => window.session.displayed(1), 0);
+      if (snapshot.sceneIndex === 1) setTimeout(() => window.session.displayed(1, window.session.snapshot.displayToken), 0);
     });
+    // Startup has already used real RTP. Attach the controller without a second peer.
+    window.transport.start=async (onEvent,onFailure)=>{window.transport.onEvent=onEvent;window.transport.onFailure=onFailure;};
+    await window.session.start();
     window.transport.onEvent = event => { window.events.push(event); window.session.receive(event); };
-    window.session.receive({type: 'session.started'}); window.session.displayed(0);
+    window.session.receive({type: 'session.started'}); window.session.displayed(0, window.session.snapshot.displayToken);
     const send = window.transport.send.bind(window.transport);
     window.transport.send = command => { window.sendState.push({ source: window.transport.activeSourceId, blocked: document.querySelector('audio').muted, content: command.content }); send(command); };
     window.session.receive({type: 'microphone.speech_started'});
-    window.session.receive({type: 'transcript', speaker: 'child', delta: 'One', startMs: 1000, endMs: 1100});
+    window.session.receive({type: 'transcript', speaker: 'child', delta: 'One', startMs: 1000, endMs: 1100, sourceId:1});
     window.session.receive({type: 'microphone.speech_stopped', quietMs: 900});
     window.hidden = setInterval(() => window.providers[0].channel.send(JSON.stringify({type: 'session.output_transcript.delta', delta: 'old scene ', start_ms: 0, end_ms: 100})), 100);
     window.transport.startRecording();
@@ -401,17 +406,15 @@ test("integrated stale ADVANCE discards A without transcript quiet and instructs
     await page.evaluate("window.sourceA.outputDiscarded && document.querySelector('audio').srcObject === null"),
   ).toBe(true);
   expect(
-    await page.evaluate(
-      "window.session.events.find(event => event.type === 'replacement.triggered').detail.threshold_ms",
-    ),
-  ).toBe(0);
+    await page.evaluate("window.session.events.find(event => event.type === 'replacement.triggered').detail.phase"),
+  ).toBe("next_question_pending");
   expect(
     await page.evaluate("window.session.events.some(event => event.type === 'answer.response_gate_deadline_updated')"),
   ).toBe(false);
   await expect.poll(() => page.evaluate("window.providers[1]?.channel?.readyState")).toBe("open");
   expect(await page.evaluate("window.session.snapshot.sceneIndex")).toBe(1);
   expect(await page.evaluate("document.querySelector('audio').muted")).toBe(true);
-  await page.evaluate(`(() => {
+  await page.evaluate(`(async () => {
     window.sourceB = window.transport.pending;
     window.providers[1].channel.onmessage = ({data}) => window.commandsB.push(JSON.parse(data));
     window.providers[1].channel.send(JSON.stringify({type: 'session.started'}));
@@ -438,7 +441,7 @@ test("integrated stale ADVANCE discards A without transcript quiet and instructs
       "window.session.events.filter(event => event.type === 'answer.response_gate_released').map(event => event.detail.reason)",
     ),
   ).toEqual(["replacement_source"]);
-  await page.evaluate(`(() => {
+  await page.evaluate(`(async () => {
     clearInterval(window.hidden);
     window.beforeLate = window.events.length;
     window.lateA({data: JSON.stringify({type: 'session.output_transcript.delta', delta: 'late A', start_ms: 0, end_ms: 1})});
@@ -471,21 +474,25 @@ test("integrated stale ADVANCE discards A without transcript quiet and instructs
 for (const activity of ["transcript", "non_answer", "microphone.activity_started", "child_stop"] as const) {
   test(`integrated ${activity} cancels preparing B and closes its peer`, async ({ page }) => {
     await fixture(page);
-    await page.evaluate(`(() => {
+    await page.evaluate("window.providers[0].channel.send(JSON.stringify({type:'session.started'}))");
+    await expect.poll(() => page.evaluate("window.transport.current.sessionStarted")).toBe(true);
+    await page.evaluate(`(async () => {
       window.session = new window.LessonSession(window.transport, async () => ({status: 'evaluated', probability: 1, model: 'test', latencyMs: 1}), snapshot => {
-        if (snapshot.sceneIndex === 1) setTimeout(() => window.session.displayed(1), 0);
+        if (snapshot.sceneIndex === 1) setTimeout(() => window.session.displayed(1, window.session.snapshot.displayToken), 0);
       });
+      window.transport.start=async (onEvent,onFailure)=>{window.transport.onEvent=onEvent;window.transport.onFailure=onFailure;};
+      await window.session.start();
       window.transport.onEvent = event => window.session.receive(event);
-      window.session.receive({type: 'session.started'}); window.session.displayed(0);
+      window.session.receive({type: 'session.started'}); window.session.displayed(0, window.session.snapshot.displayToken);
       window.session.receive({type: 'microphone.speech_started'});
-      window.session.receive({type: 'transcript', speaker: 'child', delta: 'One', startMs: 1000, endMs: 1100});
+      window.session.receive({type: 'transcript', speaker: 'child', delta: 'One', startMs: 1000, endMs: 1100, sourceId:1});
       window.session.receive({type: 'microphone.speech_stopped', quietMs: 900});
       window.hidden = setInterval(() => window.providers[0].channel.send(JSON.stringify({type: 'session.output_transcript.delta', delta: 'old ', start_ms: 0, end_ms: 100})), 100);
     })()`);
     await expect
       .poll(() => page.evaluate("window.transport.pending?.channel?.readyState"), { timeout: 8000 })
       .toBe("open");
-    await page.evaluate(`(() => {
+    await page.evaluate(`(async () => {
       window.sourceA = window.transport.current;
       window.sourceB = window.transport.pending; window.lateB = window.sourceB.channel.onmessage;
       window.session.receive(${activity === "transcript" ? "{type: 'transcript', speaker: 'child', delta: 'Two', startMs: 4000, endMs: 4100}" : activity === "non_answer" ? "{type: 'transcript', speaker: 'child', delta: 'what?', startMs: 4000, endMs: 4100}" : activity === "child_stop" ? "{type: 'transcript', speaker: 'child', delta: 'stop', startMs: 4000, endMs: 4100}" : "{type: 'microphone.activity_started'}"});
@@ -564,23 +571,27 @@ for (const activity of ["transcript", "non_answer", "microphone.activity_started
 for (const action of ["non_answer", "wrap"] as const) {
   test(`integrated stale STAY ${action} never permits A by cancelling B`, async ({ page }) => {
     await fixture(page);
-    await page.evaluate(`(() => {
+    await page.evaluate("window.providers[0].channel.send(JSON.stringify({type:'session.started'}))");
+    await expect.poll(() => page.evaluate("window.transport.current.sessionStarted")).toBe(true);
+    await page.evaluate(`(async () => {
       window.sourceA = window.transport.current;
       window.commandsA = [];
       window.providers[0].channel.onmessage = ({data}) => window.commandsA.push(JSON.parse(data));
       window.session = new window.LessonSession(window.transport, async () => ({status: 'evaluated', probability: 0, model: 'test', latencyMs: 1}), () => {});
+      window.transport.start=async (onEvent,onFailure)=>{window.transport.onEvent=onEvent;window.transport.onFailure=onFailure;};
+      await window.session.start();
       window.transport.onEvent = event => window.session.receive(event);
-      window.session.receive({type: 'session.started'}); window.session.displayed(0);
+      window.session.receive({type: 'session.started'}); window.session.displayed(0, window.session.snapshot.displayToken);
       window.commandsA.length = 0;
       window.session.receive({type: 'microphone.speech_started'});
-      window.session.receive({type: 'transcript', speaker: 'child', delta: 'One', startMs: 1000, endMs: 1100});
+      window.session.receive({type: 'transcript', speaker: 'child', delta: 'One', startMs: 1000, endMs: 1100, sourceId:1});
       window.session.receive({type: 'microphone.speech_stopped', quietMs: 900});
       window.hidden = setInterval(() => window.providers[0].channel.send(JSON.stringify({type: 'session.output_transcript.delta', delta: 'old ', start_ms: 0, end_ms: 100})), 100);
     })()`);
     await expect
       .poll(() => page.evaluate("window.transport.pending?.channel?.readyState"), { timeout: 8000 })
       .toBe("open");
-    await page.evaluate(`(() => {
+    await page.evaluate(`(async () => {
       window.sourceB = window.transport.pending;
       window.lateB = window.sourceB.channel.onmessage;
       window.commandsA.length = 0;

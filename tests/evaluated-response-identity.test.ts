@@ -1,3 +1,4 @@
+import { immediateAcknowledgment } from "./helpers/immediate-acknowledgment";
 import { afterEach, expect, it, vi } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "../convex/schema";
@@ -35,10 +36,11 @@ async function recorded(evaluate: EvaluateAnswer) {
     stopMedia: () => {},
     close: () => {},
   };
+  immediateAcknowledgment(transport, () => session.snapshot.choreographyPhase);
   const session = new LessonSession(transport, evaluate, () => {}, undefined, recorder);
   await session.start();
   session.receive({ type: "session.started" });
-  session.displayed(0);
+  session.displayed(0, session.snapshot.displayToken);
   const say = (delta: string, startMs: number, sourceId?: number) =>
     session.receive({
       type: "transcript",
@@ -61,7 +63,7 @@ async function recorded(evaluate: EvaluateAnswer) {
       saved?.events.map(({ eventKey, atMs, evidence, timeline }) => ({ eventKey, atMs, evidence, timeline })),
     ).toEqual(events.map(event => ({ evidence: undefined, timeline: undefined, ...event })));
   };
-  return { session, events, say, controls, speech, persist };
+  return { session, transport, events, say, controls, speech, persist };
 }
 
 it("retains original and superseded identities when adjacent fragments change source, including late results and persistence", async () => {
@@ -69,6 +71,9 @@ it("retains original and superseded identities when adjacent fragments change so
   const f = await recorded(() => new Promise(resolve => pending.push(resolve)));
   f.say("One", 100, 1);
   await vi.advanceTimersByTimeAsync(TRANSCRIPT_FALLBACK_MS + 1);
+  // Deliberately expose a new authoritative source without flushing legacy fragments.
+  // The response identity must still report mixed provenance and reject trust.
+  Object.assign(f.transport, { activeSourceId: 2 });
   f.say(" no, Two", 200, 2);
   await vi.advanceTimersByTimeAsync(TRANSCRIPT_FALLBACK_MS + 1);
   pending[0]({ status: "evaluated", probability: 1, model: "late", latencyMs: 1 });
@@ -146,7 +151,7 @@ it("retains repeated-answer recognition when advancement clears confirmation bef
   f.say("Eight", 5000, 1);
   await vi.advanceTimersByTimeAsync(2000);
   expect(f.session.snapshot.sceneIndex).toBe(1);
-  f.session.displayed(1);
+  f.session.displayed(1, f.session.snapshot.displayToken);
   await f.session.recordingSettled();
   expect(f.speech().map(e => e.recognition)).toEqual(["needs_confirmation"]);
   await vi.advanceTimersByTimeAsync(600);

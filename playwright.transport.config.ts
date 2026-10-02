@@ -4,7 +4,7 @@ import { defineConfig } from "@playwright/test";
  * They need a secure localhost origin, no Next server, credentials or provider. */
 export default defineConfig({
   testDir: "./tests/browser",
-  testMatch: ["transport-output.spec.ts", "local-playback.spec.ts"],
+  testMatch: ["transport-output.spec.ts", "local-playback.spec.ts", "acknowledgment-choreography.spec.ts"],
   outputDir: "./test-results/playwright-transport",
   workers: 2,
   use: {

@@ -1,3 +1,4 @@
+import { immediateAcknowledgment } from "./helpers/immediate-acknowledgment";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LessonSession, RESPONSE_GATE_RECOVERY_MS, type Transport } from "../lib/session";
 import { CORRECTION_WINDOW_MS, MICROPHONE_QUIET_MS, TRANSCRIPT_FALLBACK_MS } from "../lib/answer";
@@ -50,12 +51,13 @@ function fixture(probability = 0.99) {
     close: vi.fn(),
   };
   const evaluate = vi.fn(async () => ({ status: "evaluated" as const, probability, model: "test", latencyMs: 0 }));
+  immediateAcknowledgment(transport, () => session.snapshot.choreographyPhase);
   const session = new LessonSession(transport, evaluate, vi.fn());
   void session.start();
   session.receive({ type: "session.started" });
-  session.displayed(0);
+  session.displayed(0, session.snapshot.displayToken);
   function answer(delta: string, epoch = "B") {
-    session.receive(transcript(delta));
+    session.receive({ ...transcript(delta), sourceId: transport.activeSourceId });
     const gate = session.events.findLast(e =>
       ["answer.response_gate_started", "answer.response_gate_updated"].includes(e.type),
     )!;
@@ -122,7 +124,7 @@ describe("response-source isolation reference contract (production replacement d
     const before = session.events.length;
     late();
     expect(session.events).toHaveLength(before);
-    session.displayed(1);
+    session.displayed(1, session.snapshot.displayToken);
     await vi.advanceTimersByTimeAsync(0);
     expect(contract.eligible("B")).toBe(true);
     const order = session.events.map(e => e.type);
@@ -134,7 +136,7 @@ describe("response-source isolation reference contract (production replacement d
     contract.ready("A");
     expect(contract.activate("A")).toBe(false);
     late();
-    session.displayed(1);
+    session.displayed(1, session.snapshot.displayToken);
     expect(session.snapshot).toEqual(snapshot);
     expect(session.events.filter(e => e.type === "advance.committed")).toHaveLength(1);
     expect(contract.eligible("A")).toBe(false);

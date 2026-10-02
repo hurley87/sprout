@@ -7,6 +7,15 @@ import ts from "typescript";
 // local WebRTC peer: actual RTP, jitter/decoder buffering, HTMLAudioElement,
 // Web Audio observation and recording all run in Chromium. No billed services.
 export async function transportFixture(page: Page, microphoneMode: "silent" | "continuous" = "silent") {
+  await page.route("**/audio/acknowledgments/*.wav", async route => {
+    const name = new URL(route.request().url()).pathname.split("/").at(-1)!;
+    if (!["hello-duck.wav", "duck-friends.wav", "butterfly-garden.wav", "picnic.wav", "pond.wav"].includes(name))
+      throw new Error("Unknown fixture asset");
+    await route.fulfill({
+      contentType: "audio/wav",
+      body: await readFile(path.join(process.cwd(), "public/audio/acknowledgments", name)),
+    });
+  });
   await page.route("**/transport-fixture/**", async route => {
     const name = new URL(route.request().url()).pathname.split("/").at(-1)!;
     if (name === "index") {

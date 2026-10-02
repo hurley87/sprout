@@ -2,6 +2,23 @@ import type { TimelineEvent } from "../lib/session-recorder";
 
 export function TimelineDetail({ event }: { event: TimelineEvent }) {
   switch (event.type) {
+    case "local_playback":
+      return (
+        <p>
+          Local finite speech · {event.role} · {event.state}: {event.text} · {event.display.sceneId} ·{" "}
+          {event.identity.playbackAttemptId} · {event.reason ?? ""} ·{" "}
+          {event.state === "completed"
+            ? "Browser output fence passed; hearing unverified"
+            : "Whole instruction delivery not established"}
+        </p>
+      );
+    case "choreography_phase":
+      return (
+        <p>
+          Application choreography · {event.phase} · {event.display.sceneId} · Question: {event.questionStatus} ·{" "}
+          {event.reason ?? ""}
+        </p>
+      );
     case "sprout_generated_utterance":
       return (
         <>

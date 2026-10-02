@@ -1,3 +1,4 @@
+import { immediateAcknowledgment } from "./helpers/immediate-acknowledgment";
 import { afterEach, expect, it, vi } from "vitest";
 import { LessonSession, type Transport } from "../lib/session";
 import { type Evidence, type SessionRecorder } from "../lib/session-recorder";
@@ -222,6 +223,7 @@ it("clarifies Eight, allows help after repeating it, and still advances on Three
     stopMedia: vi.fn(),
     close: vi.fn(),
   };
+  immediateAcknowledgment(transport, () => session.snapshot.choreographyPhase);
   const session = new LessonSession(
     transport,
     async ({ utterance }) => ({
@@ -236,16 +238,25 @@ it("clarifies Eight, allows help after repeating it, and still advances on Three
   );
   await session.start();
   session.receive({ type: "session.started" });
-  session.displayed(0);
+  session.displayed(0, session.snapshot.displayToken);
   const say = async (text: string, startMs: number) => {
-    session.receive({ type: "transcript", speaker: "child", delta: text, startMs, endMs: startMs + 200, sourceId: 1 });
+    session.receive({
+      type: "transcript",
+      speaker: "child",
+      delta: text,
+      startMs,
+      endMs: startMs + 200,
+      sourceId: transport.activeSourceId,
+    });
     await vi.advanceTimersByTimeAsync(2000);
   };
   await say("One", 6200);
-  session.displayed(1);
+  session.displayed(1, session.snapshot.displayToken);
+  await vi.advanceTimersByTimeAsync(0);
   await vi.advanceTimersByTimeAsync(1000);
   await say("Two", 15800);
-  session.displayed(2);
+  session.displayed(2, session.snapshot.displayToken);
+  await vi.advanceTimersByTimeAsync(0);
   await vi.advanceTimersByTimeAsync(1000);
   await say("Eight", 35800);
   expect(session.snapshot.sceneIndex).toBe(2);
@@ -259,7 +270,8 @@ it("clarifies Eight, allows help after repeating it, and still advances on Three
   });
   await vi.advanceTimersByTimeAsync(1000);
   await say("Three", 50600);
-  session.displayed(3);
+  session.displayed(3, session.snapshot.displayToken);
+  await vi.advanceTimersByTimeAsync(0);
   await vi.advanceTimersByTimeAsync(1000);
   await session.recordingSettled();
   const responses = writes.filter((e): e is Extract<Evidence, { type: "utterance" }> => e.type === "utterance");
@@ -305,6 +317,7 @@ it("validates a concrete correct response from real LessonSession recorder outpu
     stopMedia: vi.fn(),
     close: vi.fn(),
   };
+  immediateAcknowledgment(transport, () => session.snapshot.choreographyPhase);
   const session = new LessonSession(
     transport,
     async () => ({ status: "evaluated", probability: 0.99, model: "synthetic", latencyMs: 1 }),
@@ -314,7 +327,7 @@ it("validates a concrete correct response from real LessonSession recorder outpu
   );
   await session.start();
   session.receive({ type: "session.started" });
-  session.displayed(0);
+  session.displayed(0, session.snapshot.displayToken);
   await vi.advanceTimersByTimeAsync(1000);
   session.receive({ type: "transcript", speaker: "child", delta: "One", startMs: 50600, endMs: 50800, sourceId: 1 });
   await vi.advanceTimersByTimeAsync(3100);
@@ -332,7 +345,7 @@ it("validates a concrete correct response from real LessonSession recorder outpu
   expect(response.evidence.sessionTiming).toMatchObject({
     clock: "session",
     provenance: "source_input_bound",
-    sourceId: 1,
+    sourceId: transport.activeSourceId,
     startMs: scene.atMs,
     inputScene: { sceneId: scene.evidence.sceneId, displayedAtMs: scene.atMs },
   });

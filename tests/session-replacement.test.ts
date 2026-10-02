@@ -1,6 +1,7 @@
+import { immediateAcknowledgment } from "./helpers/immediate-acknowledgment";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LessonSession, RESPONSE_GATE_RECOVERY_MS, STALE_OUTPUT_REPLACEMENT_MS, type Transport } from "../lib/session";
-import { sceneAt, type ReplacementSeed } from "../lib/lesson";
+import { type ReplacementSeed } from "../lib/lesson";
 import {
   CORRECTION_WINDOW_MS,
   EVALUATION_TIMEOUT_MS,
@@ -52,10 +53,11 @@ function setup(decision: ReplacementSeed["decision"] = "ADVANCE", evaluate?: Eva
     }),
     retireSource: vi.fn(),
   };
+  immediateAcknowledgment(transport, () => session.snapshot.choreographyPhase);
   const session = new LessonSession(transport, vi.fn(evaluate ?? (async () => result(decision))), vi.fn());
   void session.start();
   session.receive({ type: "session.started" });
-  session.displayed(0);
+  session.displayed(0, session.snapshot.displayToken);
   vi.mocked(transport.send).mockClear();
   vi.mocked(transport.setOutputBlocked).mockClear();
   order.length = 0;
@@ -75,7 +77,7 @@ function setup(decision: ReplacementSeed["decision"] = "ADVANCE", evaluate?: Eva
     child,
     transcript,
     fragments,
-    ready: () => resolve(2),
+    ready: (id = 2) => resolve(id),
     fail: () => reject(new Error("startup failed")),
   };
 }
@@ -86,7 +88,7 @@ async function promotedWithOldClock(decision: ReplacementSeed["decision"], evalu
   f.transcript("sprout", "hidden A", 20_600, 1);
   const hidden = f.fragments();
   await vi.advanceTimersByTimeAsync(251);
-  if (decision === "ADVANCE") f.session.displayed(1);
+  if (decision === "ADVANCE") f.session.displayed(1, f.session.snapshot.displayToken);
   await trigger();
   f.ready();
   await Promise.resolve();
@@ -101,23 +103,27 @@ async function held(decision: ReplacementSeed["decision"] = "ADVANCE") {
   f.transcript("sprout", "old ");
   const hidden = f.fragments();
   await vi.advanceTimersByTimeAsync(251);
-  if (decision === "ADVANCE") f.session.displayed(1);
+  if (decision === "ADVANCE") f.session.displayed(1, f.session.snapshot.displayToken);
   return { ...f, hidden };
 }
 const event = (s: LessonSession, type: string) => s.events.filter(e => e.type === type);
 const trigger = () => vi.advanceTimersByTimeAsync(STALE_OUTPUT_REPLACEMENT_MS + 1);
 
-it("normal output quiet finishes on A without a replacement", async () => {
+it("normal output quiet still requires acknowledged commit and a fresh B question", async () => {
   const f = setup();
   f.child();
   f.transcript("sprout", "short");
   await vi.advanceTimersByTimeAsync(251);
-  f.session.displayed(1);
-  await vi.advanceTimersByTimeAsync(2500);
+  expect(f.session.snapshot.sceneIndex).toBe(1);
   expect(f.transport.prepareReplacement).not.toHaveBeenCalled();
-  expect(event(f.session, "answer.response_gate_released")[0].detail).toMatchObject({
-    reason: "output_transcript_quiet",
-  });
+  f.session.displayed(1, f.session.snapshot.displayToken);
+  expect(f.transport.prepareReplacement).toHaveBeenCalledOnce();
+  expect(f.transport.send).not.toHaveBeenCalled();
+  f.ready();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(f.transport.activeSourceId).toBe(2);
+  expect(f.transport.send).toHaveBeenCalledOnce();
+  expect(event(f.session, "answer.response_gate_released")[0].detail).toMatchObject({ reason: "replacement_source" });
 });
 
 it.each(["STAY", "UNAVAILABLE"] as const)(
@@ -208,14 +214,15 @@ it("promoted B does not inherit A's number or negation and still stops immediate
 });
 
 it.each(["ADVANCE", "STAY", "UNAVAILABLE"] as const)(
-  "%s replaces only after provider-only hold and sends current authoritative context exactly once",
+  "%s prepares at its safe protocol boundary and sends current authoritative context exactly once",
   async decision => {
     const f = await held(decision);
     await vi.advanceTimersByTimeAsync(STALE_OUTPUT_REPLACEMENT_MS - 2);
-    expect(f.transport.prepareReplacement).not.toHaveBeenCalled();
+    if (decision === "ADVANCE") expect(f.transport.prepareReplacement).toHaveBeenCalledOnce();
+    else expect(f.transport.prepareReplacement).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(3);
     expect(f.transport.prepareReplacement).toHaveBeenCalledExactlyOnceWith(
-      {
+      expect.objectContaining({
         sceneIndex: decision === "ADVANCE" ? 1 : 0,
         ...(decision === "STAY" ? { recovery: "instructional_support" } : {}),
         evaluatedSceneIndex: 0,
@@ -223,7 +230,16 @@ it.each(["ADVANCE", "STAY", "UNAVAILABLE"] as const)(
         childUtterance: "One",
         transcriptRevision: 1,
         answerVersion: "0:One",
-      },
+        ...(decision === "ADVANCE"
+          ? {
+              choreography: expect.objectContaining({
+                phase: "next_question_pending",
+                acknowledgment: "completed",
+                applicationAction: "ADVANCE",
+              }),
+            }
+          : {}),
+      }),
       expect.any(AbortSignal),
     );
     expect(f.transport.send).not.toHaveBeenCalled();
@@ -291,7 +307,14 @@ it.each(["ADVANCE", "STAY"] as const)(
     expect(f.transport.activateSource).not.toHaveBeenCalled();
     expect(f.transport.send).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(1800);
-    expect(event(f.session, "answer.evaluated").at(-1)?.detail).toMatchObject({ utterance: "Two", stale: false });
+    if (decision === "ADVANCE") {
+      expect(event(f.session, "answer.evaluated")).toHaveLength(1);
+      expect(f.session.snapshot.sceneIndex).toBe(1);
+      expect(
+        vi.mocked(f.transport.prepareReplacement!).mock.calls.at(-1)![0].choreography?.transitionFragmentKeys,
+      ).toEqual(["transcript_2"]);
+    } else
+      expect(event(f.session, "answer.evaluated").at(-1)?.detail).toMatchObject({ utterance: "Two", stale: false });
   },
 );
 
@@ -333,8 +356,10 @@ it("original recovery expires while B is pending; late B resolution is retired",
   await trigger();
   await vi.advanceTimersByTimeAsync(RESPONSE_GATE_RECOVERY_MS - 251 - STALE_OUTPUT_REPLACEMENT_MS - 1);
   expect(f.session.snapshot.reason).toBe("connection_failure");
-  expect(event(f.session, "replacement.cancelled")[0].detail).toMatchObject({ reason: "recovery_expired" });
+  expect(event(f.session, "replacement.cancelled")[0].detail).toMatchObject({ reason: "preparation_timeout" });
   expect(vi.mocked(f.transport.prepareReplacement!).mock.calls[0][1].aborted).toBe(true);
+  expect(f.transport.prepareReplacement).toHaveBeenCalledTimes(2);
+  expect(vi.mocked(f.transport.prepareReplacement!).mock.calls.every(([, signal]) => signal.aborted)).toBe(true);
   expect(f.transport.stopMedia).toHaveBeenCalledOnce();
   expect(f.transport.close).toHaveBeenCalledOnce();
   f.ready();
@@ -366,8 +391,8 @@ it("no replacement before scene display, during evaluation, or active child spee
   await vi.advanceTimersByTimeAsync(5000);
   expect(f.session.snapshot.sceneIndex).toBe(1);
   expect(f.transport.prepareReplacement).not.toHaveBeenCalled();
-  f.session.displayed(1);
   f.session.receive({ type: "microphone.speech_started" });
+  f.session.displayed(1, f.session.snapshot.displayToken);
   await vi.advanceTimersByTimeAsync(3000);
   expect(f.transport.prepareReplacement).not.toHaveBeenCalled();
 });
@@ -409,162 +434,107 @@ it("no replacement while Jev is pending before its deadline, even with hidden ou
   await vi.advanceTimersByTimeAsync(0);
   expect(f.transport.prepareReplacement).not.toHaveBeenCalled();
   expect(f.session.snapshot.sceneIndex).toBe(1);
-  f.session.displayed(1);
+  f.session.displayed(1, f.session.snapshot.displayToken);
   await vi.advanceTimersByTimeAsync(STALE_OUTPUT_REPLACEMENT_MS + 1);
   expect(f.transport.prepareReplacement).toHaveBeenCalledOnce();
 });
 
 describe("replacement child interruption after displayed ADVANCE", () => {
-  it("discarded provisional activity retains the original A quiet fallback", async () => {
+  it("discarded provisional activity retires pending B and prepares one fresh question after quiet", async () => {
     const f = await held();
-    await trigger();
     f.session.receive({ type: "microphone.activity_started" });
     expect(event(f.session, "replacement.cancelled")[0].detail).toMatchObject({ reason: "child_speech" });
-    expect(event(f.session, "answer.response_gate_released")).toHaveLength(0);
-    expect(f.transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
+    f.ready();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(f.transport.retireSource).toHaveBeenCalledWith(2);
     clearInterval(f.hidden);
-    await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS + 1);
-    expect(event(f.session, "answer.response_gate_released")).toHaveLength(0);
     f.session.receive({ type: "microphone.activity_discarded" });
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_FALLBACK_MS);
+    expect(f.transport.prepareReplacement).toHaveBeenCalledTimes(2);
+    f.ready(3);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(f.transport.activateSource).toHaveBeenCalledExactlyOnceWith(3);
+    expect(f.transport.send).toHaveBeenCalledOnce();
+    expect(event(f.session, "advance.committed")).toHaveLength(1);
     expect(event(f.session, "answer.response_gate_released")[0].detail).toMatchObject({
-      reason: "output_transcript_quiet",
+      reason: "replacement_source",
       decision: "ADVANCE",
     });
-    expect(f.transport.send).toHaveBeenCalledOnce();
-    expect(event(f.session, "advance.committed")).toHaveLength(1);
-    expect(f.transport.prepareReplacement).toHaveBeenCalledOnce();
-    f.ready();
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(f.transport.retireSource).toHaveBeenCalledWith(2);
-    expect(event(f.session, "replacement.promoted")).toHaveLength(0);
-    expect(f.session.snapshot.status).toBe("active");
   });
 
-  it("non-answer child turn preserves the old gate and never exposes stale A on arrival", async () => {
+  it("non-answer transition speech retains the committed gate and clarifies on fresh B", async () => {
     const f = await held();
-    await trigger();
     f.transcript("child", "what?", 4000);
-    expect(event(f.session, "replacement.cancelled")[0].detail).toMatchObject({ reason: "newer_transcript" });
-    expect(event(f.session, "answer.response_gate_preserved").at(-1)?.detail).toMatchObject({
-      reason: "non_answer_child_interruption",
-      output_blocked: true,
-    });
-    expect(event(f.session, "answer.response_gate_cancelled")).toHaveLength(0);
-    expect(event(f.session, "answer.response_gate_released")).toHaveLength(0);
     expect(f.transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
-    expect(f.transport.send).not.toHaveBeenCalled();
-    expect(event(f.session, "transcript.child_or_nearby_speaker").at(-1)?.detail).toMatchObject({
-      delta: "what?",
-      scene: sceneAt(1).id,
-    });
+    expect(event(f.session, "answer.evaluated")).toHaveLength(1);
+    expect(event(f.session, "advance.committed")).toHaveLength(1);
     f.ready();
-    await Promise.resolve();
-    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(0);
     expect(f.transport.retireSource).toHaveBeenCalledWith(2);
-    expect(f.transport.activateSource).not.toHaveBeenCalled();
     clearInterval(f.hidden);
-    await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS + 1);
-    expect(event(f.session, "answer.response_gate_released")[0].detail).toMatchObject({
-      reason: "output_transcript_quiet",
-    });
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_FALLBACK_MS);
+    f.ready(3);
+    await vi.advanceTimersByTimeAsync(0);
     expect(f.transport.send).toHaveBeenCalledOnce();
     expect(f.transport.send).toHaveBeenCalledWith(
-      expect.objectContaining({ content: expect.stringContaining("committed ADVANCE") }),
+      expect.objectContaining({ content: expect.stringContaining("Neutrally clarify") }),
     );
+    expect(f.transport.activeSourceId).toBe(3);
   });
 
-  it("new answer supersedes old ADVANCE gate on displayed scene without unblocking A", async () => {
+  it("transition answer is retained without evaluating the unasked scene or replaying A", async () => {
     const f = await held();
-    await trigger();
     f.transcript("child", "Two", 4000);
-    expect(event(f.session, "answer.response_gate_superseded")[0].detail).toMatchObject({
-      reason: "new_answer_on_displayed_scene",
-      scene_index: 1,
-      output_blocked: true,
-    });
     expect(f.transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
-    expect(event(f.session, "answer.response_gate_released")).toHaveLength(0);
-    expect(f.transport.send).not.toHaveBeenCalled();
+    expect(event(f.session, "answer.evaluated")).toHaveLength(1);
+    expect(f.session.snapshot.sceneIndex).toBe(1);
     f.ready();
-    await Promise.resolve();
-    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(0);
     expect(f.transport.retireSource).toHaveBeenCalledWith(2);
-    expect(f.transport.activateSource).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(1800);
-    expect(event(f.session, "answer.evaluated").at(-1)?.detail).toMatchObject({
-      sceneIndex: 1,
-      utterance: "Two",
-      stale: false,
-    });
-    expect(
-      event(f.session, "advance.committed").filter(e => (e.detail as { scene_index: number }).scene_index === 0),
-    ).toHaveLength(1);
-    expect(f.transport.send).not.toHaveBeenCalled();
+    clearInterval(f.hidden);
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_FALLBACK_MS);
+    const seed = vi.mocked(f.transport.prepareReplacement!).mock.calls.at(-1)![0];
+    expect(seed.choreography?.transitionFragmentKeys).toEqual(["transcript_2"]);
+    f.ready(3);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(f.transport.send).toHaveBeenCalledOnce();
+    expect(event(f.session, "answer.evaluated")).toHaveLength(1);
+    expect(event(f.session, "advance.committed")).toHaveLength(1);
   });
 
-  it("resolves the original delegation truthfully when a displayed ADVANCE is superseded", async () => {
+  it("resolves the original accepted delegation once on A and preserves it through transition speech", async () => {
     const f = setup();
-    f.child("One!", 20_000);
-    f.transcript("sprout", "hidden A", 20_600, 1);
-    const hidden = f.fragments();
+    f.child("One!", 20000);
+    f.session.receive({ type: "delegation", id: "original-answer", offsetMs: 20100, sourceId: 1 });
     await vi.advanceTimersByTimeAsync(TRANSCRIPT_FALLBACK_MS + CORRECTION_WINDOW_MS + 1);
     expect(f.session.snapshot.sceneIndex).toBe(1);
-    f.session.receive({ type: "delegation", id: "original-answer", offsetMs: 20_600, sourceId: 1 });
-    expect(event(f.session, "evaluation.delegation_associated")).toHaveLength(1);
-    f.session.displayed(1);
-
-    await trigger();
-    expect(f.transport.prepareReplacement).toHaveBeenCalledOnce();
-    f.transcript("child", "Two!", 30_000, 1);
-    expect(f.transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
-    expect(event(f.session, "advance.committed")).toHaveLength(1);
-
-    const superseded = event(f.session, "evaluation.superseded").at(-1)?.detail as Record<string, unknown>;
-    expect(superseded).toMatchObject({
-      applicationAction: "ADVANCE",
-      reason: "pending_delegation_work_superseded_after_displayed_advance",
-      sceneIndex: 0,
-      answerVersion: "20000:One!",
-    });
-    const oldResolution = vi
+    const old = vi
       .mocked(f.transport.send)
-      .mock.calls.map(([command]) => command)
-      .find(command => command.type !== "session.close" && command.delegation_id === "original-answer");
-    expect(oldResolution?.type).toBe("session.thinking.append");
-    const oldContent = oldResolution?.type === "session.thinking.append" ? oldResolution.content : "";
-    expect(oldContent).toContain("committed ADVANCE");
-    expect(oldContent).toContain("displayed 2 ducks");
-    expect(oldContent).toContain("newer answer now owns the displayed scene");
-    expect(oldContent).not.toContain("met the advancement criterion");
-    const sendsBeforeDuplicate = vi.mocked(f.transport.send).mock.calls.length;
-    f.session.receive({ type: "delegation", id: "original-answer", offsetMs: 20_600, sourceId: 1 });
-    expect(vi.mocked(f.transport.send)).toHaveBeenCalledTimes(sendsBeforeDuplicate);
-    f.session.receive({ type: "delegation", id: "late-original-answer", offsetMs: 20_600, sourceId: 1 });
-    expect(event(f.session, "evaluation.delegation_rejected").at(-1)?.detail).toMatchObject({
-      delegationId: "late-original-answer",
-      reason: "transcript_identity_is_stale_or_superseded",
+      .mock.calls.map(([c]) => c)
+      .find(c => "delegation_id" in c && c.delegation_id === "original-answer");
+    expect(old).toMatchObject({
+      type: "session.thinking.append",
+      content: expect.stringContaining("accepted ADVANCE is UNCOMMITTED"),
     });
-    expect(f.transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
+    expect(old).toMatchObject({ content: expect.stringContaining("Currently displayed: hello-duck") });
+    f.session.displayed(1, f.session.snapshot.displayToken);
+    f.transcript("child", "Two!", 30000, 1);
     f.ready();
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(f.transport.retireSource).toHaveBeenCalledWith(2);
-    expect(f.transport.activateSource).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(1800);
-    f.session.receive({ type: "delegation", id: "new-answer", offsetMs: 30_600, sourceId: 1 });
-    expect(event(f.session, "evaluation.delegation_associated").at(-1)?.detail).toMatchObject({
-      delegationId: "new-answer",
-      answerVersion: "30000:Two!",
-    });
-    expect(event(f.session, "answer.evaluated").at(-1)?.detail).toMatchObject({ sceneIndex: 1, utterance: "Two!" });
-    expect(event(f.session, "advance.committed")).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_FALLBACK_MS);
+    f.ready(3);
+    await vi.advanceTimersByTimeAsync(0);
+    const before = vi.mocked(f.transport.send).mock.calls.length;
+    f.session.receive({ type: "delegation", id: "original-answer", offsetMs: 20100, sourceId: 1 });
+    expect(f.transport.send).toHaveBeenCalledTimes(before);
+    expect(event(f.session, "advance.committed")).toHaveLength(1);
+    expect(event(f.session, "answer.evaluated")).toHaveLength(1);
+    expect(event(f.session, "evaluation.superseded")).toHaveLength(0);
     expect(
       vi
         .mocked(f.transport.send)
-        .mock.calls.map(([command]) => (command.type === "session.close" ? null : command.delegation_id)),
-    ).not.toContain(null);
-    clearInterval(hidden);
+        .mock.calls.filter(([c]) => "delegation_id" in c && c.delegation_id === "original-answer"),
+    ).toHaveLength(1);
   });
 
   it("child stop retires B, stops media before cleanup, and never permits stale A", async () => {

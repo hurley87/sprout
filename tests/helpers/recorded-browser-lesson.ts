@@ -1,3 +1,4 @@
+import { immediateAcknowledgment } from "./immediate-acknowledgment";
 import { expect, vi } from "vitest";
 import { BrowserTransport } from "../../lib/browser-transport";
 import { LessonSession } from "../../lib/session";
@@ -119,6 +120,7 @@ export async function recordedBrowserLesson(
       await persistence?.recorder.finalize(reason, incomplete);
     },
   };
+  immediateAcknowledgment(transport, () => session.snapshot.choreographyPhase);
   const session = new LessonSession(transport, evaluator, vi.fn(), undefined, recorder);
   await session.start();
   // A realistic startup interval, measured by production before /api/live.
@@ -127,21 +129,42 @@ export async function recordedBrowserLesson(
   connection.channel.onmessage?.({ data: JSON.stringify({ type: "session.started" }) });
   expect(connection.inputTrack.enabled).toBe(false);
   await vi.advanceTimersByTimeAsync(100);
-  session.displayed(0);
+  session.displayed(0, session.snapshot.displayToken);
   expect(connection.inputTrack.enabled).toBe(true);
-  const say = (text: string, startMs = 1000) =>
-    connection.channel.onmessage?.({
+  let currentConnection = connection;
+  const prepare = transport.prepareReplacement.bind(transport);
+  let initialPeer = connection.peer;
+  transport.prepareReplacement = (seed, signal) => {
+    // Explicitly supplied pending providers are kept for readiness/retirement
+    // tests. Other transcript tests get a fresh, immediately ready source.
+    const probe = new RTCPeerConnection();
+    if ((probe as unknown) === initialPeer) {
+      const fetcher = globalThis.fetch;
+      currentConnection = liveConnection();
+      initialPeer = currentConnection.peer;
+      vi.stubGlobal("fetch", fetcher);
+    }
+    return prepare(seed, signal);
+  };
+  const say = (text: string, startMs = 1000) => {
+    // Existing evidence fixtures express offsets from the first provider request.
+    // New provider sources restart their clock; translate the stimulus, never
+    // production evidence or the frozen response identity.
+    const shift = transport.activeSourceId === 1 ? 0 : (transport.replacementTiming?.provider_request_started_at ?? 0);
+    const localStart = startMs - shift;
+    currentConnection.channel.onmessage?.({
       data: JSON.stringify({
         type: "session.input_transcript.delta",
         delta: text,
-        start_ms: startMs,
-        end_ms: startMs + 200,
+        start_ms: localStart,
+        end_ms: localStart + 200,
         // Provider JSON must never be able to supply these trust labels.
         sourceId: 999,
         sourceRequestedAt: -999999,
         sessionTiming: { provenance: "mapped_provider", startMs: 1, endMs: 2 },
       }),
     });
+  };
   const flush = async () => {
     await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS);
     await session.recordingSettled();

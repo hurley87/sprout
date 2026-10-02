@@ -796,9 +796,10 @@ it("keeps genuine scene ambiguity uncertain even if VAD and arrival agree about 
     countSequenceObserved: false,
     description: "Scene timing is ambiguous.",
     support: { status: "not_established", kinds: [], sourceEventIds: [] },
-    uncertaintyReasons: ["conflicting_context"],
+    uncertaintyReasons: ["conflicting_context", "unclear_speech"],
   };
-  expect(validateObserverProposal(proposal, f.record).ok).toBe(true);
+  const uncertainResult = validateObserverProposal(proposal, f.record);
+  expect(uncertainResult.ok, JSON.stringify(uncertainResult)).toBe(true);
   f.session.end("parent_stop");
   await f.session.recordingSettled();
 });
@@ -857,7 +858,7 @@ function proposalForResponse(f: Awaited<ReturnType<typeof recordedBrowserLesson>
   return proposal;
 }
 
-it("keeps One -> Two -> Three concrete on consecutive scenes with one real provider source", async () => {
+it("keeps One -> Two -> Three concrete on consecutive scenes with fresh provider sources and independent fences", async () => {
   const f = await recordedBrowserLesson(advances);
   await vi.advanceTimersByTimeAsync(1000);
   f.say("One", 1000);
@@ -866,30 +867,32 @@ it("keeps One -> Two -> Three concrete on consecutive scenes with one real provi
   // An app commit changes the snapshot, but the response and canonical scene
   // stay on the display it answered, including before/after the next display.
   expect(validateObserverProposal(proposalForResponse(f, "One"), f.record).ok).toBe(true);
-  f.session.displayed(1);
+  f.session.displayed(1, f.session.snapshot.displayToken);
   expect(validateObserverProposal(proposalForResponse(f, "One"), f.record).ok).toBe(true);
   await vi.advanceTimersByTimeAsync(1000);
   f.say("Two", 6000);
   await f.flush();
   expect(f.session.snapshot.sceneIndex).toBe(2);
   expect(validateObserverProposal(proposalForResponse(f, "Two"), f.record).ok).toBe(true);
-  f.session.displayed(2);
+  f.session.displayed(2, f.session.snapshot.displayToken);
   await vi.advanceTimersByTimeAsync(1000);
   f.say("Three", 9500);
   await f.flush();
   expect(f.session.snapshot.sceneIndex).toBe(3);
   expect(validateObserverProposal(proposalForResponse(f, "Three"), f.record).ok).toBe(true);
-  f.session.displayed(3);
+  f.session.displayed(3, f.session.snapshot.displayToken);
   for (const text of ["One", "Two", "Three"]) {
     expect(validateObserverProposal(proposalForResponse(f, text), f.record).ok).toBe(true);
   }
   const two = f.record.events.find(e => e.evidence?.type === "utterance" && e.evidence.text === "Two")!;
   expect(two.evidence).toMatchObject({
-    sessionTiming: { sourceId: 1, inputOpenedAtMs: 100, startMs: 4000, endMs: 4600 },
+    sessionTiming: { sourceId: 2, inputOpenedAtMs: 3600, startMs: 4000, endMs: 4600 },
     responseScene: { sceneId: "duck-friends", status: "stable" },
   });
-  expect(fetch).toHaveBeenCalledOnce();
-  expect(f.transport.activeSourceId).toBe(1);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(fetch).toHaveBeenCalledTimes(4);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(f.transport.activeSourceId).toBe(4);
   f.session.end("parent_stop");
   await f.session.recordingSettled();
 });
@@ -903,7 +906,7 @@ it("links a butterfly evaluation after strawberries display and durable flush th
     await vi.advanceTimersByTimeAsync(1000);
     f.say(text, offset);
     await f.flush();
-    f.session.displayed(index + 1);
+    f.session.displayed(index + 1, f.session.snapshot.displayToken);
   }
   await f.session.recordingSettled();
   const butterfly = f.record.events.find(
@@ -914,16 +917,16 @@ it("links a butterfly evaluation after strawberries display and durable flush th
   await vi.advanceTimersByTimeAsync(2000);
   expect(f.session.snapshot.sceneIndex).toBe(3);
   expect(f.record.events.some(e => e.evidence?.type === "utterance" && e.evidence.text === "Three")).toBe(false);
-  f.session.displayed(3);
+  f.session.displayed(3, f.session.snapshot.displayToken);
   await f.flush();
   const evaluated = responseEvaluations(f, "Three").find(e => e.action === "evaluation_result")!;
   expect(evaluated).toMatchObject({
-    correlationKey: "2|3|9500:Three|1",
+    correlationKey: "2|3|400:Three|3",
     sceneIndex: 2,
     transcriptRevision: 3,
-    answerVersion: "9500:Three",
-    sourceId: 1,
-    applicationAction: "ADVANCE",
+    answerVersion: "400:Three",
+    sourceId: 3,
+    applicationAction: "UNCOMMITTED",
     responseIdentity: {
       provenance: "application_evaluation",
       fragmentKeys: ["transcript_3"],
@@ -1017,17 +1020,22 @@ it("keeps genuinely delayed old speech ambiguous after a normal display, even wi
   await vi.advanceTimersByTimeAsync(1000);
   f.say("One", 1000);
   await f.flush();
-  f.session.displayed(1);
+  liveConnection(false); // Keep A authoritative during the transition.
+  f.session.displayed(1, f.session.snapshot.displayToken);
   await vi.advanceTimersByTimeAsync(1000);
   f.session.receive({ type: "microphone.speech_started" });
   f.say("Two", 3000); // Old timeline position, delayed until the new display.
   f.session.receive({ type: "microphone.speech_stopped", quietMs: 900 });
   await f.flush();
   const proposal = proposalForResponse(f, "Two");
-  expect(responseEvaluations(f, "Two").find(e => e.action === "evaluation_result")).toMatchObject({
-    sceneIndex: 1,
-    responseIdentity: { sourceStatus: "known", evaluatedScene: { sceneId: "duck-friends" } },
-  });
+  expect(responseEvaluations(f, "Two")).toHaveLength(0);
+  expect(f.timelines.map(e => e.timeline)).toContainEqual(
+    expect.objectContaining({
+      type: "choreography_phase",
+      reason: "transition_speech_retained_for_clarification",
+      transitionFragmentKeys: ["transcript_2"],
+    }),
+  );
   expect(validateObserverProposal(proposal, f.record).ok).toBe(false);
   proposal.observation = {
     behavior: "uncertain_exchange",
@@ -1036,9 +1044,10 @@ it("keeps genuinely delayed old speech ambiguous after a normal display, even wi
     countSequenceObserved: false,
     description: "Delayed speech crosses a display boundary.",
     support: { status: "not_established", kinds: [], sourceEventIds: [] },
-    uncertaintyReasons: ["conflicting_context"],
+    uncertaintyReasons: ["conflicting_context", "unclear_speech"],
   };
-  expect(validateObserverProposal(proposal, f.record).ok).toBe(true);
+  const uncertainResult = validateObserverProposal(proposal, f.record);
+  expect(uncertainResult.ok, JSON.stringify(uncertainResult)).toBe(true);
   f.session.end("parent_stop");
   await f.session.recordingSettled();
 });
@@ -1048,7 +1057,7 @@ it("requires support before the narrowed lower bound on later scenes", async () 
   await vi.advanceTimersByTimeAsync(1000);
   f.say("One", 1000);
   await f.flush();
-  f.session.displayed(1);
+  f.session.displayed(1, f.session.snapshot.displayToken);
   await vi.advanceTimersByTimeAsync(1000);
   f.say("Two", 6000);
   await f.flush();
@@ -1132,7 +1141,8 @@ it("retains self-corrections within a scene and refuses corrections that cross d
   // Commit can precede canonical flush; advance the evaluator fallback only.
   await vi.advanceTimersByTimeAsync(2000);
   expect(g.session.snapshot.sceneIndex).toBe(1);
-  g.session.displayed(1);
+  liveConnection(false); // A must retain the adjacent correction before B promotion.
+  g.session.displayed(1, g.session.snapshot.displayToken);
   g.say(" no, Two", 1200);
   await g.flush();
   const corrected = g.record.events.find(e => e.evidence?.type === "utterance")!;
@@ -1166,7 +1176,7 @@ it("records a promoted replacement with its own request anchor and microphone fe
       end_ms: 5100,
     }),
   });
-  f.session.displayed(1);
+  f.session.displayed(1, f.session.snapshot.displayToken);
   await vi.advanceTimersByTimeAsync(1);
   expect(b.peer.setRemoteDescription).toHaveBeenCalledOnce();
   expect(f.connection.inputs[1].enabled).toBe(false);
@@ -1270,10 +1280,11 @@ it("validates responses before evaluator commits and preserves attribution after
     await vi.advanceTimersByTimeAsync(1);
     expect(f.session.snapshot.sceneIndex).toBe(index + 1);
     expect(validateObserverProposal(proposalForResponse(f, text), f.record).ok).toBe(true);
-    f.session.displayed(index + 1);
+    f.session.displayed(index + 1, f.session.snapshot.displayToken);
     expect(validateObserverProposal(proposalForResponse(f, text), f.record).ok).toBe(true);
   }
-  expect(fetch).toHaveBeenCalledOnce();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(fetch).toHaveBeenCalledTimes(4);
   f.session.end("parent_stop");
   await f.session.recordingSettled();
 });
@@ -1283,7 +1294,7 @@ it("round-trips real recorder bounds through Convex and rejects mismatched persi
   await vi.advanceTimersByTimeAsync(1000);
   f.say("One", 1000);
   await f.flush();
-  f.session.displayed(1);
+  f.session.displayed(1, f.session.snapshot.displayToken);
   await vi.advanceTimersByTimeAsync(1000);
   f.say("Two", 6000);
   await f.flush();
@@ -1306,10 +1317,10 @@ it("round-trips real recorder bounds through Convex and rejects mismatched persi
   expect(persisted?.events.filter(e => e.timeline).map(e => e.timeline)).toEqual(f.timelines.map(e => e.timeline));
   const evaluations = responseEvaluations(f, "Two");
   expect(evaluations.find(e => e.action === "evaluation_result")).toMatchObject({
-    correlationKey: "1|2|6000:Two|1",
+    correlationKey: "1|2|400:Two|2",
     transcriptRevision: 2,
-    answerVersion: "6000:Two",
-    sourceId: 1,
+    answerVersion: "400:Two",
+    sourceId: 2,
     responseIdentity: { fragmentKeys: ["transcript_2"], evaluatedScene: { sceneId: "duck-friends" } },
   });
   const response = structuredClone(
@@ -1353,9 +1364,10 @@ it.each([0, 2000, 6000])(
       f.say(text, startupDelayMs + sourceElapsed);
       await f.flush();
       expect(validateObserverProposal(proposalForResponse(f, text), f.record).ok).toBe(true);
-      f.session.displayed(index + 1);
+      f.session.displayed(index + 1, f.session.snapshot.displayToken);
     }
-    expect(fetch).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetch).toHaveBeenCalledTimes(4);
     f.session.end("parent_stop");
     await f.session.recordingSettled();
   },

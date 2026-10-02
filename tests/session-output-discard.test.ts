@@ -1,3 +1,4 @@
+import { immediateAcknowledgment } from "./helpers/immediate-acknowledgment";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { LessonSession, RESPONSE_GATE_RECOVERY_MS, type Transport } from "../lib/session";
 import { EVALUATION_TIMEOUT_MS, TRANSCRIPT_TAIL_MS, type AnswerResult, type EvaluateAnswer } from "../lib/answer";
@@ -49,10 +50,11 @@ function setup(result: AnswerResult = advance) {
     stopMedia: vi.fn(),
     close: vi.fn(),
   };
+  immediateAcknowledgment(transport, () => session.snapshot.choreographyPhase);
   const session = new LessonSession(transport, evaluate, vi.fn());
   void session.start();
   session.receive({ type: "session.started" });
-  session.displayed(0);
+  session.displayed(0, session.snapshot.displayToken);
   sent.length = 0;
   order.length = 0;
   vi.mocked(transport.setOutputBlocked).mockClear();
@@ -97,7 +99,7 @@ it("discards in-flight output at answer gating and releases ADVANCE without the 
   await f.decide();
   expect(f.session.snapshot.sceneIndex).toBe(1);
   expect(f.transport.prepareReplacement).not.toHaveBeenCalled();
-  f.session.displayed(1);
+  f.session.displayed(1, f.session.snapshot.displayToken);
   expect(f.transport.prepareReplacement).toHaveBeenCalledOnce();
   f.ready();
   await vi.advanceTimersByTimeAsync(0);
@@ -133,7 +135,7 @@ it("discards output that first races in during evaluation and never releases it 
   f.transcript("sprout", "Okay, let's see");
   expect(f.transport.discardOutput).toHaveBeenCalledOnce();
   await f.decide();
-  f.session.displayed(1);
+  f.session.displayed(1, f.session.snapshot.displayToken);
   for (let index = 0; index < 5; index++) {
     f.transcript("sprout", "old filler", 2000 + index * 100);
     await vi.advanceTimersByTimeAsync(100);
@@ -151,20 +153,23 @@ it("discards output that first races in during evaluation and never releases it 
   ).toBe(true);
 });
 
-it("keeps the original fast path when output is quiet and no stale fragment arrives", async () => {
+it("quiet output is permanently discarded for acknowledgment and only fresh B asks the next question", async () => {
   const f = setup();
   f.transcript("sprout", "How many?");
   f.session.receive({ type: "output.activity", state: "quiet", sourceId: 1 });
   f.child();
   await f.decide();
-  f.session.displayed(1);
-  expect(f.transport.discardOutput).not.toHaveBeenCalled();
-  expect(f.transport.prepareReplacement).not.toHaveBeenCalled();
-  expect(f.sent.map(item => item.source)).toEqual([1]);
+  expect(f.session.snapshot.sceneIndex).toBe(1);
+  expect(f.transport.discardOutput).toHaveBeenCalledOnce();
+  f.session.displayed(1, f.session.snapshot.displayToken);
+  expect(f.sent).toEqual([]);
+  expect(f.transport.prepareReplacement).toHaveBeenCalledOnce();
+  f.ready();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(f.sent.map(x => x.source)).toEqual([2]);
   expect(events(f.session, "answer.response_gate_released")[0].detail).toMatchObject({
-    reason: "scene_displayed",
+    reason: "replacement_source",
     wait_ms: 251,
-    output_transcript_quiet_blocked_release: false,
   });
 });
 
@@ -241,7 +246,7 @@ it("retains answer corrections after output discard and prepares only the revise
   });
   f.finishEvaluation();
   await vi.advanceTimersByTimeAsync(0);
-  f.session.displayed(1);
+  f.session.displayed(1, f.session.snapshot.displayToken);
   expect(f.transport.prepareReplacement).toHaveBeenCalledWith(
     expect.objectContaining({ childUtterance: "One no, two" }),
     expect.any(AbortSignal),
@@ -258,7 +263,7 @@ it("discards media that races in during evaluation before any output caption", a
   f.session.receive({ type: "output.activity", state: "active", sourceId: 1 });
   expect(f.transport.discardOutput).toHaveBeenCalledOnce();
   await f.decide();
-  f.session.displayed(1);
+  f.session.displayed(1, f.session.snapshot.displayToken);
   f.ready();
   await vi.advanceTimersByTimeAsync(0);
   expect(events(f.session, "answer.response_gate_released")[0].detail).toMatchObject({
@@ -285,7 +290,7 @@ it("cannot fall back to discarded output when replacement fails", async () => {
   f.child();
   f.transcript("sprout", "stale filler");
   await f.decide();
-  f.session.displayed(1);
+  f.session.displayed(1, f.session.snapshot.displayToken);
   await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS + 1);
   expect(f.transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
   expect(f.sent).toEqual([]);
@@ -294,17 +299,16 @@ it("cannot fall back to discarded output when replacement fails", async () => {
   expect(f.transport.stopMedia).toHaveBeenCalled();
 });
 
-it("keeps transcript quiet as a diagnosed barrier if the transport cannot discard", async () => {
+it("fails closed if accepted acknowledgment cannot permanently discard A even when its transcript becomes quiet", async () => {
   const f = setup();
   vi.mocked(f.transport.discardOutput!).mockReturnValue(false);
   f.child();
   f.transcript("sprout", "stale filler");
   await f.decide();
-  f.session.displayed(1);
-  expect(f.sent).toEqual([]);
   await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS);
-  expect(events(f.session, "answer.response_gate_released")[0].detail).toMatchObject({
-    reason: "output_transcript_quiet",
-    output_transcript_quiet_blocked_release: true,
-  });
+  expect(f.session.snapshot.sceneIndex).toBe(0);
+  expect(f.session.snapshot.reason).toBe("connection_failure");
+  expect(f.sent).toEqual([]);
+  expect(events(f.session, "answer.response_gate_released")).toHaveLength(0);
+  expect(f.transport.playAcknowledgment).not.toHaveBeenCalled();
 });

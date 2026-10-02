@@ -1,3 +1,4 @@
+import { immediateAcknowledgment } from "./helpers/immediate-acknowledgment";
 import { convexTest } from "convex-test";
 import schema from "../convex/schema";
 import { api } from "../convex/_generated/api";
@@ -45,6 +46,7 @@ function setup(delivery = false, retryOf?: string, evaluator?: EvaluateAnswer) {
     })),
     delivered: () => delivery,
   };
+  immediateAcknowledgment(transport, () => session.snapshot.choreographyPhase);
   const session = new LessonSession(
     transport,
     evaluator ?? (async () => ({ status: "evaluated", probability: 1, model: "test", latencyMs: 1 })),
@@ -57,7 +59,14 @@ function setup(delivery = false, retryOf?: string, evaluator?: EvaluateAnswer) {
   return { session, recorder, writes, transport };
 }
 function say(session: LessonSession, speaker: "child" | "sprout", delta: string, startMs = 0) {
-  session.receive({ type: "transcript", speaker, delta, startMs, endMs: startMs + 100 });
+  session.receive({
+    type: "transcript",
+    speaker,
+    delta,
+    startMs,
+    endMs: startMs + 100,
+    sourceId: (session as unknown as { transport: Transport }).transport.activeSourceId,
+  });
 }
 const evidence = (writes: (string | Evidence)[]) =>
   writes.filter((write): write is Evidence => typeof write !== "string");
@@ -67,7 +76,7 @@ it("excludes startup delay from canonical timestamps while retaining the diagnos
   await vi.advanceTimersByTimeAsync(2000);
   session.receive({ type: "session.started" });
   await vi.advanceTimersByTimeAsync(200);
-  session.displayed(0);
+  session.displayed(0, session.snapshot.displayToken);
   await session.recordingSettled();
   expect(recorder.append).toHaveBeenNthCalledWith(
     1,
@@ -87,7 +96,7 @@ it("excludes startup delay from canonical timestamps while retaining the diagnos
     speaker: "child_or_nearby_speaker",
     text: "hello",
     transcriptFragments: [{ key: "transcript_1", textStart: 0, textEnd: 5 }],
-    providerTiming: { clock: "provider", startMs: 250, endMs: 350 },
+    providerTiming: { clock: "provider", startMs: 250, endMs: 350, sourceId: 1 },
     responseScene: {
       provenance: "application_transcript_context",
       sceneId: "hello-duck",
@@ -114,7 +123,9 @@ it("rejects canonical evidence when the live start origin is unavailable", async
   session.receive({ type: "session.started" });
   const startedAt = session.startedAt;
   session.startedAt = undefined;
-  expect(() => session.displayed(0)).toThrow("Canonical evidence requires a live session start");
+  expect(() => session.displayed(0, session.snapshot.displayToken)).toThrow(
+    "Canonical evidence requires a live session start",
+  );
   await session.recordingSettled();
   expect(recorder.append).not.toHaveBeenCalled();
   session.startedAt = startedAt;
@@ -126,11 +137,11 @@ it("creates before activation; persists only confirmed displays, once", async ()
   const { session, writes } = setup();
   await session.recordingSettled();
   expect(writes).toEqual(["create"]);
-  session.displayed(0);
+  session.displayed(0, session.snapshot.displayToken);
   expect(evidence(writes)).toEqual([]);
   session.receive({ type: "session.started" });
-  session.displayed(0);
-  session.displayed(0);
+  session.displayed(0, session.snapshot.displayToken);
+  session.displayed(0, session.snapshot.displayToken);
   await session.recordingSettled();
   expect(writes.slice(0, 2)).toEqual(["create", "active"]);
   expect(evidence(writes)).toEqual([
@@ -147,8 +158,10 @@ it("creates before activation; persists only confirmed displays, once", async ()
   expect(session.snapshot.sceneIndex).toBe(1);
   await session.recordingSettled();
   expect(evidence(writes).filter(e => e.type === "scene_displayed")).toHaveLength(1);
-  session.displayed(1);
-  session.displayed(1);
+  session.displayed(1, session.snapshot.displayToken);
+  await vi.advanceTimersByTimeAsync(0);
+  session.displayed(1, session.snapshot.displayToken);
+  await vi.advanceTimersByTimeAsync(0);
   await session.recordingSettled();
   expect(evidence(writes).filter(e => e.type === "scene_displayed")).toHaveLength(2);
   session.end("parent_stop");
@@ -170,7 +183,7 @@ it.each<EndReason>([
   session.end(reason);
   session.end("parent_stop");
   say(session, "child", "late");
-  session.displayed(0);
+  session.displayed(0, session.snapshot.displayToken);
   await session.recordingSettled();
   expect(writes).toEqual([
     "create",
@@ -183,7 +196,7 @@ it.each<EndReason>([
         { key: "transcript_1", textStart: 0, textEnd: 6 },
         { key: "transcript_2", textStart: 6, textEnd: 11 },
       ],
-      providerTiming: { clock: "provider", startMs: 0, endMs: 200 },
+      providerTiming: { clock: "provider", startMs: 0, endMs: 200, sourceId: 1 },
       recognition: "needs_confirmation",
       firstObservedAtMs: 0,
       lastObservedAtMs: 0,
@@ -212,7 +225,7 @@ it("combines fragments, finalizes once after transcript quiet, and keeps full te
 it("records Sprout only when attributed delivery is established; omits gated output", async () => {
   const { session, writes } = setup(true);
   session.receive({ type: "session.started" });
-  session.displayed(0);
+  session.displayed(0, session.snapshot.displayToken);
   say(session, "sprout", "Hello ");
   say(session, "sprout", "friend", 100);
   await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS);
@@ -225,7 +238,7 @@ it("records Sprout only when attributed delivery is established; omits gated out
       type: "utterance",
       speaker: "sprout",
       text: "Hello friend",
-      providerTiming: { clock: "provider", startMs: 0, endMs: 200 },
+      providerTiming: { clock: "provider", startMs: 0, endMs: 200, sourceId: 1 },
       responseScene: {
         provenance: "application_transcript_context",
         sceneId: "hello-duck",
@@ -283,7 +296,7 @@ it("reports persistence failure explicitly without changing deterministic scene/
   const { session, recorder, writes } = setup();
   vi.mocked(recorder.create).mockRejectedValue(new Error("offline"));
   session.receive({ type: "session.started" });
-  session.displayed(0);
+  session.displayed(0, session.snapshot.displayToken);
   await session.recordingSettled();
   expect(session.snapshot).toMatchObject({ status: "active", sceneIndex: 0, recordingError: expect.any(String) });
   expect(session.events).toContainEqual(expect.objectContaining({ type: "recording.failed" }));
@@ -428,7 +441,7 @@ it.each([false, true])(
     );
     void session.start();
     session.receive({ type: "session.started" });
-    session.displayed(0); // event 1
+    session.displayed(0, session.snapshot.displayToken); // event 1
     say(session, "child", "first");
     say(session, "sprout", "untrusted", 100); // finalize event 2
     say(session, "child", "third", 200);
@@ -621,7 +634,7 @@ it("retains generated output while gated, with independent observation and provi
   const { session, recorder, writes } = setup(true);
   await vi.advanceTimersByTimeAsync(2000);
   session.receive({ type: "session.started" });
-  session.displayed(0);
+  session.displayed(0, session.snapshot.displayToken);
   await vi.advanceTimersByTimeAsync(100);
   say(session, "child", "one", 20);
   say(session, "sprout", "That is ", 40);
@@ -658,7 +671,7 @@ it("preserves VAD, evaluation, committed advancement and actual display on one c
   const { session, recorder } = setup();
   await vi.advanceTimersByTimeAsync(900);
   session.receive({ type: "session.started" });
-  session.displayed(0);
+  session.displayed(0, session.snapshot.displayToken);
   await vi.advanceTimersByTimeAsync(100);
   session.receive({ type: "microphone.speech_started" });
   say(session, "child", "one", 100);
@@ -678,14 +691,14 @@ it("preserves VAD, evaluation, committed advancement and actual display on one c
     1350,
     {
       type: "answer_evaluation_requested",
-      correlationKey: "0|1|100:one|unknown-source",
+      correlationKey: "0|1|100:one|1",
       sceneIndex: 0,
       turnSignal: "microphone_vad",
       turnEndToRequestMs: 250,
     },
   ]);
   expect(calls().find(call => call[2].type === "answer_evaluation_resolved")?.[2]).toMatchObject({
-    correlationKey: "0|1|100:one|unknown-source",
+    correlationKey: "0|1|100:one|1",
     status: "evaluated",
     probability: 1,
     latencyMs: 1,
@@ -707,11 +720,12 @@ it("preserves VAD, evaluation, committed advancement and actual display on one c
       ?.slice(1),
   ).toEqual([
     committedAt,
-    { type: "scene_advance_committed", fromScene: 0, toScene: 1, correlationKey: "0|1|100:one|unknown-source" },
+    { type: "scene_advance_committed", fromScene: 0, toScene: 1, correlationKey: "0|1|100:one|1" },
   ]);
   expect(vi.mocked(recorder.append).mock.calls.filter(call => call[2].type === "scene_displayed")).toHaveLength(1);
   await vi.advanceTimersByTimeAsync(80);
-  session.displayed(1);
+  session.displayed(1, session.snapshot.displayToken);
+  await vi.advanceTimersByTimeAsync(0);
   await session.recordingSettled();
   expect(
     vi
@@ -763,7 +777,7 @@ it.each(["timeout", "request_failed", "cancelled"])(
           : async () => ({ status: "unavailable", reason, latencyMs: 40 });
     const { session, recorder, writes } = setup(false, undefined, evaluator);
     session.receive({ type: "session.started" });
-    session.displayed(0);
+    session.displayed(0, session.snapshot.displayToken);
     say(session, "child", "one");
     await vi.advanceTimersByTimeAsync(TRANSCRIPT_FALLBACK_MS);
     session.end("parent_stop");
@@ -772,7 +786,7 @@ it.each(["timeout", "request_failed", "cancelled"])(
     expect(timeline.filter(event => event.type === "answer_evaluation_resolved")).toEqual([
       expect.objectContaining({
         type: "answer_evaluation_resolved",
-        correlationKey: "0|1|0:one|unknown-source",
+        correlationKey: "0|1|0:one|1",
         status: "unavailable",
         reason,
         decision: reason === "cancelled" ? "STALE" : "UNAVAILABLE",

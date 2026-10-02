@@ -1,3 +1,4 @@
+import { immediateAcknowledgment } from "./helpers/immediate-acknowledgment";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { LessonSession, type Transport } from "../lib/session";
 import { OBJECTS, sceneAt, sceneContext, TIMING } from "../lib/lesson";
@@ -34,6 +35,7 @@ function setup(recorder?: SessionRecorder) {
   };
   const changed = vi.fn();
   const evaluate = vi.fn();
+  immediateAcknowledgment(transport, () => session.snapshot.choreographyPhase);
   const session = new LessonSession(transport, evaluate, changed, undefined, recorder);
   const starting = session.start();
   return { session, transport, changed, evaluate, starting, ready, fail, diagnostic, complete, reject };
@@ -47,17 +49,17 @@ it.each(["scene-first", "live-first"])("joins startup once with %s, preserving t
   expect(transport.start).toHaveBeenCalledOnce();
   if (order === "scene-first") {
     vi.advanceTimersByTime(16);
-    session.displayed(0);
-    session.displayed(0);
+    session.displayed(0, session.snapshot.displayToken);
+    session.displayed(0, session.snapshot.displayToken);
     expect(session.snapshot.status).toBe("starting");
   } else ready({ type: "session.started" });
   expect(transport.send).not.toHaveBeenCalled();
   vi.advanceTimersByTime(200);
   if (order === "scene-first") ready({ type: "session.started" });
-  else session.displayed(0);
+  else session.displayed(0, session.snapshot.displayToken);
   complete();
   await starting;
-  session.displayed(0);
+  session.displayed(0, session.snapshot.displayToken);
   ready({ type: "session.started" });
   const scene = sceneAt(0);
   expect(transport.send).toHaveBeenCalledExactlyOnceWith(
@@ -78,7 +80,7 @@ it.each(["failure", "timeout", "stop", "rejection", "send-failure"])(
   "ends a partially initialized lesson on %s and ignores late startup callbacks",
   async failure => {
     const { session, transport, starting, ready, fail, complete, reject, diagnostic } = setup();
-    session.displayed(0);
+    session.displayed(0, session.snapshot.displayToken);
     if (failure === "failure") fail("Connection failed");
     else if (failure === "timeout") vi.advanceTimersByTime(TIMING.startup);
     else if (failure === "stop") session.end("parent_stop");
@@ -96,7 +98,7 @@ it.each(["failure", "timeout", "stop", "rejection", "send-failure"])(
     const events = session.events.length;
     ready({ type: "session.started" });
     diagnostic("startup.media_ready");
-    session.displayed(0);
+    session.displayed(0, session.snapshot.displayToken);
     await session.start();
     vi.advanceTimersByTime(TIMING.hard);
     expect(session.events).toHaveLength(events);
@@ -124,7 +126,7 @@ it("records the early visual once at Live origin without blocking on durable cre
     markIncomplete: vi.fn(async () => {}),
   };
   const { session, transport, ready, complete, starting } = setup(recorder);
-  session.displayed(0);
+  session.displayed(0, session.snapshot.displayToken);
   await Promise.resolve();
   expect(recorder.create).toHaveBeenCalledOnce();
   expect(recorder.append).not.toHaveBeenCalled();
@@ -133,7 +135,7 @@ it("records the early visual once at Live origin without blocking on durable cre
   complete();
   await starting;
   expect(transport.send).toHaveBeenCalledOnce();
-  session.displayed(0);
+  session.displayed(0, session.snapshot.displayToken);
   ready({ type: "session.started" });
   created();
   await session.recordingSettled();
@@ -152,7 +154,7 @@ it("reports startup milestones and durations once, separating provider output, t
   const { session, diagnostic, ready, complete, starting } = setup();
   diagnostic("startup.media_started");
   vi.advanceTimersByTime(10);
-  session.displayed(0);
+  session.displayed(0, session.snapshot.displayToken);
   vi.advanceTimersByTime(90);
   diagnostic("startup.microphone_ready");
   diagnostic("startup.live_connection_started");

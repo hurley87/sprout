@@ -1,3 +1,4 @@
+import type { LocalPlaybackTimeline, ChoreographyTimeline } from "./choreography";
 import type { EndReason } from "./session";
 
 /** Target-independent text policy, not ASR or evaluator confidence. */
@@ -82,6 +83,8 @@ export type Evidence =
 
 /** Provider generation and application control facts, never learner evidence. */
 export type TimelineEvent =
+  | LocalPlaybackTimeline
+  | ChoreographyTimeline
   | {
       type: "sprout_generated_utterance";
       speaker: "sprout";
@@ -122,6 +125,7 @@ export type TimelineEvent =
       transcriptRevision?: number;
       answerVersion?: string;
       sourceId?: number;
+      deliverySourceId?: number;
       responseIdentity?: EvaluatedResponseIdentity;
       delegationId?: string;
       offsetMs?: number;
@@ -129,7 +133,7 @@ export type TimelineEvent =
       status?: "scheduled" | "in_flight" | "resolved" | "superseded";
       displayStatus?: "not_applicable" | "waiting" | "confirmed";
       result?: "evaluated" | "unavailable" | "STALE";
-      applicationAction?: "ADVANCE" | "STAY" | "UNAVAILABLE" | "SUPERSEDED";
+      applicationAction?: "UNCOMMITTED" | "ADVANCE" | "STAY" | "UNAVAILABLE" | "SUPERSEDED";
       contextEventId?: string;
       ackState?: "estimated_injection" | "error" | "missing" | "duplicate" | "stale";
       reason?: string;

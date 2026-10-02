@@ -1,3 +1,4 @@
+import { preloadAcknowledgments } from "./acknowledgment-catalog";
 import {
   parseProviderEvent,
   parseSessionAnswer,
@@ -126,6 +127,15 @@ export class BrowserTransport implements Transport {
   private turnDetector?: MicrophoneTurnDetector;
   private voiceActivity: VoiceActivity = "unavailable";
   private voiceListeners: (() => void)[] = [];
+  private acknowledgmentUrls = new Map<string, string>();
+  async preloadAcknowledgments() {
+    const urls = await preloadAcknowledgments(AbortSignal.any([this.abort.signal, AbortSignal.timeout(10_000)]));
+    if (this.cancelled) {
+      urls.forEach(url => URL.revokeObjectURL(url));
+      return;
+    }
+    this.acknowledgmentUrls = urls;
+  }
   private localPlayback?: FinitePlayback;
   private playbackAttempts = new Set<string>();
   private onPlaybackEvent?: (event: LocalPlaybackEvent) => void;
@@ -701,7 +711,7 @@ export class BrowserTransport implements Transport {
 
   /** Call only after permanently discarding provider output. Uses a private
    * finite element and one known gain into audible output AND the existing mix.
-   * Microphone and VAD stay live; no production controller invokes this yet. */
+   * Microphone and VAD stay live through the controller choreography. */
   playAcknowledgment(request: PlaybackRequest): PlaybackHandle {
     const source = this.current;
     const identity = request.identity;
@@ -734,7 +744,10 @@ export class BrowserTransport implements Transport {
     this.playbackAttempts.add(identity.playbackAttemptId);
     const previous = this.localPlayback;
     const playback: FinitePlayback = new FinitePlayback(
-      request,
+      {
+        ...request,
+        asset: { ...request.asset, url: this.acknowledgmentUrls.get(request.asset.id) ?? request.asset.url },
+      },
       this.context,
       this.mix,
       () =>
@@ -837,6 +850,8 @@ export class BrowserTransport implements Transport {
     this.mix?.disconnect();
     this.mix?.stream.getTracks().forEach(track => track.stop());
     this.mix = undefined;
+    this.acknowledgmentUrls.forEach(url => URL.revokeObjectURL(url));
+    this.acknowledgmentUrls.clear();
     if (this.context) {
       this.context.onstatechange = null;
       void this.context.close().catch(() => {});

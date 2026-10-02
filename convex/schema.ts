@@ -1,3 +1,5 @@
+import { responseIdentity } from "./response_identity";
+import { localPlayback, choreographyPhase } from "./playback_validators";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { diagnosticRow, diagnosticSummary } from "./diagnostic_validators";
@@ -85,6 +87,8 @@ export const evidence = v.union(
 );
 
 export const timeline = v.union(
+  localPlayback,
+  choreographyPhase,
   v.object({
     type: v.literal("sprout_generated_utterance"),
     speaker: v.literal("sprout"),
@@ -135,22 +139,7 @@ export const timeline = v.union(
     transcriptRevision: v.optional(v.number()),
     answerVersion: v.optional(v.string()),
     sourceId: v.optional(v.number()),
-    responseIdentity: v.optional(
-      v.object({
-        provenance: v.literal("application_evaluation"),
-        fragmentKeys: v.array(v.string()),
-        sourceStatus: v.union(v.literal("known"), v.literal("missing"), v.literal("mixed")),
-        evaluatedScene: v.optional(v.object({ sceneId: v.string(), displayedAtMs: v.number() })),
-        recognitionContext: v.optional(
-          v.object({
-            provenance: v.literal("application_text_policy"),
-            recovery: v.union(v.literal("clarification"), v.literal("instructional_support")),
-            recognition: v.union(v.literal("needs_confirmation"), v.literal("no_ambiguity_detected")),
-            repeatedTotal: v.optional(v.number()),
-          }),
-        ),
-      }),
-    ),
+    responseIdentity: v.optional(responseIdentity),
     delegationId: v.optional(v.string()),
     offsetMs: v.optional(v.number()),
     origin: v.optional(v.union(v.literal("application"), v.literal("delegation"), v.literal("both"))),
@@ -160,9 +149,16 @@ export const timeline = v.union(
     displayStatus: v.optional(v.union(v.literal("not_applicable"), v.literal("waiting"), v.literal("confirmed"))),
     result: v.optional(v.union(v.literal("evaluated"), v.literal("unavailable"), v.literal("STALE"))),
     applicationAction: v.optional(
-      v.union(v.literal("ADVANCE"), v.literal("STAY"), v.literal("UNAVAILABLE"), v.literal("SUPERSEDED")),
+      v.union(
+        v.literal("UNCOMMITTED"),
+        v.literal("ADVANCE"),
+        v.literal("STAY"),
+        v.literal("UNAVAILABLE"),
+        v.literal("SUPERSEDED"),
+      ),
     ),
     contextEventId: v.optional(v.string()),
+    deliverySourceId: v.optional(v.number()),
     ackState: v.optional(
       v.union(
         v.literal("estimated_injection"),

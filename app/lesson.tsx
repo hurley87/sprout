@@ -68,7 +68,7 @@ export default function Lesson({ debug }: { debug: boolean }) {
     const current = session.current;
     let second = 0;
     const first = requestAnimationFrame(() => {
-      second = requestAnimationFrame(() => current?.displayed(snapshot.sceneIndex));
+      second = requestAnimationFrame(() => current?.displayed(snapshot.sceneIndex, snapshot.displayToken));
     });
     return () => {
       cancelAnimationFrame(first);

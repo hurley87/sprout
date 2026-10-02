@@ -1,3 +1,4 @@
+import { immediateAcknowledgment } from "./helpers/immediate-acknowledgment";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ANSWER_QUESTION,
@@ -31,6 +32,7 @@ function sessionWith(
     stopMedia: () => {},
     close: () => {},
   };
+  immediateAcknowledgment(transport, () => session.snapshot.choreographyPhase);
   const session = new LessonSession(
     transport,
     (_request, signal) => answer(signal),
@@ -39,12 +41,12 @@ function sessionWith(
   void session.start();
   const started = parseProviderEvent({ type: "session.started" });
   if (started) session.receive(started);
-  session.displayed(0);
+  session.displayed(0, session.snapshot.displayToken);
   return session;
 }
 function say(session: LessonSession, delta: string, speaker: "input" | "output" = "input") {
   const event = parseProviderEvent({ type: `session.${speaker}_transcript.delta`, delta, start_ms: 0, end_ms: 500 });
-  if (event) session.receive(event);
+  if (event) session.receive({ ...event, sourceId: 1 });
 }
 
 describe("Jev event timeline", () => {
@@ -77,7 +79,8 @@ describe("Jev event timeline", () => {
       threshold: ADVANCE_THRESHOLD,
     });
     await vi.advanceTimersByTimeAsync(Math.max(0, CORRECTION_WINDOW_MS - 243));
-    session.displayed(1);
+    session.displayed(1, session.snapshot.displayToken);
+    await vi.advanceTimersByTimeAsync(0);
     expect(evaluationHistory(session.events)[0].displayed).toBe(true);
   });
 
@@ -102,7 +105,8 @@ describe("Jev event timeline", () => {
     await vi.advanceTimersByTimeAsync(10);
     session.receive({ type: "microphone.speech_started" });
     session.receive({ type: "microphone.speech_stopped", quietMs: 920 });
-    session.displayed(1);
+    session.displayed(1, session.snapshot.displayToken);
+    await vi.advanceTimersByTimeAsync(0);
     expect(evaluationHistory(session.events)[0]).toMatchObject({
       turnEndToDisplayMs: Math.max(CORRECTION_WINDOW_MS, TRANSCRIPT_TAIL_MS + 200) + 10,
       acousticToDisplayMs: Math.max(CORRECTION_WINDOW_MS, TRANSCRIPT_TAIL_MS + 200) + 10 + 940,

@@ -1,3 +1,4 @@
+import { immediateAcknowledgment } from "./helpers/immediate-acknowledgment";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ADVANCE_THRESHOLD,
@@ -44,6 +45,8 @@ const answering = (probability: number): EvaluateAnswer => vi.fn(async () => eva
 const CONFIDENT = ADVANCE_THRESHOLD;
 const UNSURE = ADVANCE_THRESHOLD - 0.01;
 
+const sent = (transport: Transport) => vi.mocked(transport.send).mock.calls.map(([command]) => command);
+
 function setup(active = true, evaluateAnswer: EvaluateAnswer = answering(UNSURE)) {
   const transport: Transport = {
     activeSourceId: 1,
@@ -53,11 +56,12 @@ function setup(active = true, evaluateAnswer: EvaluateAnswer = answering(UNSURE)
     stopMedia: vi.fn(),
     close: vi.fn(),
   };
+  immediateAcknowledgment(transport, () => session.snapshot.choreographyPhase);
   const session = new LessonSession(transport, evaluateAnswer, vi.fn());
   void session.start();
   if (active) {
     deliver(session, { type: "session.started" });
-    session.displayed(0);
+    session.displayed(0, session.snapshot.displayToken);
   }
   return { session, transport, evaluateAnswer };
 }
@@ -74,6 +78,7 @@ it("joins transport measurements to the application clock and ignores late callb
     stopMedia: vi.fn(),
     close: vi.fn(),
   };
+  immediateAcknowledgment(transport, () => session.snapshot.choreographyPhase);
   const session = new LessonSession(transport, answering(UNSURE), vi.fn());
   await session.start();
   vi.advanceTimersByTime(123);
@@ -94,7 +99,8 @@ const settle = (extra = 0) => vi.advanceTimersByTimeAsync(SETTLE_MS + extra);
 /** Tests send provider-shaped JSON so the parser boundary is exercised too. */
 function deliver(session: LessonSession, raw: unknown) {
   const event = parseProviderEvent(raw);
-  if (event) session.receive({ ...event, sourceId: 1 });
+  if (event)
+    session.receive({ ...event, sourceId: (session as unknown as { transport: Transport }).transport.activeSourceId });
   return event;
 }
 const delegation = (id: string) => ({ type: "session.delegation.created", delegation: { id, target: "client" } });
@@ -167,7 +173,8 @@ describe("interactive evaluator deadline", () => {
       mic(session, "microphone.speech_stopped");
       await vi.advanceTimersByTimeAsync(TRANSCRIPT_TAIL_MS + latencyMs + 1);
       expect(session.snapshot.sceneIndex).toBe(1);
-      session.displayed(1);
+      session.displayed(1, session.snapshot.displayToken);
+      await vi.advanceTimersByTimeAsync(0);
       expect(transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
       expect(session.events.findLast(event => event.type === "answer.evaluated")).toMatchObject({
         at: TRANSCRIPT_TAIL_MS + latencyMs,
@@ -193,7 +200,8 @@ describe("interactive evaluator deadline", () => {
     for (let scene = 0; scene < 2; scene++) {
       deliver(session, speech(scene === 0 ? "One" : "Two", scene * 10_000));
       await settle(CORRECTION_WINDOW_MS);
-      session.displayed(scene + 1);
+      session.displayed(scene + 1, session.snapshot.displayToken);
+      await vi.advanceTimersByTimeAsync(0);
     }
     vi.mocked(transport.send).mockClear();
     vi.mocked(transport.setOutputBlocked).mockClear();
@@ -245,7 +253,7 @@ describe("interactive evaluator deadline", () => {
     expect(transport.send).toHaveBeenCalledOnce();
     expect(transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
     expect(vi.mocked(transport.send).mock.invocationCallOrder[0]).toBeLessThan(
-      vi.mocked(transport.setOutputBlocked).mock.invocationCallOrder[1],
+      vi.mocked(transport.setOutputBlocked).mock.invocationCallOrder.at(-1)!,
     );
     expect(session.events.findLast(event => event.type === "answer.response_gate_released")?.detail).toMatchObject({
       answer_version: "20000:3",
@@ -271,7 +279,8 @@ describe("interactive evaluator deadline", () => {
     if (newerRetry) {
       deliver(session, speech("3 butterflies", 30_000));
       await settle(CORRECTION_WINDOW_MS);
-      session.displayed(3);
+      session.displayed(3, session.snapshot.displayToken);
+      await vi.advanceTimersByTimeAsync(0);
     }
     const sceneIndex = session.snapshot.sceneIndex;
     const decisions = session.events.filter(event => event.type === "answer.evaluated");
@@ -308,7 +317,7 @@ describe("application lifecycle", () => {
     expect(transport.send).not.toHaveBeenCalled();
     deliver(session, { type: "session.started" });
     expect(transport.send).not.toHaveBeenCalled();
-    session.displayed(0);
+    session.displayed(0, session.snapshot.displayToken);
     expect(transport.send).toHaveBeenCalledOnce();
     vi.advanceTimersByTime(TIMING.wrap - 1);
     expect(session.snapshot.status).toBe("active");
@@ -353,13 +362,14 @@ describe("application lifecycle", () => {
     vi.advanceTimersByTime(100);
     expect(transport.close).toHaveBeenCalledOnce();
   });
-  it("immediately stops media on parent stop, accepts finalization, ignores late actions", () => {
+  it("immediately stops media on parent stop, accepts finalization, ignores late actions", async () => {
     const { session, transport } = setup();
     session.end("parent_stop");
     expect(transport.stopMedia).toHaveBeenCalledOnce();
     deliver(session, delegation("late"));
     deliver(session, speech("continue"));
-    session.displayed(1);
+    session.displayed(1, session.snapshot.displayToken);
+    await vi.advanceTimersByTimeAsync(0);
     deliver(session, { type: "session.closed", reason: "close_requested", usage: { seconds: 2 } });
     session.end("parent_stop");
     vi.runAllTimers();
@@ -518,7 +528,8 @@ describe("answer response gate", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(session.snapshot.sceneIndex).toBe(1);
     expect(transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
-    session.displayed(1);
+    session.displayed(1, session.snapshot.displayToken);
+    await vi.advanceTimersByTimeAsync(0);
     expect(vi.mocked(transport.send).mock.calls.map(([command]) => command)).toEqual([
       expect.objectContaining({ content: expect.stringContaining("committed ADVANCE") }),
     ]);
@@ -531,13 +542,13 @@ describe("answer response gate", () => {
       transcript_revision: 1,
       answer_version: "0:One",
       decision: "ADVANCE",
-      reason: "scene_displayed",
+      reason: "replacement_source",
       wait_ms: expect.any(Number),
       eligible_at: expect.any(Number),
       eligibility_basis: "observed_all_blockers_clear",
     });
     expect(vi.mocked(transport.send).mock.invocationCallOrder[0]).toBeLessThan(
-      vi.mocked(transport.setOutputBlocked).mock.invocationCallOrder[1],
+      vi.mocked(transport.setOutputBlocked).mock.invocationCallOrder.at(-1)!,
     );
   });
 
@@ -596,7 +607,8 @@ describe("answer response gate", () => {
       expect(session.snapshot.sceneIndex).toBe(1);
       expect(session.events.filter(event => event.type === "advance.committed")).toHaveLength(1);
       expect(evaluateAnswer).toHaveBeenCalledTimes(2);
-      session.displayed(1);
+      session.displayed(1, session.snapshot.displayToken);
+      await vi.advanceTimersByTimeAsync(0);
       expect(session.events.filter(event => event.type === "answer.response_gate_released")).toHaveLength(1);
       expect(session.events.findLast(event => event.type === "answer.response_gate_released")?.detail).toMatchObject({
         answer_version: "3001:No, one",
@@ -631,7 +643,7 @@ describe("answer response gate", () => {
     expect(session.snapshot.sceneIndex).toBe(1);
     expect(evaluateAnswer).toHaveBeenCalledOnce();
     expect(session.events.filter(event => event.type === "advance.committed")).toHaveLength(1);
-    expect(session.events.some(event => event.type === "answer.advance_transition_transcript_ignored")).toBe(true);
+    expect(session.events.some(event => event.type === "choreography.transition_waiting_display")).toBe(true);
   });
 
   it("does not let an initially correct answer commit before a separate wrong correction", async () => {
@@ -1064,9 +1076,11 @@ describe("answer-gated scene advancement", () => {
     await vi.advanceTimersByTimeAsync(1);
     expectAnswerResponseHeld(session, transport);
     session.receive({ type: "microphone.activity_discarded" });
-    await vi.advanceTimersByTimeAsync(1);
-    if (decision === "ADVANCE") expect(session.snapshot.sceneIndex).toBe(1);
-    else expect(session.events.filter(event => event.type === "answer.response_gate_released")).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(SETTLE_MS + 1);
+    if (decision === "ADVANCE") {
+      await vi.advanceTimersByTimeAsync(SETTLE_MS);
+      expect(session.snapshot.sceneIndex).toBe(1);
+    } else expect(session.events.filter(event => event.type === "answer.response_gate_released")).toHaveLength(1);
   });
 
   it("keeps a completed commit when provisional activity arrives after the release callback", async () => {
@@ -1103,7 +1117,7 @@ describe("answer-gated scene advancement", () => {
     await vi.advanceTimersByTimeAsync(151);
     expectAnswerResponseHeld(session, transport);
     session.receive({ type: "microphone.activity_discarded" });
-    await vi.advanceTimersByTimeAsync(1);
+    await vi.advanceTimersByTimeAsync(SETTLE_MS + 1);
     expect(session.snapshot.sceneIndex).toBe(1);
     expect(session.events.filter(event => event.type === "advance.committed")).toHaveLength(1);
     expect(evaluateAnswer).toHaveBeenCalledOnce();
@@ -1169,6 +1183,9 @@ describe("answer-gated scene advancement", () => {
       await vi.advanceTimersByTimeAsync(400);
     }
     await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
+    expect(session.snapshot.sceneIndex).toBe(0);
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(SETTLE_MS);
     expect(session.snapshot.sceneIndex).toBe(1);
     expect(session.events.filter(event => event.type === "advance.committed")).toHaveLength(1);
     expect(evaluateAnswer).toHaveBeenCalledOnce();
@@ -1180,7 +1197,8 @@ describe("answer-gated scene advancement", () => {
     await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
     expect(session.snapshot.sceneIndex).toBe(1);
 
-    session.displayed(1);
+    session.displayed(1, session.snapshot.displayToken);
+    await vi.advanceTimersByTimeAsync(0);
     session.receive({ type: "microphone.activity_started" });
     session.receive({ type: "microphone.activity_discarded" });
     await settle();
@@ -1208,7 +1226,8 @@ describe("answer-gated scene advancement", () => {
     expect(evaluateAnswer).toHaveBeenCalledOnce();
     expect(session.events.filter(event => event.type === "advance.committed")).toHaveLength(1);
     expect(session.events.filter(event => event.type === "answer.response_gate_released")).toHaveLength(0);
-    session.displayed(1);
+    session.displayed(1, session.snapshot.displayToken);
+    await vi.advanceTimersByTimeAsync(0);
     expect(session.events.filter(event => event.type === "answer.response_gate_released")).toHaveLength(1);
   });
   it("resumes an approved answer after confirmed transcriptless microphone activity without asking for a repeat", async () => {
@@ -1227,32 +1246,20 @@ describe("answer-gated scene advancement", () => {
       expect.objectContaining({ content: expect.stringContaining("say it again") }),
     );
   });
-  it("does not send a transcriptless recovery after the approved answer advances the scene", async () => {
-    const { session, transport } = setup(true, answering(CONFIDENT));
+  it("accepted acknowledgment resumes after noise without a transcriptless recovery", async () => {
+    const { session, transport, evaluateAnswer } = setup(true, answering(CONFIDENT));
     deliver(session, speech("Two"));
     await settle();
-    expect(session.events.some(event => event.type === "advance.deferred")).toBe(true);
-
-    // Noise starts a new transcriptless speech epoch while the approved advance is pending.
     mic(session, "microphone.speech_started");
     mic(session, "microphone.speech_stopped");
-    expect(session.events.findLast(event => event.type === "answer.no_transcript_scheduled")?.detail).toMatchObject({
-      epoch: 1,
-      transcript_revision: 1,
-      scene_index: 0,
-    });
-
-    // Release the already-approved answer to exercise the scene transition with the timer pending.
-    (session as unknown as { releaseDeferredAdvance(): void }).releaseDeferredAdvance();
+    await vi.advanceTimersByTimeAsync(SETTLE_MS + CORRECTION_WINDOW_MS);
     expect(session.snapshot.sceneIndex).toBe(1);
-    session.displayed(1);
-    await vi.advanceTimersByTimeAsync(SETTLE_MS);
-
-    expect(session.snapshot.sceneIndex).toBe(1);
-    expect(session.events.some(event => event.type === "answer.no_transcript")).toBe(false);
-    const sent = vi.mocked(transport.send).mock.calls.map(([command]) => command);
-    expect(sent).toContainEqual(expect.objectContaining({ content: expect.stringContaining("committed ADVANCE") }));
-    expect(sent).not.toContainEqual(expect.objectContaining({ content: expect.stringContaining("say it again") }));
+    session.displayed(1, session.snapshot.displayToken);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+    expect(session.events.some(e => e.type === "answer.no_transcript")).toBe(false);
+    expect(sent(transport).filter(c => "content" in c && c.content.includes("Ask only"))).toHaveLength(1);
+    expect(sent(transport).some(c => "content" in c && c.content.includes("say it again"))).toBe(false);
   });
   it("checks the scheduled scene even if cleanup is bypassed", async () => {
     const { session } = setup();
@@ -1371,7 +1378,8 @@ describe("answer-gated scene advancement", () => {
     deliver(session, speech("One"));
     mic(session, "microphone.speech_stopped");
     await vi.advanceTimersByTimeAsync(Math.max(CORRECTION_WINDOW_MS, TRANSCRIPT_TAIL_MS) + 1);
-    if (decision === "ADVANCE") session.displayed(1);
+    if (decision === "ADVANCE") session.displayed(1, session.snapshot.displayToken);
+    await vi.advanceTimersByTimeAsync(0);
     expect(session.events.filter(e => e.type === "answer.response_gate_released")).toHaveLength(1);
     session.receive({ type: "microphone.activity_started" });
     mic(session, "microphone.speech_started");
@@ -1411,7 +1419,8 @@ describe("answer-gated scene advancement", () => {
       reason: releaseAtMs === TRANSCRIPT_TAIL_MS + SETTLE_MS ? "vad_grace" : "correction_window",
     });
     expect(session.events.filter(e => e.type === "answer.response_gate_released")).toHaveLength(0);
-    session.displayed(1);
+    session.displayed(1, session.snapshot.displayToken);
+    await vi.advanceTimersByTimeAsync(0);
     expect(session.events.filter(e => e.type === "answer.response_gate_released")).toHaveLength(1);
     expect(evaluateAnswer).toHaveBeenCalledOnce();
     expect(session.events.filter(e => e.type === "advance.committed")).toHaveLength(1);
@@ -1542,7 +1551,8 @@ describe("answer-gated scene advancement", () => {
     answers[1](evaluated(0.99));
     await vi.advanceTimersByTimeAsync(0);
     await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
-    session.displayed(1);
+    session.displayed(1, session.snapshot.displayToken);
+    await vi.advanceTimersByTimeAsync(0);
     expect(session.snapshot.sceneIndex).toBe(1);
     answers[0](evaluated(0.99));
     await vi.advanceTimersByTimeAsync(0);
@@ -1581,9 +1591,11 @@ describe("answer-gated scene advancement", () => {
     await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
     expect(session.snapshot.sceneIndex).toBe(1);
     expect(transport.send).not.toHaveBeenCalled();
-    session.displayed(4);
+    session.displayed(4, session.snapshot.displayToken);
+    await vi.advanceTimersByTimeAsync(0);
     expect(transport.send).not.toHaveBeenCalled();
-    session.displayed(1);
+    session.displayed(1, session.snapshot.displayToken);
+    await vi.advanceTimersByTimeAsync(0);
     expect(transport.send).toHaveBeenCalledWith(
       expect.objectContaining({ type: "session.instructions.append", delegation_id: null }),
     );
@@ -1595,7 +1607,8 @@ describe("answer-gated scene advancement", () => {
       deliver(session, speech(`Answer ${i}`, i * 10_000));
       await settle();
       await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
-      session.displayed(session.snapshot.sceneIndex);
+      session.displayed(session.snapshot.sceneIndex, session.snapshot.displayToken);
+      await vi.advanceTimersByTimeAsync(0);
       expect(session.snapshot.sceneIndex).toBeLessThanOrEqual(LAST_SCENE);
     }
     expect(session.snapshot.sceneIndex).toBe(LAST_SCENE);
@@ -1605,7 +1618,7 @@ describe("answer-gated scene advancement", () => {
       .mock.calls.map(([event]) => event)
       .findLast(event => event.type === "session.instructions.append");
     expect(finalSceneInstruction).toMatchObject({
-      content: expect.stringContaining("answer the child's counts yourself without waiting for another app update"),
+      content: expect.stringContaining("reply to later completed counts without another app evaluation"),
     });
     // On the last scene there is nothing to decide, so nothing is asked.
     expect(vi.mocked(evaluateAnswer).mock.calls).toHaveLength(LAST_SCENE);
@@ -1685,10 +1698,16 @@ describe("answer-gated scene advancement", () => {
       offset_ms: 1500,
       delegation: { id: "after-result", target: "client" },
     });
-    expect(transport.send).not.toHaveBeenCalledWith(expect.objectContaining({ delegation_id: "after-result" }));
+    expect(transport.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        delegation_id: "after-result",
+        content: expect.stringContaining("accepted ADVANCE is UNCOMMITTED"),
+      }),
+    );
 
     await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
-    session.displayed(1);
+    session.displayed(1, session.snapshot.displayToken);
+    await vi.advanceTimersByTimeAsync(0);
     const commands = vi.mocked(transport.send).mock.calls.map(([command]) => command);
     expect(
       commands.filter(command => command.type === "session.instructions.append" && command.delegation_id === null),
@@ -1701,15 +1720,11 @@ describe("answer-gated scene advancement", () => {
         .filter(command => command.type === "session.thinking.append")
         .map(command => ("delegation_id" in command ? command.delegation_id : null)),
     ).toEqual(["before", "during", "after-result"]);
-    expect(
-      commands.filter(
-        command => "content" in command && command.content.includes("Briefly acknowledge the child's answer"),
-      ),
-    ).toHaveLength(1);
+    expect(commands.filter(command => "content" in command && command.content.includes("Ask only"))).toHaveLength(1);
     expect(session.events.filter(event => event.type === "advance.committed")).toHaveLength(1);
     expect(session.events.findLast(event => event.type === "evaluation.evaluation_result")?.detail).toMatchObject({
       origin: "both",
-      applicationAction: "ADVANCE",
+      applicationAction: "UNCOMMITTED",
     });
   });
   it("rejects a delegation offset too far after the matched settled answer", async () => {
@@ -1737,34 +1752,35 @@ describe("answer-gated scene advancement", () => {
       ),
     ).toBe(true);
   });
-  it("joins a delegation after scene commit but withholds its linked result until display confirmation", async () => {
-    const { session, transport } = setup(true, answering(CONFIDENT));
+  it("resolves a postcommit delegation on A with the actual pending display and never sends its handle on B", async () => {
+    const { session, transport, evaluateAnswer } = setup(true, answering(CONFIDENT));
     vi.mocked(transport.send).mockClear();
     deliver(session, speech("One!", 1000));
-    await settle();
-    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
+    await settle(CORRECTION_WINDOW_MS);
     expect(session.snapshot.sceneIndex).toBe(1);
-    expect(transport.setOutputBlocked).not.toHaveBeenLastCalledWith(false);
     deliver(session, {
       type: "session.delegation.created",
       offset_ms: 1500,
       delegation: { id: "after-commit", target: "client" },
     });
-    expect(session.events.findLast(event => event.type === "evaluation.delegation_associated")?.detail).toMatchObject({
+    expect(session.events.findLast(e => e.type === "evaluation.delegation_associated")?.detail).toMatchObject({
       delegationId: "after-commit",
       sceneIndex: 0,
       applicationAction: "ADVANCE",
     });
-    expect(transport.send).not.toHaveBeenCalledWith(expect.objectContaining({ delegation_id: "after-commit" }));
-    session.displayed(1);
-    expect(transport.send).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: "session.thinking.append",
-        delegation_id: "after-commit",
-        content: expect.stringContaining("Currently displayed: 2 ducks"),
-      }),
+    session.displayed(1, session.snapshot.displayToken);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(transport.activeSourceId).toBe(2);
+    expect(evaluateAnswer).toHaveBeenCalledOnce();
+    const linked = sent(transport).filter(c => "delegation_id" in c && c.delegation_id === "after-commit");
+    expect(linked).toHaveLength(1);
+    expect(linked[0]).toMatchObject({ content: expect.stringContaining("Last confirmed display: hello-duck") });
+    expect(linked[0]).toMatchObject({
+      content: expect.stringContaining("display confirmation pending; next question pending"),
+    });
+    expect(sent(transport)).toContainEqual(
+      expect.objectContaining({ delegation_id: null, content: expect.stringContaining("Ask only") }),
     );
-    expect(transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
   });
   it("rejects ambiguous timing, returns the prior committed result, then matches a new displayed-scene answer", async () => {
     const { session, transport, evaluateAnswer } = setup(true, answering(CONFIDENT));
@@ -1778,7 +1794,8 @@ describe("answer-gated scene advancement", () => {
     expect(transport.send).toHaveBeenCalledWith(expect.objectContaining({ delegation_id: "too-early" }));
     await settle();
     await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
-    session.displayed(1);
+    session.displayed(1, session.snapshot.displayToken);
+    await vi.advanceTimersByTimeAsync(0);
     deliver(session, {
       type: "session.delegation.created",
       offset_ms: 1500,
@@ -1788,13 +1805,11 @@ describe("answer-gated scene advancement", () => {
       expect.objectContaining({
         type: "session.thinking.append",
         delegation_id: "old-scene",
-        content: expect.stringContaining("Currently displayed: 2 ducks"),
+        content: expect.stringContaining("No evaluation result was produced"),
       }),
     );
-    expect(session.events.findLast(event => event.type === "evaluation.delegation_associated")?.detail).toMatchObject({
+    expect(session.events.findLast(event => event.type === "evaluation.delegation_rejected")?.detail).toMatchObject({
       delegationId: "old-scene",
-      sceneIndex: 0,
-      answerVersion: "1000:One!",
     });
     deliver(session, speech("Two!", 2000));
     deliver(session, {
@@ -1815,9 +1830,8 @@ describe("answer-gated scene advancement", () => {
     vi.mocked(transport.send).mockClear();
     session.receive({ type: "delegation", id: "retired", offsetMs: 500, sourceId: 2 });
     expect(transport.send).not.toHaveBeenCalled();
-    expect(session.events.findLast(event => event.type === "evaluation.delegation_rejected")?.detail).toMatchObject({
-      delegationId: "retired",
-      reason: "unknown_or_retired_source",
+    expect(session.events.findLast(event => event.type === "source.callback_ignored")?.detail).toMatchObject({
+      source_id: 2,
     });
   });
   it("keeps every scene within the 1-5 boundary and names objects correctly", () => {
@@ -1832,7 +1846,6 @@ describe("answer-gated scene advancement", () => {
 });
 
 describe("answer-check turn synchronization", () => {
-  const sent = (transport: Transport) => vi.mocked(transport.send).mock.calls.map(([command]) => command);
   const released = (transport: Transport) =>
     sent(transport).filter(command => "content" in command && command.content.includes("has not changed"));
 
@@ -1844,7 +1857,8 @@ describe("answer-check turn synchronization", () => {
     deliver(session, speech("One!"));
     await settle();
     await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
-    session.displayed(1);
+    session.displayed(1, session.snapshot.displayToken);
+    await vi.advanceTimersByTimeAsync(0);
     vi.mocked(transport.send).mockClear();
 
     mic(session, "microphone.speech_started");
@@ -1967,7 +1981,7 @@ describe("answer-check turn synchronization", () => {
     await vi.advanceTimersByTimeAsync(151);
     expectAnswerResponseHeld(session, transport);
     session.receive({ type: "microphone.activity_discarded" });
-    await vi.advanceTimersByTimeAsync(1);
+    await vi.advanceTimersByTimeAsync(SETTLE_MS + 1);
     expect(released(transport)).toHaveLength(1);
   });
 
@@ -2049,6 +2063,9 @@ describe("answer-check turn synchronization", () => {
     await vi.advanceTimersByTimeAsync(releaseAt - (Date.now() - session.createdAt) - 1);
     expect(session.snapshot.sceneIndex).toBe(0);
     await vi.advanceTimersByTimeAsync(1);
+    expect(session.snapshot.sceneIndex).toBe(0);
+    mic(session, "microphone.speech_stopped");
+    await vi.advanceTimersByTimeAsync(SETTLE_MS);
     expect(session.snapshot.sceneIndex).toBe(1);
     expect(session.events.filter(event => event.type === "advance.committed")).toHaveLength(1);
     expect(session.events.filter(event => event.type === "answer.vad_grace_expired")).toHaveLength(1);
@@ -2100,7 +2117,8 @@ describe("answer-check turn synchronization", () => {
       await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
       expect(session.snapshot.sceneIndex).toBe(1);
       expect(transport.send).not.toHaveBeenCalled();
-      session.displayed(1);
+      session.displayed(1, session.snapshot.displayToken);
+      await vi.advanceTimersByTimeAsync(0);
       if (reply) {
         await vi.advanceTimersByTimeAsync(Math.max(0, UTTERANCE_GAP_MS - SETTLE_MS - CORRECTION_WINDOW_MS));
       }
@@ -2110,68 +2128,33 @@ describe("answer-check turn synchronization", () => {
     },
   );
 
-  it("commits and displays while long hidden output continues, then releases audio only after quiet", async () => {
+  it("hidden A output remains discarded while acknowledgment commits and confirmed display authorizes only B", async () => {
     const { session, transport, evaluateAnswer } = setup(true, answering(CONFIDENT));
     vi.mocked(transport.send).mockClear();
     deliver(session, speech("One!"));
-    await settle();
-    deliver(session, speech("Let's count this duck together", 800, true));
-    expect(transport.send).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(Math.max(0, CORRECTION_WINDOW_MS - 100));
-    deliver(session, speech(" . Still counting.", 1200, true));
-    const activeQuietAt = (session as unknown as { answerResponseGate: { outputQuietAt: number } }).answerResponseGate
-      .outputQuietAt;
-    expect(activeQuietAt).toBeGreaterThan(Date.now());
-    await vi.advanceTimersByTimeAsync(100);
+    deliver(session, speech("old praise", 800, true));
+    await settle(CORRECTION_WINDOW_MS);
     expect(session.snapshot.sceneIndex).toBe(1);
-    expect(session.events.filter(event => event.type === "advance.committed")).toHaveLength(1);
-    expect(session.events.findLast(event => event.type === "advance.released")?.detail).toMatchObject({
-      reason: "correction_window",
-    });
-    expect(session.events.filter(event => event.type === "answer.response_gate_released")).toHaveLength(0);
+    expect(transport.activeSourceId).toBe(1);
+    expect(sent(transport)).toHaveLength(0);
     expect(transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
-    expect(transport.send).not.toHaveBeenCalled();
-
-    session.displayed(1);
-    expect(session.snapshot.sceneIndex).toBe(1);
-    expect(transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
-    expect(transport.send).not.toHaveBeenCalled();
-    deliver(session, speech(". There is one duck.", 1800, true));
+    session.displayed(1, session.snapshot.displayToken);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(transport.activeSourceId).toBe(2);
     expect(evaluateAnswer).toHaveBeenCalledOnce();
-    const extendedQuietAt = (session as unknown as { answerResponseGate: { outputQuietAt: number } }).answerResponseGate
-      .outputQuietAt;
-    expect(extendedQuietAt).toBeGreaterThan(activeQuietAt);
-    expect(transport.send).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS - 1);
-    expect(transport.send).not.toHaveBeenCalled();
-    expect(transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
-    await vi.advanceTimersByTimeAsync(1);
-    expect(sent(transport)).toEqual([
-      expect.objectContaining({ content: expect.stringContaining("committed ADVANCE") }),
-    ]);
-    expect(vi.mocked(transport.send).mock.invocationCallOrder[0]).toBeLessThan(
-      vi.mocked(transport.setOutputBlocked).mock.invocationCallOrder.at(-1)!,
-    );
-    const committed = session.events.find(event => event.type === "advance.committed");
-    const releasedGate = session.events.find(event => event.type === "answer.response_gate_released");
-    expect(committed?.at).toBeLessThan(releasedGate?.at ?? 0);
-    expect(releasedGate?.detail).toMatchObject({ decision: "ADVANCE", reason: "output_transcript_quiet" });
-    expect(session.events.find(event => event.type === "answer.response_gate_deadline_updated")?.detail).toMatchObject({
-      condition: "output_transcript_quiet",
-      extension_ms: expect.any(Number),
+    const commands = sent(transport);
+    expect(commands).toHaveLength(1);
+    expect(commands[0]).toMatchObject({ content: expect.stringContaining("Ask only") });
+    session.receive({
+      type: "transcript",
+      speaker: "sprout",
+      delta: "late old praise",
+      startMs: 2000,
+      endMs: 2100,
+      sourceId: 1,
     });
-    expect(
-      session.events
-        .filter(event => event.type === "answer.response_gate_observed")
-        .map(event => (event.detail as { trigger: string }).trigger),
-    ).toEqual(
-      expect.arrayContaining(["scene_committed", "scene_displayed", "blocked_provider_transcript", "released"]),
-    );
-    expect(session.events.filter(event => event.type === "advance.deferred")).toHaveLength(1);
-    expect(session.events.filter(event => event.type === "advance.released")).toHaveLength(1);
-    expect(session.events.findLast(event => event.type === "advance.released")?.detail).toMatchObject({
-      reason: "correction_window",
-    });
+    expect(sent(transport)).toEqual(commands);
+    expect(session.events.filter(e => e.type === "advance.committed")).toHaveLength(1);
   });
 
   it.each(["child_stop", "parent_stop", "wrapping", "goodbye", "time_limit"])(
@@ -2222,7 +2205,8 @@ describe("answer-check turn synchronization", () => {
     expect(released(transport)).toHaveLength(0);
     await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS);
     expect(session.snapshot.sceneIndex).toBe(1);
-    session.displayed(1);
+    session.displayed(1, session.snapshot.displayToken);
+    await vi.advanceTimersByTimeAsync(0);
     expect(
       sent(transport).filter(
         command =>
@@ -2239,7 +2223,7 @@ describe("answer-check turn synchronization", () => {
     expect(INSTRUCTIONS).toContain("The pause is only for counts: reply straight away to everything else");
     // The old contract made GPT-Live reply to every answer at once.
     expect(INSTRUCTIONS).not.toContain("after the child answers, always reply");
-    expect(PROMPT_VERSION).toBe("counting-jev-9");
+    expect(PROMPT_VERSION).toBe("counting-jev-10-ack-first");
   });
   it("sends nothing while the utterance settles or Jev is deciding", async () => {
     let answer!: (result: AnswerResult) => void;
@@ -2261,7 +2245,8 @@ describe("answer-check turn synchronization", () => {
     await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
     expect(session.snapshot.sceneIndex).toBe(1);
     expect(transport.send).not.toHaveBeenCalled();
-    session.displayed(1);
+    session.displayed(1, session.snapshot.displayToken);
+    await vi.advanceTimersByTimeAsync(0);
     expect(sent(transport)).toEqual([
       expect.objectContaining({
         type: "session.instructions.append",
@@ -2283,15 +2268,15 @@ describe("answer-check turn synchronization", () => {
     expect(session.events.filter(event => event.type === "answer.response_gate_started")).toHaveLength(1);
     expect(session.events.filter(event => event.type === "answer.response_gate_updated")).toHaveLength(0);
     expect(
-      session.events.findLast(event => event.type === "answer.advance_transition_transcript_ignored")?.detail,
+      session.events.findLast(event => event.type === "choreography.transition_waiting_display")?.detail,
     ).toMatchObject({
-      scene_index: 1,
-      gate_scene_index: 0,
-      answer_bearing: true,
+      correlationKey: expect.any(String),
+      transitionFragmentKeys: ["transcript_2"],
     });
     expect(transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
 
-    session.displayed(1);
+    session.displayed(1, session.snapshot.displayToken);
+    await vi.advanceTimersByTimeAsync(SETTLE_MS);
     expect(sent(transport)).toEqual([
       expect.objectContaining({ content: expect.stringContaining("committed ADVANCE") }),
     ]);
@@ -2308,28 +2293,28 @@ describe("answer-check turn synchronization", () => {
     expect(evaluateAnswer).toHaveBeenCalledTimes(2);
     expect(evaluateAnswer).toHaveBeenLastCalledWith({ sceneIndex: 1, utterance: "Three" }, expect.anything());
   });
-  it("keeps gate ownership after display while hidden output is still active", async () => {
+  it("old hidden output cannot mutate the released B gate or trigger an evaluation", async () => {
     const { session, transport, evaluateAnswer } = setup(true, answering(CONFIDENT));
     vi.mocked(transport.send).mockClear();
     deliver(session, speech("One!"));
+    await settle(CORRECTION_WINDOW_MS);
+    session.displayed(1, session.snapshot.displayToken);
+    await vi.advanceTimersByTimeAsync(0);
+    const commands = sent(transport);
+    session.receive({
+      type: "transcript",
+      speaker: "sprout",
+      delta: "old hidden output",
+      sourceId: 1,
+      startMs: 800,
+      endMs: 900,
+    });
+    session.receive({ type: "transcript", speaker: "child", delta: "two", sourceId: 1, startMs: 1000, endMs: 1100 });
     await settle();
-    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
-    deliver(session, speech("Maybe, let's count...", 800, true));
-    session.displayed(1);
-    deliver(session, speech("two", 1000));
-
     expect(evaluateAnswer).toHaveBeenCalledOnce();
-    expect(session.events.filter(event => event.type === "answer.response_gate_updated")).toHaveLength(0);
-    expect(session.events.filter(event => event.type === "answer.response_gate_cancelled")).toHaveLength(0);
-    expect(transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
-    expect(sent(transport)).toHaveLength(0);
-
-    await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS);
-    expect(sent(transport)).toEqual([
-      expect.objectContaining({ content: expect.stringContaining("committed ADVANCE") }),
-    ]);
-    expect(transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
-    expect(session.events.filter(event => event.type === "answer.response_gate_released")).toHaveLength(1);
+    expect(sent(transport)).toEqual(commands);
+    expect(session.events.filter(e => e.type === "source.callback_ignored")).toHaveLength(2);
+    expect(session.events.filter(e => e.type === "answer.response_gate_released")).toHaveLength(1);
   });
   it("does not let non-answer speech cancel an ADVANCE gate and still honors stop requests", async () => {
     const ordinary = setup(true, answering(CONFIDENT));
@@ -2340,7 +2325,8 @@ describe("answer-check turn synchronization", () => {
     deliver(ordinary.session, speech("Look!", 1000));
     expect(ordinary.transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
     expect(ordinary.session.events.filter(event => event.type === "answer.response_gate_cancelled")).toHaveLength(0);
-    ordinary.session.displayed(1);
+    ordinary.session.displayed(1, ordinary.session.snapshot.displayToken);
+    await vi.advanceTimersByTimeAsync(SETTLE_MS);
     expect(sent(ordinary.transport)).toContainEqual(
       expect.objectContaining({ content: expect.stringContaining("committed ADVANCE") }),
     );
@@ -2353,40 +2339,33 @@ describe("answer-check turn synchronization", () => {
     await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
     deliver(stopping.session, speech("I want to stop", 1000));
     expect(stopping.session.snapshot).toMatchObject({ status: "ended", reason: "child_stop" });
-    expect(stopping.transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
-    stopping.session.displayed(1);
+    expect(stopping.transport.stopMedia).toHaveBeenCalledOnce();
+    stopping.session.displayed(1, stopping.session.snapshot.displayToken);
+    await vi.advanceTimersByTimeAsync(SETTLE_MS);
     expect(sent(stopping.transport)).not.toContainEqual(
       expect.objectContaining({ content: expect.stringContaining("committed ADVANCE") }),
     );
   });
-  it("waits for hidden output to become quiet after ADVANCE and display before context and unblock", async () => {
+  it("fresh B instruction precedes B permission even while A output continues", async () => {
     const { session, transport } = setup(true, answering(CONFIDENT));
     vi.mocked(transport.send).mockClear();
+    vi.mocked(transport.setOutputBlocked).mockClear();
     deliver(session, speech("One!"));
-    await settle();
-    await vi.advanceTimersByTimeAsync(CORRECTION_WINDOW_MS);
-    expect(session.snapshot.sceneIndex).toBe(1);
-    deliver(session, speech("Maybe, let's count...", 800, true));
-    session.displayed(1);
-    expect(transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
-    expect(sent(transport)).toHaveLength(0);
-    await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS - 1);
-    expect(sent(transport)).toHaveLength(0);
-    expect(transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
-    await vi.advanceTimersByTimeAsync(1);
+    await settle(CORRECTION_WINDOW_MS);
+    deliver(session, speech("hidden", 800, true));
+    session.displayed(1, session.snapshot.displayToken);
+    await vi.advanceTimersByTimeAsync(0);
     expect(sent(transport)).toEqual([
-      expect.objectContaining({
-        type: "session.instructions.append",
-        content: expect.stringContaining("committed ADVANCE"),
-      }),
+      expect.objectContaining({ type: "session.instructions.append", content: expect.stringContaining("Ask only") }),
     ]);
+    expect(transport.activeSourceId).toBe(2);
     expect(transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
     expect(vi.mocked(transport.send).mock.invocationCallOrder[0]).toBeLessThan(
-      vi.mocked(transport.setOutputBlocked).mock.invocationCallOrder[1],
+      vi.mocked(transport.setOutputBlocked).mock.invocationCallOrder.at(-1)!,
     );
-    expect(session.events.findLast(event => event.type === "answer.response_gate_released")?.detail).toMatchObject({
+    expect(session.events.findLast(e => e.type === "answer.response_gate_released")?.detail).toMatchObject({
       decision: "ADVANCE",
-      reason: "output_transcript_quiet",
+      reason: "replacement_source",
     });
   });
   it("explicitly releases GPT-Live on the current scene when the answer does not advance", async () => {
@@ -2408,7 +2387,7 @@ describe("answer-check turn synchronization", () => {
     expect("content" in outcome ? outcome.content : "").toContain("currently displayed: 1 duck");
     expect(transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
     expect(vi.mocked(transport.send).mock.invocationCallOrder[0]).toBeLessThan(
-      vi.mocked(transport.setOutputBlocked).mock.invocationCallOrder[1],
+      vi.mocked(transport.setOutputBlocked).mock.invocationCallOrder.at(-1)!,
     );
     expect(session.events.findLast(e => e.type === "answer.response_gate_released")?.detail).toMatchObject({
       decision: "STAY",
@@ -2441,7 +2420,7 @@ describe("answer-check turn synchronization", () => {
       expect(released(transport)[0]).not.toMatchObject({ content: expect.stringContaining("committed STAY") });
       expect(transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
       expect(vi.mocked(transport.send).mock.invocationCallOrder[0]).toBeLessThan(
-        vi.mocked(transport.setOutputBlocked).mock.invocationCallOrder[1],
+        vi.mocked(transport.setOutputBlocked).mock.invocationCallOrder.at(-1)!,
       );
       expect(session.events.findLast(e => e.type === "answer.response_gate_released")?.detail).toMatchObject({
         decision: "UNAVAILABLE",
@@ -2742,29 +2721,29 @@ describe("response gate media investigation and bounded recovery", () => {
     expect(transport.stopMedia).toHaveBeenCalledOnce();
   });
 
-  it("does not shorten the fragmented-output hold on media quiet or steering acknowledgments", async () => {
+  it("fragmented A callbacks and acknowledgments cannot authorize B before preparation completes", async () => {
     const { session, transport } = setup(true, answering(CONFIDENT));
+    transport.prepareReplacement = vi.fn(() => new Promise<number>(() => {}));
     deliver(session, speech("One"));
     deliver(session, speech("Mm-hm", 100, true));
     await settle(CORRECTION_WINDOW_MS);
-    expect(session.snapshot.sceneIndex).toBe(1);
-    session.displayed(1);
+    session.displayed(1, session.snapshot.displayToken);
     for (let fragment = 0; fragment < 17; fragment++) {
-      deliver(session, speech(` stale-${fragment}`, 500 + fragment * 400, true));
-      session.receive({ type: "output.activity", state: "active" });
-      await vi.advanceTimersByTimeAsync(100);
-      session.receive({ type: "output.activity", state: "quiet" });
+      session.receive({
+        type: "transcript",
+        speaker: "sprout",
+        delta: " stale",
+        sourceId: 1,
+        startMs: 500 + fragment * 400,
+        endMs: 600 + fragment * 400,
+      });
+      session.receive({ type: "output.activity", state: "quiet", sourceId: 1 });
       deliver(session, { type: "session.instructions.appended", client_event_id: "sprout_1" });
-      await vi.advanceTimersByTimeAsync(100);
+      await vi.advanceTimersByTimeAsync(200);
       expect(transport.setOutputBlocked).not.toHaveBeenCalledWith(false);
     }
-    expect(session.events.filter(event => event.type === "advance.committed")).toHaveLength(1);
-    expect(session.events.findLast(event => event.type === "answer.response_gate_observed")?.detail).toMatchObject({
-      output_media_activity: "quiet",
-      output_media_is_release_barrier: false,
-    });
-    await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS - 200);
-    expect(session.events.filter(event => event.type === "answer.response_gate_released")).toHaveLength(1);
+    expect(session.events.filter(e => e.type === "advance.committed")).toHaveLength(1);
+    expect(session.events.filter(e => e.type === "answer.response_gate_released")).toHaveLength(0);
     session.dispose();
   });
 
@@ -2777,8 +2756,10 @@ describe("response gate media investigation and bounded recovery", () => {
       if (mode === "child-activity") session.receive({ type: "microphone.activity_started" });
       await settle(CORRECTION_WINDOW_MS);
       if (mode === "fragmented") {
+        transport.prepareReplacement = vi.fn(() => new Promise<number>(() => {}));
         deliver(session, speech("old scene", 100, true));
-        session.displayed(1);
+        session.displayed(1, session.snapshot.displayToken);
+        await vi.advanceTimersByTimeAsync(0);
         while (Date.now() < started + RESPONSE_GATE_RECOVERY_MS - 1000) {
           await vi.advanceTimersByTimeAsync(1000);
           deliver(session, speech(" more", Date.now() - started, true));
@@ -2790,11 +2771,12 @@ describe("response gate media investigation and bounded recovery", () => {
       expect(transport.close).toHaveBeenCalledOnce();
       expect(session.events.filter(event => event.type === "answer.response_gate_released")).toHaveLength(0);
       expect(vi.mocked(transport.stopMedia).mock.invocationCallOrder[0]).toBeLessThan(
-        vi.mocked(transport.setOutputBlocked).mock.invocationCallOrder.at(-1)!,
+        vi.mocked(transport.close).mock.invocationCallOrder[0],
       );
       const commandsBefore = vi.mocked(transport.send).mock.calls.length;
       session.receive({ type: "output.activity", state: "quiet" });
-      session.displayed(1);
+      session.displayed(1, session.snapshot.displayToken);
+      await vi.advanceTimersByTimeAsync(0);
       deliver(session, speech("late praise", 20000, true));
       await vi.advanceTimersByTimeAsync(5000);
       expect(vi.mocked(transport.send).mock.calls.length).toBe(commandsBefore);

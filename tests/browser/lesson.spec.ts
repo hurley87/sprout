@@ -36,6 +36,7 @@ type TestState = {
   outputEnergy: number;
   outputContext?: AudioContext;
   releaseMic?: () => void;
+  readyReplacement?: () => void;
 };
 
 declare global {
@@ -127,7 +128,9 @@ async function mockLive(page: Page, pendingMic = false, pendingReplacement = fal
           });
         return stream;
       };
+      const peers: Peer[] = [];
       class Peer {
+        inputTrack?: MediaStreamTrack;
         sourceNumber = ++state.peerCount;
         localDescription = { sdp: "v=0\r\n" };
         iceGatheringState = "complete";
@@ -146,13 +149,22 @@ async function mockLive(page: Page, pendingMic = false, pendingReplacement = fal
           },
         };
         constructor() {
-          if (this.sourceNumber === 1) state.emit = event => this.channel.onmessage?.({ data: JSON.stringify(event) });
+          peers.push(this);
+          // Stimulus follows the input-enabled authoritative source. Warmup B
+          // remains disabled; retired A must not supply later scene answers.
+          state.emit = event => {
+            const current =
+              peers.find(peer => peer.inputTrack?.enabled && peer.connectionState !== "closed") ?? peers[0];
+            current.channel.onmessage?.({ data: JSON.stringify(event) });
+          };
           state.disconnect = () => {
             this.connectionState = "failed";
             this.onconnectionstatechange?.();
           };
         }
-        addTrack() {}
+        addTrack(track: MediaStreamTrack) {
+          this.inputTrack = track;
+        }
         createDataChannel() {
           return this.channel;
         }
@@ -166,6 +178,9 @@ async function mockLive(page: Page, pendingMic = false, pendingReplacement = fal
           this.ontrack?.({ track: remote });
           if (!pendingReplacement || this.sourceNumber === 1)
             this.channel.onmessage?.({ data: JSON.stringify({ type: "session.started" }) });
+          else
+            state.readyReplacement = () =>
+              this.channel.onmessage?.({ data: JSON.stringify({ type: "session.started" }) });
         }
         close() {
           state.closed = true;
@@ -382,7 +397,7 @@ test("opt-in microphone measurements appear in the local download", async ({ pag
   expect(windows[0].at).toBeLessThan(5000);
 });
 
-test("a correct count commits once and holds its response until output transcript quiet", async ({ page }) => {
+test("a correct count acknowledges on the old display before one commit and fresh question", async ({ page }) => {
   await mockLive(page);
   let evaluations = 0;
   let finishEvaluation!: () => Promise<void>;
@@ -415,7 +430,6 @@ test("a correct count commits once and holds its response until output transcrip
   });
   await finishEvaluation();
   await expect(page.locator('[data-scene="duck-friends"]')).toBeVisible();
-  expect(await commands(page)).toHaveLength(before);
   await expect.poll(async () => (await sentContent(page)).filter(text => text.includes("2 ducks"))).toHaveLength(1);
   expect(evaluations).toBe(1);
   expect(await releases(page)).toEqual([]);
@@ -470,11 +484,10 @@ test("a valid delegation shares the app evaluation and contradictory tutor text 
   const linked = (await commands(page)).find(command => command.delegation_id === "count-one")!;
   expect(linked.type).toBe("session.thinking.append");
   expect(String(linked.content)).toContain("met the advancement criterion");
-  expect(String(linked.content)).toContain("Currently displayed: 2 ducks");
-  expect(String(linked.content)).toContain("do not repeat or add another correctness acknowledgment");
-  expect(
-    (await sentContent(page)).filter(text => text.includes("Briefly acknowledge the child's answer")),
-  ).toHaveLength(1);
+  expect(String(linked.content)).toContain("Currently displayed: hello-duck");
+  expect(String(linked.content)).toContain("accepted ADVANCE is UNCOMMITTED");
+  expect(String(linked.content)).toContain("stay quiet, do not acknowledge or ask another question");
+  expect((await sentContent(page)).filter(text => text.includes("Ask only"))).toHaveLength(1);
   expect(
     (await commands(page)).filter(
       command =>
@@ -1004,7 +1017,11 @@ test("fragmented stale output and pending replacement cannot extend the original
   await emit(page, { type: "session.output_transcript.delta", delta: "Old duck guidance", start_ms: 100, end_ms: 300 });
   await page.clock.runFor(1800);
   await page.clock.runFor(100);
+  // Real finite media must finish on the running browser output clock.
+  await page.clock.resume();
   await expect(page.locator('[data-scene="duck-friends"]')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.sproutTest.peerCount)).toBe(2);
+  await page.clock.pauseAt(await page.evaluate(() => new Date(Date.now() + 100)));
   for (let i = 0; i < 17; i++) {
     await emit(page, {
       type: "session.output_transcript.delta",
@@ -1013,12 +1030,18 @@ test("fragmented stale output and pending replacement cannot extend the original
       end_ms: 800 + i * 800,
     });
     await page.clock.runFor(700);
-    expect(await page.locator("audio").evaluate((audio: HTMLAudioElement) => audio.muted)).toBe(true);
+    expect(
+      await page
+        .locator("audio")
+        .evaluate((audio: HTMLAudioElement) => audio.muted || (audio.srcObject === null && audio.paused)),
+    ).toBe(true);
   }
   expect((await sentContent(page)).filter(text => text.includes("2 ducks"))).toHaveLength(0);
-  expect(await page.evaluate(() => window.sproutTest.peerCount)).toBe(2);
+  expect((await sentContent(page)).filter(text => text.includes("Ask only"))).toHaveLength(0);
+  expect(await page.evaluate(() => Object.keys(window.sproutTest.shownAt))).toEqual(["hello-duck", "duck-friends"]);
+  expect(await page.evaluate(() => window.sproutTest.peerCount)).toBe(3);
   await page.clock.runFor(1300);
-  await expect(page.getByRole("alert").filter({ hasText: "could not safely resume" })).toBeVisible();
+  await expect(page.getByRole("alert").filter({ hasText: "could not safely" })).toBeVisible();
   expect(await tracksStopped(page)).toBe(true);
   expect(
     await page.locator("audio").evaluate((audio: HTMLAudioElement) => audio.srcObject === null && audio.paused),
@@ -1031,7 +1054,7 @@ test("fragmented stale output and pending replacement cannot extend the original
 });
 
 test("a revised STAY remains muted and sends only the context for the committed displayed scene", async ({ page }) => {
-  await mockLive(page);
+  await mockLive(page, false, true);
   await page.clock.install();
   let evaluations = 0;
   await page.route("**/api/evaluate", route =>
@@ -1043,7 +1066,6 @@ test("a revised STAY remains muted and sends only the context for the committed 
   await emit(page, { type: "session.output_transcript.delta", delta: "stale correction", start_ms: 100, end_ms: 300 });
   await page.clock.runFor(1800);
   await expect.poll(() => evaluations).toBe(1);
-  await page.clock.runFor(100);
   await say(page, " no one", 500);
   await emit(page, {
     type: "session.output_transcript.delta",
@@ -1054,10 +1076,15 @@ test("a revised STAY remains muted and sends only the context for the committed 
   await page.clock.runFor(1800);
   await expect.poll(() => evaluations).toBe(2);
   await page.clock.runFor(100);
+  await page.clock.resume();
   await expect(page.locator('[data-scene="duck-friends"]')).toBeVisible();
   expect(await releases(page)).toEqual([]);
   expect(await page.locator("audio").evaluate((audio: HTMLAudioElement) => audio.muted)).toBe(true);
-  await page.clock.runFor(1000);
+  await page.evaluate(() => {
+    // Start only the current pending provider after display; promotion follows
+    // actual disabled input and source readiness, never a transcript quiet timer.
+    window.sproutTest.readyReplacement?.();
+  });
   await expect.poll(async () => (await sentContent(page)).filter(text => text.includes("2 ducks")).length).toBe(1);
   expect(await releases(page)).toEqual([]);
   const ordered = await page.evaluate(

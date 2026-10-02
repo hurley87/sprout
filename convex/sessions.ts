@@ -1,3 +1,4 @@
+import { LAST_SCENE, SCENES } from "../lib/lesson";
 import { sessionSpeechInterval } from "../lib/evidence-timing";
 import { internalMutation, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
@@ -131,6 +132,104 @@ export const appendEvent = mutation({
       if (evidence.sessionTiming?.provenance === "source_timeline_bound" && !sessionSpeechInterval(evidence))
         throw new Error("Source timeline bound must retain its causal anchor, source and receipt envelope");
       if (evidence.responseScene) nonnegative(evidence.responseScene.displayedAtMs, "responseScene.displayedAtMs");
+    }
+    if (timeline?.type === "local_playback") {
+      const identity = timeline.identity;
+      if (
+        !timeline.text.trim() ||
+        !timeline.assetId.trim() ||
+        !/^[a-f0-9]{64}$/.test(timeline.assetSha256) ||
+        !timeline.display.token.trim() ||
+        !timeline.display.sceneId.trim() ||
+        !identity.playbackAttemptId.trim() ||
+        !identity.sessionAttemptId.trim() ||
+        !identity.correlationKey.trim() ||
+        !identity.answerVersion.trim() ||
+        timeline.sourceId !== identity.owningSourceId
+      )
+        throw new Error("Invalid local playback identity");
+      for (const value of [
+        identity.originSourceId,
+        identity.owningSourceId,
+        identity.transcriptRevision,
+        identity.choreographyEpoch,
+      ])
+        if (!Number.isSafeInteger(value) || value < 1) throw new Error("Invalid playback owner");
+      if (
+        !Number.isSafeInteger(identity.evaluatedSceneIndex) ||
+        identity.evaluatedSceneIndex < 0 ||
+        identity.evaluatedSceneIndex > LAST_SCENE ||
+        (timeline.role === "acknowledgment" && identity.evaluatedSceneIndex === LAST_SCENE)
+      )
+        throw new Error("Invalid evaluated playback scene");
+      if (
+        !SCENES.some(scene => scene.id === timeline.display.sceneId) ||
+        !timeline.display.token.startsWith(`${identity.sessionAttemptId}:display:`) ||
+        (timeline.role === "acknowledgment" &&
+          (identity.responseIdentity.sourceStatus !== "known" ||
+            !identity.responseIdentity.fragmentKeys.length ||
+            new Set(identity.responseIdentity.fragmentKeys).size !== identity.responseIdentity.fragmentKeys.length ||
+            identity.responseIdentity.evaluatedScene?.sceneId !== SCENES[identity.evaluatedSceneIndex].id ||
+            timeline.display.sceneId !== identity.responseIdentity.evaluatedScene.sceneId ||
+            timeline.display.displayedAtMs !== identity.responseIdentity.evaluatedScene.displayedAtMs))
+      )
+        throw new Error("Invalid playback display or response identity");
+      for (const [field, value] of Object.entries({
+        observedAt: timeline.observedAt,
+        displayAt: timeline.display.displayedAtMs,
+        sessionAtMs: timeline.sessionAtMs,
+        sessionClockOrigin: timeline.sessionClockOrigin,
+        mediaTime: timeline.mediaTime,
+        duration: timeline.duration,
+        renderFence: timeline.renderFence,
+        baseLatency: timeline.baseLatency,
+        outputLatency: timeline.outputLatency,
+        ...timeline.outputTimestamp,
+      }))
+        if (value !== undefined) nonnegative(value, field);
+      if (
+        (timeline.sessionAtMs === undefined) !== (timeline.sessionClockOrigin === undefined) ||
+        (timeline.sessionAtMs !== undefined &&
+          (Math.abs(timeline.observedAt - timeline.sessionClockOrigin! - timeline.sessionAtMs) > 0.001 ||
+            Math.abs(atMs - timeline.sessionAtMs) > 0.001))
+      )
+        throw new Error("Invalid local playback clock mapping");
+      if (
+        timeline.state === "completed" &&
+        (!Number.isFinite(timeline.renderFence) ||
+          timeline.renderFence! <= 0 ||
+          !Number.isFinite(timeline.duration) ||
+          timeline.duration! <= 0 ||
+          timeline.duration! > 10 ||
+          !Number.isFinite(timeline.mediaTime) ||
+          timeline.mediaTime !== timeline.duration ||
+          !Number.isFinite(timeline.outputTimestamp?.contextTime) ||
+          timeline.outputTimestamp!.contextTime! <= 0 ||
+          timeline.outputTimestamp!.contextTime! < timeline.renderFence! ||
+          !Number.isFinite(timeline.outputTimestamp?.performanceTime) ||
+          timeline.outputTimestamp!.performanceTime! <= 0)
+      )
+        throw new Error("Completed playback requires natural end and output fence");
+    }
+    if (timeline?.type === "choreography_phase") {
+      if (
+        !timeline.questionToken.trim() ||
+        !timeline.sessionAttemptId.trim() ||
+        !timeline.display.token.trim() ||
+        !timeline.display.sceneId.trim() ||
+        !Number.isSafeInteger(timeline.choreographyEpoch) ||
+        timeline.choreographyEpoch < 1 ||
+        (timeline.transitionFragmentKeys?.length ?? 0) > 128
+      )
+        throw new Error("Invalid choreography identity");
+      if (
+        timeline.questionToken !== `${timeline.sessionAttemptId}:question:${timeline.choreographyEpoch}` ||
+        !timeline.display.token.startsWith(`${timeline.sessionAttemptId}:display:`) ||
+        !SCENES.some(scene => scene.id === timeline.display.sceneId) ||
+        timeline.transitionFragmentKeys?.some(key => !key.trim() || key.length > 120)
+      )
+        throw new Error("Invalid choreography question or display");
+      nonnegative(timeline.display.displayedAtMs, "display.displayedAtMs");
     }
     if (timeline?.type === "microphone_speech_stopped") {
       nonnegative(timeline.quietMs, "quietMs");

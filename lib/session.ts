@@ -1,3 +1,6 @@
+import { acknowledgmentAsset, catalogPlaybackAsset } from "./acknowledgment-catalog";
+import { immutable, samePlayback, type ChoreographyPhase, type DisplayIdentity } from "./choreography";
+import type { PlaybackIdentity } from "./events";
 import { sourceTimelineBound } from "./evidence-timing";
 import { isolatedTotal, recognitionRecovery, type Recovery } from "./recognition-recovery";
 import {
@@ -31,6 +34,7 @@ import {
   PROMPT_VERSION,
   TIMING,
   type ReplacementSeed,
+  nextQuestionContext,
   evaluationResultContext,
   objectName,
   sceneAt,
@@ -75,6 +79,9 @@ const GRACEFUL_CLOSE: Record<EndReason, boolean> = {
 export type Snapshot = {
   status: "starting" | "active" | "wrapping" | "goodbye" | "ended";
   sceneIndex: number;
+  displayToken: string;
+  choreographyPhase?: ChoreographyPhase;
+  questionStatus?: "pending" | "authorized_delivery_unknown" | "cancelled";
   reason?: EndReason;
   error?: string;
   recordingError?: string;
@@ -83,7 +90,8 @@ export type Snapshot = {
 export type Diagnostic = { at: number; type: string; detail?: unknown };
 
 export interface Transport {
-  /** Optional app-owned finite playback. Unused until lesson choreography is enabled. */
+  preloadAcknowledgments?(): Promise<void>;
+  /** App-owned finite playback. Missing capabilities fail closed for ADVANCE. */
   playAcknowledgment?(request: PlaybackRequest): PlaybackHandle;
   setPlaybackEventSink?(sink: (event: LocalPlaybackEvent) => void): void;
   setStartupDiagnosticSink?(sink: (stage: StartupStage) => void): void;
@@ -110,6 +118,7 @@ export interface Transport {
 
 /** What the app is waiting to see on screen before it speaks about it. */
 type PendingDisplay = {
+  token: string;
   kind: "greeting" | "advance";
   sceneIndex: number;
   answerVersion?: string;
@@ -124,7 +133,7 @@ type EvaluationRecord = GateIdentity & {
   responseIdentity: EvaluatedResponseIdentity;
   status: "scheduled" | "in_flight" | "resolved" | "superseded";
   result?: AnswerResult;
-  applicationAction?: "ADVANCE" | "STAY" | "UNAVAILABLE" | "SUPERSEDED";
+  applicationAction?: "UNCOMMITTED" | "ADVANCE" | "STAY" | "UNAVAILABLE" | "SUPERSEDED";
   displayStatus: "not_applicable" | "waiting" | "confirmed";
   displayedSceneIndex?: number;
   applicationFeedbackSent: boolean;
@@ -175,6 +184,7 @@ type AnswerResponseGate = {
   discardedSourceId?: number;
   outputQuietBlockedRelease?: boolean;
   replacementAttempted?: boolean;
+  preparationAttempts?: number;
   /** The stale A source may be permitted only by an explicit safe release. */
   sourceIsolationRequired?: boolean;
   sourceIsolationRequiredAt?: number;
@@ -185,8 +195,39 @@ type AnswerResponseGate = {
   evaluationTimedOutAt?: number;
 };
 
+type Choreography = {
+  epoch: number;
+  gate: AnswerResponseGate;
+  record: EvaluationRecord;
+  originSourceId: number;
+  oldDisplay: DisplayIdentity;
+  phase: ChoreographyPhase;
+  questionToken: string;
+  questionStatus: "pending" | "authorized_delivery_unknown" | "cancelled";
+  retries: number;
+  resumeAt: number;
+  sourceRecovery?: boolean;
+  playback?: { identity: PlaybackIdentity; handle?: PlaybackHandle };
+  transitionFragments: string[];
+};
+
 export class LessonSession {
-  snapshot: Snapshot = { status: "starting", sceneIndex: 0 };
+  readonly attemptId = crypto.randomUUID();
+  snapshot: Snapshot = { status: "starting", sceneIndex: 0, displayToken: `${this.attemptId}:display:0` };
+  private choreographyEpoch = 0;
+  private playbackSequence = 0;
+  private choreography: Choreography | null = null;
+  private choreographyTimer?: ReturnType<typeof setTimeout>;
+  private playbackFacts = new Map<
+    string,
+    {
+      request: PlaybackRequest;
+      display: DisplayIdentity;
+      text: string;
+      state?: LocalPlaybackEvent["state"];
+      terminal: boolean;
+    }
+  >();
   readonly events: Diagnostic[] = [];
   readonly createdAt = Date.now();
   startedAt?: number;
@@ -240,8 +281,13 @@ export class LessonSession {
   private answerResponseGate: AnswerResponseGate | null = null;
   private replacementTimer?: ReturnType<typeof setTimeout>;
   private providerOnlySince?: number;
-  private replacement: { gate: AnswerResponseGate; abort: AbortController; startedAt: number; id?: number } | null =
-    null;
+  private replacement: {
+    gate: AnswerResponseGate;
+    abort: AbortController;
+    startedAt: number;
+    id?: number;
+    timeout?: ReturnType<typeof setTimeout>;
+  } | null = null;
   private responseGateRecoveryTimer?: ReturnType<typeof setTimeout>;
   private outputActivity: "active" | "quiet" | "unavailable" = "unavailable";
   private lastSproutDeltaAt?: number;
@@ -256,7 +302,7 @@ export class LessonSession {
   private recordingStarted = false;
   private evidenceOrder = 0;
   private timelineOrder = 0;
-  private displayedContext?: { sceneId: string; displayedAtMs: number };
+  private displayedContext?: DisplayIdentity;
   private confirmation?: { sceneIndex: number; total: number; answerVersion: string };
   private canonical = { child: new UtteranceAccumulator(), sprout: new UtteranceAccumulator() };
   private utteranceTimers: Partial<Record<"child" | "sprout", ReturnType<typeof setTimeout>>> = {};
@@ -281,7 +327,11 @@ export class LessonSession {
   private openSourceInput() {
     if (!this.ready || !this.displayedContext) return;
     this.transport.openInput?.(sourceId => {
-      this.inputBound = { sourceId, startMs: this.sessionAtMs(), inputScene: { ...this.displayedContext! } };
+      this.inputBound = {
+        sourceId,
+        startMs: this.sessionAtMs(),
+        inputScene: { sceneId: this.displayedContext!.sceneId, displayedAtMs: this.displayedContext!.displayedAtMs },
+      };
     });
   }
 
@@ -321,6 +371,14 @@ export class LessonSession {
           }
         : {}),
       ...fields,
+      // Response joins retain the evaluated source even when B carries context.
+      // Delivery provenance must never overwrite the immutable answer identity.
+      ...(record && fields.sourceId !== undefined
+        ? {
+            sourceId: record.sourceId,
+            deliverySourceId: fields.sourceId,
+          }
+        : {}),
     };
     const serializableDetail = Object.fromEntries(
       Object.entries(detail).filter(([, value]) => value !== undefined),
@@ -435,7 +493,8 @@ export class LessonSession {
           ? {
               responseScene: {
                 provenance: "application_transcript_context",
-                ...this.displayedContext,
+                sceneId: this.displayedContext.sceneId,
+                displayedAtMs: this.displayedContext.displayedAtMs,
                 status: "stable",
               } as const,
             }
@@ -557,14 +616,17 @@ export class LessonSession {
     this.log("attempt.started", { model: MODEL, prompt: PROMPT_VERSION });
     this.startupEvents.push(this.events[this.events.length - 1]);
     this.initialInstruction = `Start the lesson now in English. Say only: "Hi! How many ${OBJECTS[this.scene.object].plural} do you see?" Do not introduce yourself or ask to play a game. ${sceneContext(this.scene)} Then pause and listen.`;
-    this.pending = { kind: "greeting", sceneIndex: 0 };
+    this.pending = { kind: "greeting", sceneIndex: 0, token: this.snapshot.displayToken };
     this.startup("startup.lesson_state_ready");
     this.changed(this.snapshot);
     this.startupTimer = setTimeout(
       () => this.fail("Microphone or voice setup took too long. Check browser permission and try again."),
       TIMING.startup,
     );
+    this.transport.setPlaybackEventSink?.(event => this.playbackEvent(event));
     try {
+      if (this.transport.preloadAcknowledgments) await this.transport.preloadAcknowledgments();
+      if (this.expireIfOverdue()) return;
       await this.transport.start(
         event => this.receive(event),
         message => this.fail(message),
@@ -644,6 +706,12 @@ export class LessonSession {
   }
 
   receive(event: ProviderEvent) {
+    if (event.sourceId !== undefined && event.sourceId !== this.transport.activeSourceId) {
+      if (event.type === "context.appended")
+        this.contextAcknowledged(event.name, event.clientEventId, event.sourceId, event.startMs, event.endMs);
+      this.log("source.callback_ignored", { type: event.type, source_id: event.sourceId });
+      return;
+    }
     // Finalization is accepted after ending, but no further model work is.
     if (event.type === "session.closed") {
       this.log("connection.finalized", { reason: event.reason, usage: event.usage });
@@ -691,6 +759,7 @@ export class LessonSession {
         this.heard(event);
         return;
       case "microphone.activity_started":
+        this.interruptChoreography();
         this.cancelReplacementForChild("child_speech");
         if (this.microphoneSpeaking || this.provisionalActivity) return;
         this.provisionalActivity = true;
@@ -708,6 +777,7 @@ export class LessonSession {
       case "microphone.activity_discarded": {
         if (!this.provisionalActivity) return;
         this.provisionalActivity = false;
+        this.resumeChoreography();
         const heardNewTranscript = this.transcriptRevision !== this.activityTranscriptRevision;
         this.log("answer.activity_discarded", {
           heard_new_transcript: heardNewTranscript,
@@ -725,6 +795,7 @@ export class LessonSession {
         return;
       }
       case "microphone.speech_started":
+        this.interruptChoreography();
         this.cancelReplacementForChild("child_speech");
         if (this.microphoneSpeaking) return;
         const wasProvisional = this.provisionalActivity;
@@ -757,6 +828,7 @@ export class LessonSession {
         this.microphoneSpeaking = false;
         this.microphoneSpeechStartedAt = undefined;
         this.turnEndAt = Date.now();
+        this.resumeChoreography();
         this.vadDetectionMs = event.quietMs;
         this.timeline({
           type: "microphone_speech_stopped",
@@ -783,9 +855,9 @@ export class LessonSession {
         });
         this.observeResponseGate("microphone_speech_stopped");
         if (this.answerResponseGate?.sourceIsolationRequired) this.scheduleDisplayedRelease();
-        if (this.latest && this.transcriptEpoch === this.speechEpoch)
+        if (!this.choreography && this.latest && this.transcriptEpoch === this.speechEpoch)
           this.scheduleEvaluation(this.latest, TRANSCRIPT_TAIL_MS, "microphone_vad");
-        else if (this.latest) this.scheduleNoTranscriptRecovery(this.speechEpoch);
+        else if (!this.choreography && this.latest) this.scheduleNoTranscriptRecovery(this.speechEpoch);
         if (this.deferredAdvance) this.scheduleDeferredRelease();
         else if (this.deferredStay) this.scheduleDeferredStayRelease();
         return;
@@ -919,46 +991,50 @@ export class LessonSession {
         this.end("child_stop");
         return;
       }
-      if (this.advanceResponseTransitionActive) {
+      const choreography = this.choreography;
+      if (
+        choreography &&
+        choreography.gate.sceneCommittedAt !== undefined &&
+        ["transition_waiting_display", "next_question_pending", "next_question_released"].includes(choreography.phase)
+      ) {
         if (requestsStop(utterance.text)) {
-          this.cancelAnswerResponseGate("child_stop");
           this.end("child_stop");
           return;
         }
-        if (sourceIsolationRequired) {
-          if (mentionsNumber(utterance.text)) {
-            // The committed new scene owns this answer. The new gate inherits
-            // the original recovery deadline and keeps A blocked.
-            clearTimeout(this.displayedReleaseTimer);
-            this.displayedRelease = null;
-            this.log("answer.response_gate_superseded", {
-              reason: "new_answer_on_displayed_scene",
-              scene_index: this.snapshot.sceneIndex,
-              transcript_revision: this.transcriptRevision,
-              output_blocked: this.outputBlocked,
-            });
-          } else {
-            this.preserveNonAnswerOnStaleSource();
+        if (fragmentKey) {
+          if (choreography.transitionFragments.length >= 128) {
+            this.fail("Too much uncertain transition speech to safely resume.");
             return;
           }
-        } else {
-          this.log("answer.advance_transition_transcript_ignored", {
-            scene_index: this.snapshot.sceneIndex,
-            gate_scene_index: this.answerResponseGate?.sceneIndex,
-            answer_bearing: mentionsNumber(utterance.text),
-          });
-          // Keep transition-period speech out of the next answer window too.
-          // The canonical source fence remains valid. Reset only the answer
-          // window; display changes cannot establish a new input/queue fence.
+          choreography.transitionFragments.push(fragmentKey);
+        }
+        this.interruptChoreography();
+        if (!this.currentChoreography(choreography)) return;
+        this.phase(choreography, choreography.phase, "transition_speech_retained_for_clarification");
+        this.childSpeech = new TranscriptWindow();
+        this.resumeChoreography();
+        return;
+      }
+      if (
+        choreography &&
+        choreography.gate.sceneCommittedAt === undefined &&
+        ["accepted_pending_ack", "ack_playing", "ack_draining", "ack_completed", "transition_waiting_display"].includes(
+          choreography.phase,
+        )
+      ) {
+        if (!mentionsNumber(utterance.text) && !requestsStop(utterance.text)) {
+          this.interruptChoreography();
           this.childSpeech = new TranscriptWindow();
+          this.resumeChoreography();
           return;
         }
+        this.cancelChoreography("superseded", "child_revision");
       }
       if (sourceIsolationRequired && !mentionsNumber(utterance.text)) {
         this.preserveNonAnswerOnStaleSource();
         return;
       }
-      if (sourceIsolationRequired && this.answerResponseGate?.decision === "ADVANCE") {
+      if (sourceIsolationRequired && this.answerResponseGate?.sceneCommittedAt !== undefined) {
         const committedGate = this.answerResponseGate;
         this.supersedeEvaluation(
           {
@@ -1221,6 +1297,7 @@ export class LessonSession {
   }
 
   private cancelAnswerResponseGate(reason: string) {
+    this.cancelChoreography(this.ending ? "stopped" : "superseded", reason);
     const protectedGate = this.answerResponseGate;
     if (protectedGate?.sourceIsolationRequired && !this.ending) {
       // No ordinary cancellation path can establish A's quiet or B authority.
@@ -1367,6 +1444,10 @@ export class LessonSession {
   }
 
   private scheduleReplacement() {
+    if (this.choreography) {
+      this.scheduleChoreographyReplacement();
+      return;
+    }
     clearTimeout(this.replacementTimer);
     const gate = this.answerResponseGate;
     if (!gate || !this.transport.prepareReplacement || !this.transport.activateSource || !this.transport.retireSource)
@@ -1401,7 +1482,12 @@ export class LessonSession {
         output_blocked: this.outputBlocked,
       });
     }
-    gate.replacementAttempted = true; // At most one paid attempt per answer identity.
+    if ((gate.preparationAttempts ?? 0) >= 2) {
+      this.fail("Sprout could not safely prepare its voice. You can start a new lesson.");
+      return;
+    }
+    gate.preparationAttempts = (gate.preparationAttempts ?? 0) + 1;
+    gate.replacementAttempted = true; // Bounded within the original response budget.
     const owner = { gate, abort: new AbortController(), startedAt: Date.now(), id: undefined as number | undefined };
     this.replacement = owner;
     const seed: ReplacementSeed = {
@@ -1440,6 +1526,7 @@ export class LessonSession {
     const owner = this.replacement;
     if (!owner) return;
     this.replacement = null; // Invalidate before abort/retirement callbacks.
+    clearTimeout(owner.timeout);
     owner.abort.abort();
     if (owner.id !== undefined) this.transport.retireSource?.(owner.id);
     this.log("replacement.cancelled", { ...this.replacementIdentity(owner.gate), reason, source_id: owner.id });
@@ -1469,6 +1556,7 @@ export class LessonSession {
         this.transport.retireSource!(id);
         return;
       }
+      clearTimeout(owner.timeout);
       this.log("replacement.ready", {
         ...this.replacementIdentity(owner.gate),
         source_id: id,
@@ -1477,6 +1565,10 @@ export class LessonSession {
       if (Date.now() >= owner.gate.startedAt + RESPONSE_GATE_RECOVERY_MS) {
         this.cancelReplacement("recovery_expired");
         this.fail("Sprout could not safely resume its voice. This attempt has ended; you can start a new lesson.");
+        return;
+      }
+      if (this.choreography?.gate === owner.gate) {
+        this.promoteChoreographyReplacement(owner, id);
         return;
       }
       if (!this.replacementEligibleForGate(owner.gate)) {
@@ -1549,7 +1641,10 @@ export class LessonSession {
           });
       });
     } catch {
-      if (this.replacement === owner) this.cancelReplacement("startup_failure");
+      if (this.replacement === owner) {
+        this.cancelReplacement("startup_failure");
+        if (this.choreography?.gate === owner.gate) this.resumeChoreography();
+      }
       // The existing transcript gate and original recovery deadline keep control.
     }
   }
@@ -1660,6 +1755,7 @@ export class LessonSession {
         });
       if (delay === TRANSCRIPT_FALLBACK_MS) {
         this.turnEndAt = Date.now();
+        this.resumeChoreography();
         this.vadDetectionMs = undefined;
         this.turnSignal = "transcript_fallback";
         this.log("answer.turn_end", { signal: this.turnSignal });
@@ -1923,7 +2019,7 @@ export class LessonSession {
       : result.status === "unavailable"
         ? "UNAVAILABLE"
         : advancing
-          ? "ADVANCE"
+          ? "UNCOMMITTED"
           : "STAY";
     this.evaluationControl(record, stale ? "result_superseded" : "evaluation_result", {
       result: stale ? "STALE" : result.status,
@@ -2000,6 +2096,32 @@ export class LessonSession {
       this.answerResponseGate.decision = "ADVANCE";
       this.observeResponseGate("advance_deferred");
     }
+    const gate = this.answerResponseGate;
+    const record = gate && this.findEvaluationRecord(gate);
+    if (!gate || !record || record.sourceId === undefined || !this.displayedContext) {
+      this.fail("Sprout could not safely identify the accepted answer. You can start a new lesson.");
+      return;
+    }
+    const owner: Choreography = {
+      epoch: ++this.choreographyEpoch,
+      gate,
+      record,
+      originSourceId: record.sourceId,
+      oldDisplay: immutable({ ...this.displayedContext }),
+      phase: "accepted_pending_ack",
+      questionToken: `${this.attemptId}:question:${this.choreographyEpoch}`,
+      questionStatus: "pending",
+      retries: 0,
+      resumeAt: this.deferredAdvance.correctionReadyAt,
+      transitionFragments: [],
+    };
+    this.choreography = owner;
+    this.evaluationControl(record, "advancement_accepted", {
+      applicationAction: "UNCOMMITTED",
+      reason: "acknowledgment_and_display_pending",
+    });
+    this.phase(owner, "accepted_pending_ack");
+    for (const id of record.delegationIds) this.sendChoreographyEvaluationResult(record, id);
     this.scheduleDeferredRelease();
   }
 
@@ -2050,7 +2172,7 @@ export class LessonSession {
     });
     if (deferred.vadGraceUntil !== undefined)
       this.log("answer.vad_grace_expired", { decision: "ADVANCE", answer_version: deferred.answerVersion });
-    this.advance(deferred.answerVersion);
+    this.resumeChoreography();
   }
 
   private cancelDeferredAdvance() {
@@ -2222,7 +2344,20 @@ export class LessonSession {
   }
 
   /** The application, not the model, commits the next deterministic scene. */
-  private advance(answerVersion: string) {
+  private advance(owner: Choreography, sourceId: number) {
+    if (
+      !this.currentChoreography(owner) ||
+      this.expireIfOverdue() ||
+      owner.phase !== "transition_waiting_display" ||
+      this.microphoneSpeaking ||
+      this.provisionalActivity ||
+      this.transport.activeSourceId !== sourceId ||
+      this.snapshot.sceneIndex !== owner.record.sceneIndex ||
+      this.transcriptRevision !== owner.record.transcriptRevision ||
+      this.displayedContext?.token !== owner.oldDisplay.token
+    )
+      return;
+    const answerVersion = owner.record.answerVersion;
     const evaluationRecord = this.answerResponseGate ? this.findEvaluationRecord(this.answerResponseGate) : undefined;
     this.log("advance.committed", {
       scene_index: this.snapshot.sceneIndex,
@@ -2235,6 +2370,7 @@ export class LessonSession {
       this.answerResponseGate.sceneCommittedAt = Date.now();
       const record = evaluationRecord;
       if (record) {
+        record.applicationAction = "ADVANCE";
         record.displayStatus = "waiting";
         this.evaluationControl(record, "scene_commit", { applicationAction: "ADVANCE", result: "evaluated" });
       }
@@ -2252,6 +2388,7 @@ export class LessonSession {
     const gate = this.answerResponseGate;
     this.pending = {
       kind: "advance",
+      token: `${this.attemptId}:display:${this.choreography?.epoch}`,
       sceneIndex,
       answerVersion,
       turnEndAt: this.turnEndAt,
@@ -2266,7 +2403,7 @@ export class LessonSession {
     this.cancelNoTranscriptRecovery();
     this.latest = null;
     this.childSpeech = new TranscriptWindow();
-    this.update({ sceneIndex });
+    this.update({ sceneIndex, displayToken: this.pending.token });
   }
 
   private evaluationKey(sceneIndex: number, revision: number, version: string, sourceId?: number) {
@@ -2312,7 +2449,12 @@ export class LessonSession {
             ? { recognitionContext: structuredClone(this.latest.recognitionContext) }
             : {}),
           ...(this.displayedContext?.sceneId === sceneAt(sceneIndex).id
-            ? { evaluatedScene: { ...this.displayedContext } }
+            ? {
+                evaluatedScene: {
+                  sceneId: this.displayedContext.sceneId,
+                  displayedAtMs: this.displayedContext.displayedAtMs,
+                },
+              }
             : {}),
         },
         status: "scheduled",
@@ -2447,7 +2589,8 @@ export class LessonSession {
     if (
       candidate.sceneIndex !== this.snapshot.sceneIndex &&
       !record.applicationFeedbackSent &&
-      !(record.applicationAction === "ADVANCE" && record.displayStatus === "waiting")
+      !(record.applicationAction === "ADVANCE" && record.displayStatus === "waiting") &&
+      this.choreography?.record !== record
     ) {
       this.declineDelegation(id, sourceId, offsetMs, "answer_scene_is_no_longer_applicable");
       return;
@@ -2456,7 +2599,8 @@ export class LessonSession {
     record.delegationIds.add(id);
     this.delegations.set(id, { id, sourceId, offsetMs, recordKey: record.key });
     this.evaluationControl(record, "delegation_associated", { delegationId: id, offsetMs, sourceId });
-    if (record.applicationFeedbackSent) this.sendLinkedEvaluationResult(record, id);
+    if (this.choreography?.record === record) this.sendChoreographyEvaluationResult(record, id);
+    else if (record.applicationFeedbackSent) this.sendLinkedEvaluationResult(record, id);
   }
 
   private supersedeEvaluation(identity: GateIdentity, reason: string, notify: boolean, sourceId?: number) {
@@ -2489,8 +2633,8 @@ export class LessonSession {
     for (const record of this.evaluationRecords.values()) {
       if (record.status === "superseded" || record.applicationFeedbackSent) continue;
       record.status = "superseded";
-      record.applicationAction = "SUPERSEDED";
-      this.evaluationControl(record, "invalidated", { applicationAction: "SUPERSEDED", reason });
+      if (record.applicationAction !== "ADVANCE") record.applicationAction = "SUPERSEDED";
+      this.evaluationControl(record, "invalidated", { applicationAction: record.applicationAction, reason });
       for (const id of record.delegationIds) {
         if (!notify || record.sourceId !== this.transport.activeSourceId) continue;
         this.append(
@@ -2650,10 +2794,16 @@ export class LessonSession {
   }
 
   // Called after React commits and the browser has a paint opportunity.
-  displayed(sceneIndex: number) {
+  displayed(sceneIndex: number, token: string) {
     if (this.expireIfOverdue()) return;
     const pending = this.pending;
-    if (!pending || pending.sceneIndex !== sceneIndex) return;
+    if (
+      !pending ||
+      pending.sceneIndex !== sceneIndex ||
+      pending.token !== token ||
+      token !== this.snapshot.displayToken
+    )
+      return;
     this.pending = null;
     this.log("scene.displayed", this.scene);
     if (pending.kind === "greeting") {
@@ -2691,7 +2841,10 @@ export class LessonSession {
           this.answerResponseGate.sceneDisplayedAt = Date.now();
           this.observeResponseGate("scene_displayed");
         }
-        this.scheduleDisplayedRelease();
+        if (this.choreography) {
+          this.phase(this.choreography, "next_question_pending");
+          this.resumeChoreography();
+        } else this.scheduleDisplayedRelease();
         return;
       default: {
         const unhandled: never = pending.kind;
@@ -2701,7 +2854,11 @@ export class LessonSession {
   }
 
   private recordDisplayedScene() {
-    this.displayedContext = { sceneId: this.scene.id, displayedAtMs: this.sessionAtMs() };
+    this.displayedContext = {
+      sceneId: this.scene.id,
+      displayedAtMs: this.sessionAtMs(),
+      token: this.snapshot.displayToken,
+    };
     const object = OBJECTS[this.scene.object];
     this.record(
       {
@@ -2713,6 +2870,504 @@ export class LessonSession {
       },
       this.displayedContext.displayedAtMs,
     );
+  }
+
+  private phase(owner: Choreography, phase: ChoreographyPhase, reason?: string, notify = true) {
+    owner.phase = phase;
+    const display = this.displayedContext ?? owner.oldDisplay;
+    const event = {
+      type: "choreography_phase" as const,
+      provenance: "application_controller" as const,
+      sessionAttemptId: this.attemptId,
+      choreographyEpoch: owner.epoch,
+      correlationKey: owner.record.key,
+      phase,
+      display: { ...display },
+      questionToken: owner.questionToken,
+      questionStatus: owner.questionStatus,
+      ...(reason ? { reason } : {}),
+      ...(owner.transitionFragments.length ? { transitionFragmentKeys: [...owner.transitionFragments] } : {}),
+    };
+    this.log(`choreography.${phase}`, event);
+    this.timeline(event);
+    if (notify) this.update({ choreographyPhase: phase, questionStatus: owner.questionStatus });
+  }
+
+  private currentChoreography(owner: Choreography) {
+    return (
+      this.choreography === owner &&
+      !this.ending &&
+      this.snapshot.status === "active" &&
+      this.answerResponseGate === owner.gate &&
+      this.gateMatches(owner.gate) &&
+      owner.record.status === "resolved" &&
+      Date.now() < owner.gate.startedAt + RESPONSE_GATE_RECOVERY_MS
+    );
+  }
+
+  private cancelChoreography(phase: "stopped" | "superseded" | "failed", reason: string) {
+    const owner = this.choreography;
+    if (!owner) return;
+    if (phase === "superseded" && owner.gate.sceneCommittedAt === undefined)
+      this.supersedeEvaluation(owner.record, reason, true, owner.originSourceId);
+    this.choreography = null; // Revoke before teardown can synchronously publish events.
+    clearTimeout(this.choreographyTimer);
+    const playback = owner.playback;
+    owner.playback = undefined;
+    if (owner.questionStatus === "pending") owner.questionStatus = "cancelled";
+    this.phase(owner, phase, reason);
+    playback?.handle?.cancel(phase === "superseded" ? "superseded" : "stopped");
+    this.cancelReplacement(reason);
+  }
+
+  private interruptChoreography() {
+    const owner = this.choreography;
+    if (!owner || !this.currentChoreography(owner)) return;
+    if (owner.gate.sceneCommittedAt !== undefined && owner.questionStatus === "authorized_delivery_unknown") {
+      // Sending may already have reached B. Replaying would risk two questions;
+      // stop instead of treating uncertain speech as safely resumable delivery.
+      this.fail("Question delivery became uncertain after interruption. You can start a new lesson.");
+      return;
+    }
+    owner.resumeAt = Math.max(owner.resumeAt, Date.now() + TRANSCRIPT_FALLBACK_MS);
+    const playback = owner.playback;
+    if (!playback) {
+      // A reentrant input notification may arrive after output completion but
+      // before its scene commit. It still belongs to the old display.
+      if (
+        owner.gate.sceneCommittedAt === undefined &&
+        ["ack_completed", "transition_waiting_display"].includes(owner.phase)
+      ) {
+        if (owner.retries >= 1) {
+          this.fail("Sprout could not safely finish its acknowledgment.");
+          return;
+        }
+        owner.retries++;
+        this.phase(owner, "accepted_pending_ack", "child_interruption_before_commit");
+      }
+      return;
+    }
+    owner.playback = undefined; // A cancelled clip can never resume or complete.
+    playback.handle?.cancel("interrupted");
+    if (owner.retries >= 1) {
+      this.phase(owner, "failed", "interruption_retry_exhausted");
+      this.fail("Sprout could not safely finish its acknowledgment. You can start a new lesson.");
+      return;
+    }
+    owner.retries++;
+    this.phase(owner, "accepted_pending_ack", "child_interruption");
+  }
+
+  private resumeChoreography() {
+    clearTimeout(this.choreographyTimer);
+    const owner = this.choreography;
+    if (!owner || this.expireIfOverdue() || !this.currentChoreography(owner)) return;
+    if (this.microphoneSpeaking || this.provisionalActivity || this.evaluation || this.settleTimer) return;
+    const readyAt = Math.max(
+      owner.resumeAt,
+      this.deferredAdvance?.correctionReadyAt ?? 0,
+      this.deferredAdvance?.vadGraceUntil ?? 0,
+    );
+    if (readyAt > Date.now()) {
+      this.choreographyTimer = setTimeout(() => this.resumeChoreography(), readyAt - Date.now());
+      return;
+    }
+    if (owner.phase === "accepted_pending_ack") {
+      if (this.deferredAdvance) return; // Existing correction policy still owns release.
+      if (owner.sourceRecovery) {
+        this.scheduleChoreographyReplacement();
+        return;
+      }
+      if (this.snapshot.sceneIndex !== owner.gate.sceneIndex || this.displayedContext?.token !== owner.oldDisplay.token)
+        return;
+      this.discardStaleOutput("accepted_acknowledgment");
+      if (!this.currentChoreography(owner)) return;
+      if (!owner.gate.outputDiscarded || !this.transport.playAcknowledgment || !this.transport.setPlaybackEventSink) {
+        this.fail("Verified acknowledgment playback is unavailable. You can start a new lesson.");
+        return;
+      }
+      const sourceId = this.transport.activeSourceId;
+      if (sourceId === undefined) {
+        this.fail("The acknowledgment source is unavailable.");
+        return;
+      }
+      const identity = immutable(
+        structuredClone({
+          sessionAttemptId: this.attemptId,
+          originSourceId: owner.originSourceId,
+          owningSourceId: sourceId,
+          evaluatedSceneIndex: owner.record.sceneIndex,
+          transcriptRevision: owner.record.transcriptRevision,
+          answerVersion: owner.record.answerVersion,
+          correlationKey: owner.record.key,
+          responseIdentity: owner.record.responseIdentity,
+          choreographyEpoch: owner.epoch,
+          playbackAttemptId: `${this.attemptId}:playback:${++this.playbackSequence}`,
+        }),
+      );
+      const request = immutable({ identity, asset: catalogPlaybackAsset(owner.record.sceneIndex) });
+      const slot: NonNullable<Choreography["playback"]> = { identity };
+      owner.playback = slot;
+      if (this.playbackFacts.size >= 128) {
+        this.fail("Too many playback attempts to safely continue.");
+        return;
+      }
+      this.playbackFacts.set(identity.playbackAttemptId, {
+        request,
+        display: owner.oldDisplay,
+        text: acknowledgmentAsset(owner.record.sceneIndex).text,
+        terminal: false,
+      });
+      try {
+        slot.handle = this.transport.playAcknowledgment(request);
+        // Sink carries every fact. The result is also consumed in case a transport
+        // queues its sink asynchronously; duplicate terminal events have no authority.
+        void slot.handle.result.then(
+          event => this.playbackEvent(event),
+          () => {
+            if (this.choreography === owner && owner.playback === slot && this.currentChoreography(owner))
+              this.playbackEvent({
+                type: "local.playback",
+                identity,
+                sourceId,
+                assetId: request.asset.id,
+                assetSha256: request.asset.sha256,
+                state: "failed",
+                reason: "playback_promise_rejected",
+                clock: "browser.performance.now",
+                observedAt: performance.now(),
+              });
+          },
+        );
+        if (this.choreography !== owner || owner.playback !== slot) slot.handle.cancel("superseded");
+      } catch {
+        this.playbackEvent({
+          type: "local.playback",
+          identity,
+          sourceId,
+          assetId: request.asset.id,
+          assetSha256: request.asset.sha256,
+          state: "failed",
+          reason: "playback_route_unavailable",
+          clock: "browser.performance.now",
+          observedAt: performance.now(),
+        });
+      }
+    } else if (owner.phase === "next_question_pending") this.scheduleChoreographyReplacement();
+  }
+
+  private playbackEvent(event: LocalPlaybackEvent) {
+    const facts = this.playbackFacts.get(event.identity.playbackAttemptId);
+    if (
+      !facts ||
+      facts.terminal ||
+      !samePlayback(facts.request.identity, event.identity) ||
+      event.sourceId !== event.identity.owningSourceId ||
+      event.assetId !== facts.request.asset.id ||
+      event.assetSha256 !== facts.request.asset.sha256 ||
+      !Number.isFinite(event.observedAt) ||
+      event.observedAt < 0
+    )
+      return;
+    if (
+      [
+        event.mediaTime,
+        event.duration,
+        event.renderFence,
+        event.baseLatency,
+        event.outputLatency,
+        event.outputTimestamp?.contextTime,
+        event.outputTimestamp?.performanceTime,
+      ].some(value => value !== undefined && (!Number.isFinite(value) || value < 0))
+    )
+      return;
+    const expected = {
+      requested: undefined,
+      ready: "requested",
+      started: "ready",
+      media_ended: "started",
+      completed: "media_ended",
+    };
+    const staged = event.state in expected;
+    if (staged && facts.state !== expected[event.state as keyof typeof expected]) return;
+    if (
+      event.state === "completed" &&
+      (!Number.isFinite(event.renderFence) ||
+        (event.renderFence ?? 0) <= 0 ||
+        !Number.isFinite(event.outputTimestamp?.contextTime) ||
+        event.outputTimestamp!.contextTime! < event.renderFence! ||
+        !Number.isFinite(event.outputTimestamp?.performanceTime) ||
+        (event.outputTimestamp!.performanceTime ?? 0) <= 0 ||
+        !Number.isFinite(event.duration) ||
+        (event.duration ?? 0) <= 0 ||
+        event.duration! > 10 ||
+        !Number.isFinite(event.mediaTime) ||
+        event.mediaTime !== event.duration)
+    )
+      return;
+    facts.state = event.state;
+    facts.terminal = !["requested", "ready", "started", "media_ended"].includes(event.state);
+    const local = { ...event };
+    const mapping =
+      this.canonicalClockOrigin !== undefined && event.observedAt >= this.canonicalClockOrigin
+        ? { sessionClockOrigin: this.canonicalClockOrigin, sessionAtMs: event.observedAt - this.canonicalClockOrigin }
+        : {};
+    const timeline = {
+      ...local,
+      ...mapping,
+      type: "local_playback" as const,
+      provenance: "application_finite_audio" as const,
+      role: "acknowledgment" as const,
+      text: facts.text,
+      display: facts.display,
+    };
+    this.log("acknowledgment.playback", timeline);
+    this.timeline(timeline, mapping.sessionAtMs ?? this.sessionAtMs());
+    const owner = this.choreography;
+    if (
+      !owner ||
+      owner.playback?.identity.playbackAttemptId !== event.identity.playbackAttemptId ||
+      !this.currentChoreography(owner) ||
+      this.expireIfOverdue()
+    )
+      return;
+    if (event.state === "started") this.phase(owner, "ack_playing");
+    if (event.state === "media_ended") this.phase(owner, "ack_draining");
+    if (event.state === "completed") {
+      owner.playback = undefined;
+      if (
+        this.microphoneSpeaking ||
+        this.provisionalActivity ||
+        this.transport.activeSourceId !== event.sourceId ||
+        this.snapshot.sceneIndex !== owner.record.sceneIndex ||
+        this.transcriptRevision !== owner.record.transcriptRevision ||
+        this.displayedContext?.token !== owner.oldDisplay.token
+      ) {
+        this.fail("Sprout could not safely confirm acknowledgment completion.");
+        return;
+      }
+      this.phase(owner, "ack_completed");
+      if (!this.currentChoreography(owner) || owner.phase !== "ack_completed") return;
+      this.phase(owner, "transition_waiting_display");
+      this.advance(owner, event.sourceId); // Sole scene commit, synchronous with the owner recheck.
+    } else if (facts.terminal) {
+      owner.playback = undefined;
+      if (["failed", "source_retired", "interrupted"].includes(event.state) && owner.retries < 1) {
+        owner.retries++;
+        owner.sourceRecovery = event.state === "source_retired";
+        this.phase(owner, "accepted_pending_ack", event.reason ?? event.state);
+        this.resumeChoreography();
+      } else {
+        this.phase(owner, "failed", event.reason ?? event.state);
+        this.fail("Sprout could not safely finish its acknowledgment. You can start a new lesson.");
+      }
+    }
+  }
+
+  private choreographySeed(owner: Choreography): ReplacementSeed {
+    const committed = owner.gate.sceneCommittedAt !== undefined;
+    return {
+      sceneIndex: this.snapshot.sceneIndex,
+      decision: "ADVANCE",
+      evaluatedSceneIndex: owner.record.sceneIndex,
+      childUtterance: owner.record.utterance,
+      transcriptRevision: owner.record.transcriptRevision,
+      answerVersion: owner.record.answerVersion,
+      choreography: {
+        phase: committed ? "next_question_pending" : "accepted_pending_ack",
+        sessionAttemptId: this.attemptId,
+        epoch: owner.epoch,
+        originSourceId: owner.originSourceId,
+        correlationKey: owner.record.key,
+        responseIdentity: structuredClone(owner.record.responseIdentity),
+        display: { ...this.displayedContext! },
+        applicationAction: committed ? "ADVANCE" : "UNCOMMITTED",
+        acknowledgment: committed ? "completed" : "pending",
+        questionToken: owner.questionToken,
+        transitionFragmentKeys: [...owner.transitionFragments],
+      },
+    };
+  }
+
+  private scheduleChoreographyReplacement() {
+    const owner = this.choreography;
+    if (
+      !owner ||
+      !this.currentChoreography(owner) ||
+      this.replacement ||
+      this.pending ||
+      this.microphoneSpeaking ||
+      this.provisionalActivity ||
+      Date.now() < owner.resumeAt ||
+      !(owner.phase === "next_question_pending" || (owner.phase === "accepted_pending_ack" && owner.sourceRecovery))
+    )
+      return;
+    if (!this.transport.prepareReplacement || !this.transport.activateSource || !this.transport.retireSource) {
+      this.fail("Fresh question playback is unavailable. You can start a new lesson.");
+      return;
+    }
+    if ((owner.gate.preparationAttempts ?? 0) >= 2) {
+      this.fail("Sprout could not safely prepare its question.");
+      return;
+    }
+    owner.gate.preparationAttempts = (owner.gate.preparationAttempts ?? 0) + 1;
+    const replacement: NonNullable<LessonSession["replacement"]> = {
+      gate: owner.gate,
+      abort: new AbortController(),
+      startedAt: Date.now(),
+    };
+    this.replacement = replacement;
+    // A preparation has its own bounded watchdog, subordinate to the original
+    // response budget. Cancellation/retry never resets that enclosing deadline.
+    replacement.timeout = setTimeout(
+      () => {
+        if (this.replacement !== replacement || !this.currentChoreography(owner)) return;
+        this.cancelReplacement("preparation_timeout");
+        this.resumeChoreography();
+      },
+      Math.min(5000, owner.gate.startedAt + RESPONSE_GATE_RECOVERY_MS - Date.now()),
+    );
+    this.log("replacement.triggered", {
+      ...this.replacementIdentity(owner.gate),
+      phase: owner.phase,
+      question_token: owner.questionToken,
+    });
+    void this.prepareGateReplacement(replacement, this.choreographySeed(owner));
+  }
+
+  private promoteChoreographyReplacement(replacement: NonNullable<LessonSession["replacement"]>, id: number) {
+    const owner = this.choreography;
+    if (
+      !owner ||
+      this.replacement !== replacement ||
+      !this.currentChoreography(owner) ||
+      this.microphoneSpeaking ||
+      this.provisionalActivity ||
+      this.pending ||
+      Date.now() < owner.resumeAt
+    ) {
+      this.cancelReplacement("choreography_superseded");
+      return;
+    }
+    const old = this.transport.activeSourceId;
+    if (id === old) {
+      this.fail("Fresh voice source reused the discarded source.");
+      return;
+    }
+    this.setOutputBlocked(true, "replacement_source");
+    this.retireEvaluationDelegations(old, id);
+    if (!this.transport.activateSource!(id) || this.transport.activeSourceId !== id) {
+      this.fail("Sprout could not safely switch its voice.");
+      return;
+    }
+    this.log("replacement.promoted", {
+      ...this.replacementIdentity(owner.gate),
+      source_id: id,
+      old_source_id: old,
+      phase: owner.phase,
+    });
+    for (const speaker of ["child", "sprout"] as const) {
+      clearTimeout(this.utteranceTimers[speaker]);
+      delete this.utteranceTimers[speaker];
+      this.flushUtterance(speaker, "finalized");
+    }
+    this.replacement = null;
+    this.inputBound = undefined;
+    this.childSpeech = new TranscriptWindow();
+    this.sproutSpeech = new TranscriptWindow();
+    this.latest = null;
+    this.lastSproutDeltaAt = undefined;
+    this.openSourceInput(); // Source-local fence before microphone enablement.
+    if (!this.currentChoreography(owner) || this.microphoneSpeaking || this.provisionalActivity) {
+      this.fail("Speech interrupted question authorization.");
+      return;
+    }
+    if (owner.sourceRecovery) {
+      owner.sourceRecovery = false;
+      owner.gate.outputDiscarded = false;
+      owner.gate.discardedSourceId = undefined;
+      this.resumeChoreography();
+      return;
+    }
+    if (
+      owner.phase !== "next_question_pending" ||
+      owner.questionStatus !== "pending" ||
+      owner.gate.sceneDisplayedAt === undefined ||
+      this.displayedContext?.token !== this.snapshot.displayToken
+    )
+      return;
+    // Consume authority before sending. Transport success/ack/transcript never
+    // becomes a claim that the child heard a question.
+    this.phase(owner, "next_question_pending", "question_authorization_pending");
+    if (
+      !this.currentChoreography(owner) ||
+      owner.phase !== "next_question_pending" ||
+      owner.questionStatus !== "pending" ||
+      this.microphoneSpeaking ||
+      this.provisionalActivity ||
+      Date.now() < owner.resumeAt ||
+      this.transport.activeSourceId !== id
+    )
+      return;
+    owner.questionStatus = "authorized_delivery_unknown";
+    // Persist consumption immediately before dispatch without another UI callback
+    // between the ownership check and send. Failed dispatch stays delivery unknown.
+    this.phase(owner, "next_question_pending", "question_authorized_delivery_unverified", false);
+    const instruction = nextQuestionContext(this.choreographySeed(owner));
+    if (!this.append("session.instructions.append", instruction, null, owner.record)) {
+      // append() already ended the attempt. The pre-send record retains the
+      // unknown delivery status; do not mutate terminal ownership afterward.
+      return;
+    }
+    if (!this.currentChoreography(owner)) return;
+    this.phase(owner, "next_question_released", "instruction_authorized_delivery_unverified");
+    if (
+      !this.currentChoreography(owner) ||
+      this.choreography?.phase !== "next_question_released" ||
+      this.microphoneSpeaking ||
+      this.provisionalActivity ||
+      this.transport.activeSourceId !== id
+    )
+      return;
+    this.log("replacement.instruction_sent", {
+      ...this.replacementIdentity(owner.gate),
+      source_id: id,
+      question_token: owner.questionToken,
+    });
+    this.choreography = null;
+    this.displayedRelease = null;
+    this.releaseAnswerResponseGate(owner.gate, "ADVANCE", "replacement_source", () =>
+      this.releaseEvaluationRecord(owner.gate, "ADVANCE"),
+    );
+  }
+
+  private sendChoreographyEvaluationResult(record: EvaluationRecord, id: string) {
+    const owner = this.choreography;
+    if (
+      !owner ||
+      owner.record !== record ||
+      record.linkedResultsSent.has(id) ||
+      record.sourceId !== this.transport.activeSourceId
+    )
+      return;
+    const committed = owner.gate.sceneCommittedAt !== undefined;
+    const phaseContext = committed
+      ? `the app committed ADVANCE after the completed local acknowledgment. Last confirmed display: ${this.displayedContext?.sceneId}; transition target: ${this.scene.id}; display confirmation ${this.pending ? "pending" : "confirmed"}; next question pending. Do not replay the acknowledgment.`
+      : `accepted ADVANCE is UNCOMMITTED. Currently displayed: ${this.displayedContext?.sceneId}. Local acknowledgment and transition are pending;`;
+    if (
+      this.append(
+        "session.thinking.append",
+        `Linked application result for the child's answer "${record.utterance}" about ${objectName(sceneAt(record.sceneIndex))} (${sceneAt(record.sceneIndex).id}), revision ${record.transcriptRevision}, answer version "${record.answerVersion}": the answer met the advancement criterion; ${phaseContext} stay quiet, do not acknowledge or ask another question. Only the app can commit the next scene.`,
+        id,
+        record,
+      )
+    ) {
+      record.linkedResultsSent.add(id);
+      this.evaluationControl(record, "linked_result_sent", {
+        applicationAction: committed ? "ADVANCE" : "UNCOMMITTED",
+        delegationId: id,
+      });
+    }
   }
 
   private scheduleDisplayedRelease() {
@@ -2762,6 +3417,10 @@ export class LessonSession {
 
   private wrap() {
     if (this.snapshot.status !== "active") return;
+    if (this.choreography) {
+      this.end("wrap_up");
+      return;
+    }
     if (this.answerResponseGate?.sourceIsolationRequired) {
       this.fail("Sprout could not safely finish its voice. This attempt has ended; you can start a new lesson.");
       return;
@@ -2781,6 +3440,10 @@ export class LessonSession {
 
   private goodbye() {
     if (this.snapshot.status === "ended") return;
+    if (this.choreography) {
+      this.end("time_limit");
+      return;
+    }
     if (this.answerResponseGate?.sourceIsolationRequired) {
       this.fail("Sprout could not safely finish its voice. This attempt has ended; you can start a new lesson.");
       return;
@@ -2805,6 +3468,7 @@ export class LessonSession {
   end(reason: EndReason, error?: string) {
     if (this.snapshot.status === "ended" || this.ending) return;
     this.ending = true;
+    this.cancelChoreography("stopped", reason);
     // Stop physical media before gate cancellation can request an unmute.
     this.transport.stopMedia();
     const remaining = this.startedAt === undefined ? TIMING.hard : TIMING.hard - (Date.now() - this.startedAt);

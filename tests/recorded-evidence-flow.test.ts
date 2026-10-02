@@ -209,7 +209,8 @@ async function next(f: Awaited<ReturnType<typeof recordedFlow>>, text: string, o
   await vi.advanceTimersByTimeAsync(1000);
   f.say(text, offset);
   await f.flush();
-  f.session.displayed(scene);
+  f.session.displayed(scene, f.session.snapshot.displayToken);
+  await vi.advanceTimersByTimeAsync(0);
   await f.session.recordingSettled();
 }
 
@@ -225,7 +226,8 @@ it("joins butterflies after strawberries display through transport, persistence,
   expect((await f.saved())!.events.some(e => e.evidence?.type === "utterance" && e.evidence.text === "Three")).toBe(
     false,
   );
-  f.session.displayed(3);
+  f.session.displayed(3, f.session.snapshot.displayToken);
+  await vi.advanceTimersByTimeAsync(0);
   await f.flush();
   expect(evaluated.mock.calls[2][0]).toMatchObject({ sceneIndex: 2, utterance: "Three" });
   await f.finish();
@@ -238,13 +240,15 @@ it("joins butterflies after strawberries display through transport, persistence,
   const strawberry = original!.events.find(
     e => e.evidence?.type === "scene_displayed" && e.evidence.sceneId === "picnic",
   )!;
-  expect(strawberry.atMs).toBeLessThan(response.atMs);
+  // B promotion flushes the old utterance on the same millisecond as display.
+  // Its immutable fragment identity and speech interval must still refer to butterflies.
+  expect(strawberry.atMs).toBeLessThanOrEqual(response.atMs);
   expect(response.evidence).toMatchObject({
     recognition: "no_ambiguity_detected",
     transcriptFragments: [{ key: "transcript_3", textStart: 0, textEnd: 5 }],
-    providerTiming: { sourceId: 1, startMs: 9500 },
+    providerTiming: { sourceId: 3, startMs: 400 },
     responseScene: { sceneId: "butterfly-garden", displayedAtMs: butterfly.atMs, status: "stable" },
-    sessionTiming: { provenance: "source_timeline_bound", sourceId: 1, startMs: 7500, endMs: 8100 },
+    sessionTiming: { provenance: "source_timeline_bound", sourceId: 3, startMs: 7500, endMs: 8100 },
   });
   const evaluation = original!.events.find(
     e =>
@@ -253,9 +257,9 @@ it("joins butterflies after strawberries display through transport, persistence,
       e.timeline.sceneIndex === 2,
   )!;
   expect(evaluation.timeline).toMatchObject({
-    correlationKey: "2|3|9500:Three|1",
+    correlationKey: "2|3|400:Three|3",
     transcriptRevision: 3,
-    sourceId: 1,
+    sourceId: 3,
     responseIdentity: {
       fragmentKeys: ["transcript_3"],
       sourceStatus: "known",
@@ -331,7 +335,7 @@ it("joins butterflies after strawberries display through transport, persistence,
   expect(anchor).toBe(7500);
   const recovered = await f.recorder.getRecord(f.sessionId);
   expect(recordingOffsetSeconds(anchor, recovered!.recording!)).toBe(7.5);
-  expect(f.fetcher.mock.calls.filter(([url]) => url === "/api/live")).toHaveLength(1);
+  expect(f.fetcher.mock.calls.filter(([url]) => url === "/api/live")).toHaveLength(4);
 });
 
 it("persists replacement-source anchors, excludes warmup/retired callbacks and reviews both sources", async () => {
@@ -345,7 +349,8 @@ it("persists replacement-source anchors, excludes warmup/retired callbacks and r
   f.connection.channel.onmessage?.({
     data: JSON.stringify({ type: "session.output_transcript.delta", delta: "stale", start_ms: 5000, end_ms: 5100 }),
   });
-  f.session.displayed(1);
+  f.session.displayed(1, f.session.snapshot.displayToken);
+  await vi.advanceTimersByTimeAsync(0);
   await vi.advanceTimersByTimeAsync(1);
   expect(f.connection.inputs[1].enabled).toBe(false);
   b.channel.onmessage?.({
@@ -445,7 +450,8 @@ it("retains repeated-answer recognition after confirmation is cleared and publis
   f.say("Eight", 5500);
   await vi.advanceTimersByTimeAsync(2000);
   expect(f.session.snapshot.sceneIndex).toBe(1);
-  f.session.displayed(1);
+  f.session.displayed(1, f.session.snapshot.displayToken);
+  await vi.advanceTimersByTimeAsync(0);
   await f.flush();
   await f.finish();
   const saved = (await f.saved())!;
@@ -501,7 +507,8 @@ it.each(["impossible", "delayed_crossing", "competing_display", "missing_source"
         endMs: 1100,
         ...(mode === "mixed_sources" ? { sourceId: 1 } : {}),
       });
-      if (mode === "mixed_sources")
+      if (mode === "mixed_sources") {
+        Object.defineProperty(f.transport, "activeSourceId", { value: 2, configurable: true });
         f.session.receive({
           type: "transcript",
           speaker: "child",
@@ -510,6 +517,7 @@ it.each(["impossible", "delayed_crossing", "competing_display", "missing_source"
           endMs: 1300,
           sourceId: 2,
         });
+      }
     } else f.say("One", mode === "impossible" ? 50000 : 1000);
     await f.flush();
     await f.finish();
