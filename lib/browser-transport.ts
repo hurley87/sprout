@@ -1,10 +1,17 @@
-import { parseProviderEvent, parseSessionAnswer, type ClientCommand, type ProviderEvent } from "./events";
+import {
+  parseProviderEvent,
+  parseSessionAnswer,
+  type ClientCommand,
+  type ProviderEvent,
+  type LocalPlaybackEvent,
+} from "./events";
 import type { SessionAudioRecording } from "./session-recorder";
 import type { Transport } from "./session";
 import { MicrophoneTurnDetector, type MicrophoneMeasurement } from "./microphone-turn";
 import { OutputActivityObserver } from "./output-activity";
 import { parseReplacementSeed, type ReplacementSeed } from "./lesson";
 import type { StartupStage } from "./startup-diagnostics";
+import { FinitePlayback, type PlaybackRequest, type PlaybackHandle } from "./local-playback";
 
 export const REPLACEMENT_TIMEOUT_MS = 30_000;
 /** All timestamps are browser performance.now() milliseconds in one document.
@@ -104,6 +111,7 @@ export class BrowserTransport implements Transport {
   private remoteGain?: GainNode;
   private mediaRecorder?: MediaRecorder;
   private captureError?: Error;
+  private captureRouteListeners: (() => void)[] = [];
   private captureStartedAt?: number;
   private captureDurationMs = 0;
   private captureStartOffsetMs = 0;
@@ -118,6 +126,13 @@ export class BrowserTransport implements Transport {
   private turnDetector?: MicrophoneTurnDetector;
   private voiceActivity: VoiceActivity = "unavailable";
   private voiceListeners: (() => void)[] = [];
+  private localPlayback?: FinitePlayback;
+  private playbackAttempts = new Set<string>();
+  private onPlaybackEvent?: (event: LocalPlaybackEvent) => void;
+
+  setPlaybackEventSink(sink: (event: LocalPlaybackEvent) => void) {
+    if (!this.cancelled) this.onPlaybackEvent = sink;
+  }
   // The single record of "this attempt is over", set by stopMedia(). Late
   // callbacks and resolved awaits check it instead of tracking their own flags.
   private abort = new AbortController();
@@ -136,7 +151,8 @@ export class BrowserTransport implements Transport {
         ?.getAudioTracks()
         .some(track => track.readyState === "live" && track.enabled && !track.muted);
       const playbackSilent = this.outputBlocked || this.audio.muted || this.audio.paused || this.audio.volume === 0;
-      if (this.playbackReady && !playbackSilent && source.activity.state === "active") activity = "speaking";
+      if (this.localPlayback?.speaking) activity = "speaking";
+      else if (this.playbackReady && !playbackSilent && source.activity.state === "active") activity = "speaking";
       else if (
         microphoneOpen &&
         (this.outputBlocked || (this.playbackReady && (playbackSilent || source.activity.state === "quiet")))
@@ -242,6 +258,17 @@ export class BrowserTransport implements Transport {
       if (typeof MediaRecorder === "undefined") throw new Error("MediaRecorder is unavailable");
       this.context = new AudioContext();
       this.mix = this.context.createMediaStreamDestination();
+      for (const track of this.mix.stream.getAudioTracks()) {
+        const failed = () => {
+          if (this.cancelled) return;
+          this.captureError = new Error("Session audio recording route failed");
+          this.localPlayback?.cancel("failed", "recording_route_failed");
+        };
+        for (const name of ["ended", "mute"]) {
+          track.addEventListener(name, failed);
+          this.captureRouteListeners.push(() => track.removeEventListener(name, failed));
+        }
+      }
       const source = this.context.createMediaStreamSource(stream);
       this.sources.push(source);
       source.connect(this.mix);
@@ -255,8 +282,10 @@ export class BrowserTransport implements Transport {
       }
       if (this.context.state !== "running") throw new Error("Recording AudioContext did not start");
       this.context.onstatechange = () => {
-        if (!this.cancelled && this.captureStartedAt !== undefined && this.context?.state !== "running")
+        if (!this.cancelled && this.captureStartedAt !== undefined && this.context?.state !== "running") {
           this.captureError = new Error("Recording AudioContext stopped running");
+          this.localPlayback?.cancel("failed", "recording_context_suspended");
+        }
       };
     } catch (error) {
       this.captureError = error instanceof Error ? error : new Error("Audio mix initialization failed");
@@ -296,6 +325,8 @@ export class BrowserTransport implements Transport {
 
   private emit(source: LiveSource, event: ProviderEvent) {
     if (this.authoritative(source)) {
+      if (event.type === "session.closed" || event.type === "provider.error")
+        this.localPlayback?.cancel("failed", "owning_source_failed");
       this.onEvent?.({
         ...event,
         sourceId: source.id,
@@ -308,8 +339,10 @@ export class BrowserTransport implements Transport {
   }
 
   private fail(source: LiveSource, message: string) {
-    if (this.authoritative(source)) this.onFailure?.(message);
-    else if (this.live(source)) {
+    if (this.authoritative(source)) {
+      this.localPlayback?.cancel("failed", "owning_source_failed");
+      this.onFailure?.(message);
+    } else if (this.live(source)) {
       source.rejectReadiness?.(new Error(message));
       this.retireSource(source.id);
     }
@@ -415,6 +448,7 @@ export class BrowserTransport implements Transport {
     source.retired = true;
     const wasCurrent = this.current === source;
     if (wasCurrent) this.current = undefined;
+    if (this.localPlayback?.request.identity.owningSourceId === id) this.localPlayback.cancel("source_retired");
     if (this.pending === source) this.pending = undefined;
     if (wasCurrent) {
       this.playbackReady = false;
@@ -656,7 +690,82 @@ export class BrowserTransport implements Transport {
   private syncRecordingGate() {
     if (this.remoteGain)
       this.remoteGain.gain.value =
-        !!this.current && this.authoritative(this.current) && this.playbackReady && !this.outputBlocked ? 1 : 0;
+        !!this.current &&
+        this.authoritative(this.current) &&
+        !this.current.outputDiscarded &&
+        this.playbackReady &&
+        !this.outputBlocked
+          ? 1
+          : 0;
+  }
+
+  /** Call only after permanently discarding provider output. Uses a private
+   * finite element and one known gain into audible output AND the existing mix.
+   * Microphone and VAD stay live; no production controller invokes this yet. */
+  playAcknowledgment(request: PlaybackRequest): PlaybackHandle {
+    const source = this.current;
+    const identity = request.identity;
+    if (
+      !source ||
+      !this.authoritative(source) ||
+      !source.sessionStarted ||
+      !source.outputDiscarded ||
+      identity.owningSourceId !== source.id ||
+      !this.context ||
+      !this.mix ||
+      !this.playbackRouteHealthy()
+    )
+      throw new Error("Acknowledgment playback route unavailable");
+    if (
+      !identity.sessionAttemptId ||
+      !identity.playbackAttemptId ||
+      !identity.correlationKey ||
+      !identity.answerVersion ||
+      ![
+        identity.originSourceId,
+        identity.owningSourceId,
+        identity.evaluatedSceneIndex,
+        identity.transcriptRevision,
+        identity.choreographyEpoch,
+      ].every(value => Number.isSafeInteger(value) && value >= 0) ||
+      this.playbackAttempts.has(identity.playbackAttemptId)
+    )
+      throw new Error("Invalid or reused playback identity");
+    this.playbackAttempts.add(identity.playbackAttemptId);
+    const previous = this.localPlayback;
+    const playback: FinitePlayback = new FinitePlayback(
+      request,
+      this.context,
+      this.mix,
+      () =>
+        this.authoritative(source) &&
+        source.outputDiscarded === true &&
+        this.localPlayback === playback &&
+        this.playbackRouteHealthy(),
+      event => {
+        this.onPlaybackEvent?.(event);
+        this.reportVoiceActivity();
+      },
+    );
+    this.localPlayback = playback;
+    previous?.cancel("superseded");
+    playback.start();
+    return { result: playback.result, cancel: reason => playback.cancel(reason) };
+  }
+
+  private playbackRouteHealthy() {
+    const recordingTrackLive = this.mix?.stream
+      .getAudioTracks()
+      .some(track => track.readyState === "live" && track.enabled && !track.muted);
+    if (!this.cancelled && this.captureStartedAt !== undefined && !recordingTrackLive)
+      this.captureError ??= new Error("Session audio recording route failed");
+    return (
+      !this.cancelled &&
+      !this.captureError &&
+      this.context?.state === "running" &&
+      this.mediaRecorder?.state === "recording" &&
+      !!recordingTrackLive
+    );
   }
 
   startRecording(canonicalClockOrigin?: number) {
@@ -676,9 +785,13 @@ export class BrowserTransport implements Transport {
     };
     recorder.onerror = () => {
       this.captureError = new Error("Session audio recorder failed");
+      this.localPlayback?.cancel("failed", "recording_failed");
     };
     recorder.onstop = () => {
-      if (!this.cancelled) this.captureError = new Error("Session audio recorder stopped unexpectedly");
+      if (!this.cancelled) {
+        this.captureError = new Error("Session audio recorder stopped unexpectedly");
+        this.localPlayback?.cancel("failed", "recording_stopped");
+      }
       const blob = new Blob(this.chunks, { type: this.chunks[0]?.type || recorder.mimeType });
       this.chunks = [];
       if (!blob.size || !blob.type) this.captureError ??= new Error("Session audio recording is empty or unusable");
@@ -714,6 +827,9 @@ export class BrowserTransport implements Transport {
   }
 
   private releaseMix() {
+    this.localPlayback?.cancel("failed", "recording_route_released");
+    this.captureRouteListeners.forEach(remove => remove());
+    this.captureRouteListeners = [];
     this.sources.forEach(source => source.disconnect());
     this.sources = [];
     this.remoteGain?.disconnect();
@@ -731,6 +847,8 @@ export class BrowserTransport implements Transport {
   stopMedia() {
     if (this.cancelled) return;
     this.abort.abort();
+    this.localPlayback?.cancel("stopped");
+    this.onPlaybackEvent = undefined;
     this.reportVoiceActivity();
     this.voiceListeners.forEach(remove => remove());
     this.voiceListeners = [];

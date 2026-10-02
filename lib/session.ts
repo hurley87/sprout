@@ -19,8 +19,9 @@ import {
   type AnswerResult,
   type EvaluateAnswer,
 } from "./answer";
-import type { ClientCommand, ProviderEvent, TranscriptEvent } from "./events";
+import type { ClientCommand, ProviderEvent, TranscriptEvent, LocalPlaybackEvent } from "./events";
 import type { MicrophoneDiagnostic } from "./browser-transport";
+import type { PlaybackRequest, PlaybackHandle } from "./local-playback";
 import { startupTiming, type StartupStage } from "./startup-diagnostics";
 
 import {
@@ -82,6 +83,9 @@ export type Snapshot = {
 export type Diagnostic = { at: number; type: string; detail?: unknown };
 
 export interface Transport {
+  /** Optional app-owned finite playback. Unused until lesson choreography is enabled. */
+  playAcknowledgment?(request: PlaybackRequest): PlaybackHandle;
+  setPlaybackEventSink?(sink: (event: LocalPlaybackEvent) => void): void;
   setStartupDiagnosticSink?(sink: (stage: StartupStage) => void): void;
   setMicrophoneDiagnosticSink?(sink: (event: MicrophoneDiagnostic) => void): void;
   start(onEvent: (event: ProviderEvent) => void, onFailure: (message: string) => void): Promise<void>;

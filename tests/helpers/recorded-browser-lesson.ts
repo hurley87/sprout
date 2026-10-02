@@ -177,8 +177,14 @@ export async function recordedBrowserLesson(
 export function captureMocks() {
   const sources: { connect: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> }[] = [];
   const gain = { gain: { value: 0 }, connect: vi.fn(), disconnect: vi.fn() };
-  const mix = { stream: { getTracks: () => [] }, disconnect: vi.fn() };
-  const context = {
+  const mixTrack = Object.assign(new EventTarget(), {
+    readyState: "live",
+    enabled: true,
+    muted: false,
+    stop: vi.fn(),
+  });
+  const mix = { stream: { getTracks: () => [mixTrack], getAudioTracks: () => [mixTrack] }, disconnect: vi.fn() };
+  const context = Object.assign(new EventTarget(), {
     state: "running",
     resume: vi.fn(async () => {}),
     close: vi.fn(async () => {}),
@@ -189,7 +195,7 @@ export function captureMocks() {
       sources.push(source);
       return source;
     }),
-  };
+  });
   const recorders: Recorder[] = [];
   class Recorder {
     static isTypeSupported = (type: string) => type === "audio/webm;codecs=opus";
@@ -223,5 +229,5 @@ export function captureMocks() {
     },
   );
   vi.stubGlobal("MediaRecorder", Recorder);
-  return { sources, gain, mix, context, recorders };
+  return { sources, gain, mix, mixTrack, context, recorders };
 }

@@ -1,5 +1,39 @@
 // The provider boundary. Raw data-channel JSON is validated once here so the
 // rest of the app works with a closed union instead of unknown fields.
+import type { EvaluatedResponseIdentity } from "./session-recorder";
+
+export type PlaybackIdentity = {
+  sessionAttemptId: string;
+  originSourceId: number;
+  owningSourceId: number;
+  evaluatedSceneIndex: number;
+  transcriptRevision: number;
+  answerVersion: string;
+  correlationKey: string;
+  responseIdentity: EvaluatedResponseIdentity;
+  choreographyEpoch: number;
+  playbackAttemptId: string;
+};
+export type PlaybackTerminalState =
+  "completed" | "interrupted" | "superseded" | "stopped" | "source_retired" | "failed";
+/** Local facts, never parsed from provider JSON or mapped into provider clocks. */
+export type LocalPlaybackEvent = {
+  type: "local.playback";
+  sourceId: number;
+  identity: PlaybackIdentity;
+  assetId: string;
+  assetSha256: string;
+  state: "requested" | "ready" | "started" | "media_ended" | PlaybackTerminalState;
+  reason?: string;
+  clock: "browser.performance.now";
+  observedAt: number;
+  mediaTime?: number;
+  duration?: number;
+  renderFence?: number;
+  outputTimestamp?: AudioTimestamp;
+  baseLatency?: number;
+  outputLatency?: number;
+};
 
 type Identified = {
   eventId?: string;
