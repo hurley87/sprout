@@ -32,6 +32,15 @@ const serverError = (body: unknown) =>
 export type LiveSourceId = number;
 export type VoiceActivity = "speaking" | "listening" | "unavailable";
 
+/** Opt-in investigation only: unparsed data is never a lesson/completion event. */
+export type RawServerEventDiagnostic = {
+  sourceId: LiveSourceId;
+  activeSourceId?: LiveSourceId;
+  authoritative: boolean;
+  receivedAt: number;
+  data: unknown;
+};
+
 export type MicrophoneDiagnostic =
   | { type: "microphone.track_settings"; detail: Record<string, number | boolean | string> }
   | { type: "microphone.detector_unavailable"; detail: { reason: "web_audio_initialization_failed" } }
@@ -114,6 +123,7 @@ export class BrowserTransport implements Transport {
   private initialMediaReady = false;
   private initialStartedEmitted = false;
   private startupDiagnosticSink?: (stage: StartupStage) => void;
+  private rawServerEventSink?: (event: RawServerEventDiagnostic) => void;
   private outputBlocked = false;
   private turnDetector?: MicrophoneTurnDetector;
   private voiceActivity: VoiceActivity = "unavailable";
@@ -164,6 +174,10 @@ export class BrowserTransport implements Transport {
 
   setStartupDiagnosticSink(sink: (stage: StartupStage) => void) {
     if (!this.cancelled) this.startupDiagnosticSink = sink;
+  }
+
+  setRawServerEventSink(sink: (event: RawServerEventDiagnostic) => void) {
+    if (!this.cancelled) this.rawServerEventSink = sink;
   }
 
   private startup(stage: StartupStage) {
@@ -513,6 +527,17 @@ export class BrowserTransport implements Transport {
     });
     const channel = (source.channel = peer.createDataChannel("oai-events"));
     channel.onmessage = ({ data }) => {
+      try {
+        this.rawServerEventSink?.({
+          sourceId: source.id,
+          activeSourceId: this.activeSourceId,
+          authoritative: this.authoritative(source),
+          receivedAt: performance.now(),
+          data,
+        });
+      } catch {
+        // A diagnostic collector must not interrupt normal provider dispatch.
+      }
       if (!this.live(source)) return;
       let raw: unknown;
       try {
@@ -736,6 +761,7 @@ export class BrowserTransport implements Transport {
     this.voiceListeners = [];
     this.diagnosticSink = undefined;
     this.startupDiagnosticSink = undefined;
+    this.rawServerEventSink = undefined;
     for (const source of this.connections.values()) this.retireSource(source.id);
     this.audio.muted = true;
     if (this.audio.srcObject) this.audio.pause();

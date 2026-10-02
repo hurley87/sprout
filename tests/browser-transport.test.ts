@@ -22,6 +22,81 @@ const seed = {
   answerVersion: "0:Two",
 };
 
+describe("raw WebRTC server diagnostics", () => {
+  it("observes unknown events before parsing without trusting provider source identity", async () => {
+    const connection = liveConnection();
+    const events = vi.fn();
+    const raw = vi.fn();
+    const transport = new BrowserTransport(audioElement() as unknown as HTMLAudioElement);
+    transport.setRawServerEventSink(raw);
+    await transport.start(events, vi.fn());
+    const before = events.mock.calls.length;
+    const data = JSON.stringify({
+      type: "output_audio_buffer.stopped",
+      event_id: "event_stop",
+      response_id: "resp_probe",
+      sourceId: 999,
+    });
+    connection.channel.onmessage?.({ data });
+    expect(raw).toHaveBeenLastCalledWith({
+      sourceId: 1,
+      activeSourceId: 1,
+      authoritative: true,
+      receivedAt: expect.any(Number),
+      data,
+    });
+    // Capturing an undocumented Live event does not manufacture internal support.
+    expect(events).toHaveBeenCalledTimes(before);
+    transport.close();
+  });
+
+  it("labels pending and retired traffic without forwarding it as current-source events", async () => {
+    const a = liveConnection();
+    const events = vi.fn();
+    const raw = vi.fn();
+    const transport = new BrowserTransport(audioElement() as unknown as HTMLAudioElement);
+    transport.setRawServerEventSink(raw);
+    await transport.start(events, vi.fn());
+    const b = liveConnection();
+    const idB = await transport.prepareReplacement(seed);
+    const data = JSON.stringify({ type: "session.output_transcript.delta", delta: "probe", start_ms: 0, end_ms: 1 });
+    const before = events.mock.calls.length;
+    b.channel.onmessage?.({ data });
+    expect(raw).toHaveBeenLastCalledWith(
+      expect.objectContaining({ sourceId: idB, activeSourceId: 1, authoritative: false }),
+    );
+    expect(events).toHaveBeenCalledTimes(before);
+    expect(transport.activateSource(idB)).toBe(true);
+    const promoted = events.mock.calls.length;
+    a.channel.onmessage?.({ data });
+    expect(raw).toHaveBeenLastCalledWith(
+      expect.objectContaining({ sourceId: 1, activeSourceId: idB, authoritative: false }),
+    );
+    expect(events).toHaveBeenCalledTimes(promoted);
+    b.channel.onmessage?.({ data });
+    expect(events).toHaveBeenLastCalledWith(expect.objectContaining({ type: "transcript", sourceId: idB }));
+    transport.close();
+    const captured = raw.mock.calls.length;
+    b.channel.onmessage?.({ data });
+    expect(raw).toHaveBeenCalledTimes(captured);
+  });
+
+  it("keeps provider dispatch intact when the diagnostic collector fails", async () => {
+    const connection = liveConnection();
+    const events = vi.fn();
+    const transport = new BrowserTransport(audioElement() as unknown as HTMLAudioElement);
+    transport.setRawServerEventSink(() => {
+      throw new Error("collector failed");
+    });
+    await transport.start(events, vi.fn());
+    connection.channel.onmessage?.({ data: JSON.stringify({ type: "session.usage.updated", usage: { seconds: 1 } }) });
+    expect(events).toHaveBeenLastCalledWith(
+      expect.objectContaining({ type: "usage", sourceId: 1, usage: { seconds: 1 } }),
+    );
+    transport.close();
+  });
+});
+
 it("exports only useful microphone settings and excludes device identifiers", () => {
   const track = {
     getSettings: () => ({
