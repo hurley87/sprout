@@ -413,6 +413,9 @@ h1 {
   padding: 0.7rem 0;
   font-weight: 600;
 }
+.evidence-diagnostics {
+  overflow-wrap: anywhere;
+}
 .parent-review article {
   padding: 1rem 0;
   border-top: 1px solid #85927d;

@@ -2,6 +2,7 @@ import { sessionSpeechInterval } from "./evidence-timing";
 import { validateParentDecision, type ObserverProposal, type ParentDecision } from "./observation-contracts";
 import type { Evidence } from "./session-recorder";
 import { isDurableSessionReference } from "./durable-session-reference";
+import type { DiagnosticHistory } from "./parent-review-diagnostics";
 
 export type RepairLevel = "verified" | "light_correction" | "substantial_repair";
 export type ReviewSnapshot = {
@@ -13,6 +14,7 @@ export type ReviewSnapshot = {
   decisions: { proposalRowId: string; decision: ParentDecision }[];
   review: { repairLevel: RepairLevel; note?: string; emptyAcknowledged: boolean; completedAt: number } | null;
   sources: { id: string; eventKey: string; atMs: number; evidence: Evidence }[];
+  diagnostics?: DiagnosticHistory;
 };
 
 /** Session time only; the inspector applies the recording offset when seeking. */

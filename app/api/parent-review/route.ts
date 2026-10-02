@@ -2,6 +2,7 @@ import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../convex/_generated/api";
 import { isLocalRequest, readJsonBody } from "../../../lib/local-request";
 import { validReviewCommand } from "../../../lib/parent-review";
+import { validDiagnosticHistory } from "../../../lib/parent-review-diagnostics";
 
 export async function POST(request: Request) {
   if (!isLocalRequest(request)) return Response.json({ error: "Local requests only." }, { status: 403 });
@@ -17,7 +18,14 @@ export async function POST(request: Request) {
       capability,
       command: JSON.stringify(body.value),
     });
-    return Response.json(body.value.operation === "get" ? JSON.parse(result) : { saved: result === "saved" }, {
+    const value = body.value.operation === "get" ? JSON.parse(result) : { saved: result === "saved" };
+    if (
+      body.value.operation === "get" &&
+      (value.sessionId !== body.value.sessionId ||
+        (value.diagnostics !== undefined && !validDiagnosticHistory(value.diagnostics)))
+    )
+      throw new Error();
+    return Response.json(value, {
       headers: { "Cache-Control": "no-store" },
     });
   } catch {

@@ -161,7 +161,15 @@ export type InspectableSessionRecord = {
     startOffsetMs: number;
     durationMs: number;
   };
-  events: { eventKey: string; order: number; atMs: number; evidence?: Evidence; timeline?: TimelineEvent }[];
+  events: {
+    /** Canonical identity for diagnostic joins; older readers may omit it. Never substitute an event key. */
+    id?: string;
+    eventKey: string;
+    order: number;
+    atMs: number;
+    evidence?: Evidence;
+    timeline?: TimelineEvent;
+  }[];
 };
 
 export interface SessionRecordReader {

@@ -83,7 +83,7 @@ it("returns durable identity and passes explicit retry linkage to create", async
   expect(await recorder.create("prior-session")).toBe("session-test");
   expect(mutation).toHaveBeenLastCalledWith(api.sessions.create, { retryOf: "prior-session" });
 });
-it("fetches an application record by reference without exposing storage/database internals", async () => {
+it("retains canonical event identity for inspection without exposing recording storage internals", async () => {
   const { recorder } = await setup();
   query.mockResolvedValue({
     session: {
@@ -110,13 +110,14 @@ it("fetches an application record by reference without exposing storage/database
   expect(record?.recording?.url).toBe("https://storage.invalid/audio");
   expect(record?.recording?.recordingId).toBe("session-test:recording");
   expect(record?.events[0]).toEqual({
+    id: "event-id",
     eventKey: "scene",
     order: 0,
     atMs: 0,
     evidence: { type: "support", source: "parent", mode: "other", description: "help" },
   });
   expect(JSON.stringify(record)).not.toContain("secret-internal-id");
-  expect(JSON.stringify(record)).not.toContain("event-id");
+  expect(record?.events[0].id).toBe("event-id");
 });
 it("does not invent a playback URL and handles a missing record", async () => {
   const { recorder } = await setup();
