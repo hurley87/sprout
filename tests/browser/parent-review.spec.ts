@@ -1,7 +1,349 @@
 import { test, expect, type Page } from "@playwright/test";
 import { observationFixtures } from "../fixtures/observation-contracts";
 import type { ReviewCommand, ReviewSnapshot } from "../../lib/parent-review";
+import { reviewDiagnosticFixture } from "../fixtures/review-diagnostics";
+import type { DiagnosticRequest } from "../../lib/parent-review-diagnostics";
+import type { InspectableSessionRecord } from "../../lib/session-recorder";
 import type { ParentDecision } from "../../lib/observation-contracts";
+
+async function diagnosticHarness(
+  page: Page,
+  initial?: ReviewSnapshot,
+  read?: (input: DiagnosticRequest) => Promise<{ status?: number; json: unknown }>,
+  source = reviewDiagnosticFixture(),
+) {
+  const calls: DiagnosticRequest[] = [];
+  const state = initial ?? { ...snapshot(), diagnostics: source.history, status: "failed" as const, proposals: [] };
+  const h = await harness(page, state, false, {
+    record: source.record,
+    read: async input => {
+      calls.push(input);
+      return read ? read(input) : { json: { ...input, page: source.rows, isDone: true, continueCursor: "" } };
+    },
+  });
+  await expect(h.panel.getByText("Refresh review", { exact: true })).toBeVisible();
+  await h.panel.getByText("Evidence diagnostics", { exact: true }).click();
+  return { ...h, calls, source, diagnostics: h.panel.locator(".evidence-diagnostics") };
+}
+
+for (const width of [1280, 390])
+  test(`synthetic diagnostics distinguish absence/rejection with canonical inspection at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    const errors: string[] = [];
+    page.on("pageerror", error => errors.push(error.message));
+    const h = await diagnosticHarness(page);
+    await expect(
+      h.diagnostics.getByRole("heading", { name: "Response absent from usable Observer output" }),
+    ).toBeVisible();
+    await expect(h.diagnostics.getByText("The cause of absence is unknown.")).toBeVisible();
+    await expect(h.diagnostics.getByRole("heading", { name: "Proposal 2: rejected by validation" })).toBeVisible();
+    await expect(h.diagnostics.getByRole("heading", { name: "Proposal 1: passed proposal validation" })).toBeVisible();
+    await expect(h.diagnostics.getByText(/observation.statedTotal/).first()).toBeVisible();
+    const response = h.diagnostics.getByRole("article", { name: `Response diagnostic ${h.source.responseId}` });
+    await response.locator("summary").first().click();
+    await expect(response.getByText(/Scene supported by trustworthy.*ducks-3/)).toBeVisible();
+    await response.getByText("Fragment and evaluation provenance", { exact: true }).click();
+    await response.getByText("Evaluation event evaluation-event", { exact: true }).click();
+    await expect(response.getByText(/Evaluated-scene context: ducks-3/)).toBeVisible();
+    await expect(response.getByText(/Association provenance: application_evaluation/)).toBeVisible();
+    await expect(response.getByText(/text offsets 0–5: Three/)).toBeVisible();
+    expect(await h.diagnostics.getByRole("button", { name: /Accept|Reject|Edit|Finish review/ }).count()).toBe(0);
+    await expect(h.panel.getByText("Analysis failed. No observations are approved.")).toBeVisible();
+    expect(h.writes).toEqual([]);
+    // Development Strict Mode may start an aborted first read before remounting.
+    expect(h.calls.length).toBeGreaterThanOrEqual(1);
+    expect(h.calls.length).toBeLessThanOrEqual(2);
+    expect(h.calls[0]).not.toHaveProperty("capability");
+    expect(h.unexpected).toEqual([]);
+    expect(errors).toEqual([]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await h.panel.screenshot({ path: testInfo.outputPath(`diagnostics-${width}.png`) });
+  });
+
+test("synthetic diagnostics paginate, retry sanitized errors and display explicit truncation", async ({ page }) => {
+  const f = reviewDiagnosticFixture();
+  let fail = true;
+  const h = await diagnosticHarness(page, undefined, async input => {
+    if (fail) return { status: 409, json: { error: "private provider failure" } };
+    const row = input.cursor === null ? f.rows[0] : { ...f.rows.at(-1)!, traceTruncated: true };
+    return {
+      json: {
+        ...input,
+        page: [row],
+        isDone: input.cursor !== null,
+        continueCursor: input.cursor === null ? "next-page" : "",
+      },
+    };
+  });
+  await expect(h.diagnostics.getByRole("alert")).toContainText("could not be loaded");
+  await expect(h.diagnostics).not.toContainText("private provider");
+  fail = false;
+  await h.diagnostics.getByRole("button", { name: "Retry diagnostic details" }).click();
+  await expect(h.diagnostics.getByText(/Diagnostic page 1/)).toBeVisible();
+  await h.diagnostics.getByRole("button", { name: "Next diagnostic page" }).click();
+  await expect(h.diagnostics.getByText(/Diagnostic page 2/)).toBeVisible();
+  await expect(h.diagnostics.getByText(/Trace detail truncated/)).toBeVisible();
+  await expect(h.diagnostics.getByRole("heading", { name: "Proposal 1: passed proposal validation" })).toHaveCount(0);
+  await h.diagnostics.getByRole("button", { name: "Back to first diagnostic page" }).click();
+  await expect(h.diagnostics.getByText(/Diagnostic page 1/)).toBeVisible();
+  expect(h.calls.filter(call => call.cursor !== null).map(call => call.cursor)).toEqual(["next-page"]);
+  expect(h.calls.at(-1)?.cursor).toBe(null);
+  expect(h.calls.length).toBeLessThanOrEqual(5);
+  expect(h.calls.every(call => call.numItems === 25)).toBe(true);
+});
+
+test("synthetic late attempt/page reads cannot mix retries or a refreshed analysis", async ({ page }) => {
+  const f = reviewDiagnosticFixture();
+  f.history.attempts.push({
+    ...f.attempt,
+    snapshotId: "attempt-two",
+    attempt: 2,
+    snapshotChanged: true,
+    completedAt: 300,
+  });
+  let release: () => void = () => {};
+  const delayed = new Promise<void>(resolve => {
+    release = resolve;
+  });
+  const h = await diagnosticHarness(
+    page,
+    { ...snapshot(), status: "failed", proposals: [], diagnostics: f.history },
+    async input => {
+      if (input.snapshotId === "attempt-two") await delayed;
+      return {
+        json: {
+          ...input,
+          page: input.snapshotId === "attempt-one" ? f.rows : [{ ...f.rows[0], proposalId: "late-old-attempt" }],
+          isDone: true,
+          continueCursor: "",
+        },
+      };
+    },
+    f,
+  );
+  await expect(h.diagnostics.getByText("Loading diagnostic details…")).toBeVisible();
+  await expect(h.diagnostics.getByText("Canonical snapshot changed before attempt completion.")).toBeVisible();
+  await h.diagnostics.getByLabel("Observer attempt", { exact: true }).selectOption("attempt-one");
+  await expect(
+    h.diagnostics.getByRole("heading", { name: "Response absent from usable Observer output" }),
+  ).toBeVisible();
+  release();
+  await expect(h.diagnostics).not.toContainText("late-old-attempt");
+  // An analysis refresh with an identical attempt ID still remounts the detail reader.
+  h.setCurrent({
+    ...h.getCurrent(),
+    analysisId: "new-analysis",
+    diagnostics: { availability: "legacy_unavailable", attempts: [], missingAttempts: [1, 2] },
+  });
+  await h.panel.getByRole("button", { name: "Refresh review" }).click();
+  await expect(h.diagnostics.getByText(/Historical diagnostics unavailable/)).toBeVisible();
+  await expect(h.diagnostics.getByRole("article")).toHaveCount(0);
+});
+
+test("synthetic delayed pagination cannot repopulate a reopened reader or a different session", async ({ page }) => {
+  const f = reviewDiagnosticFixture();
+  let release: () => void = () => {};
+  let finished = 0;
+  let delayed = new Promise<void>(resolve => {
+    release = resolve;
+  });
+  const h = await diagnosticHarness(
+    page,
+    undefined,
+    async input => {
+      if (input.cursor !== null) {
+        await delayed;
+        finished++;
+        return {
+          json: {
+            ...input,
+            page: [{ ...f.rows[0], proposalId: "stale-page-marker" }],
+            isDone: true,
+            continueCursor: "",
+          },
+        };
+      }
+      return { json: { ...input, page: [f.rows[0]], isDone: false, continueCursor: "second-page" } };
+    },
+    f,
+  );
+  await h.diagnostics.getByRole("button", { name: "Next diagnostic page" }).click();
+  await expect(h.diagnostics.getByText("Loading diagnostic details…")).toBeVisible();
+  await h.diagnostics.locator(":scope > summary").click();
+  await h.diagnostics.locator(":scope > summary").click();
+  await expect(h.diagnostics.getByText(/Diagnostic page 1/)).toBeVisible();
+  release();
+  await expect.poll(() => finished).toBe(1);
+  await expect(h.diagnostics).not.toContainText("stale-page-marker");
+  delayed = new Promise<void>(resolve => {
+    release = resolve;
+  });
+  await h.diagnostics.getByRole("button", { name: "Next diagnostic page" }).click();
+  await expect(h.diagnostics.getByText("Loading diagnostic details…")).toBeVisible();
+  h.setCurrent({
+    ...snapshot(0),
+    sessionId: "other-session",
+    analysisId: "other-analysis",
+    diagnostics: { availability: "legacy_unavailable", missingAttempts: [1], attempts: [] },
+  });
+  await page.evaluate(() => localStorage.setItem("sprout.latest-session-reference.v1", "other-session"));
+  await page.reload();
+  await h.panel.getByText("Evidence diagnostics", { exact: true }).click();
+  await expect(h.diagnostics.getByText(/Historical diagnostics unavailable/)).toBeVisible();
+  release();
+  await expect.poll(() => finished).toBe(2);
+  await expect(h.diagnostics.getByRole("article")).toHaveCount(0);
+  expect(h.writes).toEqual([]);
+});
+
+test("synthetic wrong-session or wrong-attempt diagnostic responses fail closed and recover", async ({ page }) => {
+  let scope: "session" | "attempt" | "valid" = "session";
+  const f = reviewDiagnosticFixture();
+  const h = await diagnosticHarness(page, undefined, async input => ({
+    json: {
+      ...input,
+      sessionId: scope === "session" ? "other-session" : input.sessionId,
+      snapshotId: scope === "attempt" ? "other-attempt" : input.snapshotId,
+      page: f.rows,
+      isDone: true,
+      continueCursor: "",
+    },
+  }));
+  await expect(h.diagnostics.getByRole("alert")).toBeVisible();
+  expect(await h.diagnostics.getByRole("article").count()).toBe(0);
+  scope = "attempt";
+  await h.diagnostics.getByRole("button", { name: "Retry diagnostic details" }).click();
+  await expect(h.diagnostics.getByRole("alert")).toBeVisible();
+  expect(await h.diagnostics.getByRole("article").count()).toBe(0);
+  scope = "valid";
+  await h.diagnostics.getByRole("button", { name: "Retry diagnostic details" }).click();
+  await expect(
+    h.diagnostics.getByRole("heading", { name: "Response absent from usable Observer output" }),
+  ).toBeVisible();
+});
+
+for (const mode of [
+  "unavailable",
+  "invalid_batch",
+  "not_captured",
+  "legacy_unavailable",
+  "old_payload",
+  "empty",
+] as const)
+  test(`synthetic ${mode} diagnostics preserve unknown coverage and empty/loading states`, async ({ page }) => {
+    const f = reviewDiagnosticFixture();
+    const state = { ...snapshot(), status: "failed" as const, proposals: [], diagnostics: f.history };
+    if (mode === "unavailable" || mode === "invalid_batch") {
+      f.attempt.summary = {
+        ...f.attempt.summary!,
+        outputState: mode,
+        absentResponseCount: null,
+        returnedProposalCount: null,
+        failureStage: "transcription",
+        batchIssue: mode === "invalid_batch" ? { path: "$", message: "Invalid bounded batch." } : null,
+      };
+      f.rows = f.rows
+        .filter(row => row.kind === "response")
+        .map(row => ({ ...row, coverage: "unknown" as const, omissionCause: null }));
+    } else if (mode === "not_captured") {
+      Object.assign(f.attempt, { state: "not_captured", summary: null, snapshotChanged: null, completedAt: null });
+    } else if (mode === "legacy_unavailable")
+      state.diagnostics = { availability: "legacy_unavailable", attempts: [], missingAttempts: [1] };
+    else if (mode === "old_payload") delete (state as ReviewSnapshot).diagnostics;
+    else f.rows = [];
+    const h = await diagnosticHarness(page, state, undefined, f);
+    if (mode === "unavailable" || mode === "invalid_batch") {
+      await expect(h.diagnostics.getByText(/response coverage is unknown/)).toBeVisible();
+      await expect(h.diagnostics.getByRole("heading", { name: "Response coverage unknown" })).toHaveCount(2);
+      await expect(
+        h.diagnostics.getByRole("heading", { name: "Response absent from usable Observer output" }),
+      ).toHaveCount(0);
+    } else if (mode === "not_captured")
+      await expect(h.diagnostics.getByText(/Attempt diagnostics not captured/)).toBeVisible();
+    else if (mode === "legacy_unavailable")
+      await expect(h.diagnostics.getByText(/Historical diagnostics unavailable/)).toBeVisible();
+    else if (mode === "old_payload") await expect(h.diagnostics.getByText(/older review payload/)).toBeVisible();
+    else await expect(h.diagnostics.getByText(/No diagnostic rows captured/)).toBeVisible();
+    if (["not_captured", "legacy_unavailable", "old_payload"].includes(mode)) expect(h.calls).toHaveLength(0);
+    expect(h.writes).toEqual([]);
+  });
+
+for (const timing of ["mapped_provider", "source_input_bound", "source_timeline_bound", "receipt", "event"] as const)
+  test(`synthetic ${timing} diagnostic seek uses recording offset, not provider time`, async ({ page }) => {
+    const f = reviewDiagnosticFixture();
+    const evidence = f.record.events[1].evidence!;
+    if (evidence.type !== "utterance") throw new Error();
+    let expected = 10;
+    let name = "Play from mapped session speech time";
+    if (timing === "source_input_bound") {
+      evidence.sessionTiming = {
+        clock: "session",
+        provenance: timing,
+        sourceId: 1,
+        startMs: 900,
+        endMs: 14500,
+        inputScene: { sceneId: "ducks-3", displayedAtMs: 900 },
+      };
+      expected = 0;
+      name = "Play from conservative bound (may precede speech)";
+    } else if (timing === "source_timeline_bound") {
+      evidence.providerTiming = { clock: "provider", sourceId: 1, startMs: 12000, endMs: 13000 };
+      evidence.sessionTiming = {
+        clock: "session",
+        provenance: timing,
+        sourceId: 1,
+        sourceRequestedAtMs: 0,
+        inputOpenedAtMs: 900,
+        startMs: 12000,
+        endMs: 14500,
+        inputScene: { sceneId: "ducks-3", displayedAtMs: 900 },
+      };
+      name = "Play from conservative bound (may precede speech)";
+    } else if (timing === "receipt" || timing === "event") {
+      delete evidence.sessionTiming;
+      expected = timing === "receipt" ? 12 : 18;
+      name =
+        timing === "receipt" ? "Play from approximate transcript receipt" : "Play from approximate saved event time";
+      if (timing === "event") delete evidence.firstObservedAtMs;
+    }
+    const h = await diagnosticHarness(page, undefined, undefined, f);
+    const article = h.diagnostics.getByRole("article", { name: `Response diagnostic ${f.responseId}` });
+    await article.locator("summary").first().click();
+    const audio = page.getByLabel("Full-session recording");
+    await page.getByText("Check the recording", { exact: true }).click();
+    await expect.poll(() => audio.evaluate((element: HTMLAudioElement) => element.readyState)).toBe(4);
+    await article.getByRole("button", { name, exact: true }).first().click();
+    await expect
+      .poll(() => audio.evaluate((element: HTMLAudioElement) => element.currentTime))
+      .toBeGreaterThanOrEqual(expected);
+    const position = await audio.evaluate((element: HTMLAudioElement) => {
+      element.pause();
+      return element.currentTime;
+    });
+    expect(position).toBeLessThan(expected + 1);
+  });
+
+test("synthetic diagnostics label unavailable historical source material and preserve legacy reject-only decisions", async ({
+  page,
+}) => {
+  const f = reviewDiagnosticFixture();
+  f.record.events[1].id = "replacement-event";
+  const initial = snapshot();
+  initial.proposals[0].resolution = "reject_only";
+  initial.diagnostics = f.history;
+  const h = await diagnosticHarness(page, initial, undefined, f);
+  const response = h.diagnostics.getByRole("article", { name: `Response diagnostic ${f.responseId}` });
+  await expect(response.getByText(/source material unavailable in the current record/)).toBeVisible();
+  await expect(response.getByRole("button")).toHaveCount(0);
+  await h.panel.getByRole("button", { name: "Review individually" }).click();
+  const article = h.panel.getByRole("article", { name: `Observation ${initial.proposals[0].proposal.proposalId}` });
+  await expect(article.getByRole("button", { name: "Accept unchanged" })).toBeDisabled();
+  await expect(article.getByRole("button", { name: "Edit details" })).toBeDisabled();
+  await expect(article.getByRole("button", { name: "Reject proposal" })).toBeEnabled();
+  expect(h.writes).toEqual([]);
+});
 
 for (const viewport of [
   { width: 1280, height: 900 },
@@ -51,7 +393,15 @@ function snapshot(count = 1): ReviewSnapshot {
     review: null,
   };
 }
-async function harness(page: Page, initial = snapshot(), expand = true) {
+async function harness(
+  page: Page,
+  initial = snapshot(),
+  expand = true,
+  diagnostics?: {
+    record: InspectableSessionRecord;
+    read: (input: DiagnosticRequest) => Promise<{ status?: number; json: unknown }>;
+  },
+) {
   let current = initial;
   const writes: ReviewCommand[] = [];
   let failWrite = false;
@@ -62,6 +412,10 @@ async function harness(page: Page, initial = snapshot(), expand = true) {
   const unexpected: string[] = [];
   await page.route("**/api/**", async route => {
     const url = route.request().url();
+    if (url.endsWith("/api/parent-review/diagnostics") && diagnostics) {
+      const result = await diagnostics.read(route.request().postDataJSON());
+      return route.fulfill(result).catch(() => {});
+    }
     if (url.endsWith("/api/parent-review")) {
       const command = route.request().postDataJSON() as ReviewCommand;
       if (command.operation === "get") {
@@ -145,7 +499,9 @@ async function harness(page: Page, initial = snapshot(), expand = true) {
               createdAt: 1,
               recording: { storageId: "synthetic", mimeType: "audio/wav", startOffsetMs: 2000, durationMs: 30000 },
             },
-            events: current.sources.map((source, order) => ({ ...source, order })),
+            events: diagnostics
+              ? diagnostics.record.events.map(event => ({ ...event, _id: event.id }))
+              : current.sources.map((source, order) => ({ ...source, _id: source.id, order })),
             recordingUrl: "https://synthetic-audio.invalid/saved.wav",
           },
         },

@@ -36,6 +36,37 @@ export function EvidenceDetail({ evidence }: { evidence: Evidence }) {
           {evidence.recognition === "needs_confirmation" && (
             <p>Recognition needs confirmation; this response does not establish a counting mistake.</p>
           )}
+          <details>
+            <summary>Timing provenance</summary>
+            <p>
+              Provider clock: {evidence.providerTiming?.clock ?? "Unlabelled legacy offsets"} · Provider source:{" "}
+              {evidence.providerTiming?.sourceId ?? "Unavailable"} · Provider offsets:{" "}
+              {evidence.providerTiming?.startMs ?? evidence.startMs ?? "Unavailable"}–
+              {evidence.providerTiming?.endMs ?? evidence.endMs ?? "Unavailable"} ms. These offsets are not recording
+              seek positions.
+            </p>
+            {evidence.sessionTiming && evidence.sessionTiming.provenance !== "mapped_provider" && (
+              <>
+                <p>
+                  Input fence source: {evidence.sessionTiming.sourceId} · Scene:{" "}
+                  {evidence.sessionTiming.inputScene.sceneId} · Displayed at:{" "}
+                  {evidence.sessionTiming.inputScene.displayedAtMs} ms.
+                </p>
+                {evidence.sessionTiming.provenance === "source_timeline_bound" && (
+                  <p>
+                    Source requested: {evidence.sessionTiming.sourceRequestedAtMs} ms · Input opened:{" "}
+                    {evidence.sessionTiming.inputOpenedAtMs} ms.
+                  </p>
+                )}
+              </>
+            )}
+            {evidence.responseScene && (
+              <p>
+                Transcript-arrival attribution: {evidence.responseScene.provenance} · Displayed at:{" "}
+                {evidence.responseScene.displayedAtMs} ms.
+              </p>
+            )}
+          </details>
         </>
       );
     case "scene_displayed":

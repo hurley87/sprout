@@ -1,5 +1,27 @@
 import type { EndReason } from "./session";
 
+/** Target-independent text policy, not ASR or evaluator confidence. */
+export type ResponseRecognitionContext = {
+  provenance: "application_text_policy";
+  recovery: "clarification" | "instructional_support";
+  recognition: "needs_confirmation" | "no_ambiguity_detected";
+  /** Corroborating text released before this response, never proof of recognition. */
+  repeatedTotal?: number;
+};
+
+/** A join to canonical transcript fragments, never an acoustic scene assertion. */
+export type EvaluatedResponseIdentity = {
+  provenance: "application_evaluation";
+  /** One answer window can include fragments from several canonical utterances. */
+  fragmentKeys: string[];
+  /** Missing includes contributors without canonical fragment or provider identity. */
+  sourceStatus: "known" | "missing" | "mixed";
+  /** The confirmed display evaluated by the app, independent of speech timing. */
+  evaluatedScene?: { sceneId: string; displayedAtMs: number };
+  /** Frozen for this evaluation revision, including superseded results. */
+  recognitionContext?: ResponseRecognitionContext;
+};
+
 export type Evidence =
   | {
       type: "utterance";
@@ -11,6 +33,8 @@ export type Evidence =
       state: "finalized" | "interrupted";
       firstObservedAtMs?: number;
       lastObservedAtMs?: number;
+      /** Immutable fragment joins to evaluation_control.responseIdentity. No evaluation is implied. */
+      transcriptFragments?: { key: string; textStart: number; textEnd: number }[];
       providerTiming?: { clock: "provider"; startMs: number; endMs: number; sourceId?: number };
       /** Mapped speech, or a conservative envelope of source input through transcript receipt. */
       sessionTiming?:
@@ -98,6 +122,7 @@ export type TimelineEvent =
       transcriptRevision?: number;
       answerVersion?: string;
       sourceId?: number;
+      responseIdentity?: EvaluatedResponseIdentity;
       delegationId?: string;
       offsetMs?: number;
       origin?: "application" | "delegation" | "both";
@@ -136,7 +161,15 @@ export type InspectableSessionRecord = {
     startOffsetMs: number;
     durationMs: number;
   };
-  events: { eventKey: string; order: number; atMs: number; evidence?: Evidence; timeline?: TimelineEvent }[];
+  events: {
+    /** Canonical identity for diagnostic joins; older readers may omit it. Never substitute an event key. */
+    id?: string;
+    eventKey: string;
+    order: number;
+    atMs: number;
+    evidence?: Evidence;
+    timeline?: TimelineEvent;
+  }[];
 };
 
 export interface SessionRecordReader {

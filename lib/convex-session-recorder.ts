@@ -50,7 +50,8 @@ export class ConvexSessionRecorder implements SessionRecorder, SessionRecordRead
               durationMs: session.recording.durationMs,
             }
           : undefined,
-      events: events.map(({ eventKey, order, atMs, evidence, timeline }) => ({
+      events: events.map(({ _id, eventKey, order, atMs, evidence, timeline }) => ({
+        ...(_id ? { id: _id } : {}),
         eventKey,
         order,
         atMs,

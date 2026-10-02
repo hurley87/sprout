@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { diagnosticRow, diagnosticSummary } from "./diagnostic_validators";
 
 export const endingReason = v.union(
   v.literal("parent_stop"),
@@ -21,6 +22,7 @@ export const evidence = v.union(
     state: v.union(v.literal("finalized"), v.literal("interrupted")),
     firstObservedAtMs: v.optional(v.number()),
     lastObservedAtMs: v.optional(v.number()),
+    transcriptFragments: v.optional(v.array(v.object({ key: v.string(), textStart: v.number(), textEnd: v.number() }))),
     providerTiming: v.optional(
       v.object({
         clock: v.literal("provider"),
@@ -133,6 +135,22 @@ export const timeline = v.union(
     transcriptRevision: v.optional(v.number()),
     answerVersion: v.optional(v.string()),
     sourceId: v.optional(v.number()),
+    responseIdentity: v.optional(
+      v.object({
+        provenance: v.literal("application_evaluation"),
+        fragmentKeys: v.array(v.string()),
+        sourceStatus: v.union(v.literal("known"), v.literal("missing"), v.literal("mixed")),
+        evaluatedScene: v.optional(v.object({ sceneId: v.string(), displayedAtMs: v.number() })),
+        recognitionContext: v.optional(
+          v.object({
+            provenance: v.literal("application_text_policy"),
+            recovery: v.union(v.literal("clarification"), v.literal("instructional_support")),
+            recognition: v.union(v.literal("needs_confirmation"), v.literal("no_ambiguity_detected")),
+            repeatedTotal: v.optional(v.number()),
+          }),
+        ),
+      }),
+    ),
     delegationId: v.optional(v.string()),
     offsetMs: v.optional(v.number()),
     origin: v.optional(v.union(v.literal("application"), v.literal("delegation"), v.literal("both"))),
@@ -198,6 +216,23 @@ export default defineSchema({
     failure: v.optional(v.string()),
     completedAt: v.optional(v.number()),
   }).index("by_session", ["sessionId"]),
+  observerDiagnosticAttempts: defineTable({
+    analysisId: v.id("observerAnalyses"),
+    attempt: v.number(),
+    // Immutable attempt input, retained when the analysis retries with a new snapshot.
+    inputSnapshot: v.string(),
+    startedAt: v.number(),
+    recordStatus: v.union(v.literal("complete"), v.literal("incomplete")),
+    hasRecording: v.boolean(),
+    summary: v.optional(diagnosticSummary),
+    snapshotChanged: v.optional(v.boolean()),
+    completedAt: v.optional(v.number()),
+  }).index("by_analysisId_and_attempt", ["analysisId", "attempt"]),
+  observerDiagnosticRows: defineTable({
+    attemptId: v.id("observerDiagnosticAttempts"),
+    ordinal: v.number(),
+    diagnostic: diagnosticRow,
+  }).index("by_attemptId_and_ordinal", ["attemptId", "ordinal"]),
   parentDecisions: defineTable({
     sessionId: v.id("sessions"),
     analysisId: v.id("observerAnalyses"),

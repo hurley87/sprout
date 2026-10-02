@@ -6,6 +6,103 @@ import { api } from "../convex/_generated/api";
 const modules = import.meta.glob("../convex/**/*.ts");
 const makeTest = () => convexTest(schema, modules);
 
+it("rejects corrupted fragment joins and complete evaluation identities with missing source fields", async () => {
+  const t = makeTest();
+  const sessionId = await t.mutation(api.sessions.create, {});
+  await t.mutation(api.sessions.activate, { sessionId });
+  const speech = {
+    type: "utterance" as const,
+    speaker: "child_or_nearby_speaker" as const,
+    text: "One Two",
+    state: "finalized" as const,
+    transcriptFragments: [
+      { key: "first", textStart: 0, textEnd: 4 },
+      { key: "second", textStart: 4, textEnd: 7 },
+    ],
+  };
+  for (const mutation of ["gap", "duplicate", "truncated", "fractional"] as const) {
+    const evidence = structuredClone(speech);
+    if (mutation === "gap") evidence.transcriptFragments[1].textStart = 5;
+    if (mutation === "duplicate") evidence.transcriptFragments[1].key = "first";
+    if (mutation === "truncated") evidence.transcriptFragments.pop();
+    if (mutation === "fractional") evidence.transcriptFragments[1].textEnd = 6.5;
+    await expect(
+      t.mutation(api.sessions.appendEvent, {
+        sessionId,
+        eventKey: mutation,
+        atMs: 100,
+        evidence,
+      }),
+    ).rejects.toThrow(/fragment identity/i);
+  }
+  const timeline = {
+    type: "evaluation_control" as const,
+    action: "evaluation_result",
+    correlationKey: "0|1|100:One Two|1",
+    sceneIndex: 0,
+    transcriptRevision: 1,
+    answerVersion: "100:One Two",
+    sourceId: 1,
+    responseIdentity: {
+      provenance: "application_evaluation" as const,
+      sourceStatus: "known" as const,
+      fragmentKeys: ["first", "second"],
+      evaluatedScene: { sceneId: "hello-duck", displayedAtMs: 0 },
+      recognitionContext: {
+        provenance: "application_text_policy" as const,
+        recovery: "instructional_support" as const,
+        recognition: "no_ambiguity_detected" as const,
+      },
+    },
+  };
+  for (const payload of [
+    { ...timeline, sourceId: undefined },
+    { ...timeline, transcriptRevision: undefined },
+    { ...timeline, responseIdentity: { ...timeline.responseIdentity, fragmentKeys: ["first", "first"] } },
+  ]) {
+    await expect(
+      t.mutation(api.sessions.appendEvent, {
+        sessionId,
+        eventKey: "invalid-evaluation",
+        atMs: 100,
+        timeline: payload,
+      }),
+    ).rejects.toThrow("Invalid evaluated response identity");
+  }
+  for (const identity of [
+    { ...timeline.responseIdentity, sourceStatus: "mixed" as const },
+    { ...timeline.responseIdentity, evaluatedScene: undefined },
+    {
+      ...timeline.responseIdentity,
+      recognitionContext: { ...timeline.responseIdentity.recognitionContext, recovery: "clarification" as const },
+    },
+  ]) {
+    await expect(
+      t.mutation(api.sessions.appendEvent, {
+        sessionId,
+        eventKey: "invalid-recognition",
+        atMs: 100,
+        timeline: { ...timeline, responseIdentity: identity },
+      }),
+    ).rejects.toThrow("Clear recognition requires complete response context");
+  }
+  await expect(
+    t.mutation(api.sessions.appendEvent, {
+      sessionId,
+      eventKey: "invalid-confirmation",
+      atMs: 100,
+      timeline: {
+        ...timeline,
+        responseIdentity: {
+          ...timeline.responseIdentity,
+          recognitionContext: { ...timeline.responseIdentity.recognitionContext, repeatedTotal: Number.NaN },
+        },
+      },
+    }),
+  ).rejects.toThrow("Invalid recognition confirmation total");
+  expect((await t.query(api.sessions.getRecord, { sessionId }))?.events).toHaveLength(0);
+});
+
 describe("durable session record", () => {
   it("creates, activates, orders evidence, finalizes, and fetches a pending record without audio", async () => {
     const t = makeTest();

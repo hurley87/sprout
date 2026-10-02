@@ -2,16 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "../convex/schema";
 import { api } from "../convex/_generated/api";
-import { LessonSession } from "../lib/session";
-import {
-  validateObserverProposal,
-  type CanonicalObservationRecord,
-  type ObserverProposal,
-} from "../lib/observation-contracts";
+import { validateObserverProposal, type ObserverProposal } from "../lib/observation-contracts";
 import type { EvaluateAnswer } from "../lib/answer";
+import { audioElement, captureMocks, liveConnection, recordedBrowserLesson } from "./helpers/recorded-browser-lesson";
 import { responseSceneValidity, sessionSpeechInterval } from "../lib/evidence-timing";
-import type { SessionRecorder } from "../lib/session-recorder";
-import { UTTERANCE_GAP_MS } from "../lib/transcript";
+import type { TimelineEvent } from "../lib/session-recorder";
 import { REPLACEMENT_TIMEOUT_MS, BrowserTransport, microphoneTrackSettings } from "../lib/browser-transport";
 
 afterEach(() => {
@@ -49,78 +44,6 @@ it("exports only useful microphone settings and excludes device identifiers", ()
     latency: 0.02,
   });
 });
-
-function audioElement() {
-  const audio = {
-    muted: false,
-    autoplay: false,
-    srcObject: null as MediaStream | null,
-    play: vi.fn(async () => {}),
-    pause: vi.fn(),
-  };
-  return audio;
-}
-
-function liveConnection(autoStarted = true) {
-  const remoteTrack = { stop: vi.fn() } as unknown as MediaStreamTrack;
-  const inputTrack = { enabled: true, stop: vi.fn() } as unknown as MediaStreamTrack;
-  const inputs: MediaStreamTrack[] = [];
-  const micTrack = {
-    stop: vi.fn(),
-    clone: vi.fn(() => {
-      const track = inputs.length ? ({ enabled: true, stop: vi.fn() } as unknown as MediaStreamTrack) : inputTrack;
-      inputs.push(track);
-      return track;
-    }),
-  } as unknown as MediaStreamTrack;
-  class Stream {
-    constructor(private tracks: MediaStreamTrack[]) {}
-    getTracks() {
-      return this.tracks;
-    }
-    getAudioTracks() {
-      return this.tracks;
-    }
-  }
-  const channel = {
-    readyState: "open",
-    onmessage: null as ((event: { data: string }) => void) | null,
-    onerror: null,
-    onclose: null,
-    onopen: null as (() => void) | null,
-    send: vi.fn(),
-    close: vi.fn(),
-  };
-  const peer = {
-    connectionState: "connected",
-    iceGatheringState: "complete",
-    localDescription: { sdp: "offer" },
-    ontrack: null as ((event: { track: MediaStreamTrack }) => void) | null,
-    onconnectionstatechange: null,
-    addTrack: vi.fn(),
-    createDataChannel: vi.fn(() => channel),
-    createOffer: vi.fn(async () => ({ type: "offer", sdp: "offer" })),
-    setLocalDescription: vi.fn(async () => {}),
-    setRemoteDescription: vi.fn(async () => {
-      if (autoStarted) channel.onmessage?.({ data: JSON.stringify({ type: "session.started" }) });
-    }),
-    close: vi.fn(),
-  };
-  vi.stubGlobal("MediaStream", Stream);
-  vi.stubGlobal("navigator", { mediaDevices: { getUserMedia: vi.fn(async () => new Stream([micTrack])) } });
-  const Peer = class {
-    constructor() {
-      return peer;
-    }
-  };
-  vi.stubGlobal("window", { RTCPeerConnection: Peer });
-  vi.stubGlobal("RTCPeerConnection", Peer);
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async () => ({ ok: true, json: async () => ({ transport: { sdp: "answer" } }) })),
-  );
-  return { channel, peer, remoteTrack, micTrack, inputTrack, inputs };
-}
 
 describe("BrowserTransport output gating", () => {
   it("permanently discards stale output while retaining child input and routes the next response only through B", async () => {
@@ -254,58 +177,6 @@ describe("BrowserTransport output gating", () => {
     expect(audio.muted).toBe(false);
   });
 });
-
-function captureMocks() {
-  const sources: { connect: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> }[] = [];
-  const gain = { gain: { value: 0 }, connect: vi.fn(), disconnect: vi.fn() };
-  const mix = { stream: { getTracks: () => [] }, disconnect: vi.fn() };
-  const context = {
-    state: "running",
-    resume: vi.fn(async () => {}),
-    close: vi.fn(async () => {}),
-    createMediaStreamDestination: () => mix,
-    createGain: () => gain,
-    createMediaStreamSource: vi.fn(() => {
-      const source = { connect: vi.fn(), disconnect: vi.fn() };
-      sources.push(source);
-      return source;
-    }),
-  };
-  const recorders: Recorder[] = [];
-  class Recorder {
-    static isTypeSupported = (type: string) => type === "audio/webm;codecs=opus";
-    state = "inactive";
-    mimeType = "audio/webm;codecs=opus";
-    ondataavailable?: ((event: { data: Blob }) => void) | null;
-    onstop?: (() => void) | null;
-    onerror?: (() => void) | null;
-    constructor(readonly stream: unknown) {
-      recorders.push(this);
-    }
-    start() {
-      this.state = "recording";
-    }
-    stop() {
-      this.state = "inactive";
-      queueMicrotask(() => {
-        this.ondataavailable?.({ data: new Blob(["audio"], { type: this.mimeType }) });
-        this.onstop?.();
-      });
-    }
-  }
-  let contexts = 0;
-  vi.stubGlobal(
-    "AudioContext",
-    class {
-      constructor() {
-        // Recording, microphone VAD and remote observation own separate contexts.
-        return contexts++ === 0 ? context : { ...context, close: vi.fn(async () => {}) };
-      }
-    },
-  );
-  vi.stubGlobal("MediaRecorder", Recorder);
-  return { sources, gain, mix, context, recorders };
-}
 
 function deferred<T = void>() {
   let resolve!: (value: T) => void;
@@ -854,81 +725,17 @@ it("gate cancellation signal immediately retires pending B without stopping A", 
   transport.close();
 });
 
-async function recordedBrowserLesson(
-  evaluator: EvaluateAnswer = async () => ({ status: "unavailable", reason: "synthetic", latencyMs: 1 }),
-  startupDelayMs = 2000,
-) {
-  vi.useFakeTimers();
-  const connection = liveConnection(false);
-  const transport = new BrowserTransport(audioElement() as unknown as HTMLAudioElement);
-  const record: CanonicalObservationRecord = {
-    session: { _id: "recorded-browser-session", state: "ended", recordStatus: "complete" },
-    events: [],
-  };
-  const recorder: SessionRecorder = {
-    create: async () => record.session._id,
-    activate: async () => {},
-    append: async (key, atMs, evidence) => {
-      record.events.push({ _id: key, atMs, evidence });
-    },
-    appendTimeline: async () => {},
-    attachRecording: async () => {},
-    markIncomplete: async () => {},
-    finalize: async () => {},
-  };
-  const session = new LessonSession(transport, evaluator, vi.fn(), undefined, recorder);
-  await session.start();
-  // A realistic startup interval, measured by production before /api/live.
-  // No test-supplied session timing or provider/browser clock mapping.
-  await vi.advanceTimersByTimeAsync(startupDelayMs);
-  connection.channel.onmessage?.({ data: JSON.stringify({ type: "session.started" }) });
-  expect(connection.inputTrack.enabled).toBe(false);
-  await vi.advanceTimersByTimeAsync(100);
-  session.displayed(0);
-  expect(connection.inputTrack.enabled).toBe(true);
-  const say = (text: string, startMs = 1000) =>
-    connection.channel.onmessage?.({
-      data: JSON.stringify({
-        type: "session.input_transcript.delta",
-        delta: text,
-        start_ms: startMs,
-        end_ms: startMs + 200,
-        // Provider JSON must never be able to supply these trust labels.
-        sourceId: 999,
-        sourceRequestedAt: -999999,
-        sessionTiming: { provenance: "mapped_provider", startMs: 1, endMs: 2 },
-      }),
-    });
-  const flush = async () => {
-    await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS);
-    await session.recordingSettled();
-  };
-  const proposal = (): ObserverProposal => {
-    const scene = record.events.find(event => event.evidence?.type === "scene_displayed")!;
-    const response = record.events.find(event => event.evidence?.type === "utterance")!;
-    return {
-      kind: "observer_proposal",
-      proposalId: "real-recorder-output",
-      sessionId: record.session._id,
-      exchangeAtMs: response.atMs,
-      observation: {
-        behavior: "quantity_identification",
-        outcome: "correct",
-        speakerAttribution: "child_or_nearby_speaker",
-        statedTotal: 1,
-        countSequenceObserved: false,
-        targetQuantity: 1,
-        description: "Said One about one duck.",
-        support: { status: "not_established", kinds: [], sourceEventIds: [] },
-        uncertaintyReasons: [],
-      },
-      sources: [
-        { eventId: scene._id, role: "scene" },
-        { eventId: response._id, role: "response" },
-      ],
-    };
-  };
-  return { connection, transport, session, record, say, flush, proposal };
+function responseEvaluations(f: Awaited<ReturnType<typeof recordedBrowserLesson>>, text: string) {
+  const response = f.record.events.find(e => e.evidence?.type === "utterance" && e.evidence.text === text)?.evidence;
+  if (response?.type !== "utterance") throw new Error("expected canonical response");
+  const keys = new Set(response.transcriptFragments?.map(fragment => fragment.key));
+  return f.timelines
+    .map(event => event.timeline)
+    .filter(
+      (timeline): timeline is Extract<TimelineEvent, { type: "evaluation_control" }> =>
+        timeline.type === "evaluation_control" &&
+        Boolean(timeline.responseIdentity?.fragmentKeys.some(key => keys.has(key))),
+    );
 }
 
 it("publishes concrete evidence from actual transport, LessonSession and recorder output without a provider clock offset", async () => {
@@ -1087,6 +894,124 @@ it("keeps One -> Two -> Three concrete on consecutive scenes with one real provi
   await f.session.recordingSettled();
 });
 
+it("links a butterfly evaluation after strawberries display and durable flush through immutable fragment joins", async () => {
+  const f = await recordedBrowserLesson(advances);
+  for (const [index, text, offset] of [
+    [0, "One", 1000],
+    [1, "Two", 6000],
+  ] as const) {
+    await vi.advanceTimersByTimeAsync(1000);
+    f.say(text, offset);
+    await f.flush();
+    f.session.displayed(index + 1);
+  }
+  await f.session.recordingSettled();
+  const butterfly = f.record.events.find(
+    e => e.evidence?.type === "scene_displayed" && e.evidence.sceneId === "butterfly-garden",
+  )!;
+  await vi.advanceTimersByTimeAsync(1000);
+  f.say("Three", 9500);
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(f.session.snapshot.sceneIndex).toBe(3);
+  expect(f.record.events.some(e => e.evidence?.type === "utterance" && e.evidence.text === "Three")).toBe(false);
+  f.session.displayed(3);
+  await f.flush();
+  const evaluated = responseEvaluations(f, "Three").find(e => e.action === "evaluation_result")!;
+  expect(evaluated).toMatchObject({
+    correlationKey: "2|3|9500:Three|1",
+    sceneIndex: 2,
+    transcriptRevision: 3,
+    answerVersion: "9500:Three",
+    sourceId: 1,
+    applicationAction: "ADVANCE",
+    responseIdentity: {
+      provenance: "application_evaluation",
+      fragmentKeys: ["transcript_3"],
+      sourceStatus: "known",
+      evaluatedScene: { sceneId: "butterfly-garden", displayedAtMs: butterfly.atMs },
+    },
+  });
+  const stages = f.timelines
+    .map(e => e.timeline)
+    .filter(e => "correlationKey" in e && e.correlationKey === evaluated.correlationKey);
+  expect(stages.map(e => e.type)).toEqual(
+    expect.arrayContaining(["answer_evaluation_requested", "answer_evaluation_resolved", "scene_advance_committed"]),
+  );
+  expect(validateObserverProposal(proposalForResponse(f, "Three"), f.record).ok).toBe(true);
+  // This relationship is retained even when no trustworthy acoustic interval exists.
+  const response = f.record.events.find(e => e.evidence?.type === "utterance" && e.evidence.text === "Three")!;
+  if (response.evidence?.type !== "utterance") throw new Error("expected speech");
+  delete response.evidence.sessionTiming;
+  expect(responseEvaluations(f, "Three")).toContainEqual(evaluated);
+  expect(validateObserverProposal(proposalForResponse(f, "Three"), f.record).ok).toBe(false);
+  f.session.end("parent_stop");
+  await f.session.recordingSettled();
+});
+
+it("keeps corrected and superseded evaluation identities on one canonical utterance", async () => {
+  const pending: Array<(result: Awaited<ReturnType<EvaluateAnswer>>) => void> = [];
+  const f = await recordedBrowserLesson(() => new Promise(resolve => pending.push(resolve)));
+  await vi.advanceTimersByTimeAsync(1000);
+  f.say("Two", 2500);
+  await vi.advanceTimersByTimeAsync(1501);
+  expect(pending).toHaveLength(1);
+  f.say(" no, One", 2600);
+  await vi.advanceTimersByTimeAsync(1501);
+  expect(pending).toHaveLength(2);
+  pending[0]({ status: "evaluated", probability: 1, model: "late", latencyMs: 1 });
+  pending[1]({ status: "unavailable", reason: "synthetic", latencyMs: 1 });
+  await f.flush();
+  const evaluations = responseEvaluations(f, "Two no, One");
+  expect(evaluations.find(e => e.action === "superseded")).toMatchObject({
+    correlationKey: "0|1|2500:Two|1",
+    transcriptRevision: 1,
+    answerVersion: "2500:Two",
+    status: "superseded",
+    responseIdentity: { fragmentKeys: ["transcript_1"] },
+  });
+  expect(evaluations.find(e => e.action === "evaluation_result")).toMatchObject({
+    correlationKey: "0|2|2500:Two no, One|1",
+    transcriptRevision: 2,
+    answerVersion: "2500:Two no, One",
+    responseIdentity: { fragmentKeys: ["transcript_1", "transcript_2"] },
+  });
+  const response = f.record.events.find(e => e.evidence?.type === "utterance")!;
+  expect(response.evidence).toMatchObject({
+    transcriptFragments: [
+      { key: "transcript_1", textStart: 0, textEnd: 3 },
+      { key: "transcript_2", textStart: 3, textEnd: 11 },
+    ],
+  });
+  f.session.end("parent_stop");
+  await f.session.recordingSettled();
+});
+
+it("links one revised answer window to multiple utterances including speech flushed before evaluation", async () => {
+  const f = await recordedBrowserLesson();
+  await vi.advanceTimersByTimeAsync(1000);
+  f.say("Two", 2500);
+  // Generated tutor text ends canonical child speech, but not the answer window.
+  f.connection.channel.onmessage?.({
+    data: JSON.stringify({
+      type: "session.output_transcript.delta",
+      delta: "hidden",
+      start_ms: 2500,
+      end_ms: 2600,
+    }),
+  });
+  await f.session.recordingSettled();
+  expect(f.record.events.find(e => e.evidence?.type === "utterance")?.evidence).toMatchObject({ text: "Two" });
+  f.say(" no, One", 2600);
+  await f.flush();
+  const first = responseEvaluations(f, "Two").find(e => e.action === "evaluation_result")!;
+  const second = responseEvaluations(f, " no, One").find(e => e.action === "evaluation_result")!;
+  expect(first).toEqual(second);
+  expect(first.responseIdentity?.fragmentKeys).toEqual(["transcript_1", "transcript_2"]);
+  expect(first.answerVersion).toBe("2500:Two no, One");
+  f.session.end("parent_stop");
+  await f.session.recordingSettled();
+});
+
 it("keeps genuinely delayed old speech ambiguous after a normal display, even with matching local VAD", async () => {
   const f = await recordedBrowserLesson(advances);
   await vi.advanceTimersByTimeAsync(1000);
@@ -1099,6 +1024,10 @@ it("keeps genuinely delayed old speech ambiguous after a normal display, even wi
   f.session.receive({ type: "microphone.speech_stopped", quietMs: 900 });
   await f.flush();
   const proposal = proposalForResponse(f, "Two");
+  expect(responseEvaluations(f, "Two").find(e => e.action === "evaluation_result")).toMatchObject({
+    sceneIndex: 1,
+    responseIdentity: { sourceStatus: "known", evaluatedScene: { sceneId: "duck-friends" } },
+  });
   expect(validateObserverProposal(proposal, f.record).ok).toBe(false);
   proposal.observation = {
     behavior: "uncertain_exchange",
@@ -1271,6 +1200,20 @@ it("records a promoted replacement with its own request anchor and microphone fe
     providerTiming: { sourceId: 2, startMs: 900 },
     sessionTiming: { provenance: "source_timeline_bound", sourceId: 2, sourceRequestedAtMs: 3600, startMs: 4500 },
   });
+  const a = responseEvaluations(f, "One").find(e => e.action === "evaluation_result")!;
+  const replacement = responseEvaluations(f, "Two").find(e => e.action === "evaluation_result")!;
+  expect(a).toMatchObject({ sourceId: 1, responseIdentity: { fragmentKeys: ["transcript_1"] } });
+  expect(replacement).toMatchObject({
+    sourceId: 2,
+    transcriptRevision: 2,
+    answerVersion: "900:Two",
+    responseIdentity: {
+      sourceStatus: "known",
+      fragmentKeys: ["transcript_2"],
+      evaluatedScene: { sceneId: "duck-friends" },
+    },
+  });
+  expect(replacement.correlationKey).not.toBe(a.correlationKey);
   expect(validateObserverProposal(proposalForResponse(f, "Two"), f.record).ok).toBe(true);
   expect(f.record.events.some(e => e.evidence?.type === "utterance" && /hidden|retired/.test(e.evidence.text))).toBe(
     false,
@@ -1355,8 +1298,20 @@ it("round-trips real recorder bounds through Convex and rejects mismatched persi
       evidence: event.evidence,
     });
   }
+  for (const event of f.timelines) {
+    await t.mutation(api.sessions.appendEvent, { sessionId, ...event });
+  }
   const persisted = await t.query(api.sessions.getRecord, { sessionId });
-  expect(persisted?.events.map(e => e.evidence)).toEqual(f.record.events.map(e => e.evidence));
+  expect(persisted?.events.filter(e => e.evidence).map(e => e.evidence)).toEqual(f.record.events.map(e => e.evidence));
+  expect(persisted?.events.filter(e => e.timeline).map(e => e.timeline)).toEqual(f.timelines.map(e => e.timeline));
+  const evaluations = responseEvaluations(f, "Two");
+  expect(evaluations.find(e => e.action === "evaluation_result")).toMatchObject({
+    correlationKey: "1|2|6000:Two|1",
+    transcriptRevision: 2,
+    answerVersion: "6000:Two",
+    sourceId: 1,
+    responseIdentity: { fragmentKeys: ["transcript_2"], evaluatedScene: { sceneId: "duck-friends" } },
+  });
   const response = structuredClone(
     f.record.events.find(e => e.evidence?.type === "utterance" && e.evidence.text === "Two")!,
   );

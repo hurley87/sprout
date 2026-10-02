@@ -6,6 +6,9 @@ import { reviewPlaybackAtMs, type RepairLevel, type ReviewCommand, type ReviewSn
 import { reconcileReviewWrite, type ReviewWrite } from "../lib/parent-review-reconciliation";
 import { observationSummary, repairLabels } from "../lib/parent-review-summary";
 import { reviewedObserverClaim } from "../lib/reviewed-observation";
+import type { InspectableSessionRecord } from "../lib/session-recorder";
+import { EvidenceDiagnostics } from "./evidence-diagnostics";
+import { validDiagnosticHistory } from "../lib/parent-review-diagnostics";
 import { EvidenceDetail } from "./evidence-detail";
 
 const label = (value: string) => value.replaceAll("_", " ");
@@ -18,7 +21,11 @@ async function request(command: ReviewCommand): Promise<ReviewSnapshot | null> {
   const value = await response.json();
   if (!response.ok || (command.operation !== "get" && value.saved !== true)) throw new Error("Review request failed");
   if (command.operation === "get") {
-    if (value.sessionId !== command.sessionId) throw new Error("Wrong review session");
+    if (
+      value.sessionId !== command.sessionId ||
+      (value.diagnostics !== undefined && !validDiagnosticHistory(value.diagnostics))
+    )
+      throw new Error("Wrong review session");
     return value as ReviewSnapshot;
   }
   return null;
@@ -300,11 +307,13 @@ function ReviewPanel({
   seek,
   hasRecording,
   canRetry,
+  record,
 }: {
   sessionId: string;
   seek: (atMs: number) => void;
   hasRecording: boolean;
   canRetry: boolean;
+  record?: InspectableSessionRecord;
 }) {
   const [snapshot, setSnapshot] = useState<ReviewSnapshot | null>(null);
   const [busy, setBusy] = useState(false);
@@ -483,6 +492,15 @@ function ReviewPanel({
             </button>
           )}
         </>
+      )}
+      {snapshot && (
+        <EvidenceDiagnostics
+          sessionId={sessionId}
+          analysisId={snapshot.analysisId}
+          history={snapshot.diagnostics}
+          record={record}
+          seek={seek}
+        />
       )}
       {snapshot?.status === "ready" && scope && (
         <>
@@ -681,6 +699,7 @@ export function ParentReviewPanel(props: {
   seek: (atMs: number) => void;
   hasRecording: boolean;
   canRetry: boolean;
+  record?: InspectableSessionRecord;
 }) {
   return <ReviewPanel key={props.sessionId} {...props} />;
 }

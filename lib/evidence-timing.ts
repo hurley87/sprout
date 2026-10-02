@@ -1,5 +1,5 @@
 import type { TranscriptEvent } from "./events";
-import type { Evidence } from "./session-recorder";
+import type { Evidence, TimelineEvent } from "./session-recorder";
 
 /** A session interval is an envelope, not necessarily exact acoustic timing.
  * Keep the historical mapped-provider shape compatible for existing readers. */
@@ -52,12 +52,20 @@ export function sessionSpeechInterval(evidence: Evidence | undefined) {
     !Number.isSafeInteger(timing.sourceId) ||
     timing.sourceId < 1 ||
     evidence.providerTiming?.sourceId !== timing.sourceId ||
+    evidence.providerTiming.clock !== "provider" ||
+    !Number.isFinite(evidence.providerTiming.startMs) ||
+    evidence.providerTiming.startMs < 0 ||
+    !Number.isFinite(evidence.providerTiming.endMs) ||
+    evidence.providerTiming.endMs < evidence.providerTiming.startMs ||
     !timing.inputScene.sceneId ||
     !Number.isFinite(timing.inputScene.displayedAtMs) ||
     timing.inputScene.displayedAtMs < 0 ||
     timing.inputScene.displayedAtMs > timing.startMs ||
     evidence.firstObservedAtMs === undefined ||
+    !Number.isFinite(evidence.firstObservedAtMs) ||
     evidence.lastObservedAtMs === undefined ||
+    !Number.isFinite(evidence.lastObservedAtMs) ||
+    evidence.lastObservedAtMs < evidence.firstObservedAtMs ||
     timing.startMs > evidence.firstObservedAtMs ||
     timing.endMs < evidence.lastObservedAtMs
   )
@@ -110,20 +118,20 @@ export function sourceTimelineBound(
   };
 }
 
-export type DisplayedSceneEvent = { _id: string; atMs: number; evidence?: Evidence };
+export type DisplayedSceneEvent = { _id: string; atMs: number; evidence?: Evidence; timeline?: unknown };
 
 /** Shared scene check for Observer and parent-correction callers. Callers must
  * additionally enforce finalization, speaker attribution and recognition. */
 export function responseSceneValidity(
   response: Evidence | undefined,
   scene: DisplayedSceneEvent | undefined,
-  displayedScenes: DisplayedSceneEvent[],
+  canonicalEvents: DisplayedSceneEvent[],
 ) {
   const interval = sessionSpeechInterval(response);
   const fenced =
     interval?.provenance === "source_input_bound" ||
     (interval?.provenance === "source_timeline_bound" && interval.startMs === interval.inputOpenedAtMs);
-  displayedScenes = displayedScenes.filter(event => event.evidence?.type === "scene_displayed");
+  const displayedScenes = canonicalEvents.filter(event => event.evidence?.type === "scene_displayed");
   const priorScenes = interval
     ? displayedScenes.filter(event => event.atMs < interval.startMs || (fenced && event.atMs === interval.startMs))
     : [];
@@ -157,17 +165,61 @@ export function responseSceneValidity(
       scene?.evidence?.type === "scene_displayed" &&
       attribution.sceneId === scene.evidence.sceneId &&
       attribution.displayedAtMs === scene.atMs);
+  // Resolve joins per fragment, not per utterance or evaluator result. A later
+  // revision can span multiple durable utterances; a superseded revision's
+  // known source/scene cannot clarify its mixed or conflicting replacement.
+  const fragmentKeys =
+    response?.type === "utterance" ? (response.transcriptFragments?.map(fragment => fragment.key) ?? []) : [];
+  const associations = canonicalEvents.flatMap(event => {
+    const control = event.timeline as Extract<TimelineEvent, { type: "evaluation_control" }> | undefined;
+    return control?.type === "evaluation_control" &&
+      control.responseIdentity &&
+      Number.isSafeInteger(control.transcriptRevision) &&
+      control.responseIdentity.fragmentKeys.some(key => fragmentKeys.includes(key))
+      ? [control]
+      : [];
+  });
+  const latestRevisionByFragment = new Map<string, number>();
+  for (const control of associations) {
+    for (const key of control.responseIdentity!.fragmentKeys) {
+      if (fragmentKeys.includes(key))
+        latestRevisionByFragment.set(
+          key,
+          Math.max(latestRevisionByFragment.get(key) ?? -1, control.transcriptRevision!),
+        );
+    }
+  }
+  const latestAssociations = associations.filter(control =>
+    control.responseIdentity!.fragmentKeys.some(
+      key => latestRevisionByFragment.get(key) === control.transcriptRevision,
+    ),
+  );
+  const associationMatchesScene = latestAssociations.every(
+    control =>
+      control.responseIdentity!.sourceStatus === "known" &&
+      response?.type === "utterance" &&
+      control.sourceId === response.providerTiming?.sourceId &&
+      scene?.evidence?.type === "scene_displayed" &&
+      control.responseIdentity!.evaluatedScene?.sceneId === scene.evidence.sceneId &&
+      control.responseIdentity!.evaluatedScene?.displayedAtMs === scene.atMs,
+  );
+  const recognitionNeedsConfirmation = latestAssociations.some(
+    control => control.responseIdentity!.recognitionContext?.recognition === "needs_confirmation",
+  );
   return {
     hasSpeechInterval: Boolean(interval),
     transitionsDuringSpeech,
     citedSceneIsCurrent,
     fenceMatchesScene,
     attributionMatchesScene,
+    associationMatchesScene,
+    recognitionNeedsConfirmation,
     valid:
       Boolean(interval) &&
       !transitionsDuringSpeech &&
       citedSceneIsCurrent &&
       fenceMatchesScene &&
-      attributionMatchesScene,
+      attributionMatchesScene &&
+      associationMatchesScene,
   };
 }

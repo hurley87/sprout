@@ -120,6 +120,23 @@ it("claims a saved partial record, analyzes mocked recording bytes, validates an
     sessionId,
     observation: { behavior: "quantity_identification", statedTotal: 3 },
   });
+  expect(JSON.parse(await t.query(internal.parent_review.inspect, { sessionId })).diagnostics).toMatchObject({
+    availability: "recorded",
+    attempts: [
+      {
+        attempt: 1,
+        recordStatus: "incomplete",
+        hasRecording: true,
+        summary: {
+          outputState: "usable",
+          responseCount: 1,
+          absentResponseCount: 0,
+          rejectedProposalCount: 0,
+          failureStage: null,
+        },
+      },
+    ],
+  });
 
   // A duplicate trigger sees ready state and cannot make another provider call or batch.
   expect(await t.action(internal.observer_action.analyze, { sessionId })).toBe("ready");

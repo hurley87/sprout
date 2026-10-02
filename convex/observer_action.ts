@@ -11,6 +11,8 @@ import {
   PROVIDER_TIMEOUT_MS,
 } from "../lib/observer-provider";
 import type { Id } from "./_generated/dataModel";
+import type { ObserverDiagnostics, ObserverFailureStage } from "../lib/observer-diagnostics";
+import type { ObserverProposal } from "../lib/observation-contracts";
 
 /** Public RPC surface; the capability is checked inside this backend action before any scheduling. */
 export const requestAnalysis = action({
@@ -28,6 +30,7 @@ export const requestAnalysis = action({
 
 export const analyze = internalAction({
   args: { sessionId: v.id("sessions"), expectedAttempt: v.optional(v.number()) },
+  returns: v.string(),
   handler: async (ctx, { sessionId, expectedAttempt }): Promise<string> => {
     const now = Date.now();
     const claim = await ctx.runMutation(
@@ -37,6 +40,9 @@ export const analyze = internalAction({
     if (claim.status !== "claimed") return claim.status;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
+    let diagnostics: ObserverDiagnostics | undefined;
+    let proposals: ObserverProposal[] | undefined;
+    let failureStage: ObserverFailureStage = "recording";
     try {
       const snapshot = JSON.parse(claim.inputSnapshot) as {
         recording?: { storageId: Id<"_storage">; mimeType: string } | null;
@@ -48,13 +54,23 @@ export const analyze = internalAction({
       const audioResponse = await fetch(url, { signal: controller.signal });
       if (!audioResponse.ok) throw new ObserverProviderError("Saved recording could not be retrieved.");
       const audio = await readAudio(audioResponse, recording.mimeType);
-      const proposals = await analyzeSavedRecording({
-        provider: createOpenAIObserverProvider(process.env.OPENAI_API_KEY),
+      failureStage = "provider_setup";
+      const provider = createOpenAIObserverProvider(process.env.OPENAI_API_KEY);
+      proposals = await analyzeSavedRecording({
+        provider,
         audio,
         mimeType: recording.mimeType,
         canonicalSnapshot: claim.inputSnapshot,
         signal: controller.signal,
+        onDiagnostics: report => {
+          diagnostics = report;
+          failureStage = "provider_validation";
+        },
+        onStage: stage => {
+          failureStage = stage;
+        },
       });
+      failureStage = "publication";
       await ctx.runMutation(
         makeFunctionReference("observer:publish") as unknown as FunctionReference<"mutation", "internal">,
         {
@@ -76,6 +92,9 @@ export const analyze = internalAction({
             ? "Observer provider timed out before the five-minute lease expired."
             : message,
           now: Date.now(),
+          ...(diagnostics ? { diagnostics } : {}),
+          ...(proposals ? { proposals } : {}),
+          failureStage,
         },
       );
       return "failed";
