@@ -1,5 +1,14 @@
 import type { EndReason } from "./session";
 
+/** Target-independent text policy, not ASR or evaluator confidence. */
+export type ResponseRecognitionContext = {
+  provenance: "application_text_policy";
+  recovery: "clarification" | "instructional_support";
+  recognition: "needs_confirmation" | "no_ambiguity_detected";
+  /** Corroborating text released before this response, never proof of recognition. */
+  repeatedTotal?: number;
+};
+
 /** A join to canonical transcript fragments, never an acoustic scene assertion. */
 export type EvaluatedResponseIdentity = {
   provenance: "application_evaluation";
@@ -9,6 +18,8 @@ export type EvaluatedResponseIdentity = {
   sourceStatus: "known" | "missing" | "mixed";
   /** The confirmed display evaluated by the app, independent of speech timing. */
   evaluatedScene?: { sceneId: string; displayedAtMs: number };
+  /** Frozen for this evaluation revision, including superseded results. */
+  recognitionContext?: ResponseRecognitionContext;
 };
 
 export type Evidence =

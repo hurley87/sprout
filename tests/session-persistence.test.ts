@@ -48,6 +48,11 @@ it("rejects corrupted fragment joins and complete evaluation identities with mis
       sourceStatus: "known" as const,
       fragmentKeys: ["first", "second"],
       evaluatedScene: { sceneId: "hello-duck", displayedAtMs: 0 },
+      recognitionContext: {
+        provenance: "application_text_policy" as const,
+        recovery: "instructional_support" as const,
+        recognition: "no_ambiguity_detected" as const,
+      },
     },
   };
   for (const payload of [
@@ -64,6 +69,37 @@ it("rejects corrupted fragment joins and complete evaluation identities with mis
       }),
     ).rejects.toThrow("Invalid evaluated response identity");
   }
+  for (const identity of [
+    { ...timeline.responseIdentity, sourceStatus: "mixed" as const },
+    { ...timeline.responseIdentity, evaluatedScene: undefined },
+    {
+      ...timeline.responseIdentity,
+      recognitionContext: { ...timeline.responseIdentity.recognitionContext, recovery: "clarification" as const },
+    },
+  ]) {
+    await expect(
+      t.mutation(api.sessions.appendEvent, {
+        sessionId,
+        eventKey: "invalid-recognition",
+        atMs: 100,
+        timeline: { ...timeline, responseIdentity: identity },
+      }),
+    ).rejects.toThrow("Clear recognition requires complete response context");
+  }
+  await expect(
+    t.mutation(api.sessions.appendEvent, {
+      sessionId,
+      eventKey: "invalid-confirmation",
+      atMs: 100,
+      timeline: {
+        ...timeline,
+        responseIdentity: {
+          ...timeline.responseIdentity,
+          recognitionContext: { ...timeline.responseIdentity.recognitionContext, repeatedTotal: Number.NaN },
+        },
+      },
+    }),
+  ).rejects.toThrow("Invalid recognition confirmation total");
   expect((await t.query(api.sessions.getRecord, { sessionId }))?.events).toHaveLength(0);
 });
 

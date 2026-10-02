@@ -368,10 +368,7 @@ export class LessonSession {
         : {}),
       ...(speaker === "child"
         ? ({
-            recognition:
-              this.recovery(utterance.text, `${utterance.startMs}:${utterance.text.trim()}`) === "clarification"
-                ? "needs_confirmation"
-                : "no_ambiguity_detected",
+            recognition: utterance.context?.recognition ?? "needs_confirmation",
           } as const)
         : {}),
       firstObservedAtMs: utterance.firstObservedAtMs,
@@ -422,6 +419,7 @@ export class LessonSession {
       delivered,
       this.sessionAtMs(),
       {
+        ...(event.speaker === "child" ? { recognition: "needs_confirmation" as const } : {}),
         ...(sessionTiming ? { sessionTiming } : {}),
         providerTiming: {
           clock: "provider",
@@ -999,6 +997,30 @@ export class LessonSession {
       this.evaluation?.abort();
       this.cancelDeferredAdvance();
       this.cancelDeferredStay();
+      // Freeze the prior-confirmation input at the response's first revision.
+      // A correction to that response cannot corroborate itself after release.
+      const sameResponse = Boolean(
+        previous?.fragments?.length && previous.fragments[0].key === utterance.fragments?.[0]?.key,
+      );
+      const prior = this.confirmation;
+      const version = `${utterance.startMs}:${utterance.text.trim()}`;
+      const repeatedTotal = sameResponse
+        ? previous?.recognitionContext?.repeatedTotal
+        : prior?.sceneIndex === this.snapshot.sceneIndex && prior.answerVersion !== version
+          ? prior.total
+          : undefined;
+      const recovery = recognitionRecovery(utterance.text, repeatedTotal);
+      utterance.recognitionContext = {
+        provenance: "application_text_policy",
+        recovery,
+        recognition: this.canonical.child.retainRecognition(
+          utterance,
+          recovery === "clarification" || this.displayedContext?.sceneId !== this.scene.id
+            ? "needs_confirmation"
+            : "no_ambiguity_detected",
+        ),
+        ...(repeatedTotal === undefined ? {} : { repeatedTotal }),
+      };
       this.latest = utterance;
       this.childTranscriptHistory.push({
         sceneIndex: this.snapshot.sceneIndex,
@@ -2282,6 +2304,9 @@ export class LessonSession {
           provenance: "application_evaluation",
           fragmentKeys: fragments.map(fragment => fragment.key),
           sourceStatus,
+          ...(fragments.length && this.latest?.recognitionContext
+            ? { recognitionContext: structuredClone(this.latest.recognitionContext) }
+            : {}),
           ...(this.displayedContext?.sceneId === sceneAt(sceneIndex).id
             ? { evaluatedScene: { ...this.displayedContext } }
             : {}),

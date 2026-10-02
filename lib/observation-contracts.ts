@@ -402,7 +402,6 @@ export function validateObserverProposal(
     (source): source is ObservationSource & { eventId: string; role: "scene" } => source.role === "scene",
   );
   const sceneEvent = sceneSource && sourceById.get(sceneSource.eventId);
-  const displayedScenes = sourceRecord.events.filter(event => event.evidence?.type === "scene_displayed");
   if (responseEvent && responseEvent.atMs !== input.exchangeAtMs) {
     issues.push({
       path: "exchangeAtMs",
@@ -432,7 +431,9 @@ export function validateObserverProposal(
       citedSceneIsCurrent,
       fenceMatchesScene,
       attributionMatchesScene,
-    } = responseSceneValidity(responseEvent.evidence, sceneEvent, displayedScenes);
+      associationMatchesScene,
+      recognitionNeedsConfirmation,
+    } = responseSceneValidity(responseEvent.evidence, sceneEvent, sourceRecord.events);
     if (!attributionMatchesScene) {
       if (
         observation.behavior !== "uncertain_exchange" ||
@@ -441,7 +442,7 @@ export function validateObserverProposal(
         issues.push({ path: "sources", message: "response scene attribution conflicts with the cited scene" });
     }
     if (
-      responseEvent.evidence.recognition === "needs_confirmation" &&
+      (responseEvent.evidence.recognition === "needs_confirmation" || recognitionNeedsConfirmation) &&
       (observation.behavior !== "uncertain_exchange" || !observation.uncertaintyReasons.includes("unclear_speech"))
     ) {
       issues.push({
@@ -455,14 +456,18 @@ export function validateObserverProposal(
           path: "sources",
           message: "a concrete behavior requires trustworthy speech start and end timestamps",
         });
-      } else if (transitionsDuringSpeech || !citedSceneIsCurrent || !fenceMatchesScene) {
+      } else if (transitionsDuringSpeech || !citedSceneIsCurrent || !fenceMatchesScene || !associationMatchesScene) {
         issues.push({
           path: "sources",
           message: "a concrete behavior requires the uniquely displayed scene throughout the response interval",
         });
       }
     } else if (
-      (!hasSpeechInterval || transitionsDuringSpeech || !citedSceneIsCurrent || !fenceMatchesScene) &&
+      (!hasSpeechInterval ||
+        transitionsDuringSpeech ||
+        !citedSceneIsCurrent ||
+        !fenceMatchesScene ||
+        !associationMatchesScene) &&
       !observation.uncertaintyReasons.includes("missing_scene_context") &&
       !observation.uncertaintyReasons.includes("conflicting_context")
     ) {

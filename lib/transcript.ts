@@ -1,4 +1,4 @@
-import type { Evidence } from "./session-recorder";
+import type { Evidence, ResponseRecognitionContext } from "./session-recorder";
 import { GOODBYE_PHRASE } from "./lesson";
 
 /** Silence longer than this starts a new utterance. */
@@ -8,7 +8,13 @@ export const WINDOW_CHARS = 500;
 
 /** Speech so far in one utterance, identified by when that utterance began. */
 type AnswerFragment = { key: string; sourceId?: number };
-export type Utterance = { text: string; startMs: number; fragments?: AnswerFragment[]; fragmentsComplete?: boolean };
+export type Utterance = {
+  text: string;
+  startMs: number;
+  fragments?: AnswerFragment[];
+  fragmentsComplete?: boolean;
+  recognitionContext?: ResponseRecognitionContext;
+};
 
 /** The recent speech of one speaker, rebuilt from provider transcript deltas. */
 export class TranscriptWindow {
@@ -123,7 +129,14 @@ export class UtteranceAccumulator {
         firstObservedAtMs: observedAtMs,
         lastObservedAtMs: observedAtMs,
       };
-    if (this.open.context?.responseScene && this.open.context.responseScene.sceneId !== context?.responseScene?.sceneId)
+    // A new fragment invalidates the prior revision until its complete answer
+    // context is established. Ignored transition fragments never inherit it.
+    if (this.open.context && context?.recognition) this.open.context.recognition = context.recognition;
+    if (
+      this.open.context?.responseScene &&
+      (this.open.context.responseScene.sceneId !== context?.responseScene?.sceneId ||
+        this.open.context.responseScene.displayedAtMs !== context?.responseScene?.displayedAtMs)
+    )
       this.open.context.responseScene.status = "changed";
     if (this.open.context?.providerTiming) {
       this.open.context.providerTiming.startMs = Math.min(this.open.startMs, startMs);
@@ -170,6 +183,28 @@ export class UtteranceAccumulator {
     this.open.endMs = Math.max(this.open.endMs, endMs);
     this.open.delivered &&= delivered;
     return completed;
+  }
+  /** Answer windows and durable utterances have many-to-many fragment joins.
+   * A policy result for different/partial text cannot clarify this utterance. */
+  retainRecognition(response: Utterance, recognition: ResponseRecognitionContext["recognition"]) {
+    const open = this.open;
+    const fragments = response.fragments ?? [];
+    const sourceId = open?.context?.providerTiming?.sourceId;
+    const matches = Boolean(
+      open &&
+      response.fragmentsComplete &&
+      fragments.length &&
+      Number.isSafeInteger(sourceId) &&
+      sourceId! > 0 &&
+      fragments.every(fragment => fragment.sourceId === sourceId) &&
+      open.text === response.text &&
+      open.transcriptFragments?.length === fragments.length &&
+      open.transcriptFragments.every((fragment, index) => fragment.key === fragments[index].key) &&
+      open.context?.responseScene?.status === "stable",
+    );
+    const retained = matches ? recognition : "needs_confirmation";
+    if (open?.context) open.context.recognition = retained;
+    return retained;
   }
   take() {
     const utterance = this.open;

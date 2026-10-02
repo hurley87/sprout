@@ -136,6 +136,47 @@ it("orders support on mapped session time rather than large provider offsets or 
   expect(validateObserverProposal(f.proposal, f.record).ok).toBe(false);
 });
 
+it("does not turn STAY, suggested help or delivered neutral clarification into recorded instructional support", () => {
+  const { record, proposal } = contractFixture();
+  record.events.push(
+    {
+      _id: "stay",
+      atMs: 900,
+      timeline: { type: "answer_evaluation_resolved", status: "evaluated", probability: 0.01, decision: "STAY" },
+    },
+    {
+      _id: "suggested-help",
+      atMs: 1000,
+      timeline: {
+        type: "evaluation_control",
+        action: "application_outcome_released",
+        reason: "Count them one at a time.",
+      },
+    },
+    {
+      _id: "generated-help",
+      atMs: 1100,
+      timeline: { type: "sprout_generated_utterance", text: "Count with me." },
+    },
+    {
+      _id: "delivered-clarification",
+      atMs: 1200,
+      evidence: { type: "utterance", speaker: "sprout", text: "Could you say your number again?", state: "finalized" },
+    },
+  );
+  expect(validateObserverProposal(proposal, record).ok).toBe(true);
+  for (const id of ["suggested-help", "generated-help", "delivered-clarification"]) {
+    const withHelp = structuredClone(proposal!);
+    withHelp.sources.push({ role: "support", eventId: id });
+    withHelp.observation.support = { status: "recorded", kinds: ["hint"], sourceEventIds: [id] };
+    expect(validateObserverProposal(withHelp, record).ok).toBe(false);
+  }
+  const mistaken = structuredClone(proposal!);
+  mistaken.observation.statedTotal = 2;
+  mistaken.observation.outcome = "incorrect";
+  expect(validateObserverProposal(mistaken, record).ok).toBe(false);
+});
+
 it("records changed arrival context across fragments and separates provider sources", () => {
   const accumulator = new UtteranceAccumulator();
   const context = (sceneId: string, sourceId = 1) => ({

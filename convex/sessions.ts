@@ -169,6 +169,23 @@ export const appendEvent = mutation({
           if (!identity.evaluatedScene.sceneId.trim()) throw new Error("Evaluated scene identity is required");
           nonnegative(identity.evaluatedScene.displayedAtMs, "evaluatedScene.displayedAtMs");
         }
+        const recognition = identity.recognitionContext;
+        if (recognition) {
+          if (
+            recognition.recognition === "no_ambiguity_detected" &&
+            (recognition.recovery !== "instructional_support" ||
+              identity.sourceStatus !== "known" ||
+              !identity.evaluatedScene)
+          )
+            throw new Error("Clear recognition requires complete response context");
+          if (
+            recognition.repeatedTotal !== undefined &&
+            (!Number.isSafeInteger(recognition.repeatedTotal) ||
+              recognition.repeatedTotal < 0 ||
+              recognition.repeatedTotal > 99)
+          )
+            throw new Error("Invalid recognition confirmation total");
+        }
       }
       if (!timeline.action.trim()) throw new Error("Control action is required");
       for (const [field, value] of Object.entries({

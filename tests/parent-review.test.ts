@@ -3,9 +3,10 @@ import { convexTest } from "convex-test";
 import { internal } from "../convex/_generated/api";
 import schema from "../convex/schema";
 import { observationFixtures, type SyntheticObservationFixture } from "./fixtures/observation-contracts";
-import type { ObserverProposal } from "../lib/observation-contracts";
+import { validateObserverProposal, type ObserverProposal } from "../lib/observation-contracts";
 import { sourceTimelineBound } from "../lib/evidence-timing";
 import { reviewedObserverClaim } from "../lib/reviewed-observation";
+import type { TimelineEvent } from "../lib/session-recorder";
 
 async function fixture(
   name = "correct-total-without-spoken-count",
@@ -30,6 +31,7 @@ async function fixture(
         eventKey: `${order}`,
         atMs: event.atMs,
         evidence: event.evidence,
+        ...(event.timeline ? { timeline: event.timeline as TimelineEvent } : {}),
       });
       ids.set(event._id, id);
     }
@@ -170,7 +172,18 @@ it.each(["mapped_provider", "source_input_bound", "source_timeline_bound"] as co
       "wrong_display_time",
       "missing_timing",
       "changed_context",
+      "mixed_response",
+      "missing_response_source",
+      "wrong_evaluated_scene",
+      "invalid_provider_interval",
+      "invalid_arrival_interval",
     ] as const) {
+      // Historical mapped-provider timing is independent of provider offsets.
+      if (
+        provenance === "mapped_provider" &&
+        (defect === "invalid_provider_interval" || defect === "invalid_arrival_interval")
+      )
+        continue;
       const f = await fixture("ambiguous-speaker", 1, source => {
         prepareTiming(source, provenance, provenance !== "mapped_provider");
         const scene = source.record.events.find(event => event.evidence?.type === "scene_displayed")!;
@@ -200,7 +213,47 @@ it.each(["mapped_provider", "source_input_bound", "source_timeline_bound"] as co
         }
         if (defect === "missing_timing") delete speech.sessionTiming;
         if (defect === "changed_context") speech.responseScene!.status = "changed";
+        if (defect === "invalid_provider_interval") speech.providerTiming!.endMs = speech.providerTiming!.startMs - 1;
+        if (defect === "invalid_arrival_interval") speech.lastObservedAtMs = Number.NaN;
+        if (defect === "mixed_response" || defect === "missing_response_source" || defect === "wrong_evaluated_scene") {
+          speech.transcriptFragments = [{ key: "answer-fragment", textStart: 0, textEnd: speech.text.length }];
+          source.record.events.push({
+            _id: "latest-evaluation",
+            atMs: 2100,
+            timeline: {
+              type: "evaluation_control",
+              action: "evaluation_result",
+              correlationKey: "latest",
+              transcriptRevision: 2,
+              sourceId: 1,
+              responseIdentity: {
+                provenance: "application_evaluation",
+                fragmentKeys: ["answer-fragment", "correction-fragment"],
+                sourceStatus:
+                  defect === "mixed_response" ? "mixed" : defect === "missing_response_source" ? "missing" : "known",
+                evaluatedScene: {
+                  sceneId: defect === "wrong_evaluated_scene" ? "other-scene" : speech.responseScene!.sceneId,
+                  displayedAtMs: scene.atMs,
+                },
+              },
+            },
+          });
+        }
         source.proposal!.observation.uncertaintyReasons.push("conflicting_context");
+        // Observer and parent correction must see the same complete canonical
+        // history, including uncited displays and later response revisions.
+        const concreteProposal = structuredClone(source.proposal!);
+        concreteProposal.observation = {
+          ...concreteProposal.observation,
+          behavior: "quantity_identification",
+          outcome: "correct",
+          speakerAttribution: "child_or_nearby_speaker",
+          statedTotal: 3,
+          uncertaintyReasons: [],
+        };
+        speech.speaker = "child_or_nearby_speaker";
+        expect(validateObserverProposal(concreteProposal, source.record).ok, defect).toBe(false);
+        speech.speaker = "unknown";
       });
       const concrete = {
         ...f.original.observation,
@@ -223,6 +276,7 @@ it.each(["mapped_provider", "source_input_bound", "source_timeline_bound"] as co
           {
             observation: {
               behavior: "uncertain_exchange",
+              outcome: "uncertain",
               uncertaintyReasons: ["ambiguous_speaker", "conflicting_context"],
             },
           },
@@ -286,6 +340,72 @@ it("allows explicit parent speech and assistance testimony while keeping product
         parentContext: { assistance: ["parent_reported_assistance"] },
       },
     ],
+  });
+});
+
+it("keeps later recognition uncertainty through fragment joins but allows explicit parent speech testimony", async () => {
+  const f = await fixture("ambiguous-speaker", 1, source => {
+    prepareTiming(source, "source_timeline_bound", true);
+    const speech = source.record.events.find(event => event.evidence?.type === "utterance")!.evidence;
+    if (speech?.type !== "utterance") throw new Error("speech");
+    speech.recognition = "no_ambiguity_detected";
+    speech.transcriptFragments = [{ key: "answer", textStart: 0, textEnd: speech.text.length }];
+    source.record.events.push({
+      _id: "revised-evaluation",
+      atMs: 2100,
+      timeline: {
+        type: "evaluation_control",
+        action: "evaluation_result",
+        correlationKey: "revised",
+        transcriptRevision: 2,
+        sourceId: 1,
+        responseIdentity: {
+          provenance: "application_evaluation",
+          sourceStatus: "known",
+          fragmentKeys: ["answer", "correction"],
+          evaluatedScene: {
+            sceneId: speech.responseScene!.sceneId,
+            displayedAtMs: speech.responseScene!.displayedAtMs,
+          },
+          recognitionContext: {
+            provenance: "application_text_policy",
+            recovery: "clarification",
+            recognition: "needs_confirmation",
+          },
+        },
+      },
+    });
+    source.proposal!.observation.uncertaintyReasons.push("unclear_speech");
+    const concrete = structuredClone(source.proposal!);
+    concrete.observation = {
+      ...concrete.observation,
+      behavior: "quantity_identification",
+      outcome: "correct",
+      speakerAttribution: "child_or_nearby_speaker",
+      statedTotal: 3,
+      uncertaintyReasons: [],
+    };
+    speech.speaker = "child_or_nearby_speaker";
+    const validated = validateObserverProposal(concrete, source.record);
+    expect(validated.ok).toBe(false);
+    if (!validated.ok)
+      expect(validated.issues.some(issue => issue.message.includes("unconfirmed recognition"))).toBe(true);
+    speech.speaker = "unknown";
+  });
+  const correction = {
+    ...f.original.observation,
+    behavior: "quantity_identification" as const,
+    outcome: "correct" as const,
+    speakerAttribution: "child_or_nearby_speaker" as const,
+    statedTotal: 3,
+    uncertaintyReasons: [],
+  };
+  await f.decide(correct(correction));
+  expect(await f.gate()).toMatchObject({ blocked: true, evidence: [] });
+  await f.t.mutation(internal.parent_review.complete, { ...f.scope, repairLevel: "substantial_repair" });
+  expect(await f.gate()).toMatchObject({
+    blocked: false,
+    evidence: [{ observation: correction, interpretationProvenance: "parent_review" }],
   });
 });
 
