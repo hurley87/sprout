@@ -7,9 +7,20 @@ import { recordLiveTraffic } from "./instrumentation.mjs";
  * after Start is clicked; collection runs after the existing settling delay.
  * setupPage runs before navigation and may return an async cleanup callback.
  * Neither callback needs to describe child actions as fixed timestamps.
+ * @param {{baseUrl: string, browserArgs?: string[], setupPage?: (page: any) => Promise<(() => Promise<void>) | void>, drive: (context: any) => Promise<any>, collect: (context: any) => Promise<any>, onFailure?: (context: any) => Promise<void>, deadlineAt?: number}} options
  */
-export async function runLiveSession({ baseUrl, browserArgs, setupPage, drive, collect, onFailure = undefined }) {
+export async function runLiveSession({
+  baseUrl,
+  browserArgs,
+  setupPage,
+  drive,
+  collect,
+  onFailure = undefined,
+  deadlineAt = undefined,
+}) {
   const browser = await chromium.launch({ args: browserArgs });
+  const hardDeadline =
+    deadlineAt === undefined ? undefined : setTimeout(() => void browser.close(), Math.max(1, deadlineAt - Date.now()));
   let cleanup;
   let page;
   let failed = false;
@@ -38,6 +49,7 @@ export async function runLiveSession({ baseUrl, browserArgs, setupPage, drive, c
         throw error;
       }
     } finally {
+      clearTimeout(hardDeadline);
       try {
         await browser.close();
       } catch (error) {

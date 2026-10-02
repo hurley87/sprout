@@ -14,6 +14,7 @@ Start with the [MVP PRD](sprout-mvp-prd.md) for the agreed product scope. These 
 | [Jev answer experiment](jev-answer-experiment.md) | Whether one Jev question can drive scene advancement, measured against that baseline |
 | [Response-gate latency baseline](response-gate-latency-experiment.md) | Post-decision gate holds, provider lifecycle limits, and the next measured release-policy hypothesis |
 | [Acknowledgment playback contract](acknowledgment-playback-contract.md) | Issue #47 finite playback boundary, cancellation/evidence contract, synthetic demonstration and live gates |
+| [Issue #47 verification, commit 5](verification/issue-47/commit-5.md) | Bounded live trials, captured audio correlation, analyzer evidence, and remaining human gates |
 | [Microphone turn investigation baseline](microphone-turn-investigation.md) | Pre-evaluation fallback evidence, detector policy, and pending comparison protocol |
 
 ## Tutoring principle

@@ -42,6 +42,8 @@ export async function transportFixture(page: Page, microphoneMode: "silent" | "c
         import { ResponseSourceContract } from './response-source-contract';
         import { advanceContext, sceneAt } from './lesson';
         window.advanceContext = advanceContext; window.sceneAt = sceneAt;
+        import { acknowledgmentFor } from './acknowledgment-catalog';
+        window.acknowledgmentFor = acknowledgmentFor;
         window.Transport = BrowserTransport;
         window.SourceContract = ResponseSourceContract;
       </script>`,

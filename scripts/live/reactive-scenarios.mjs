@@ -208,12 +208,27 @@ async function delayedSecondTurn(ctx, first, text, answer) {
   }
 }
 
-const scenario = (run, timeoutMs = 120000) => ({ run, timeoutMs });
+const scenario = (run, timeoutMs = 120000, hardDeadlineMs = undefined) => ({ run, timeoutMs, hardDeadlineMs });
 export const REACTIVE_SCENARIOS = {
   "happy-path": scenario(async ctx => {
     await ctx.observer.waitForSproutTurnEnd();
     for (let i = 0; i < 3; i++) await correct(ctx);
   }, 180000),
+  "issue47-four-scene": scenario(
+    async ctx => {
+      await ctx.observer.waitForSproutTurnEnd();
+      for (const expectedScene of ["hello-duck", "duck-friends", "butterfly-garden"]) {
+        const displayed = await ctx.observer.currentScene();
+        requireEvidence(displayed === expectedScene, "Unexpected displayed scene before issue #47 trial answer", {
+          expectedScene,
+          displayed,
+        });
+        await correct(ctx);
+      }
+    },
+    140000,
+    150000,
+  ),
   "hedged-answer": scenario(async ctx => {
     await ctx.observer.waitForSproutTurnEnd();
     await correctPhrase(ctx, "I think there is one duck!", 1, /\b(?:one|1)\b.*\bduck\b/i);
@@ -322,36 +337,40 @@ export const REACTIVE_SCENARIOS = {
     await spokenNonAnswer(ctx, await ctx.child.say("I have a dinosaur named Rex!"));
     await correct(ctx);
   }),
-  interruption: scenario(async ctx => {
-    const turn = await ctx.observer.waitForSproutTurnStart();
-    const action = await ctx.child.say("Wait!");
-    const end = await ctx.observer.waitForSproutTurnEnd({ after: turn.cursor });
-    const events = (await ctx.observer.snapshot()).events;
-    const playback = events.find(e => e.kind === "playback-start" && e.cursor > action.checkpointBefore);
-    requireEvidence(
-      playback && playback.at >= turn.at && playback.at < end.at,
-      "Child audio did not barge into the same Sprout turn",
-      { turn, end, playback, action },
-    );
-    const window = events.filter(e => e.cursor > action.checkpointBefore && e.cursor <= end.cursor);
-    requireEvidence(
-      /\bwait\b/i.test(
-        window
-          .filter(e => e.kind === "child-transcript")
-          .map(e => e.text)
-          .join(""),
-      ),
-      "GPT-Live did not transcribe the interruption",
-      window,
-    );
-    requireEvidence(
-      !window.some(e => e.kind === "evaluation" || e.kind === "session-end"),
-      "Interruption caused evaluation or ended the session",
-      window,
-    );
-    await ctx.assertions.sceneStayed({ after: action, through: end.cursor });
-    await correct(ctx);
-  }),
+  interruption: scenario(
+    async ctx => {
+      const turn = await ctx.observer.waitForSproutTurnStart();
+      const action = await ctx.child.say("Wait!");
+      const end = await ctx.observer.waitForSproutTurnEnd({ after: turn.cursor });
+      const events = (await ctx.observer.snapshot()).events;
+      const playback = events.find(e => e.kind === "playback-start" && e.cursor > action.checkpointBefore);
+      requireEvidence(
+        playback && playback.at >= turn.at && playback.at < end.at,
+        "Child audio did not barge into the same Sprout turn",
+        { turn, end, playback, action },
+      );
+      const window = events.filter(e => e.cursor > action.checkpointBefore && e.cursor <= end.cursor);
+      requireEvidence(
+        /\bwait\b/i.test(
+          window
+            .filter(e => e.kind === "child-transcript")
+            .map(e => e.text)
+            .join(""),
+        ),
+        "GPT-Live did not transcribe the interruption",
+        window,
+      );
+      requireEvidence(
+        !window.some(e => e.kind === "evaluation" || e.kind === "session-end"),
+        "Interruption caused evaluation or ended the session",
+        window,
+      );
+      await ctx.assertions.sceneStayed({ after: action, through: end.cursor });
+      await correct(ctx);
+    },
+    120000,
+    150000,
+  ),
   silence: scenario(async ctx => {
     await ctx.observer.waitForSproutTurnEnd();
     await silentOpportunity(ctx, await ctx.child.staySilent(30000));

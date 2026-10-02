@@ -74,7 +74,7 @@ function context() {
 
 describe("baseline reactive suite", () => {
   it("selects one, subset, all, repeat and rejects invalid input", () => {
-    expect(selectScenarios([], REACTIVE_SCENARIOS)).toHaveLength(15);
+    expect(selectScenarios([], REACTIVE_SCENARIOS)).toHaveLength(16);
     expect(selectScenarios(["happy-path"], REACTIVE_SCENARIOS).map(r => r.name)).toEqual(["happy-path"]);
     expect(selectScenarios(["silence", "interruption", "--repeat", "2"], REACTIVE_SCENARIOS).map(r => r.label)).toEqual(
       ["silence-1", "silence-2", "interruption-1", "interruption-2"],

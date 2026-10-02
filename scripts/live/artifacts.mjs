@@ -1,6 +1,7 @@
 import { copyFileSync, writeFileSync, readFileSync } from "node:fs";
 import { LiveEventJournal } from "./observer.mjs";
 import { metrics } from "./metrics.mjs";
+import { createHash } from "node:crypto";
 
 /** Merges transcript deltas into speaker turns (provider clock) between app events (page clock). */
 export function timeline(name, micScript, log, failure) {
@@ -92,6 +93,76 @@ export async function exportArtifacts({ page, browser, dir, label, scenario, mic
   }
   let text = timeline(label, micScript, log, failure);
   let diagnostics = null;
+  let recording = null;
+  let recordingError = null;
+  let acknowledgmentResources = [];
+  if (process.env.LIVE_CAPTURE_AUDIO === "1") {
+    try {
+      await page.waitForFunction(
+        () => window.__liveAudioCaptures?.length > 0 && window.__liveAudioCaptures.every(capture => capture.blob),
+        null,
+        { timeout: 10_000 },
+      );
+      recording = await page.evaluate(async () => {
+        const capture = window.__liveAudioCaptures.at(-1);
+        const bytes = new Uint8Array(await capture.blob.arrayBuffer());
+        return {
+          mimeType: capture.mimeType,
+          startedAtPerformanceMs: capture.startedAtPerformanceMs,
+          startedAtPageMs: capture.startedAtPageMs,
+          pageOriginPerformanceMs: window.__livePageOriginPerformanceMs ?? null,
+          pageOriginWallMs: window.__livePageOriginWallMs ?? null,
+          acknowledgmentResources: performance
+            .getEntriesByType("resource")
+            .filter(entry => entry.name.includes("/audio/acknowledgments/"))
+            .map(entry => ({
+              url: new URL(entry.name).pathname,
+              startTime: entry.startTime,
+              responseEnd: entry.responseEnd,
+              duration: entry.duration,
+              encodedBodySize: entry.encodedBodySize,
+              transferSize: entry.transferSize,
+            })),
+          stoppedAtPerformanceMs: capture.stoppedAtPerformanceMs,
+          durationMs: capture.blob.size ? undefined : null,
+          base64: btoa(Array.from(bytes, byte => String.fromCharCode(byte)).join("")),
+        };
+      });
+      acknowledgmentResources = recording.acknowledgmentResources ?? [];
+      writeFileSync(
+        `${dir}/acknowledgment-resource-timing.json`,
+        JSON.stringify(
+          {
+            browserPerformanceClock: "performance.now relative to page navigation origin",
+            pageOriginPerformanceMs: recording.pageOriginPerformanceMs,
+            resources: acknowledgmentResources,
+          },
+          null,
+          2,
+        ),
+      );
+      const bytes = Buffer.from(recording.base64, "base64");
+      const sha256 = createHash("sha256").update(bytes).digest("hex");
+      writeFileSync(`${dir}/session-recording.webm`, bytes);
+      recording = {
+        mimeType: recording.mimeType,
+        bytes: bytes.byteLength,
+        sha256,
+        startedAtPerformanceMs: recording.startedAtPerformanceMs,
+        startedAtPageMs: recording.startedAtPageMs,
+        pageOriginPerformanceMs: recording.pageOriginPerformanceMs,
+        pageOriginWallMs: recording.pageOriginWallMs,
+        stoppedAtPerformanceMs: recording.stoppedAtPerformanceMs,
+        browserPerformanceClock: "performance.now",
+        localSyntheticMicrophone: true,
+      };
+      writeFileSync(`${dir}/recording-metadata.json`, JSON.stringify(recording, null, 2));
+    } catch (error) {
+      recordingError = `Recording capture failed: ${error}`;
+      recording = { unavailable: recordingError };
+      writeFileSync(`${dir}/recording-metadata.json`, JSON.stringify(recording, null, 2));
+    }
+  }
   // Always leave a diagnostics file, even when startup/download fails.
   writeFileSync(
     `${dir}/diagnostics.json`,
@@ -177,6 +248,7 @@ export async function exportArtifacts({ page, browser, dir, label, scenario, mic
     );
   const evidenceSummary = [
     ...(unavailable ? [unavailable] : []),
+    ...(recordingError ? [recordingError] : []),
     ...(diagnostics?.unavailable ? [`diagnostics unavailable: ${diagnostics.unavailable}`] : []),
     ...(evaluationTimeline.length
       ? ["Evaluation timeline (application milliseconds since attempt createdAt):", ...evaluationTimeline]
@@ -196,8 +268,13 @@ export async function exportArtifacts({ page, browser, dir, label, scenario, mic
     : `${text}\n${evidenceSummary}`;
   writeFileSync(
     `${dir}/log.json`,
-    JSON.stringify({ browser: browser.version(), scenario, summary, log, unavailable }, null, 2),
+    JSON.stringify(
+      { browser: browser.version(), scenario, summary, log, unavailable, recording, acknowledgmentResources },
+      null,
+      2,
+    ),
   );
   writeFileSync(`${dir}/timeline.txt`, text);
+  if (recordingError) throw new Error(recordingError);
   return text;
 }

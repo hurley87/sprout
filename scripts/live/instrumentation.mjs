@@ -2,6 +2,8 @@
 export function recordLiveTraffic() {
   const log = [];
   const t0 = performance.now();
+  window.__livePageOriginPerformanceMs = t0;
+  window.__livePageOriginWallMs = Date.now();
   const at = () => Math.round(performance.now() - t0);
   window.__liveLog = log;
   window.__liveNow = at;

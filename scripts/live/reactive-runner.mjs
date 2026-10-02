@@ -7,6 +7,7 @@ import { createReactiveChild } from "./reactive-child.mjs";
 import { countingBehavior } from "./lesson-behaviors/counting.mjs";
 import { createScenarioAssertions } from "./assertions.mjs";
 import { exportArtifacts } from "./artifacts.mjs";
+import { installMediaRecorderCapture } from "./recording-capture.mjs";
 
 export function selectScenarios(args, scenarios) {
   const names = [];
@@ -125,8 +126,10 @@ export async function runReactiveScenario(name, definition, { out, baseUrl, labe
     await runLiveSession({
       baseUrl,
       browserArgs: ["--autoplay-policy=no-user-gesture-required"],
+      ...(definition.hardDeadlineMs ? { deadlineAt: Date.parse(metadata.startedAt) + definition.hardDeadlineMs } : {}),
       setupPage: async page => {
         page.setDefaultTimeout(15000);
+        if (process.env.LIVE_CAPTURE_AUDIO === "1") await page.addInitScript(installMediaRecorderCapture);
         const cleanup = await setupSyntheticMicrophone(page);
         speech = createSimulatedChild({ page });
         return async () => {

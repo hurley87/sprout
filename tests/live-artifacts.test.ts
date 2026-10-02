@@ -5,7 +5,10 @@ import { join } from "node:path";
 import { exportArtifacts, timeline } from "../scripts/live/artifacts.mjs";
 
 const dirs: string[] = [];
-afterEach(() => dirs.splice(0).forEach(dir => rmSync(dir, { recursive: true, force: true })));
+afterEach(() => {
+  vi.unstubAllEnvs();
+  dirs.splice(0).forEach(dir => rmSync(dir, { recursive: true, force: true }));
+});
 const directory = () => {
   const dir = mkdtempSync(join(tmpdir(), "sprout-artifacts-"));
   dirs.push(dir);
@@ -13,6 +16,43 @@ const directory = () => {
 };
 
 describe("readable live artifacts", () => {
+  it("writes core failure artifacts when opt-in recording capture is unavailable", async () => {
+    vi.stubEnv("LIVE_CAPTURE_AUDIO", "1");
+    const dir = directory();
+    const page = {
+      evaluate: vi.fn(async () => [{ dir: "scene", at: 0, scene: "hello-duck" }]),
+      waitForFunction: async () => {
+        throw new Error("recording never finalized");
+      },
+      getByText: () => ({
+        click: async () => {
+          throw new Error("diagnostics download failed");
+        },
+      }),
+    };
+    await expect(
+      exportArtifacts({
+        page,
+        browser: { version: () => "test-browser" },
+        dir,
+        label: "capture-failure",
+        scenario: { name: "capture-failure", timeoutMs: 1000 },
+        micScript: "synthetic public speech",
+        failure: undefined,
+      }),
+    ).rejects.toThrow("Recording capture failed");
+    expect(JSON.parse(readFileSync(join(dir, "recording-metadata.json"), "utf8"))).toMatchObject({
+      unavailable: expect.stringContaining("recording never finalized"),
+    });
+    expect(readFileSync(join(dir, "timeline.txt"), "utf8")).toContain("Recording capture failed");
+    expect(JSON.parse(readFileSync(join(dir, "log.json"), "utf8"))).toMatchObject({
+      recording: { unavailable: expect.stringContaining("recording never finalized") },
+    });
+    expect(JSON.parse(readFileSync(join(dir, "diagnostics.json"), "utf8"))).toMatchObject({
+      unavailable: expect.stringContaining("diagnostics download failed"),
+    });
+  });
+
   it("shows intent, separate clocks, structured transitions and the failure prominently", () => {
     const text = timeline("wrong", "runtime mic", [
       { dir: "scene", at: 0, scene: "hello-duck" },
