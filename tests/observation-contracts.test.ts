@@ -232,6 +232,61 @@ describe("evidence-linked observation contracts", () => {
     expect(validateObserverProposal(falseSupport, observationFixtures[0].record).ok).toBe(false);
   });
 
+  it.each(["potential", "unknown"] as const)("does not infer independence from %s transcript-only help", delivery => {
+    const fixture = observationFixtures.find(item => item.name === "correct-total-without-spoken-count")!;
+    const record = structuredClone(fixture.record);
+    record.events.push({
+      _id: `sessionEvents_help_candidate_${delivery}`,
+      atMs: 1700,
+      timeline: {
+        type: "help_delivery_candidate",
+        provenance: "provider_transcript_only",
+        kind: "instructional_help",
+        delivery,
+        transcriptState: delivery === "potential" ? "finalized" : "interrupted",
+        text: "Point to each duck as you count it once.",
+        providerClock: "provider",
+        sourceId: 1,
+        startMs: 200,
+        endMs: 500,
+        displayStatus: "stable",
+        display: { sceneId: "ducks-3", displayedAtMs: 1000 },
+      },
+    });
+    const proposal = structuredClone(fixture.proposal!) as ObserverProposal;
+    proposal.observation.support = { status: "not_established", kinds: [], sourceEventIds: [] };
+    expect(validateObserverProposal(proposal, record)).toMatchObject({ ok: false });
+    expect(validateObserverProposal(proposal, record)).toMatchObject({
+      issues: expect.arrayContaining([
+        expect.objectContaining({ message: expect.stringContaining("cannot establish independence") }),
+      ]),
+    });
+  });
+
+  it("keeps generated neutral clarification distinct from instructional help", () => {
+    const fixture = observationFixtures.find(item => item.name === "correct-total-without-spoken-count")!;
+    const record = structuredClone(fixture.record);
+    record.events.push({
+      _id: "sessionEvents_neutral_clarification",
+      atMs: 1700,
+      timeline: {
+        type: "help_delivery_candidate",
+        provenance: "provider_transcript_only",
+        kind: "clarification",
+        delivery: "unknown",
+        transcriptState: "finalized",
+        text: "I want to make sure I heard you. Could you say your number again?",
+        providerClock: "provider",
+        sourceId: 1,
+        startMs: 200,
+        endMs: 500,
+        displayStatus: "stable",
+        display: { sceneId: "ducks-3", displayedAtMs: 1000 },
+      },
+    });
+    expect(validateObserverProposal(fixture.proposal, record).ok).toBe(true);
+  });
+
   it.each([5000, 5000.25, 1200])(
     "accepts recording-backed support without a structured support row for duration %s ms",
     durationMs => {

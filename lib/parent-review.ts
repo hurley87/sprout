@@ -14,6 +14,17 @@ export type ReviewSnapshot = {
   decisions: { proposalRowId: string; decision: ParentDecision }[];
   review: { repairLevel: RepairLevel; note?: string; emptyAcknowledged: boolean; completedAt: number } | null;
   sources: { id: string; eventKey: string; atMs: number; evidence: Evidence }[];
+  helpCandidates?: {
+    id: string;
+    atMs: number;
+    kind: "instructional_help" | "clarification";
+    delivery: "potential" | "partial" | "unknown";
+    transcriptState: "finalized" | "interrupted";
+    text: string;
+    displayStatus: "stable" | "changed" | "unknown";
+    sceneId?: string;
+    reviewStartAtMs?: number;
+  }[];
   diagnostics?: DiagnosticHistory;
 };
 

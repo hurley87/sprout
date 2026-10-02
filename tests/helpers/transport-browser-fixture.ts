@@ -9,7 +9,20 @@ import ts from "typescript";
 export async function transportFixture(page: Page, microphoneMode: "silent" | "continuous" = "silent") {
   await page.route("**/audio/acknowledgments/*.wav", async route => {
     const name = new URL(route.request().url()).pathname.split("/").at(-1)!;
-    if (!["hello-duck.wav", "duck-friends.wav", "butterfly-garden.wav", "picnic.wav", "pond.wav"].includes(name))
+    if (
+      ![
+        "hello-duck.wav",
+        "duck-friends.wav",
+        "butterfly-garden.wav",
+        "picnic.wav",
+        "pond.wav",
+        "hello-duck-variation.wav",
+        "duck-friends-variation.wav",
+        "butterfly-garden-variation.wav",
+        "picnic-variation.wav",
+        "pond-variation.wav",
+      ].includes(name)
+    )
       throw new Error("Unknown fixture asset");
     await route.fulfill({
       contentType: "audio/wav",

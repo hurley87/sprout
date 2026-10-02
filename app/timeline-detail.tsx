@@ -31,6 +31,16 @@ export function TimelineDetail({ event }: { event: TimelineEvent }) {
           </p>
         </>
       );
+    case "help_delivery_candidate":
+      return (
+        <p>
+          Generated {event.kind === "instructional_help" ? "instructional help" : "neutral clarification"} · Delivery{" "}
+          {event.delivery} · Transcript {event.transcriptState} · Source {event.sourceId ?? "unknown"} · Display{" "}
+          {event.displayStatus}
+          {event.display ? ` (${event.display.sceneId}, shown at ${event.display.displayedAtMs} ms)` : " (unknown)"} ·
+          Provider transcript time {event.startMs}–{event.endMs} ms is not a recording seek point: {event.text}
+        </p>
+      );
     case "microphone_speech_started":
       return <p>Microphone speech started · observed by app (approximate VAD)</p>;
     case "microphone_speech_stopped":

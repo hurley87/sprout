@@ -667,6 +667,47 @@ it("retains generated output while gated, with independent observation and provi
   expect(recorder.appendTimeline).toHaveBeenCalledBefore(vi.mocked(recorder.finalize));
 });
 
+it("keeps a delayed source A help candidate tied to its captured scene after display changes", async () => {
+  const { session, recorder, transport } = setup();
+  Object.assign(transport, {
+    activeSourceId: 1,
+    openInput: (fence: (sourceId: number) => void) => {
+      fence(1);
+      return true;
+    },
+  });
+  await vi.advanceTimersByTimeAsync(1000);
+  session.receive({ type: "session.started" });
+  session.displayed(0, session.snapshot.displayToken);
+  await vi.advanceTimersByTimeAsync(100);
+  say(session, "sprout", "Point to each duck as you count it once.", 40);
+  // Source A's transcript is retained, then its delayed flush happens after B's display.
+  (
+    session as unknown as { displayedContext: { sceneId: string; displayedAtMs: number; token: string } }
+  ).displayedContext = {
+    sceneId: "duck-friends",
+    displayedAtMs: 1100,
+    token: "source-b-display",
+  };
+  await vi.advanceTimersByTimeAsync(UTTERANCE_GAP_MS);
+  await session.recordingSettled();
+  const candidate = vi
+    .mocked(recorder.appendTimeline)
+    .mock.calls.map(call => call[2])
+    .find(event => event.type === "help_delivery_candidate");
+  expect(candidate).toMatchObject({
+    type: "help_delivery_candidate",
+    provenance: "provider_transcript_only",
+    kind: "instructional_help",
+    delivery: "unknown",
+    sourceId: 1,
+    displayStatus: "changed",
+    display: { sceneId: "hello-duck", displayedAtMs: expect.any(Number) },
+  });
+  session.dispose();
+  await session.recordingSettled();
+});
+
 it("preserves VAD, evaluation, committed advancement and actual display on one clock", async () => {
   const { session, recorder } = setup();
   await vi.advanceTimersByTimeAsync(900);

@@ -504,6 +504,40 @@ function ReviewPanel({
       )}
       {snapshot?.status === "ready" && scope && (
         <>
+          {snapshot.helpCandidates?.length ? (
+            <section aria-label="Generated help candidates" className="review-summary">
+              <h4>Generated help candidates</h4>
+              <p>
+                Provider transcript text is not proof of heard speech. Its observed time is an arrival marker, not an
+                acoustic position. Use the saved recording to review delivery and timing.
+              </p>
+              {snapshot.helpCandidates.map(candidate => {
+                const reviewStartAtMs = candidate.reviewStartAtMs ?? record?.recording?.startOffsetMs ?? 0;
+                return (
+                  <article key={candidate.id}>
+                    <p>
+                      {candidate.kind === "instructional_help" ? "Possible counting help" : "Neutral clarification"} ·
+                      Delivery: {candidate.delivery} · Transcript: {candidate.transcriptState} · Display:{" "}
+                      {candidate.sceneId ?? "unknown"}
+                    </p>
+                    <p>{candidate.text}</p>
+                    {candidate.displayStatus !== "stable" && (
+                      <p>Display association is {candidate.displayStatus}; scene timing is uncertain.</p>
+                    )}
+                    <p>
+                      Observed by app at approximately {candidate.atMs} ms; this does not mark when the phrase was
+                      heard.
+                    </p>
+                    {hasRecording && (
+                      <button className="download-button" onClick={() => seek(reviewStartAtMs)}>
+                        Play recording from group context
+                      </button>
+                    )}
+                  </article>
+                );
+              })}
+            </section>
+          ) : null}
           {snapshot.proposals.length ? (
             <div className="review-summary">
               {observationSummary(snapshot).map((item, index) => (

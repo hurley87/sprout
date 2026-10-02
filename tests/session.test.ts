@@ -249,7 +249,9 @@ describe("interactive evaluator deadline", () => {
       content: expect.stringContaining("committed UNAVAILABLE"),
     });
     expect(retry).toMatchObject({ content: expect.stringContaining("Do not judge the answer right or wrong.") });
-    expect(retry).toMatchObject({ content: expect.stringContaining('Ask "How many butterflies do you see?"') });
+    expect(retry).toMatchObject({
+      content: expect.stringContaining("counting question about the displayed butterflies"),
+    });
     expect(transport.send).toHaveBeenCalledOnce();
     expect(transport.setOutputBlocked).toHaveBeenLastCalledWith(false);
     expect(vi.mocked(transport.send).mock.invocationCallOrder[0]).toBeLessThan(
@@ -1842,6 +1844,8 @@ describe("answer-gated scene advancement", () => {
     expect(objectName({ id: "x", object: "strawberry", quantity: 3 })).toBe("strawberries");
     expect(objectName({ id: "x", object: "duck", quantity: 1 })).toBe("duck");
     expect(sceneContext({ id: "x", object: "butterfly", quantity: 3 })).toContain("exactly 3 butterflies");
+    expect(sceneContext({ id: "x", object: "butterfly", quantity: 3 })).toContain("one short, clear question");
+    expect(sceneContext({ id: "x", object: "butterfly", quantity: 3 })).not.toContain("exactly 4");
   });
 });
 
@@ -2223,7 +2227,9 @@ describe("answer-check turn synchronization", () => {
     expect(INSTRUCTIONS).toContain("The pause is only for counts: reply straight away to everything else");
     // The old contract made GPT-Live reply to every answer at once.
     expect(INSTRUCTIONS).not.toContain("after the child answers, always reply");
-    expect(PROMPT_VERSION).toBe("counting-jev-10-ack-first");
+    expect(INSTRUCTIONS).toContain("tiny playful counting phrase about only the group confirmed on screen");
+    expect(INSTRUCTIONS).toContain("do not invent a new scene, event, or action as fact");
+    expect(PROMPT_VERSION).toBe("counting-jev-11-varied-help");
   });
   it("sends nothing while the utterance settles or Jev is deciding", async () => {
     let answer!: (result: AnswerResult) => void;

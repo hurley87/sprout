@@ -704,8 +704,42 @@ test("saves assistance/pointing correction, rejection and mixed review with note
 });
 
 test("empty READY needs explicit acknowledgment and never writes decisions", async ({ page }) => {
-  const h = await harness(page, snapshot(0));
+  const empty = snapshot(0);
+  empty.helpCandidates = [
+    {
+      id: "help-candidate-interrupted",
+      atMs: 18000,
+      kind: "instructional_help",
+      delivery: "unknown",
+      transcriptState: "interrupted",
+      text: "Point to each duck as you count it once.",
+      displayStatus: "changed",
+      sceneId: "ducks-3",
+      reviewStartAtMs: 12000,
+    },
+  ];
+  const h = await harness(page, empty);
   await expect(h.panel.getByText(/No usable observations were found/)).toBeVisible();
+  const candidate = h.panel.getByRole("region", { name: "Generated help candidates" });
+  await expect(
+    candidate.getByText("Possible counting help · Delivery: unknown · Transcript: interrupted · Display: ducks-3"),
+  ).toBeVisible();
+  await expect(candidate.getByText("Point to each duck as you count it once.")).toBeVisible();
+  await candidate.getByRole("button", { name: "Play recording from group context" }).click();
+  await expect
+    .poll(() =>
+      page
+        .locator('audio[aria-label="Full-session recording"]')
+        .evaluate(audio => (audio as HTMLAudioElement).currentTime),
+    )
+    .toBeGreaterThan(9);
+  await expect
+    .poll(() =>
+      page
+        .locator('audio[aria-label="Full-session recording"]')
+        .evaluate(audio => (audio as HTMLAudioElement).currentTime),
+    )
+    .toBeLessThan(11);
   await expect(h.panel.getByRole("button", { name: "Finish review", exact: true })).toBeDisabled();
   await h.panel.getByLabel("I checked this summary with no observations").check();
   await h.panel.getByRole("button", { name: "Finish review", exact: true }).click();

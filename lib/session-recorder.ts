@@ -95,6 +95,20 @@ export type TimelineEvent =
       lastObservedAtMs: number;
       state: "finalized" | "interrupted";
     }
+  | {
+      type: "help_delivery_candidate";
+      provenance: "provider_transcript_only";
+      kind: "instructional_help" | "clarification";
+      delivery: "potential" | "partial" | "unknown";
+      transcriptState: "finalized" | "interrupted";
+      text: string;
+      providerClock: "provider";
+      sourceId?: number;
+      startMs: number;
+      endMs: number;
+      displayStatus: "stable" | "changed" | "unknown";
+      display?: { sceneId: string; displayedAtMs: number };
+    }
   | { type: "microphone_speech_started" }
   | { type: "microphone_speech_stopped"; quietMs: number; estimatedAcousticEndAtMs: number }
   | { type: "playback_gate_changed"; state: "blocked" | "permitted"; reason: string }
@@ -165,6 +179,7 @@ export type InspectableSessionRecord = {
     startOffsetMs: number;
     durationMs: number;
   };
+
   events: {
     /** Canonical identity for diagnostic joins; older readers may omit it. Never substitute an event key. */
     id?: string;
@@ -175,6 +190,26 @@ export type InspectableSessionRecord = {
     timeline?: TimelineEvent;
   }[];
 };
+
+/** Text classifier only creates a review candidate; it never proves delivery. */
+export function helpCandidateKind(text: string): "instructional_help" | "clarification" | undefined {
+  const normalized = text
+    .toLocaleLowerCase("en")
+    .replace(/[^a-z0-9' ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (
+    /\b(point to each|point to every|count (?:them|each|the|one at a time)|let'?s count|count together|count it once)\b/.test(
+      normalized,
+    )
+  )
+    return "instructional_help";
+  if (
+    /\b(make sure i heard|say your number again|repeat your number|could you repeat|say that again)\b/.test(normalized)
+  )
+    return "clarification";
+  return undefined;
+}
 
 export interface SessionRecordReader {
   getRecord(ref: DurableSessionRef): Promise<InspectableSessionRecord | null>;

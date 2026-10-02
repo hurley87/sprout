@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { LessonSession, RESPONSE_GATE_RECOVERY_MS, type Transport } from "../lib/session";
 import { TRANSCRIPT_FALLBACK_MS, CORRECTION_WINDOW_MS } from "../lib/answer";
 import { LAST_SCENE } from "../lib/lesson";
+import { acknowledgmentFor } from "../lib/acknowledgment-catalog";
 import type { ClientCommand, LocalPlaybackEvent } from "../lib/events";
 import type { PlaybackRequest } from "../lib/local-playback";
 import type { TimelineEvent, SessionRecorder } from "../lib/session-recorder";
@@ -180,7 +181,7 @@ it("accepts without committing, plays on the old display, waits for drain, valid
   for (const { event, atMs } of f.timeline)
     if (event.type === "local_playback") {
       expect(event.provenance).toBe("application_finite_audio");
-      expect(event.text).toBe("That's right, there's one duck.");
+      expect(event.text).toBe(acknowledgmentFor(0, f.requests[0].identity.correlationKey).text);
       expect(event.display.sceneId).toBe("hello-duck");
       expect(atMs).toBe(event.sessionAtMs);
     }

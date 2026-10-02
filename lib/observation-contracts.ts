@@ -326,7 +326,37 @@ export function validateObserverProposal(
     (source): source is ObservationSource & { eventId: string; role: "response" } => source.role === "response",
   );
   const responseEvent = responseSource && sourceById.get(responseSource.eventId);
+  const sceneSource = normalizedSources.find(
+    (source): source is ObservationSource & { eventId: string; role: "scene" } => source.role === "scene",
+  );
+  const sceneEvent = sceneSource && sourceById.get(sceneSource.eventId);
+  const citedSceneId = sceneEvent?.evidence?.type === "scene_displayed" ? sceneEvent.evidence.sceneId : undefined;
   if (observation) {
+    const possibleHelp = sourceRecord.events.some(event => {
+      const candidate = record(event.timeline) ? event.timeline : undefined;
+      return (
+        candidate?.type === "help_delivery_candidate" &&
+        candidate.kind === "instructional_help" &&
+        !!responseEvent &&
+        // Provider transcript arrival is not acoustic ordering. Keep an
+        // unknown or late-arriving candidate conservative when its captured
+        // source scene could apply to this response.
+        (!record(candidate.display) ||
+          typeof candidate.display.sceneId !== "string" ||
+          citedSceneId === undefined ||
+          candidate.display.sceneId === citedSceneId)
+      );
+    });
+    if (
+      possibleHelp &&
+      observation.support.status === "not_established" &&
+      observation.behavior !== "uncertain_exchange"
+    ) {
+      issues.push({
+        path: "observation.support",
+        message: "potential instructional help exists; absent completed support cannot establish independence",
+      });
+    }
     const supportSourceIds = new Set(
       normalizedSources
         .filter(
@@ -398,10 +428,6 @@ export function validateObserverProposal(
       });
     }
   }
-  const sceneSource = normalizedSources.find(
-    (source): source is ObservationSource & { eventId: string; role: "scene" } => source.role === "scene",
-  );
-  const sceneEvent = sceneSource && sourceById.get(sceneSource.eventId);
   if (responseEvent && responseEvent.atMs !== input.exchangeAtMs) {
     issues.push({
       path: "exchangeAtMs",

@@ -477,6 +477,25 @@ export const inspect = internalQuery({
           .filter(event => event.evidence)
           .map(event => ({ id: event._id, eventKey: event.eventKey, atMs: event.atMs, evidence: event.evidence })) ??
         [],
+      helpCandidates:
+        saved?.record.events.flatMap(event => {
+          const timeline = event.timeline;
+          return timeline?.type === "help_delivery_candidate"
+            ? [
+                {
+                  id: event._id,
+                  atMs: event.atMs,
+                  kind: timeline.kind,
+                  delivery: timeline.delivery,
+                  transcriptState: timeline.transcriptState,
+                  text: timeline.text,
+                  displayStatus: timeline.displayStatus,
+                  ...(timeline.display ? { sceneId: timeline.display.sceneId } : {}),
+                  ...(timeline.display ? { reviewStartAtMs: timeline.display.displayedAtMs } : {}),
+                },
+              ]
+            : [];
+        }) ?? [],
     });
     if (new TextEncoder().encode(result).length > 2_000_000) throw new Error("Review view exceeds byte limit");
     return result;

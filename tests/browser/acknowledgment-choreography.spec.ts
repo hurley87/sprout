@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { transportFixture } from "../helpers/transport-browser-fixture";
+import { acknowledgmentFor } from "../../lib/acknowledgment-catalog";
 
 async function fixture(page: Page, confirm = true) {
   await transportFixture(page);
@@ -109,10 +110,11 @@ test("actual spoken asset completes on old display, output fence precedes commit
  })()`);
   expect(record).toMatchObject({ rms: expect.any(Number) });
   expect((record as { rms: number }).rms).toBeGreaterThan(0.01);
-  expect((record as { timeline: { state: string; text: string }[] }).timeline.at(-1)).toMatchObject({
-    state: "completed",
-    text: "That's right, there's one duck.",
-  });
+  const clip = (
+    record as { timeline: { state: string; text: string; identity: { correlationKey: string } }[] }
+  ).timeline.at(-1)!;
+  expect(clip).toMatchObject({ state: "completed" });
+  expect(clip.text).toBe(acknowledgmentFor(0, clip.identity.correlationKey).text);
   await cleanup(page);
 });
 

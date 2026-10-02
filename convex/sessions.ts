@@ -87,6 +87,20 @@ export const appendEvent = mutation({
       )
         throw new Error("lastObservedAtMs must follow firstObservedAtMs");
     }
+    if (timeline?.type === "help_delivery_candidate") {
+      if (!timeline.text.trim()) throw new Error("Help candidate text is required");
+      nonnegative(timeline.startMs, "help.startMs");
+      nonnegative(timeline.endMs, "help.endMs");
+      if (timeline.endMs < timeline.startMs) throw new Error("help.endMs must follow help.startMs");
+      if (timeline.sourceId !== undefined && (!Number.isSafeInteger(timeline.sourceId) || timeline.sourceId <= 0))
+        throw new Error("help.sourceId must be a positive integer");
+      if (timeline.display) {
+        if (!timeline.display.sceneId.trim()) throw new Error("Help candidate scene is required");
+        nonnegative(timeline.display.displayedAtMs, "help.displayedAtMs");
+      }
+      if (timeline.displayStatus === "stable" && !timeline.display)
+        throw new Error("Stable help candidate display requires scene context");
+    }
     if (evidence?.type === "utterance") {
       if (evidence.transcriptFragments) {
         let textEnd = 0;

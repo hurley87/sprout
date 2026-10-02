@@ -37,9 +37,9 @@ it("keeps clarification distinct from instructional support in original and repl
   } as const;
   const context = evaluationResultContext({ ...common, evaluatedAnswer: "Eight" });
   expect(context).toContain("Could you say your number again?");
-  expect(context).not.toContain('for example "Count them one at a time."');
+  expect(context).not.toContain("Point to each butterfly as you count it once.");
   expect(evaluationResultContext({ ...common, evaluatedAnswer: "Two" })).toContain(
-    'for example "Count them one at a time."',
+    "Point to each butterfly as you count it once.",
   );
   const seed = {
     sceneIndex: 2,
@@ -51,7 +51,7 @@ it("keeps clarification distinct from instructional support in original and repl
     recovery: "instructional_support",
   } as const;
   expect(parseReplacementSeed(seed)).toEqual(seed);
-  expect(replacementSessionInput(seed)[1].content[0].text).toContain('for example "Count them one at a time."');
+  expect(replacementSessionInput(seed)[1].content[0].text).toContain("Point to each butterfly as you count it once.");
 });
 
 function contractFixture() {
@@ -266,7 +266,7 @@ it("clarifies Eight, allows help after repeating it, and still advances on Three
   await vi.advanceTimersByTimeAsync(1000);
   await say("Eight", 40000);
   expect(vi.mocked(transport.send).mock.calls.at(-1)?.[0]).toMatchObject({
-    content: expect.stringContaining('for example "Count them one at a time."'),
+    content: expect.stringContaining("Point to each butterfly as you count it once."),
   });
   await vi.advanceTimersByTimeAsync(1000);
   await say("Three", 50600);

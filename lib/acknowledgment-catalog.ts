@@ -130,6 +130,145 @@ export const ACKNOWLEDGMENTS = [
   },
 ] as const;
 
+/** Versioned alternatives make wording variation audible while keeping each
+ * accepted answer's choice stable across playback retries. */
+export const ACKNOWLEDGMENT_VARIANTS = [
+  {
+    id: "ack-v2-hello-duck-careful-count",
+    sceneId: "hello-duck",
+    text: "You found that little duck! What a careful count.",
+    url: "/audio/acknowledgments/hello-duck-variation.wav",
+    mimeType: "audio/wav",
+    sha256: "5f9aa14d779e1b99b997f64f4f7d609ff603d24216757be09beb5d4c906fd8c2",
+    formatReview: {
+      operation: "Finalize streaming WAV RIFF and data lengths; PCM unchanged",
+      renderSha256: "5fa29573cd5d9a42f644511c41e105fec0c96a52903bddc47b249b7625d8d0d3",
+    },
+    render: {
+      model: "gpt-4o-mini-tts",
+      voice: "marin",
+      language: "en",
+      instructions:
+        "Speak English as a warm preschool counting tutor. Short, clear, unhurried. Say exactly the supplied sentence, nothing else.",
+      date: "2026-10-02",
+      requestId: "req_c36d89154d024dd3b0de04feba27ff3c",
+    },
+    contentReview: {
+      method: "gpt-4o-transcribe; normalized exact match",
+      transcript: "You found that little duck. What a careful count!",
+    },
+  },
+  {
+    id: "ack-v2-duck-friends-fine-team",
+    sceneId: "duck-friends",
+    text: "Those two ducks make a fine team!",
+    url: "/audio/acknowledgments/duck-friends-variation.wav",
+    mimeType: "audio/wav",
+    sha256: "83bc854c75e5734ca5cd61176ebf80751313112d7a740e1a3aa6ba27414293f3",
+    formatReview: {
+      operation: "Finalize streaming WAV RIFF and data lengths; PCM unchanged",
+      renderSha256: "c141ca994664a5f5b2d563ab01d024f398bcbb5be9c03ee1840e88c9bfa89b26",
+    },
+    render: {
+      model: "gpt-4o-mini-tts",
+      voice: "marin",
+      language: "en",
+      instructions:
+        "Speak English as a warm preschool counting tutor. Short, clear, unhurried. Say exactly the supplied sentence, nothing else.",
+      date: "2026-10-02",
+      requestId: "req_41d0342044f54d92a90b104d6cb5298b",
+    },
+    contentReview: {
+      method: "gpt-4o-transcribe; normalized exact match",
+      transcript: "Those two ducks make a fine team.",
+    },
+  },
+  {
+    id: "ack-v2-butterfly-garden-fluttering",
+    sceneId: "butterfly-garden",
+    text: "You counted three butterflies! Imagine they are playing follow-the-leader!",
+    url: "/audio/acknowledgments/butterfly-garden-variation.wav",
+    mimeType: "audio/wav",
+    sha256: "02981933e57a132799872f39a3ce3f8715e052ea6f9add52cd9b9dd737bed720",
+    formatReview: {
+      operation: "Finalize streaming WAV RIFF and data lengths; PCM unchanged",
+      renderSha256: "ea603d270e2bcd235d8b64e0cfc57ae5143fffcdb363c3a8932c22c6593a5490",
+    },
+    render: {
+      model: "gpt-4o-mini-tts",
+      voice: "marin",
+      language: "en",
+      instructions:
+        "Speak English as a warm preschool counting tutor. Short, clear, unhurried. Say exactly the supplied sentence, nothing else.",
+      date: "2026-10-02",
+      requestId: "req_27c22860aaa648a9a057ee6fd754a35c",
+    },
+    contentReview: {
+      method: "gpt-4o-transcribe; normalized exact match",
+      transcript: "You counted three butterflies. Imagine they are playing follow the leader.",
+    },
+  },
+  {
+    id: "ack-v2-picnic-careful-count",
+    sceneId: "picnic",
+    text: "You counted those strawberries so carefully!",
+    url: "/audio/acknowledgments/picnic-variation.wav",
+    mimeType: "audio/wav",
+    sha256: "8fce9c0fa265fcb2ef5eb7ffede893a0401d1334b4bfd43fd12c4d598591ccac",
+    formatReview: {
+      operation: "Finalize streaming WAV RIFF and data lengths; PCM unchanged",
+      renderSha256: "dfaad125646aebf1ca155709bc3c883814364100bfd20f0bf34ef4492e877057",
+    },
+    render: {
+      model: "gpt-4o-mini-tts",
+      voice: "marin",
+      language: "en",
+      instructions:
+        "Speak English as a warm preschool counting tutor. Short, clear, unhurried. Say exactly the supplied sentence, nothing else.",
+      date: "2026-10-02",
+      requestId: "req_2e08201228884887a3ec5fd04e44b7fd",
+    },
+    contentReview: {
+      method: "gpt-4o-transcribe; normalized exact match",
+      transcript: "You counted those strawberries so carefully.",
+    },
+  },
+  {
+    id: "ack-v2-pond-waddling",
+    sceneId: "pond",
+    text: "You counted four ducks! Imagine they are waddling in a parade!",
+    url: "/audio/acknowledgments/pond-variation.wav",
+    mimeType: "audio/wav",
+    sha256: "88137c915a084bff571362d826c2097bb201b96fa0c3b1b961445df98c0065c9",
+    formatReview: {
+      operation: "Finalize streaming WAV RIFF and data lengths; PCM unchanged",
+      renderSha256: "fb059057dee304a2aed9e11ef5ca30b6f5778271bcb4a68a3421592b72e1c719",
+    },
+    render: {
+      model: "gpt-4o-mini-tts",
+      voice: "marin",
+      language: "en",
+      instructions:
+        "Speak English as a warm preschool counting tutor. Short, clear, unhurried. Say exactly the supplied sentence, nothing else.",
+      date: "2026-10-02",
+      requestId: "req_927e92b655044a79a84d8970001164aa",
+    },
+    contentReview: {
+      method: "gpt-4o-transcribe; normalized exact match",
+      transcript: "You counted four ducks. Imagine they are waddling in a parade.",
+    },
+  },
+] as const;
+
+export function acknowledgmentFor(sceneIndex: number, answerIdentity: string) {
+  const baseline = ACKNOWLEDGMENTS[sceneIndex];
+  const variant = ACKNOWLEDGMENT_VARIANTS[sceneIndex];
+  if (!baseline || !variant) throw new Error("No reviewed acknowledgment for this scene");
+  let hash = 2166136261;
+  for (const character of answerIdentity) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619);
+  return (hash >>> 0) % 2 === 0 ? baseline : variant;
+}
+
 export function acknowledgmentAsset(sceneIndex: number) {
   const asset = ACKNOWLEDGMENTS[sceneIndex];
   if (!asset) throw new Error("No reviewed acknowledgment for this scene");
@@ -140,7 +279,7 @@ export function acknowledgmentAsset(sceneIndex: number) {
 export async function preloadAcknowledgments(signal: AbortSignal): Promise<Map<string, string>> {
   const urls = new Map<string, string>();
   try {
-    for (const asset of ACKNOWLEDGMENTS) {
+    for (const asset of [...ACKNOWLEDGMENTS, ...ACKNOWLEDGMENT_VARIANTS]) {
       signal.throwIfAborted();
       const response = await fetch(asset.url, { signal });
       if (!response.ok) throw new Error("Acknowledgment catalog unavailable");
@@ -178,4 +317,10 @@ export async function preloadAcknowledgments(signal: AbortSignal): Promise<Map<s
 export function catalogPlaybackAsset(sceneIndex: number): PlaybackRequest["asset"] {
   const { id, sha256, url, mimeType } = acknowledgmentAsset(sceneIndex);
   return { id, sha256, url, mimeType };
+}
+
+export function catalogPlaybackAssetFor(
+  asset: (typeof ACKNOWLEDGMENTS)[number] | (typeof ACKNOWLEDGMENT_VARIANTS)[number],
+): PlaybackRequest["asset"] {
+  return { id: asset.id, sha256: asset.sha256, url: asset.url, mimeType: asset.mimeType };
 }

@@ -29,10 +29,28 @@ it("aggregates only compatible correct totals without promoting free-text model 
   expect(observationSummary(state)).toEqual([
     {
       text: "The displayed quantities 1, 2, 3 were identified correctly.",
-      detail: "Help was not established in the record. Speaker may be the child or someone nearby.",
+      detail: "No verified help is linked in the cited sources. Speaker may be the child or someone nearby.",
     },
   ]);
   expect(state).toEqual(before);
+});
+
+it("shows transcript-only possible help and its unverified delivery in parent review", () => {
+  const state = fixture();
+  state.helpCandidates = [
+    {
+      id: "candidate-1",
+      atMs: 1200,
+      kind: "instructional_help",
+      delivery: "potential",
+      transcriptState: "finalized",
+      text: "Point to each duck as you count it once.",
+      displayStatus: "unknown",
+    },
+  ];
+  expect(observationSummary(state)[0].detail).toContain(
+    "An instructional-help phrase was generated for this displayed group, but delivery and timing against the response are unverified; review the recording.",
+  );
 });
 it.each(["support", "uncertainty", "outcome", "speaker", "counting"])("keeps differing %s separate", difference => {
   const state = fixture();

@@ -212,6 +212,44 @@ it("rejects a provider count proposal when the canonical response has an incompl
   ).rejects.toThrow(ObserverProviderError);
 });
 
+it("passes transcript-only help delivery and captured display provenance to Observer without treating it as support", async () => {
+  const canonical = JSON.parse(snapshot);
+  canonical.events.push({
+    _id: "possible-help",
+    atMs: 1900,
+    timeline: {
+      type: "help_delivery_candidate",
+      provenance: "provider_transcript_only",
+      kind: "instructional_help",
+      delivery: "unknown",
+      transcriptState: "interrupted",
+      text: "Point to each duck as you count it once.",
+      providerClock: "provider",
+      sourceId: 1,
+      startMs: 500,
+      endMs: 700,
+      displayStatus: "changed",
+      display: { sceneId: "ducks", displayedAtMs: 500 },
+    },
+  });
+  const canonicalSnapshot = JSON.stringify(canonical);
+  let body: Record<string, unknown> | undefined;
+  const openai = createOpenAIObserverProvider(
+    "synthetic-key",
+    vi.fn(async (_url, init) => {
+      body = JSON.parse(String(init?.body));
+      return Response.json({ status: "completed", output_text: '{"proposals":[]}' });
+    }) as typeof fetch,
+  );
+  await expect(
+    openai.propose({ transcript: "synthetic", canonicalSnapshot }, new AbortController().signal),
+  ).resolves.toEqual([]);
+  expect(body?.input).toContain("Point to each duck as you count it once.");
+  expect(body?.instructions).toContain("provider transcript text only");
+  expect(body?.instructions).toContain("transcript observation time, not acoustic ordering");
+  expect(body?.instructions).toContain("Never turn a provider transcript into canonical delivered support");
+});
+
 it("fails closed for missing configuration, refusals, malformed output and oversized audio", async () => {
   expect(() => createOpenAIObserverProvider(undefined)).toThrow("OPENAI_API_KEY");
   const fetcher = vi.fn(async () =>

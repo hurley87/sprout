@@ -6,6 +6,49 @@ import { api } from "../convex/_generated/api";
 const modules = import.meta.glob("../convex/**/*.ts");
 const makeTest = () => convexTest(schema, modules);
 
+it("round-trips transcript-only help candidates and rejects invalid review provenance", async () => {
+  const t = makeTest();
+  const sessionId = await t.mutation(api.sessions.create, {});
+  await t.mutation(api.sessions.activate, { sessionId, startedAt: 100 });
+  const candidate = {
+    type: "help_delivery_candidate" as const,
+    provenance: "provider_transcript_only" as const,
+    kind: "instructional_help" as const,
+    delivery: "unknown" as const,
+    transcriptState: "interrupted" as const,
+    text: "Point to each duck as you count it once.",
+    providerClock: "provider" as const,
+    startMs: 100,
+    endMs: 200,
+    displayStatus: "unknown" as const,
+  };
+  await t.mutation(api.sessions.appendEvent, { sessionId, eventKey: "help_candidate", atMs: 300, timeline: candidate });
+  const saved = await t.query(api.sessions.getRecord, { sessionId });
+  expect(saved?.events[0].timeline).toEqual(candidate);
+
+  const invalid = [
+    { ...candidate, startMs: Infinity },
+    { ...candidate, startMs: 200, endMs: 100 },
+    { ...candidate, sourceId: 1.5 },
+    { ...candidate, text: "  " },
+    {
+      ...candidate,
+      displayStatus: "stable" as const,
+      display: { sceneId: "ducks", displayedAtMs: NaN },
+    },
+  ];
+  for (const [index, timeline] of invalid.entries()) {
+    await expect(
+      t.mutation(api.sessions.appendEvent, {
+        sessionId,
+        eventKey: `invalid_help_${index}`,
+        atMs: 400 + index,
+        timeline,
+      }),
+    ).rejects.toThrow();
+  }
+});
+
 it("rejects corrupted fragment joins and complete evaluation identities with missing source fields", async () => {
   const t = makeTest();
   const sessionId = await t.mutation(api.sessions.create, {});

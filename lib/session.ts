@@ -1,10 +1,11 @@
-import { acknowledgmentAsset, catalogPlaybackAsset } from "./acknowledgment-catalog";
+import { acknowledgmentFor, catalogPlaybackAssetFor } from "./acknowledgment-catalog";
 import { immutable, samePlayback, type ChoreographyPhase, type DisplayIdentity } from "./choreography";
 import type { PlaybackIdentity } from "./events";
 import { sourceTimelineBound } from "./evidence-timing";
 import { isolatedTotal, recognitionRecovery, type Recovery } from "./recognition-recovery";
 import {
   RecordingQueue,
+  helpCandidateKind,
   type SessionRecorder,
   type DurableSessionRef,
   type Evidence,
@@ -224,6 +225,7 @@ export class LessonSession {
       request: PlaybackRequest;
       display: DisplayIdentity;
       text: string;
+      role: "acknowledgment" | "instructional_help" | "clarification";
       state?: LocalPlaybackEvent["state"];
       terminal: boolean;
     }
@@ -233,6 +235,7 @@ export class LessonSession {
   startedAt?: number;
   private canonicalClockOrigin?: number;
   private inputBound?: { sourceId: number; startMs: number; inputScene: { sceneId: string; displayedAtMs: number } };
+  private sourceDisplays = new Map<number, DisplayIdentity>();
   private startupTimer?: ReturnType<typeof setTimeout>;
   private phaseTimers: ReturnType<typeof setTimeout>[] = [];
   private closeTimer?: ReturnType<typeof setTimeout>;
@@ -327,6 +330,7 @@ export class LessonSession {
   private openSourceInput() {
     if (!this.ready || !this.displayedContext) return;
     this.transport.openInput?.(sourceId => {
+      this.sourceDisplays.set(sourceId, { ...this.displayedContext! });
       this.inputBound = {
         sourceId,
         startMs: this.sessionAtMs(),
@@ -402,6 +406,7 @@ export class LessonSession {
   ) {
     if (!utterance?.text.trim()) return;
     if (speaker === "sprout") {
+      const helpKind = helpCandidateKind(utterance.text);
       this.timeline(
         {
           type: "sprout_generated_utterance",
@@ -415,6 +420,44 @@ export class LessonSession {
         },
         utterance.firstObservedAtMs,
       );
+      if (helpKind) {
+        const sourceId = utterance.context?.providerTiming?.sourceId;
+        const responseScene = utterance.context?.responseScene;
+        const sourceDisplayCaptured = sourceId !== undefined && this.sourceDisplays.has(sourceId);
+        const displayStillCurrent = !!(
+          sourceDisplayCaptured &&
+          responseScene &&
+          this.displayedContext?.sceneId === responseScene.sceneId &&
+          this.displayedContext.displayedAtMs === responseScene.displayedAtMs
+        );
+        this.timeline(
+          {
+            type: "help_delivery_candidate",
+            provenance: "provider_transcript_only",
+            kind: helpKind,
+            delivery:
+              !sourceDisplayCaptured || responseScene?.status !== "stable" || !displayStillCurrent
+                ? "unknown"
+                : "potential",
+            transcriptState: state,
+            text: utterance.text,
+            providerClock: "provider",
+            ...(sourceId === undefined ? {} : { sourceId }),
+            startMs: utterance.startMs,
+            endMs: utterance.endMs,
+            displayStatus:
+              !sourceDisplayCaptured || !responseScene
+                ? "unknown"
+                : displayStillCurrent && responseScene.status === "stable"
+                  ? "stable"
+                  : "changed",
+            ...(responseScene
+              ? { display: { sceneId: responseScene.sceneId, displayedAtMs: responseScene.displayedAtMs } }
+              : {}),
+          },
+          utterance.firstObservedAtMs,
+        );
+      }
     }
     if (!utterance.delivered) return;
     this.record({
@@ -474,6 +517,12 @@ export class LessonSession {
               Math.ceil(performance.now() - this.canonicalClockOrigin!),
             )
         : undefined;
+    const sourceDisplay =
+      event.speaker === "sprout"
+        ? event.sourceId === undefined
+          ? this.displayedContext
+          : (this.sourceDisplays.get(event.sourceId) ?? this.displayedContext)
+        : this.displayedContext;
     const completed = this.canonical[event.speaker].append(
       event.delta,
       event.startMs,
@@ -489,13 +538,18 @@ export class LessonSession {
           endMs: event.endMs,
           ...(event.sourceId === undefined ? {} : { sourceId: event.sourceId }),
         },
-        ...(this.displayedContext
+        ...(sourceDisplay
           ? {
               responseScene: {
                 provenance: "application_transcript_context",
-                sceneId: this.displayedContext.sceneId,
-                displayedAtMs: this.displayedContext.displayedAtMs,
-                status: "stable",
+                sceneId: sourceDisplay.sceneId,
+                displayedAtMs: sourceDisplay.displayedAtMs,
+                status:
+                  event.speaker === "sprout" &&
+                  (sourceDisplay.sceneId !== this.displayedContext?.sceneId ||
+                    sourceDisplay.displayedAtMs !== this.displayedContext.displayedAtMs)
+                    ? "changed"
+                    : "stable",
               } as const,
             }
           : {}),
@@ -3005,7 +3059,8 @@ export class LessonSession {
           playbackAttemptId: `${this.attemptId}:playback:${++this.playbackSequence}`,
         }),
       );
-      const request = immutable({ identity, asset: catalogPlaybackAsset(owner.record.sceneIndex) });
+      const acknowledgment = acknowledgmentFor(owner.record.sceneIndex, owner.record.key);
+      const request = immutable({ identity, asset: catalogPlaybackAssetFor(acknowledgment) });
       const slot: NonNullable<Choreography["playback"]> = { identity };
       owner.playback = slot;
       if (this.playbackFacts.size >= 128) {
@@ -3015,7 +3070,8 @@ export class LessonSession {
       this.playbackFacts.set(identity.playbackAttemptId, {
         request,
         display: owner.oldDisplay,
-        text: acknowledgmentAsset(owner.record.sceneIndex).text,
+        text: acknowledgment.text,
+        role: "acknowledgment",
         terminal: false,
       });
       try {
@@ -3117,12 +3173,15 @@ export class LessonSession {
       ...mapping,
       type: "local_playback" as const,
       provenance: "application_finite_audio" as const,
-      role: "acknowledgment" as const,
+      role: facts.role,
       text: facts.text,
       display: facts.display,
     };
     this.log("acknowledgment.playback", timeline);
     this.timeline(timeline, mapping.sessionAtMs ?? this.sessionAtMs());
+    if (event.state === "completed" && facts.role === "instructional_help" && mapping.sessionAtMs !== undefined) {
+      this.record({ type: "support", source: "sprout", mode: "spoken", description: facts.text }, mapping.sessionAtMs);
+    }
     const owner = this.choreography;
     if (
       !owner ||
