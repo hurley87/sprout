@@ -100,6 +100,17 @@ The browser failures concern unchanged production/session and browser-test files
 
 Investigating whether these are harness assumptions or runtime defects requires a separately reviewed scope covering delegation/revision/source lifecycle. This slice retains the reproduction and does not change acknowledgment choreography or relax those assertions. Passing unit and parent-review tests does not clear these failures.
 
+### Unresolved browser failure handoff
+
+Independent review reproduced the same two failures: 91 of 93 browser cases passed, including all 54 parent-review cases. The unit/contract suite passed all 820 cases. Approval of the final tests/documentation commit was limited to that commit's changes; it was not a claim that the full lesson browser suite passed.
+
+| Failure | Expected behavior | Observed behavior / practical limit |
+| --- | --- | --- |
+| Missing delegated response (`lesson.spec.ts:468`) | After “One!” is approved and two ducks appear, exactly one tutor command answers delegation `count-one` using the shared evaluation and committed scene. | The scene advanced, but zero commands carrying that delegation ID appeared before the five-second assertion timeout. Later acknowledgment/audio assertions were not reached, so this run does not verify completion of the delegated response. |
+| Revised STAY not reevaluated (`lesson.spec.ts:1055`) | After “Five” receives STAY, “ no one” revises the answer to “Five no one”; a second evaluation should allow the test to check advancement, audio gating and updated tutor context. | Only one evaluator request was observed before the five-second assertion timeout. The subsequent scene, mute and context assertions were not reached. The run does not establish why the revised input failed to trigger the expected request. |
+
+Root causes remain unclassified. Unchanged files in the final verification commit do not prove that these failures predate the entire issue #46 branch. A follow-up investigation should retain the reproduction commands above, trace incoming transcript/delegation events and source activation/retirement, then compare evaluation scheduling and outgoing commands. Determine whether each failure is a runtime defect or an outdated fixture assumption before changing code or assertions. Resolution requires the focused cases and full synthetic browser suite to pass, or a documented, reviewed correction to the expected contract. Real provider/deployed-backend verification remains a separate gate described below; merging an issue-closing PR does not itself supply that evidence.
+
 ### Reproducible live verification procedure (external gate)
 
 Do this only in a later explicitly authorized live-verification task. These steps were **not executed** here.
