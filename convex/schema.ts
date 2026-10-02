@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { diagnosticRow, diagnosticSummary } from "./diagnostic_validators";
 
 export const endingReason = v.union(
   v.literal("parent_stop"),
@@ -215,6 +216,23 @@ export default defineSchema({
     failure: v.optional(v.string()),
     completedAt: v.optional(v.number()),
   }).index("by_session", ["sessionId"]),
+  observerDiagnosticAttempts: defineTable({
+    analysisId: v.id("observerAnalyses"),
+    attempt: v.number(),
+    // Immutable attempt input, retained when the analysis retries with a new snapshot.
+    inputSnapshot: v.string(),
+    startedAt: v.number(),
+    recordStatus: v.union(v.literal("complete"), v.literal("incomplete")),
+    hasRecording: v.boolean(),
+    summary: v.optional(diagnosticSummary),
+    snapshotChanged: v.optional(v.boolean()),
+    completedAt: v.optional(v.number()),
+  }).index("by_analysisId_and_attempt", ["analysisId", "attempt"]),
+  observerDiagnosticRows: defineTable({
+    attemptId: v.id("observerDiagnosticAttempts"),
+    ordinal: v.number(),
+    diagnostic: diagnosticRow,
+  }).index("by_attemptId_and_ordinal", ["attemptId", "ordinal"]),
   parentDecisions: defineTable({
     sessionId: v.id("sessions"),
     analysisId: v.id("observerAnalyses"),

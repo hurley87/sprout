@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { internalMutation, internalQuery, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { reviewedObserverClaim } from "../lib/reviewed-observation";
+import { diagnosticHistory } from "./observer_diagnostics";
 import {
   validateObserverProposal,
   validateParentDecision,
@@ -450,6 +451,7 @@ export const inspect = internalQuery({
       sessionId,
       analysisId: analysis?._id ?? null,
       status: analysis?.status ?? "not_started",
+      diagnostics: analysis ? await diagnosticHistory(ctx, analysis) : { availability: "not_started", attempts: [] },
       qualification: saved?.timingUnverifiedIds.size
         ? "Saved proposals have unverified speech timing. Reject undecided affected proposals to exclude them, then finish review. Acceptance and correction are unavailable for these proposals. Historical decisions remain final; previously endorsed invalid evidence still blocks planning."
         : session.recordStatus === "incomplete"

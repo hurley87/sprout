@@ -1,8 +1,9 @@
+import { validateObserverProposal, type ObserverProposal } from "./observation-contracts";
 import {
-  validateObserverProposal,
-  type CanonicalObservationRecord,
-  type ObserverProposal,
-} from "./observation-contracts";
+  diagnoseObserverOutput,
+  observationRecordFromSnapshot,
+  type ObserverDiagnostics,
+} from "./observer-diagnostics";
 
 export const AUDIO_LIMIT_BYTES = 20 * 1024 * 1024;
 export const PROVIDER_TIMEOUT_MS = 90_000;
@@ -13,7 +14,10 @@ export type ObserverProvider = {
 };
 
 export class ObserverProviderError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    public readonly diagnostics?: ObserverDiagnostics,
+  ) {
     super(message);
     this.name = "ObserverProviderError";
   }
@@ -232,28 +236,17 @@ export async function analyzeSavedRecording(args: {
   mimeType: string;
   canonicalSnapshot: string;
   signal: AbortSignal;
+  onDiagnostics?: (diagnostics: ObserverDiagnostics) => void;
+  onStage?: (stage: "transcription" | "proposal") => void;
 }): Promise<ObserverProposal[]> {
   if (args.audio.size <= 0 || args.audio.size > AUDIO_LIMIT_BYTES)
     throw new ObserverProviderError("Recording exceeds the Observer audio size limit.");
+  args.onStage?.("transcription");
   const transcript = await args.provider.transcribe(args.audio, args.mimeType, args.signal);
+  args.onStage?.("proposal");
   const raw = await args.provider.propose({ transcript, canonicalSnapshot: args.canonicalSnapshot }, args.signal);
-  if (!Array.isArray(raw) || raw.length > 1000)
-    throw new ObserverProviderError("Observer proposal batch is invalid or exceeds 1,000 rows.");
-  const snapshot = JSON.parse(args.canonicalSnapshot) as {
-    sessionId: string;
-    state: string;
-    recordStatus: string;
-    recording?: { startOffsetMs: number; durationMs: number } | null;
-    events: CanonicalObservationRecord["events"];
-  };
-  const record: CanonicalObservationRecord = {
-    session: { _id: snapshot.sessionId, state: snapshot.state, recordStatus: snapshot.recordStatus },
-    ...(snapshot.recording
-      ? { recording: { recordingId: `${snapshot.sessionId}:recording`, ...snapshot.recording } }
-      : {}),
-    events: snapshot.events,
-  };
-  return raw.map(proposal => {
+  const record = observationRecordFromSnapshot(args.canonicalSnapshot);
+  const { diagnostics, results } = diagnoseObserverOutput(record, raw, "provider_validation", proposal => {
     const normalized = normalizeNullOptionals(proposal);
     let validated = validateObserverProposal(normalized, record);
     // Timestamp bookkeeping belongs to the app. Repair only this field after
@@ -267,11 +260,20 @@ export async function analyzeSavedRecording(args: {
       if (event?.evidence?.type === "utterance" && event.evidence.speaker !== "sprout")
         validated = validateObserverProposal({ ...candidate, exchangeAtMs: event.atMs }, record);
     }
-    if (!validated.ok)
-      throw new ObserverProviderError(
-        `Observer cited invalid evidence: ${validated.issues.map(issue => `${issue.path} ${issue.message}`).join("; ")}`,
-      );
-    return validated.value;
+    return validated;
+  });
+  args.onDiagnostics?.(diagnostics);
+  if (diagnostics.outputState !== "usable")
+    throw new ObserverProviderError("Observer proposal batch is invalid or exceeds 1,000 rows.", diagnostics);
+  const rejected = results.find(result => !result.ok);
+  if (rejected && !rejected.ok)
+    throw new ObserverProviderError(
+      `Observer cited invalid evidence: ${rejected.issues.map(issue => `${issue.path} ${issue.message}`).join("; ")}`,
+      diagnostics,
+    );
+  return results.map(result => {
+    if (!result.ok) throw new Error("Invalid Observer batch");
+    return result.value;
   });
 }
 

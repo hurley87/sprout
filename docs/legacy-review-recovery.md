@@ -8,6 +8,8 @@ This path applies only when validation reports the recognized timing failures an
 
 Original events, proposals, saved decisions and completed reviews are never rewritten. Previously accepted or corrected proposals that now fail timing validation still block planning; their final decisions cannot be replaced by rejection. This patch does not provide a historical migration or uncertain-exchange downgrade. Exclusion is the conservative recovery path, because missing timing cannot establish scene association or the timing of recorded assistance.
 
+Observer diagnostic history is separate from this recovery path. Analyses predating diagnostic capture expose `legacy_unavailable` and missing attempt numbers through review inspection; ready analyses are not rerun or backfilled. New attempt diagnostics describe returned/absent responses and validation rejection against their own immutable snapshot. They supply no reviewed learning evidence, cannot resolve historical decisions, and cannot establish why historical butterfly/strawberry observations were omitted.
+
 The parent panel explains the limitation, disables unsupported actions, retains rejection controls for undecided affected proposals, and displays a warning instead of summarizing unsupported totals as current conclusions. Completed historical decisions remain visible without an ineffective analysis-retry control.
 
 Regression coverage lives in `tests/parent-review.test.ts`, `tests/parent-review-summary.test.ts`, and `tests/browser/parent-review.spec.ts`. Browser tests use synthetic API responses, not live sessions.
