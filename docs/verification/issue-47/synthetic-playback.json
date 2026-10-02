@@ -1,0 +1,830 @@
+{
+  "experiment": "issue-47-finite-media-v1",
+  "startedAtUtc": "2026-10-02T13:18:29.545Z",
+  "fixtureSha256": "8b1c445c88e79caed032c59b942970b29ba4972db94bd33e421c478ca5482352",
+  "browser": "153.0.8010.12",
+  "fixtureOnly": true,
+  "clock": "browser.performance.now per page",
+  "results": [
+    {
+      "scenario": "complete",
+      "terminalReason": "completed",
+      "state": {
+        "active": true,
+        "source": 1,
+        "epoch": 1,
+        "phase": "completed",
+        "commits": 1,
+        "questions": 1
+      },
+      "events": [
+        {
+          "type": "asset_ready",
+          "atMs": 178.3,
+          "duration": 0.9,
+          "token": {
+            "source": 1,
+            "epoch": 1,
+            "answer": "scene-0:revision-1:1000:One",
+            "playback": "ack-1"
+          }
+        },
+        {
+          "type": "transcript_arrived",
+          "atMs": 178.3
+        },
+        {
+          "type": "context_appended",
+          "atMs": 178.3
+        },
+        {
+          "type": "play_started",
+          "atMs": 181.3,
+          "mediaTime": 0
+        },
+        {
+          "type": "ended_callback",
+          "atMs": 1505.3,
+          "callbackOrigin": "browser",
+          "trusted": true,
+          "authorized": true,
+          "mediaTime": 0.9,
+          "duration": 0.9
+        },
+        {
+          "type": "media_ended",
+          "atMs": 1505.3,
+          "renderFence": 0.9013333333333333,
+          "outputTimestamp": {
+            "contextTime": 0.863055,
+            "performanceTime": 1504.7999999970198
+          }
+        },
+        {
+          "type": "output_clock_fence_passed",
+          "atMs": 1560.8,
+          "renderFence": 0.9013333333333333,
+          "outputTimestamp": {
+            "contextTime": 0.9163723333333333,
+            "performanceTime": 1558.0999999940395
+          }
+        },
+        {
+          "type": "playback_completed",
+          "atMs": 1560.8,
+          "scene": "one duck"
+        },
+        {
+          "type": "scene_committed",
+          "atMs": 1560.8
+        },
+        {
+          "type": "scene_display_confirmed",
+          "atMs": 1607.8
+        },
+        {
+          "type": "question_authorized",
+          "atMs": 1607.8
+        },
+        {
+          "type": "ended_callback",
+          "atMs": 1607.8,
+          "callbackOrigin": "retained_simulation",
+          "trusted": true,
+          "authorized": false,
+          "mediaTime": 0.9,
+          "duration": 0.9
+        },
+        {
+          "type": "ended_callback",
+          "atMs": 1607.8,
+          "callbackOrigin": "dispatched_simulation",
+          "trusted": false,
+          "authorized": false,
+          "mediaTime": 0.9,
+          "duration": 0.9
+        }
+      ],
+      "recording": {
+        "bytes": 15752,
+        "durationMs": 960,
+        "local440Amplitude": 0.20020408622223132,
+        "stale880Amplitude": 0.0000020179049869852415,
+        "internalSilenceRms": 0.00011817059115112255,
+        "finalToneRms": 0.14157834515048753
+      }
+    },
+    {
+      "scenario": "final_scene",
+      "terminalReason": "completed",
+      "state": {
+        "active": true,
+        "source": 1,
+        "epoch": 1,
+        "phase": "completed",
+        "commits": 0,
+        "questions": 0
+      },
+      "events": [
+        {
+          "type": "asset_ready",
+          "atMs": 76.6,
+          "duration": 0.9,
+          "token": {
+            "source": 1,
+            "epoch": 1,
+            "answer": "scene-0:revision-1:1000:One",
+            "playback": "ack-1"
+          }
+        },
+        {
+          "type": "transcript_arrived",
+          "atMs": 76.6
+        },
+        {
+          "type": "context_appended",
+          "atMs": 76.6
+        },
+        {
+          "type": "play_started",
+          "atMs": 88.6,
+          "mediaTime": 0
+        },
+        {
+          "type": "ended_callback",
+          "atMs": 1395.5,
+          "callbackOrigin": "browser",
+          "trusted": true,
+          "authorized": true,
+          "mediaTime": 0.9,
+          "duration": 0.9
+        },
+        {
+          "type": "media_ended",
+          "atMs": 1395.5,
+          "renderFence": 0.9066666666666666,
+          "outputTimestamp": {
+            "contextTime": 0.8683983333333333,
+            "performanceTime": 1395.1000000089407
+          }
+        },
+        {
+          "type": "output_clock_fence_passed",
+          "atMs": 1452.1,
+          "renderFence": 0.9066666666666666,
+          "outputTimestamp": {
+            "contextTime": 0.9217246666666666,
+            "performanceTime": 1448.4000000059605
+          }
+        },
+        {
+          "type": "playback_completed",
+          "atMs": 1452.2,
+          "scene": "one duck"
+        },
+        {
+          "type": "ended_callback",
+          "atMs": 1452.2,
+          "callbackOrigin": "retained_simulation",
+          "trusted": true,
+          "authorized": false,
+          "mediaTime": 0.9,
+          "duration": 0.9
+        },
+        {
+          "type": "ended_callback",
+          "atMs": 1452.3,
+          "callbackOrigin": "dispatched_simulation",
+          "trusted": false,
+          "authorized": false,
+          "mediaTime": 0.9,
+          "duration": 0.9
+        }
+      ],
+      "recording": {
+        "bytes": 15752,
+        "durationMs": 960,
+        "local440Amplitude": 0.200343756322308,
+        "stale880Amplitude": 0.00002291211951822925,
+        "internalSilenceRms": 0.00012611272426151003,
+        "finalToneRms": 0.14108762114389792
+      }
+    },
+    {
+      "scenario": "interrupted",
+      "terminalReason": "interrupted",
+      "state": {
+        "active": true,
+        "source": 1,
+        "epoch": 2,
+        "phase": "interrupted",
+        "commits": 0,
+        "questions": 0
+      },
+      "events": [
+        {
+          "type": "asset_ready",
+          "atMs": 91.1,
+          "duration": 0.9,
+          "token": {
+            "source": 1,
+            "epoch": 1,
+            "answer": "scene-0:revision-1:1000:One",
+            "playback": "ack-1"
+          }
+        },
+        {
+          "type": "transcript_arrived",
+          "atMs": 91.1
+        },
+        {
+          "type": "context_appended",
+          "atMs": 91.1
+        },
+        {
+          "type": "play_started",
+          "atMs": 103.2,
+          "mediaTime": 0
+        },
+        {
+          "type": "interrupted",
+          "atMs": 718.9,
+          "mediaTime": 0.20881
+        },
+        {
+          "type": "ended_callback",
+          "atMs": 719.4,
+          "callbackOrigin": "retained_simulation",
+          "trusted": true,
+          "authorized": false,
+          "mediaTime": 0.20881,
+          "duration": 0.9
+        },
+        {
+          "type": "ended_callback",
+          "atMs": 719.5,
+          "callbackOrigin": "dispatched_simulation",
+          "trusted": false,
+          "authorized": false,
+          "mediaTime": 0.20881,
+          "duration": 0.9
+        }
+      ],
+      "recording": {
+        "bytes": 3194,
+        "durationMs": 180,
+        "local440Amplitude": 0.200343756322308,
+        "stale880Amplitude": 0.00002291211951822925,
+        "internalSilenceRms": null,
+        "finalToneRms": null
+      }
+    },
+    {
+      "scenario": "superseded",
+      "terminalReason": "superseded",
+      "state": {
+        "active": true,
+        "source": 1,
+        "epoch": 2,
+        "phase": "superseded",
+        "commits": 0,
+        "questions": 0
+      },
+      "events": [
+        {
+          "type": "asset_ready",
+          "atMs": 93.3,
+          "duration": 0.9,
+          "token": {
+            "source": 1,
+            "epoch": 1,
+            "answer": "scene-0:revision-1:1000:One",
+            "playback": "ack-1"
+          }
+        },
+        {
+          "type": "transcript_arrived",
+          "atMs": 93.4
+        },
+        {
+          "type": "context_appended",
+          "atMs": 93.4
+        },
+        {
+          "type": "play_started",
+          "atMs": 103.5,
+          "mediaTime": 0
+        },
+        {
+          "type": "superseded",
+          "atMs": 719.4,
+          "mediaTime": 0.207803
+        },
+        {
+          "type": "ended_callback",
+          "atMs": 719.9,
+          "callbackOrigin": "retained_simulation",
+          "trusted": true,
+          "authorized": false,
+          "mediaTime": 0.207803,
+          "duration": 0.9
+        },
+        {
+          "type": "ended_callback",
+          "atMs": 719.9,
+          "callbackOrigin": "dispatched_simulation",
+          "trusted": false,
+          "authorized": false,
+          "mediaTime": 0.207803,
+          "duration": 0.9
+        }
+      ],
+      "recording": {
+        "bytes": 3194,
+        "durationMs": 180,
+        "local440Amplitude": 0.200343756322308,
+        "stale880Amplitude": 0.00002291211951822925,
+        "internalSilenceRms": null,
+        "finalToneRms": null
+      }
+    },
+    {
+      "scenario": "stopped",
+      "terminalReason": "stopped",
+      "state": {
+        "active": false,
+        "source": 1,
+        "epoch": 2,
+        "phase": "stopped",
+        "commits": 0,
+        "questions": 0
+      },
+      "events": [
+        {
+          "type": "asset_ready",
+          "atMs": 93.2,
+          "duration": 0.9,
+          "token": {
+            "source": 1,
+            "epoch": 1,
+            "answer": "scene-0:revision-1:1000:One",
+            "playback": "ack-1"
+          }
+        },
+        {
+          "type": "transcript_arrived",
+          "atMs": 93.3
+        },
+        {
+          "type": "context_appended",
+          "atMs": 93.3
+        },
+        {
+          "type": "play_started",
+          "atMs": 103.9,
+          "mediaTime": 0
+        },
+        {
+          "type": "stopped",
+          "atMs": 718.4,
+          "mediaTime": 0.207232
+        },
+        {
+          "type": "ended_callback",
+          "atMs": 718.6,
+          "callbackOrigin": "retained_simulation",
+          "trusted": true,
+          "authorized": false,
+          "mediaTime": 0.207232,
+          "duration": 0.9
+        },
+        {
+          "type": "ended_callback",
+          "atMs": 718.6,
+          "callbackOrigin": "dispatched_simulation",
+          "trusted": false,
+          "authorized": false,
+          "mediaTime": 0.207232,
+          "duration": 0.9
+        }
+      ],
+      "recording": {
+        "bytes": 3194,
+        "durationMs": 180,
+        "local440Amplitude": 0.200343756322308,
+        "stale880Amplitude": 0.00002291211951822925,
+        "internalSilenceRms": null,
+        "finalToneRms": null
+      }
+    },
+    {
+      "scenario": "source_retired",
+      "terminalReason": "source_retired",
+      "state": {
+        "active": true,
+        "source": 2,
+        "epoch": 2,
+        "phase": "source_retired",
+        "commits": 0,
+        "questions": 0
+      },
+      "events": [
+        {
+          "type": "asset_ready",
+          "atMs": 92.7,
+          "duration": 0.9,
+          "token": {
+            "source": 1,
+            "epoch": 1,
+            "answer": "scene-0:revision-1:1000:One",
+            "playback": "ack-1"
+          }
+        },
+        {
+          "type": "transcript_arrived",
+          "atMs": 92.7
+        },
+        {
+          "type": "context_appended",
+          "atMs": 92.7
+        },
+        {
+          "type": "play_started",
+          "atMs": 104.7,
+          "mediaTime": 0
+        },
+        {
+          "type": "source_retired",
+          "atMs": 718.8,
+          "mediaTime": 0.206066
+        },
+        {
+          "type": "ended_callback",
+          "atMs": 719.1,
+          "callbackOrigin": "retained_simulation",
+          "trusted": true,
+          "authorized": false,
+          "mediaTime": 0.206066,
+          "duration": 0.9
+        },
+        {
+          "type": "ended_callback",
+          "atMs": 719.2,
+          "callbackOrigin": "dispatched_simulation",
+          "trusted": false,
+          "authorized": false,
+          "mediaTime": 0.206066,
+          "duration": 0.9
+        }
+      ],
+      "recording": {
+        "bytes": 3194,
+        "durationMs": 180,
+        "local440Amplitude": 0.200343756322308,
+        "stale880Amplitude": 0.00002291211951822925,
+        "internalSilenceRms": null,
+        "finalToneRms": null
+      }
+    },
+    {
+      "scenario": "suspended",
+      "terminalReason": "suspended",
+      "state": {
+        "active": true,
+        "source": 1,
+        "epoch": 2,
+        "phase": "suspended",
+        "commits": 0,
+        "questions": 0
+      },
+      "events": [
+        {
+          "type": "asset_ready",
+          "atMs": 93.9,
+          "duration": 0.9,
+          "token": {
+            "source": 1,
+            "epoch": 1,
+            "answer": "scene-0:revision-1:1000:One",
+            "playback": "ack-1"
+          }
+        },
+        {
+          "type": "transcript_arrived",
+          "atMs": 93.9
+        },
+        {
+          "type": "context_appended",
+          "atMs": 93.9
+        },
+        {
+          "type": "play_started",
+          "atMs": 104.9,
+          "mediaTime": 0
+        },
+        {
+          "type": "suspended",
+          "atMs": 719.8,
+          "mediaTime": 0.206405
+        },
+        {
+          "type": "ended_callback",
+          "atMs": 720,
+          "callbackOrigin": "retained_simulation",
+          "trusted": true,
+          "authorized": false,
+          "mediaTime": 0.206405,
+          "duration": 0.9
+        },
+        {
+          "type": "ended_callback",
+          "atMs": 720,
+          "callbackOrigin": "dispatched_simulation",
+          "trusted": false,
+          "authorized": false,
+          "mediaTime": 0.206405,
+          "duration": 0.9
+        }
+      ],
+      "recording": {
+        "bytes": 3194,
+        "durationMs": 180,
+        "local440Amplitude": 0.200343756322308,
+        "stale880Amplitude": 0.00002291211951822925,
+        "internalSilenceRms": null,
+        "finalToneRms": null
+      }
+    },
+    {
+      "scenario": "failed",
+      "terminalReason": "failed",
+      "state": {
+        "active": true,
+        "source": 1,
+        "epoch": 2,
+        "phase": "failed",
+        "commits": 0,
+        "questions": 0
+      },
+      "events": [
+        {
+          "type": "asset_ready",
+          "atMs": 404.9,
+          "duration": 0.9,
+          "token": {
+            "source": 1,
+            "epoch": 1,
+            "answer": "scene-0:revision-1:1000:One",
+            "playback": "ack-1"
+          }
+        },
+        {
+          "type": "transcript_arrived",
+          "atMs": 404.9
+        },
+        {
+          "type": "context_appended",
+          "atMs": 404.9
+        },
+        {
+          "type": "failed",
+          "atMs": 408.4,
+          "mediaTime": 0
+        },
+        {
+          "type": "ended_callback",
+          "atMs": 408.7,
+          "callbackOrigin": "retained_simulation",
+          "trusted": true,
+          "authorized": false,
+          "mediaTime": 0,
+          "duration": null
+        },
+        {
+          "type": "ended_callback",
+          "atMs": 408.7,
+          "callbackOrigin": "dispatched_simulation",
+          "trusted": false,
+          "authorized": false,
+          "mediaTime": 0,
+          "duration": null
+        }
+      ],
+      "recording": {
+        "bytes": 110,
+        "durationMs": null,
+        "local440Amplitude": null,
+        "stale880Amplitude": null,
+        "internalSilenceRms": null,
+        "finalToneRms": null
+      }
+    },
+    {
+      "scenario": "muted",
+      "terminalReason": "muted",
+      "state": {
+        "active": true,
+        "source": 1,
+        "epoch": 2,
+        "phase": "muted",
+        "commits": 0,
+        "questions": 0
+      },
+      "events": [
+        {
+          "type": "asset_ready",
+          "atMs": 74.9,
+          "duration": 0.9,
+          "token": {
+            "source": 1,
+            "epoch": 1,
+            "answer": "scene-0:revision-1:1000:One",
+            "playback": "ack-1"
+          }
+        },
+        {
+          "type": "transcript_arrived",
+          "atMs": 74.9
+        },
+        {
+          "type": "context_appended",
+          "atMs": 74.9
+        },
+        {
+          "type": "play_started",
+          "atMs": 87.3,
+          "mediaTime": 0
+        },
+        {
+          "type": "muted",
+          "atMs": 702.5,
+          "mediaTime": 0.208703
+        },
+        {
+          "type": "ended_callback",
+          "atMs": 702.8,
+          "callbackOrigin": "retained_simulation",
+          "trusted": true,
+          "authorized": false,
+          "mediaTime": 0.208703,
+          "duration": 0.9
+        },
+        {
+          "type": "ended_callback",
+          "atMs": 702.9,
+          "callbackOrigin": "dispatched_simulation",
+          "trusted": false,
+          "authorized": false,
+          "mediaTime": 0.208703,
+          "duration": 0.9
+        }
+      ],
+      "recording": {
+        "bytes": 3194,
+        "durationMs": 180,
+        "local440Amplitude": 0.200343756322308,
+        "stale880Amplitude": 0.00002291211951822925,
+        "internalSilenceRms": null,
+        "finalToneRms": null
+      }
+    },
+    {
+      "scenario": "rate_changed",
+      "terminalReason": "rate_changed",
+      "state": {
+        "active": true,
+        "source": 1,
+        "epoch": 2,
+        "phase": "rate_changed",
+        "commits": 0,
+        "questions": 0
+      },
+      "events": [
+        {
+          "type": "asset_ready",
+          "atMs": 93.7,
+          "duration": 0.9,
+          "token": {
+            "source": 1,
+            "epoch": 1,
+            "answer": "scene-0:revision-1:1000:One",
+            "playback": "ack-1"
+          }
+        },
+        {
+          "type": "transcript_arrived",
+          "atMs": 93.7
+        },
+        {
+          "type": "context_appended",
+          "atMs": 93.7
+        },
+        {
+          "type": "play_started",
+          "atMs": 104.2,
+          "mediaTime": 0
+        },
+        {
+          "type": "rate_changed",
+          "atMs": 719.6,
+          "mediaTime": 0.208
+        },
+        {
+          "type": "ended_callback",
+          "atMs": 720,
+          "callbackOrigin": "retained_simulation",
+          "trusted": true,
+          "authorized": false,
+          "mediaTime": 0.208,
+          "duration": 0.9
+        },
+        {
+          "type": "ended_callback",
+          "atMs": 720,
+          "callbackOrigin": "dispatched_simulation",
+          "trusted": false,
+          "authorized": false,
+          "mediaTime": 0.208,
+          "duration": 0.9
+        }
+      ],
+      "recording": {
+        "bytes": 3194,
+        "durationMs": 180,
+        "local440Amplitude": 0.200343756322308,
+        "stale880Amplitude": 0.00002291211951822925,
+        "internalSilenceRms": null,
+        "finalToneRms": null
+      }
+    },
+    {
+      "scenario": "seeked",
+      "terminalReason": "seeked",
+      "state": {
+        "active": true,
+        "source": 1,
+        "epoch": 2,
+        "phase": "seeked",
+        "commits": 0,
+        "questions": 0
+      },
+      "events": [
+        {
+          "type": "asset_ready",
+          "atMs": 95.7,
+          "duration": 0.9,
+          "token": {
+            "source": 1,
+            "epoch": 1,
+            "answer": "scene-0:revision-1:1000:One",
+            "playback": "ack-1"
+          }
+        },
+        {
+          "type": "transcript_arrived",
+          "atMs": 95.7
+        },
+        {
+          "type": "context_appended",
+          "atMs": 95.7
+        },
+        {
+          "type": "play_started",
+          "atMs": 106.8,
+          "mediaTime": 0
+        },
+        {
+          "type": "seeked",
+          "atMs": 722.5,
+          "mediaTime": 0.8
+        },
+        {
+          "type": "ended_callback",
+          "atMs": 722.8,
+          "callbackOrigin": "retained_simulation",
+          "trusted": true,
+          "authorized": false,
+          "mediaTime": 0.8,
+          "duration": 0.9
+        },
+        {
+          "type": "ended_callback",
+          "atMs": 722.9,
+          "callbackOrigin": "dispatched_simulation",
+          "trusted": false,
+          "authorized": false,
+          "mediaTime": 0.8,
+          "duration": 0.9
+        }
+      ],
+      "recording": {
+        "bytes": 3194,
+        "durationMs": 180,
+        "local440Amplitude": 0.200343756322308,
+        "stale880Amplitude": 0.00002291211951822925,
+        "internalSilenceRms": null,
+        "finalToneRms": null
+      }
+    }
+  ]
+}
