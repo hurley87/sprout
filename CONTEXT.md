@@ -73,8 +73,20 @@ The Observer's interpretation of a specific exchange before parent review.
 _Avoid_: Established fact
 
 **Conversation-state proposal**:
-The ConversationStateClassifier's ephemeral interpretation of the child's and tutor's states for a lesson node and transcript revision, supplied to the deterministic lesson reducer.
+The ConversationStateClassifier's ephemeral interpretation of child activity, latest answer outcome, support need, and tutor state for a claimed lesson node and transcript revision, supplied to the deterministic lesson reducer.
 _Avoid_: Observer proposal, transition command, reviewed evidence
+
+**Child activity**:
+What the child is currently doing in the exchange: waiting, thinking, or answering, independently of their latest answer's outcome or need for help.
+_Avoid_: Child state when combining activity, outcome, and support need
+
+**Answer outcome**:
+The inferred outcome of the latest answer for the lesson node: correct, incorrect, or unclear, with none when no answer has been given.
+_Avoid_: Current child activity, reviewed learning evidence
+
+**Support state**:
+The child's currently inferred need for help, independently of their activity or latest answer outcome; none means no need is inferred.
+_Avoid_: Incorrect answer, record of help provided
 
 **ConversationStateClassifier**:
 The runtime interpreter that classifies a live transcript snapshot into a conversation-state proposal. It proposes conversation state without directing lesson transitions or producing persistent, parent-reviewable learning evidence.

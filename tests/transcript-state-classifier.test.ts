@@ -1,7 +1,9 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { COUNTING_NODE_IDS, type CountingNodeId } from "../lib/transcript-state-steering/counting-lesson";
 import {
-  CHILD_STATES,
+  ANSWER_OUTCOMES,
+  CHILD_ACTIVITIES,
+  SUPPORT_STATES,
   TUTOR_STATES,
   parseConversationStateProposal,
   type ConversationStateClassifier,
@@ -12,7 +14,9 @@ import {
 const proposal: ConversationStateProposal = {
   nodeId: "count-1-duck",
   transcriptRevision: 0,
-  childState: "thinking",
+  childActivity: "thinking",
+  answerOutcome: "none",
+  supportState: "none",
   tutorState: "listening",
   confidence: 0.8,
 };
@@ -32,19 +36,61 @@ describe("ConversationStateClassifier ephemeral runtime contract", () => {
 
   it("types exactly the descriptive fields and restricts node identity to authored IDs", () => {
     expectTypeOf<keyof ConversationStateProposal>().toEqualTypeOf<
-      "nodeId" | "transcriptRevision" | "childState" | "tutorState" | "confidence"
+      "nodeId" | "transcriptRevision" | "childActivity" | "answerOutcome" | "supportState" | "tutorState" | "confidence"
     >();
     expectTypeOf<ConversationStateProposal["nodeId"]>().toEqualTypeOf<CountingNodeId>();
+    expectTypeOf<ConversationStateProposal["childActivity"]>().toEqualTypeOf<"waiting" | "thinking" | "answering">();
+    expectTypeOf<ConversationStateProposal["answerOutcome"]>().toEqualTypeOf<
+      "none" | "correct" | "incorrect" | "unclear"
+    >();
+    expectTypeOf<ConversationStateProposal["supportState"]>().toEqualTypeOf<"none" | "needs_help">();
   });
 
   it.each(COUNTING_NODE_IDS)("accepts a proposal for authored node %s", nodeId => {
     expect(parseConversationStateProposal({ ...proposal, nodeId })).toEqual({ ...proposal, nodeId });
   });
 
-  it.each(CHILD_STATES)("accepts descriptive child state %s with each tutor state", childState => {
-    for (const tutorState of TUTOR_STATES) {
-      const input = { ...proposal, childState, tutorState };
-      expect(parseConversationStateProposal(input)).toEqual(input);
+  it.each(CHILD_ACTIVITIES)(
+    "represents activity %s independently of answer outcome, support, and tutor state",
+    childActivity => {
+      for (const answerOutcome of ANSWER_OUTCOMES) {
+        for (const supportState of SUPPORT_STATES) {
+          for (const tutorState of TUTOR_STATES) {
+            const input = { ...proposal, childActivity, answerOutcome, supportState, tutorState };
+            expect(parseConversationStateProposal(input)).toEqual(input);
+          }
+        }
+      }
+    },
+  );
+
+  it("represents thinking after an incorrect answer while needing help and the tutor is helping", () => {
+    const input: ConversationStateProposal = {
+      ...proposal,
+      childActivity: "thinking",
+      answerOutcome: "incorrect",
+      supportState: "needs_help",
+      tutorState: "helping",
+    };
+    expect(parseConversationStateProposal(JSON.parse(JSON.stringify(input)))).toEqual(input);
+  });
+
+  it("checks node and revision claim shape without certifying a match to the classification request", () => {
+    const request: ConversationStateClassifierInput = {
+      nodeId: "count-1-duck",
+      transcriptRevision: 7,
+      transcript: "Tutor: How many ducks do you see?",
+    };
+    for (const claims of [
+      { nodeId: "count-2-ducks", transcriptRevision: request.transcriptRevision },
+      { nodeId: request.nodeId, transcriptRevision: request.transcriptRevision - 1 },
+    ]) {
+      const parsed = parseConversationStateProposal({ ...proposal, ...claims });
+      expect(parsed).not.toBeNull();
+      expect({ nodeId: parsed!.nodeId, transcriptRevision: parsed!.transcriptRevision }).not.toEqual({
+        nodeId: request.nodeId,
+        transcriptRevision: request.transcriptRevision,
+      });
     }
   });
 
@@ -83,13 +129,44 @@ describe("ConversationStateClassifier ephemeral runtime contract", () => {
   );
 
   it.each(["finished", "advance", "", 0, [], {}, null, undefined])("rejects unknown or malformed state %j", state => {
-    expect(parseConversationStateProposal({ ...proposal, childState: state })).toBeNull();
-    expect(parseConversationStateProposal({ ...proposal, tutorState: state })).toBeNull();
+    for (const field of ["childActivity", "answerOutcome", "supportState", "tutorState"]) {
+      expect(parseConversationStateProposal({ ...proposal, [field]: state })).toBeNull();
+    }
   });
 
-  it("does not interchange child and tutor state vocabularies", () => {
-    expect(parseConversationStateProposal({ ...proposal, childState: "listening" })).toBeNull();
-    expect(parseConversationStateProposal({ ...proposal, tutorState: "correct" })).toBeNull();
+  it.each([
+    ["childActivity", "none"],
+    ["childActivity", "correct"],
+    ["childActivity", "incorrect"],
+    ["childActivity", "unclear"],
+    ["childActivity", "needs_help"],
+    ["childActivity", "listening"],
+    ["answerOutcome", "thinking"],
+    ["answerOutcome", "answering"],
+    ["answerOutcome", "waiting"],
+    ["answerOutcome", "needs_help"],
+    ["supportState", "incorrect"],
+    ["supportState", "unclear"],
+    ["supportState", "thinking"],
+    ["supportState", "helping"],
+    ["tutorState", "correct"],
+    ["tutorState", "needs_help"],
+    ["tutorState", "waiting"],
+  ])("rejects a value from a different axis: %s = %s", (field, state) => {
+    expect(parseConversationStateProposal({ ...proposal, [field]: state })).toBeNull();
+  });
+
+  it("rejects the legacy mixed childState contract and any added childState field", () => {
+    expect(
+      parseConversationStateProposal({
+        nodeId: proposal.nodeId,
+        transcriptRevision: proposal.transcriptRevision,
+        childState: "thinking",
+        tutorState: proposal.tutorState,
+        confidence: proposal.confidence,
+      }),
+    ).toBeNull();
+    expect(parseConversationStateProposal({ ...proposal, childState: "correct" })).toBeNull();
   });
 
   it.each([null, undefined, true, 7, "correct", [], [proposal], {}])("rejects malformed payload %j", value => {
@@ -116,7 +193,9 @@ describe("ConversationStateClassifier ephemeral runtime contract", () => {
     ["futureNodes", ["count-2-ducks", "count-3-butterflies"]],
     ["explanation", "The child is thinking."],
   ])("rejects additional field %s even alongside a valid correct proposal", (key, value) => {
-    expect(parseConversationStateProposal({ ...proposal, childState: "correct", [key as string]: value })).toBeNull();
+    expect(
+      parseConversationStateProposal({ ...proposal, answerOutcome: "correct", [key as string]: value }),
+    ).toBeNull();
   });
 
   it("rejects the post-session Observer's evidence-oriented proposal envelope", () => {
@@ -153,6 +232,14 @@ describe("ConversationStateClassifier ephemeral runtime contract", () => {
     const parsed = parseConversationStateProposal(JSON.parse(serialized));
     expect(parsed).toEqual(proposal);
     expect(parsed).not.toBe(proposal);
-    expect(Object.keys(parsed!)).toEqual(["nodeId", "transcriptRevision", "childState", "tutorState", "confidence"]);
+    expect(Object.keys(parsed!)).toEqual([
+      "nodeId",
+      "transcriptRevision",
+      "childActivity",
+      "answerOutcome",
+      "supportState",
+      "tutorState",
+      "confidence",
+    ]);
   });
 });
