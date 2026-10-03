@@ -72,10 +72,10 @@ cost reduction under sustained usage.
 
 ## Final manual run
 
-The final live-run outcome and approximate probabilities below were supplied in
-the spike closeout report. This documentation task did not rerun the live
-session or independently reanalyze a raw diagnostic export; no session ID,
-export filename, precise run timestamp, or latency measurements were supplied.
+The final manual run was reviewed from the recording and exported runtime
+diagnostics during the spike. The closeout commit itself did not rerun the live
+session. This remains evidence of one successful path, not aggregate classifier
+accuracy or production validation.
 
 ```text
 count-1-duck → count-2-ducks → count-3-butterflies → lesson complete
@@ -154,5 +154,5 @@ Implementation contracts and reproduction instructions remain in the
 
 Closeout validation: `npm test` passed all 1,112 tests in 49 files;
 `npm run lint`, `npm run typecheck`, and `git diff --check` passed. These local
-checks supplement the supplied live-run report; no new live-provider or browser
+checks supplement the reviewed manual-run evidence; no new live-provider or browser
 E2E run was performed during this documentation-only closeout.

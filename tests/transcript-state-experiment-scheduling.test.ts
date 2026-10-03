@@ -97,6 +97,56 @@ it("routes real experiment output events through the tutor gate without using th
   expect(experiment.report().events).toContainEqual(expect.objectContaining({ type: "classifier.abstained" }));
 });
 
+it("attributes an advancing proposal diagnostic to its source visit rather than the resulting visit", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      Response.json({
+        proposal: {
+          nodeId: "count-1-duck",
+          transcriptRevision: 2,
+          childActivity: "unknown",
+          answerOutcome: "correct",
+          supportState: "none",
+          tutorState: "acknowledging",
+        },
+      }),
+    ),
+  );
+  start();
+  tutor("Yes, one duck!");
+  emit({ type: "output.activity", state: "active" });
+  emit({ type: "output.activity", state: "quiet" });
+  await vi.advanceTimersByTimeAsync(600);
+
+  expect(experiment.snapshot().runtime).toMatchObject({ nodeId: "count-2-ducks", visitId: 2, phase: "rendering" });
+  const events = experiment.report().events;
+  const proposalIndex = events.findIndex(event => event.type === "runtime.event.proposal.received");
+  expect(proposalIndex).toBeGreaterThanOrEqual(0);
+  expect(events[proposalIndex]).toMatchObject({
+    runtimeId: experiment.report().runtimeId,
+    nodeId: "count-1-duck",
+    visitId: 1,
+    childTurnId: 1,
+    transcriptRevision: 2,
+    transcriptSpeaker: "tutor",
+    detail: {
+      accepted: true,
+      event: { source: { nodeId: "count-1-duck", visitId: 1 } },
+    },
+  });
+  expect(events[proposalIndex + 1]).toMatchObject({
+    type: "runtime.changed",
+    nodeId: "count-2-ducks",
+    visitId: 2,
+    detail: {
+      trigger: "proposal.received",
+      before: { nodeId: "count-1-duck", visitId: 1 },
+      after: { nodeId: "count-2-ducks", visitId: 2 },
+    },
+  });
+});
+
 it("aborts an in-flight older revision and waits for the new tutor boundary before capturing its snapshot", async () => {
   const requests: {
     signal: AbortSignal;

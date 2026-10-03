@@ -59,6 +59,14 @@ export type ExperimentSnapshot = {
   diagnostics: readonly ExperimentDiagnostic[];
 };
 
+function eventDiagnosticSource(event: LessonRuntimeEvent, before: LessonRuntimeState): ClassificationSource {
+  return {
+    nodeId: before.nodeId,
+    transcriptRevision: before.transcriptRevision,
+    ...("source" in event ? event.source : runtimeSource(before)),
+  };
+}
+
 /** Local, disposable experiment wiring. LessonSession and persistence are not involved. */
 export class TranscriptSteeringExperiment {
   private readonly runtimeId = crypto.randomUUID();
@@ -191,7 +199,12 @@ export class TranscriptSteeringExperiment {
     const result = reduceLessonRuntime(before, event);
     this.state = result.state;
     if (event.type !== "clock.tick")
-      this.log(`runtime.event.${event.type}`, { event, accepted: before !== result.state });
+      this.log(
+        `runtime.event.${event.type}`,
+        { event, accepted: before !== result.state },
+        eventDiagnosticSource(event, before),
+        event.type === "transcript.updated" ? event.speaker : before.transcriptSource,
+      );
     if (JSON.stringify({ ...before, nowMs: 0 }) !== JSON.stringify({ ...this.state, nowMs: 0 })) {
       this.log("runtime.changed", { trigger: event.type, before, after: this.state });
     }
