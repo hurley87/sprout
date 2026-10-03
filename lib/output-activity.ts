@@ -1,6 +1,6 @@
 import type { OutputActivityEvent } from "./events";
 
-/** Observes decoded remote PCM upstream of both playback and recording gates.
+/** Observes decoded remote PCM independently of playback.
  * Energy is media activity, never response completion or delivery attribution.
  * No samples are retained. Missing/suspended media is unknown, not silence. */
 export class OutputActivityObserver {
