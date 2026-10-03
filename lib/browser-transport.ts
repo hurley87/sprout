@@ -125,6 +125,7 @@ export class BrowserTransport implements Transport {
     private audio: HTMLAudioElement,
     private microphoneDiagnostics = false,
     private onVoiceActivity?: (activity: VoiceActivity) => void,
+    private experiment?: "transcript-state-steering",
   ) {}
 
   /** UI feedback uses local media and playback gates, never transcript arrival. */
@@ -567,7 +568,9 @@ export class BrowserTransport implements Transport {
     const response = await fetch("/api/live", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(seed ? { sdp, replacement: seed } : { sdp }),
+      body: JSON.stringify(
+        seed ? { sdp, replacement: seed } : { sdp, ...(this.experiment ? { experiment: this.experiment } : {}) },
+      ),
       signal: source.abort.signal,
     });
     if (!this.live(source)) return;

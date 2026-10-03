@@ -1,5 +1,6 @@
 import { LIVE_CONFIG, parseReplacementSeed, replacementSessionInput } from "@/lib/lesson";
 import { isLocalRequest, readJsonBody } from "@/lib/local-request";
+import { TRANSCRIPT_STEERING_LIVE_CONFIG } from "@/lib/transcript-state-steering/live-context";
 
 export const runtime = "nodejs";
 const LIMIT = 65_536;
@@ -21,10 +22,12 @@ export async function POST(request: Request) {
     !payload ||
     typeof payload !== "object" ||
     Array.isArray(payload) ||
-    Object.keys(payload).some(key => key !== "sdp" && key !== "replacement")
+    Object.keys(payload).some(key => key !== "sdp" && key !== "replacement" && key !== "experiment")
   )
     return json({ error: "Invalid session request." }, 400);
-  const { sdp, replacement } = payload as { sdp?: unknown; replacement?: unknown };
+  const { sdp, replacement, experiment } = payload as { sdp?: unknown; replacement?: unknown; experiment?: unknown };
+  if (experiment !== undefined && (experiment !== "transcript-state-steering" || replacement !== undefined))
+    return json({ error: "Invalid experiment session request." }, 400);
   if (typeof sdp !== "string" || !sdp.startsWith("v=0") || sdp.length > LIMIT)
     return json({ error: "Invalid microphone connection offer." }, 400);
   const seed = replacement === undefined ? undefined : parseReplacementSeed(replacement);
@@ -42,7 +45,12 @@ export async function POST(request: Request) {
       method: "POST",
       headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        session: seed ? { ...LIVE_CONFIG, input: replacementSessionInput(seed) } : LIVE_CONFIG,
+        session:
+          experiment === "transcript-state-steering"
+            ? TRANSCRIPT_STEERING_LIVE_CONFIG
+            : seed
+              ? { ...LIVE_CONFIG, input: replacementSessionInput(seed) }
+              : LIVE_CONFIG,
         transport: { type: "webrtc", sdp },
       }),
       signal: AbortSignal.any([request.signal, AbortSignal.timeout(20_000)]),

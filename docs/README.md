@@ -7,6 +7,7 @@ Start with the [MVP PRD](sprout-mvp-prd.md) for the agreed product scope. These 
 | [MVP PRD](sprout-mvp-prd.md) | Product behavior, boundaries, success criteria, and build sequence |
 | [Domain glossary](../CONTEXT.md) | Canonical meanings of lesson, session, observation, reviewed evidence, and adaptation |
 | [Architecture and evidence flow](architecture.md) | Component authority, session lifecycle, evidence records, review gate, and technical feasibility |
+| [Transcript-state steering findings](transcript-state-steering-findings.md) | Completed architecture spike, final live-run evidence, authority boundaries, and productionization/evaluation follow-ups |
 | [Experiment protocol](experiment-protocol.md) | How to run the seven days and evaluate the results |
 | [ADR 0001](adr/0001-parent-reviewed-evidence.md) | Why only parent-reviewed evidence may inform future lessons |
 | [Issue #5 verification](issue-5-verification.md) | Acceptance matrix, reproducible local checks, synthetic visual evidence and remaining live/manual gates |

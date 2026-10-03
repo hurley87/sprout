@@ -34,6 +34,14 @@ _Avoid_: Level, grade
 The story or play setting used to present a counting activity.
 _Avoid_: Learning objective
 
+**Authored lesson graph**:
+The application's bounded set of lesson nodes and permitted success paths, including where the lesson ends.
+_Avoid_: Model-selected curriculum
+
+**Lesson node**:
+One authored counting activity with a displayed group, learning objective, tutor brief, and success outcome.
+_Avoid_: Screen when referring to the whole activity
+
 ### Evidence and interpretation
 
 **Session record**:
@@ -64,6 +72,30 @@ _Avoid_: Incorrect answer
 The Observer's interpretation of a specific exchange before parent review.
 _Avoid_: Established fact
 
+**Conversation-state proposal**:
+The ConversationStateClassifier's ephemeral interpretation of child activity, latest answer outcome, support need, and tutor state for a claimed lesson node and transcript revision, supplied to the deterministic lesson reducer.
+_Avoid_: Observer proposal, transition command, reviewed evidence
+
+**Child activity**:
+What the child is currently doing in the exchange: waiting, thinking, or answering, independently of their latest answer's outcome or need for help. A transcript-only classifier reports unknown; establishing activity requires runtime turn or microphone signals.
+_Avoid_: Child state when combining activity, outcome, and support need
+
+**Answer outcome**:
+The inferred outcome of the latest answer for the lesson node: correct, incorrect, or unclear, with none when no answer has been given.
+_Avoid_: Current child activity, reviewed learning evidence
+
+**Support state**:
+The child's currently inferred need for help, independently of their activity or latest answer outcome; none means no need is inferred.
+_Avoid_: Incorrect answer, record of help provided
+
+**ConversationStateClassifier**:
+The runtime interpreter that classifies a live transcript snapshot into a conversation-state proposal. It proposes conversation state without directing lesson transitions or producing persistent, parent-reviewable learning evidence.
+_Avoid_: Observer, lesson controller
+
+**Tutor state**:
+The tutor's conversational function: asking, clarifying, helping, or acknowledging. Transcript classification describes the latest tutor message and reports unknown when none of these functions is evidenced; it cannot establish live speaking or listening activity.
+_Avoid_: Acoustic activity inferred from transcript
+
 **Reviewed evidence**:
 An observation accepted by the parent, either unchanged or after correction, with its supporting context.
 _Avoid_: Model verdict
@@ -75,7 +107,7 @@ _Avoid_: Mastery score, developmental status
 ### Review and adaptation
 
 **Observer**:
-The post-session interpreter that proposes learning observations from the session record.
+The post-session interpreter that proposes evidence-oriented, parent-reviewable learning observations from the session record.
 _Avoid_: Examiner, assessor
 
 **Parent review**:
