@@ -34,6 +34,14 @@ _Avoid_: Level, grade
 The story or play setting used to present a counting activity.
 _Avoid_: Learning objective
 
+**Authored lesson graph**:
+The application's bounded set of lesson nodes and permitted success paths, including where the lesson ends.
+_Avoid_: Model-selected curriculum
+
+**Lesson node**:
+One authored counting activity with a displayed group, learning objective, tutor brief, and success outcome.
+_Avoid_: Screen when referring to the whole activity
+
 ### Evidence and interpretation
 
 **Session record**:
@@ -64,6 +72,14 @@ _Avoid_: Incorrect answer
 The Observer's interpretation of a specific exchange before parent review.
 _Avoid_: Established fact
 
+**Conversation-state proposal**:
+The ConversationStateClassifier's ephemeral interpretation of the child's and tutor's states for a lesson node and transcript revision, supplied to the deterministic lesson reducer.
+_Avoid_: Observer proposal, transition command, reviewed evidence
+
+**ConversationStateClassifier**:
+The runtime interpreter that classifies a live transcript snapshot into a conversation-state proposal. It proposes conversation state without directing lesson transitions or producing persistent, parent-reviewable learning evidence.
+_Avoid_: Observer, lesson controller
+
 **Reviewed evidence**:
 An observation accepted by the parent, either unchanged or after correction, with its supporting context.
 _Avoid_: Model verdict
@@ -75,7 +91,7 @@ _Avoid_: Mastery score, developmental status
 ### Review and adaptation
 
 **Observer**:
-The post-session interpreter that proposes learning observations from the session record.
+The post-session interpreter that proposes evidence-oriented, parent-reviewable learning observations from the session record.
 _Avoid_: Examiner, assessor
 
 **Parent review**:
