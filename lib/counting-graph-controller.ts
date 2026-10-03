@@ -10,8 +10,8 @@ export type GraphSnapshot = Readonly<{
   visitId: number;
   sourceId?: number;
   phase: GraphPhase;
-  ackAudioObserved: boolean;
-  outputWasActive: boolean;
+  ackOutputDrained: boolean;
+  ackOutputObserved: boolean;
   failure?: string;
 }>;
 export interface GraphClock {
@@ -35,8 +35,8 @@ export class CountingGraphController {
     nodeId: COUNTING_GRAPH.entry,
     visitId: 0,
     phase: "awaiting source",
-    ackAudioObserved: false,
-    outputWasActive: false,
+    ackOutputDrained: false,
+    ackOutputObserved: false,
   };
   private usedSources = new Set<number>();
   private handles = new Map<string, Handle>();
@@ -49,6 +49,7 @@ export class CountingGraphController {
   private failureGeneration = 0;
   private commandId = 0;
   private disposed = false;
+  private childTurnStarted = false;
 
   constructor(
     private transport: GraphTransport,
@@ -95,10 +96,11 @@ export class CountingGraphController {
       visitId: this.state.visitId + 1,
       sourceId,
       phase: "awaiting render",
-      ackAudioObserved: false,
-      outputWasActive: false,
+      ackOutputDrained: false,
+      ackOutputObserved: false,
     };
     this.activity = "unavailable";
+    this.childTurnStarted = false;
     const identity = this.identity();
     this.render = identity;
     this.armFailure(identity);
@@ -163,15 +165,16 @@ export class CountingGraphController {
         !this.current(identity) ||
         event.sourceId !== identity.sourceId ||
         this.state.phase !== "teaching" ||
-        !this.state.outputWasActive ||
+        !this.state.ackOutputObserved ||
         !event.id.trim()
       )
         return;
       this.handles.set(event.id, { sourceId: identity.sourceId, visitId: identity.visitId, state: "accepted" });
       this.pending = { id: event.id, identity };
-      this.state = { ...this.state, phase: "awaiting audio drain", ackAudioObserved: true };
-      this.clearQuiet(); // Pre-delegation silence never starts the gate.
+      this.state = { ...this.state, phase: "awaiting audio drain" };
+      this.clearQuiet(); // Never credit any quiet time before delegation acceptance.
       this.armFailure(identity);
+      this.startQuiet(identity);
       return;
     }
     // The teaching-source sink also owns cancellation during its successor's
@@ -186,22 +189,41 @@ export class CountingGraphController {
       this.disconnect();
       return;
     }
-    if (
-      (event.type === "microphone.speech_started" || event.type === "microphone.activity_started") &&
-      ["awaiting audio drain", "awaiting render"].includes(this.state.phase)
-    ) {
-      this.fail("child interrupted; activate a fresh source to retry");
+    if (event.type === "microphone.speech_started" || event.type === "microphone.activity_started") {
+      if (["awaiting audio drain", "awaiting render"].includes(this.state.phase)) {
+        this.fail("child interrupted; activate a fresh source to retry");
+      } else if (this.state.phase === "teaching") {
+        this.childTurnStarted = true;
+        this.state = { ...this.state, ackOutputObserved: false, ackOutputDrained: false };
+        this.clearQuiet();
+      }
       return;
     }
     if (event.type !== "output.activity" || !["teaching", "awaiting audio drain"].includes(this.state.phase)) return;
     const previous = this.activity;
     this.activity = event.state;
-    if (event.state === "active") this.state = { ...this.state, outputWasActive: true };
     if (event.state !== "quiet") {
+      this.state = {
+        ...this.state,
+        ackOutputObserved: this.state.ackOutputObserved || (event.state === "active" && this.childTurnStarted),
+        ackOutputDrained: false,
+      };
       this.clearQuiet();
       return;
     }
-    if (previous === "quiet" || this.state.phase !== "awaiting audio drain" || !this.pending) return;
+    this.state = { ...this.state, ackOutputDrained: this.state.ackOutputObserved };
+    if (previous !== "quiet") this.startQuiet(identity);
+  }
+
+  private startQuiet(identity: GraphIdentity): void {
+    if (
+      this.state.phase !== "awaiting audio drain" ||
+      !this.pending ||
+      !this.state.ackOutputObserved ||
+      !this.state.ackOutputDrained ||
+      this.activity !== "quiet"
+    )
+      return;
     const generation = ++this.quietGeneration;
     this.quietTimer = this.clock.setTimeout(() => {
       if (
@@ -209,6 +231,8 @@ export class CountingGraphController {
         !this.current(identity) ||
         this.state.phase !== "awaiting audio drain" ||
         this.activity !== "quiet" ||
+        !this.state.ackOutputObserved ||
+        !this.state.ackOutputDrained ||
         !this.pending
       )
         return;
@@ -221,7 +245,7 @@ export class CountingGraphController {
     this.handles.set(this.pending!.id, { ...this.pending!.identity, state: "retired" });
     const edge = COUNTING_GRAPH.nodes[identity.nodeId].success;
     if (edge.type === "complete") {
-      this.state = { ...this.state, phase: "complete", ackAudioObserved: false, outputWasActive: false };
+      this.state = { ...this.state, phase: "complete", ackOutputDrained: false, ackOutputObserved: false };
       const id = this.pending!.id;
       this.retirePending();
       if (!this.send(identity.sourceId, COUNTING_COMPLETION_INSTRUCTIONS, id)) this.fail("completion send failed");
@@ -234,10 +258,11 @@ export class CountingGraphController {
       visitId: this.state.visitId + 1,
       sourceId: identity.sourceId,
       phase: "awaiting render",
-      ackAudioObserved: false,
-      outputWasActive: false,
+      ackOutputDrained: false,
+      ackOutputObserved: false,
     };
     this.activity = "unavailable";
+    this.childTurnStarted = false;
     this.render = this.identity();
     this.armFailure(this.render);
   }
@@ -292,10 +317,11 @@ export class CountingGraphController {
       visitId: this.state.visitId + 1,
       phase,
       failure,
-      ackAudioObserved: false,
-      outputWasActive: false,
+      ackOutputDrained: false,
+      ackOutputObserved: false,
     };
     this.activity = "unavailable";
+    this.childTurnStarted = false;
     if (sourceId !== undefined) this.transport.retireSource(sourceId);
   }
   private fail(reason: string): void {

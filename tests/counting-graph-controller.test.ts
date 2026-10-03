@@ -25,7 +25,7 @@ class Clock implements GraphClock {
     this.now = until;
   }
 }
-function fixture() {
+function fixture(childTurn = true) {
   const clock = new Clock();
   const transport = { send: vi.fn<GraphTransport["send"]>(() => true), retireSource: vi.fn() };
   const controller = new CountingGraphController(transport, clock, { quietMs: 100, failureMs: 1000 });
@@ -35,6 +35,7 @@ function fixture() {
     sink = controller.startSource(++sourceId)!;
     expect(sink).toBeTypeOf("function");
     controller.confirmRender(controller.pendingRender!);
+    if (childTurn) sink({ type: "microphone.speech_started", sourceId });
   };
   const emit = (event: ProviderEvent) => sink({ ...event, sourceId: event.sourceId ?? sourceId });
   const activity = (state: "active" | "quiet" | "unavailable") => emit({ type: "output.activity", state });
@@ -54,9 +55,13 @@ describe("experimental graph transition authority", () => {
     const f = fixture();
     const initial = f.controller.snapshot;
     f.activity("active");
-    expect(f.controller.snapshot.outputWasActive).toBe(true);
+    expect(f.controller.snapshot.ackOutputObserved).toBe(true);
     f.delegate();
-    expect(f.controller.snapshot).toMatchObject({ phase: "awaiting audio drain", ackAudioObserved: true });
+    expect(f.controller.snapshot).toMatchObject({
+      phase: "awaiting audio drain",
+      ackOutputObserved: true,
+      ackOutputDrained: false,
+    });
     f.clock.tick(100);
     expect(f.controller.snapshot.nodeId).toBe(initial.nodeId);
     f.activity("quiet");
@@ -66,7 +71,7 @@ describe("experimental graph transition authority", () => {
     expect(f.controller.snapshot).toMatchObject({
       nodeId: "count-2-ducks",
       phase: "awaiting render",
-      outputWasActive: false,
+      ackOutputObserved: false,
     });
     expect(f.transport.send).toHaveBeenCalledTimes(1);
     const render = f.controller.pendingRender!;
@@ -89,26 +94,120 @@ describe("experimental graph transition authority", () => {
   it("rejects missing prior activity permanently, even if active output appears later", () => {
     const f = fixture();
     f.delegate("too-early");
+    expect(f.controller.snapshot.ackOutputObserved).toBe(false);
     f.activity("active");
     f.delegate("too-early");
     f.activity("quiet");
     f.clock.tick(100);
     expect(f.controller.snapshot.phase).toBe("teaching");
-    expect(f.controller.snapshot.ackAudioObserved).toBe(false);
+    expect(f.controller.snapshot.ackOutputDrained).toBe(true);
     expect(f.controller.delegationHandles.get("too-early")?.state).toBe("retired");
     f.clock.tick(900);
     expect(f.controller.snapshot).toMatchObject({ phase: "failed", nodeId: "count-1-duck" });
   });
 
-  it("pre-existing quiet and duplicate quiet cannot supply a post-delegation transition", () => {
+  it("accepts already drained post-child acknowledgment, counting quiet only from delegation", () => {
+    const f = fixture();
+    f.activity("active");
+    f.activity("quiet");
+    expect(f.controller.snapshot).toMatchObject({ ackOutputObserved: true, ackOutputDrained: true });
+    f.clock.tick(500); // This earlier quiet time must not shorten the gate.
+    f.delegate();
+    f.clock.tick(70);
+    f.delegate(); // A duplicate must not reset the accepted interval.
+    f.activity("quiet"); // Nor may a duplicate quiet notification reset it.
+    f.clock.tick(29);
+    expect(f.controller.snapshot).toMatchObject({ nodeId: "count-1-duck", phase: "awaiting audio drain" });
+    f.clock.tick(1);
+    expect(f.controller.snapshot.phase).toBe("awaiting render");
+  });
+
+  it.each(["microphone.speech_started", "microphone.activity_started"] as const)(
+    "%s discards pre-child question audio and prior-turn acknowledgment evidence",
+    type => {
+      const f = fixture(false);
+      f.activity("active");
+      f.activity("quiet");
+      f.delegate("pre-child");
+      expect(f.controller.snapshot).toMatchObject({
+        phase: "teaching",
+        ackOutputObserved: false,
+        ackOutputDrained: false,
+      });
+      f.emit({ type });
+      f.activity("quiet");
+      f.delegate("no-ack");
+      f.clock.tick(100);
+      expect(f.controller.snapshot.phase).toBe("teaching");
+      f.activity("active");
+      f.activity("quiet");
+      expect(f.controller.snapshot).toMatchObject({ ackOutputObserved: true, ackOutputDrained: true });
+      f.emit({ type }); // A second child turn on this node must discard the first turn's audio.
+      expect(f.controller.snapshot).toMatchObject({ ackOutputObserved: false, ackOutputDrained: false });
+      f.delegate("previous-turn");
+      f.clock.tick(100);
+      expect(f.controller.snapshot.phase).toBe("teaching");
+      f.activity("active");
+      f.delegate("current-turn");
+      f.activity("quiet");
+      f.clock.tick(100);
+      expect(f.controller.snapshot.phase).toBe("awaiting render");
+    },
+  );
+
+  it("pre-child active audio ending after the child starts cannot establish acknowledgment evidence", () => {
+    const f = fixture(false);
+    f.activity("active");
+    f.emit({ type: "microphone.speech_started" });
+    f.activity("quiet");
+    f.delegate();
+    f.clock.tick(100);
+    expect(f.controller.snapshot).toMatchObject({
+      phase: "teaching",
+      ackOutputObserved: false,
+      ackOutputDrained: false,
+    });
+  });
+
+  it("quiet without post-child active output cannot advance", () => {
+    const f = fixture();
+    f.activity("quiet");
+    f.delegate();
+    f.clock.tick(100);
+    expect(f.controller.snapshot).toMatchObject({
+      phase: "teaching",
+      ackOutputObserved: false,
+      ackOutputDrained: false,
+    });
+  });
+
+  it.each(["active", "unavailable"] as const)("%s resets a gate accepted after already drained audio", state => {
     const f = fixture();
     f.activity("active");
     f.activity("quiet");
     f.delegate();
-    f.activity("quiet");
-    f.clock.tick(500);
+    f.clock.tick(70);
+    const oldTimer = f.clock.tasks.at(-1)!;
+    f.activity(state);
+    expect(f.controller.snapshot.ackOutputDrained).toBe(false);
+    oldTimer.callback();
+    f.clock.tick(50);
     expect(f.controller.snapshot.phase).toBe("awaiting audio drain");
+    f.activity("quiet");
+    f.clock.tick(99);
+    expect(f.controller.snapshot.phase).toBe("awaiting audio drain");
+    f.clock.tick(1);
+    expect(f.controller.snapshot.phase).toBe("awaiting render");
+  });
+
+  it("unavailable after drained audio cannot start a quiet interval on delegation", () => {
+    const f = fixture();
     f.activity("active");
+    f.activity("quiet");
+    f.activity("unavailable");
+    f.delegate();
+    f.clock.tick(100);
+    expect(f.controller.snapshot).toMatchObject({ phase: "awaiting audio drain", ackOutputDrained: false });
     f.activity("quiet");
     f.clock.tick(100);
     expect(f.controller.snapshot.phase).toBe("awaiting render");
@@ -172,7 +271,7 @@ describe("experimental graph transition authority", () => {
       expect(f.controller.snapshot).toMatchObject({
         nodeId: "count-2-ducks",
         phase: "teaching",
-        ackAudioObserved: false,
+        ackOutputDrained: false,
       });
     },
   );
@@ -191,7 +290,7 @@ describe("experimental graph transition authority", () => {
       else f.controller[action as "stop" | "disconnect" | "dispose"]();
       callbacks.forEach(t => t.callback());
       expect(f.controller.snapshot.nodeId).toBe("count-1-duck");
-      expect(f.controller.snapshot).toMatchObject({ ackAudioObserved: false, outputWasActive: false });
+      expect(f.controller.snapshot).toMatchObject({ ackOutputDrained: false, ackOutputObserved: false });
       expect(f.controller.delegationHandles.get("d-1")?.state).toBe("retired");
       expect(f.transport.send).toHaveBeenCalledTimes(1);
       if (["speech", "activity", "disconnect"].includes(action)) {
@@ -203,6 +302,40 @@ describe("experimental graph transition authority", () => {
       } else expect(f.controller.startSource(2)).toBeUndefined();
     },
   );
+
+  it.each(["microphone.speech_started", "microphone.activity_started"] as const)(
+    "%s interrupts progression accepted after acknowledgment already drained",
+    type => {
+      const f = fixture();
+      f.activity("active");
+      f.activity("quiet");
+      f.delegate();
+      const oldTimer = f.clock.tasks.at(-1)!;
+      f.emit({ type });
+      oldTimer.callback();
+      f.clock.tick(100);
+      expect(f.controller.snapshot).toMatchObject({
+        nodeId: "count-1-duck",
+        phase: "failed",
+        ackOutputObserved: false,
+        ackOutputDrained: false,
+      });
+      expect(f.controller.delegationHandles.get("d-1")?.state).toBe("retired");
+      expect(f.transport.send).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("wrong-source child and media events cannot alter the current turn's gate", () => {
+    const f = fixture();
+    f.activity("active");
+    f.activity("quiet");
+    f.delegate();
+    f.emit({ type: "microphone.speech_started", sourceId: 99 });
+    f.emit({ type: "output.activity", state: "active", sourceId: 99 });
+    f.emit({ type: "output.activity", state: "unavailable", sourceId: 99 });
+    f.clock.tick(100);
+    expect(f.controller.snapshot.phase).toBe("awaiting render");
+  });
 
   it("interruption after commit invalidates render and retains the committed scene for recovery", () => {
     const f = fixture();
@@ -243,6 +376,7 @@ describe("experimental graph transition authority", () => {
     sink({ type: "delegation", id: "startup", sourceId: 2 });
     expect(f.transport.send).toHaveBeenCalledTimes(1);
     f.controller.confirmRender(f.controller.pendingRender!);
+    sink({ type: "microphone.speech_started", sourceId: 2 });
     sink({ type: "output.activity", state: "active", sourceId: 2 });
     sink({ type: "delegation", id: "startup", sourceId: 2 });
     expect(f.controller.snapshot.phase).toBe("teaching");

@@ -22,9 +22,9 @@ have no proven mapping to the local render/visit boundary. The appended-context
 alternative was also checked below. The controller therefore
 uses **one teaching attempt per source**, ignores offsets for association, permanently
 retires every observed rejected/accepted ID, and never reuses a source for teaching.
-It accepts only the first eligible request during teaching with previously observed
-active output. Extra pending, wrong-phase, missing-source, stale-source, duplicate and
-unsupported requests do not advance. No model-supplied identity or next action is used.
+It accepts only the first eligible request during teaching with tutor output
+observed after the current child turn started. Extra pending, wrong-phase,
+missing-source, stale-source, duplicate and unsupported requests do not advance. No model-supplied identity or next action is used.
 
 After successor render confirmation the old source receives the pending response
 containing only the now-rendered current-node teaching context, then is retired. The
@@ -69,15 +69,28 @@ relaxes association to an explicitly heuristic timestamp fence.
 
 ## Audio, render and cancellation
 
-The sequence is teaching → observe active decoded output → accept delegation →
-observe a fresh post-delegation quiet transition → sustain quiet for `quietMs` →
-commit the authored successor → confirm its render → answer the pending delegation.
-`outputWasActive` records prior activity; `ackAudioObserved` records acceptance with
-that prior activity. Both reset on visit/source changes and cancellation. Neither
-flag proves acknowledgment **content**. Later recordings must check that.
+Teaching requires a current child turn before tutor output can establish
+acknowledgment evidence. A source-local `microphone.speech_started` or
+`microphone.activity_started` during teaching starts a fresh child turn and resets
+`ackOutputObserved` and `ackOutputDrained`. Startup/question audio before any child
+turn, or tutor audio from a preceding child turn on this node, cannot satisfy the
+gate. Both flags also reset on visit/source changes, completion and cancellation.
+The source/visit callback fences apply before child-turn resets or media observation.
 
-Pre-existing quiet, repeated quiet notifications and delegation alone never start
-an interval. Active or unavailable output invalidates a running quiet interval.
+Post-child tutor `active` output sets `ackOutputObserved` and clears
+`ackOutputDrained`. Quiet after that observed output sets `ackOutputDrained`.
+A valid delegation requires `ackOutputObserved`. Both orderings are supported:
+
+- Child turn → active tutor output → delegation → quiet → sustain quiet for `quietMs`.
+- Child turn → active tutor output → quiet → delegation → sustain current quiet for `quietMs`.
+
+For already drained acknowledgment output, the interval starts at delegation
+acceptance; no preceding silence is credited. Otherwise it starts on subsequent
+quiet. Quiet without observed post-child active output and delegation alone never
+start an interval. Neither flag establishes acknowledgment **content**; later
+recordings must check that. Active or unavailable output clears `ackOutputDrained`
+and invalidates a running interval. Subsequent quiet starts a full new interval;
+repeated quiet notifications and duplicate delegations do not restart it.
 Unavailable is never silence. Quiet intervals and failure callbacks have generation
 fences in addition to source/visit fences. `failureMs` is finite and greater than
 `quietMs`; it bounds startup render, teaching, accepted progression and successor
@@ -104,7 +117,8 @@ wiring, recording, live trials and browser hardening belong to later commits.
 
 Focused tests use a fake source-targeted transport and clock, including cancelled
 callbacks deliberately fired after invalidation. Coverage includes startup/render
-ordering, prior activity, pre-existing quiet, active/unavailable interval resets,
+ordering, both acknowledgment/delegation orderings, child-turn evidence resets,
+pre-child question audio, quiet without active output, active/unavailable interval resets,
 duplicate and same-source distinct stale IDs (with and without offsets), wrong source
 and phase, cancellation/recovery, renewed child speech, timeout, send failure,
 at-most-once responses and the exact terminal path with fresh sources.
