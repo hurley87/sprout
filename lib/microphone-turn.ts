@@ -1,5 +1,11 @@
-import { MICROPHONE_ONSET_MS, MICROPHONE_ONSET_QUIET_MS, MICROPHONE_QUIET_MS } from "./answer";
 import type { MicrophoneEvent } from "./events";
+
+/** Quiet audio required before the local microphone detector signals speech stop. */
+export const MICROPHONE_QUIET_MS = 900;
+/** Sustained microphone energy required before activity becomes confirmed speech. */
+export const MICROPHONE_ONSET_MS = 80;
+/** Quiet needed to discard an unconfirmed microphone burst. */
+export const MICROPHONE_ONSET_QUIET_MS = 150;
 
 export type MicrophoneMeasurement = {
   frames: number;

@@ -5,16 +5,14 @@ import { api, internal } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
 import schema from "../convex/schema";
 import { ConvexSessionRecorder } from "../lib/convex-session-recorder";
-import type { EvaluateAnswer } from "../lib/answer";
 import { recordingOffsetSeconds } from "../lib/session-recorder";
 import type { ObserverProposal } from "../lib/observation-contracts";
 import { observationRecordFromSnapshot } from "../lib/observer-diagnostics";
 import type { ReviewCommand, ReviewSnapshot } from "../lib/parent-review";
 import { reviewPlaybackAtMs } from "../lib/parent-review";
 import type { DiagnosticPage } from "../lib/parent-review-diagnostics";
-import { observationSummary } from "../lib/parent-review-summary";
 import { sessionSpeechInterval } from "../lib/evidence-timing";
-import { captureMocks, liveConnection, recordedBrowserLesson } from "./helpers/recorded-browser-lesson";
+import { captureMocks, recordedBrowserEvidence } from "./helpers/recorded-browser-evidence";
 
 const rpc = vi.hoisted(() => ({ mutation: vi.fn(), query: vi.fn(), action: vi.fn() }));
 vi.mock("convex/browser", () => ({
@@ -35,13 +33,6 @@ afterEach(() => {
   Object.values(rpc).forEach(mock => mock.mockReset());
 });
 
-const advances: EvaluateAnswer = async () => ({
-  status: "evaluated",
-  probability: 0.99,
-  model: "synthetic",
-  latencyMs: 1,
-});
-const unavailable: EvaluateAnswer = async () => ({ status: "unavailable", reason: "synthetic", latencyMs: 1 });
 function request(path: string, body: unknown, origin = "http://127.0.0.1:3000") {
   return new Request(`http://127.0.0.1:3000${path}`, {
     method: "POST",
@@ -50,10 +41,10 @@ function request(path: string, body: unknown, origin = "http://127.0.0.1:3000") 
   });
 }
 
-/** WebRTC, media bytes, evaluator and provider output are synthetic. Transport clocks,
+/** WebRTC, media bytes, authored displays, recognition and provider output are synthetic. Transport clocks,
  * recording queue/upload, routes, Convex functions, validation and review are production.
  * No provider/browser offset or acoustic alignment is supplied by this harness. */
-async function recordedFlow(evaluator = advances) {
+async function recordedFlow() {
   vi.stubEnv("NEXT_PUBLIC_CONVEX_URL", "https://synthetic.convex.cloud");
   vi.stubEnv("OBSERVER_SERVER_CAPABILITY", "synthetic-capability");
   vi.stubEnv("OPENAI_API_KEY", "synthetic-key");
@@ -95,9 +86,9 @@ async function recordedFlow(evaluator = advances) {
   });
   captureMocks();
   const recorder = new ConvexSessionRecorder();
-  const lesson = await recordedBrowserLesson(evaluator, 2000, { recorder, fetcher });
+  const lesson = await recordedBrowserEvidence(2000, { recorder, fetcher });
   await lesson.session.recordingSettled();
-  expect(lesson.session.snapshot.recordingError).toBeUndefined();
+  expect(lesson.errors).toEqual([]);
   const sessionId = lesson.record.session._id as Id<"sessions">;
   const saved = () => t.query(api.sessions.getRecord, { sessionId });
   const read = async (): Promise<ReviewSnapshot> => {
@@ -158,7 +149,7 @@ async function recordedFlow(evaluator = advances) {
   const finish = async () => {
     lesson.session.end("parent_stop");
     await lesson.session.recordingSettled();
-    expect(lesson.session.snapshot.recordingError).toBeUndefined();
+    expect(lesson.errors).toEqual([]);
     expect((await saved())!.session).toMatchObject({
       state: "ended",
       recordStatus: "complete",
@@ -214,20 +205,17 @@ async function next(f: Awaited<ReturnType<typeof recordedFlow>>, text: string, o
 }
 
 it("joins butterflies after strawberries display through transport, persistence, diagnostics, correction and planning", async () => {
-  const evaluated = vi.fn(advances);
-  const f = await recordedFlow(evaluated);
+  const f = await recordedFlow();
   await next(f, "One", 1000, 1);
   await next(f, "Two", 6000, 2);
   await vi.advanceTimersByTimeAsync(1000);
   f.say("Three", 9500);
   await vi.advanceTimersByTimeAsync(2000);
-  expect(f.session.snapshot.sceneIndex).toBe(3);
   expect((await f.saved())!.events.some(e => e.evidence?.type === "utterance" && e.evidence.text === "Three")).toBe(
     false,
   );
   f.session.displayed(3);
   await f.flush();
-  expect(evaluated.mock.calls[2][0]).toMatchObject({ sceneIndex: 2, utterance: "Three" });
   await f.finish();
   const original = await f.saved();
   const batch = await Promise.all([f.proposal("One", 1), f.proposal("Two", 2), f.proposal("Three", 3)]);
@@ -246,22 +234,6 @@ it("joins butterflies after strawberries display through transport, persistence,
     responseScene: { sceneId: "butterfly-garden", displayedAtMs: butterfly.atMs, status: "stable" },
     sessionTiming: { provenance: "source_timeline_bound", sourceId: 1, startMs: 7500, endMs: 8100 },
   });
-  const evaluation = original!.events.find(
-    e =>
-      e.timeline?.type === "evaluation_control" &&
-      e.timeline.action === "evaluation_result" &&
-      e.timeline.sceneIndex === 2,
-  )!;
-  expect(evaluation.timeline).toMatchObject({
-    correlationKey: "2|3|9500:Three|1",
-    transcriptRevision: 3,
-    sourceId: 1,
-    responseIdentity: {
-      fragmentKeys: ["transcript_3"],
-      sourceStatus: "known",
-      evaluatedScene: { sceneId: "butterfly-garden", displayedAtMs: butterfly.atMs },
-    },
-  });
   f.output(batch);
   expect(await f.gate()).toMatchObject({ blocked: true, evidence: [] });
   await f.run();
@@ -277,7 +249,6 @@ it("joins butterflies after strawberries display through transport, persistence,
       kind: "response",
       eventId: response._id,
       fragmentKeys: ["transcript_3"],
-      evaluationEventIds: expect.arrayContaining([evaluation._id]),
       coverage: "returned",
       trustedTiming: true,
     }),
@@ -334,154 +305,10 @@ it("joins butterflies after strawberries display through transport, persistence,
   expect(f.fetcher.mock.calls.filter(([url]) => url === "/api/live")).toHaveLength(1);
 });
 
-it("persists replacement-source anchors, excludes warmup/retired callbacks and reviews both sources", async () => {
-  const f = await recordedFlow();
-  await vi.advanceTimersByTimeAsync(1000);
-  f.say("One", 1000);
-  await f.flush();
-  const b = liveConnection(false);
-  // Restore the RPC router replaced by the reusable WebRTC stub.
-  vi.stubGlobal("fetch", f.fetcher);
-  f.connection.channel.onmessage?.({
-    data: JSON.stringify({ type: "session.output_transcript.delta", delta: "stale", start_ms: 5000, end_ms: 5100 }),
-  });
-  f.session.displayed(1);
-  await vi.advanceTimersByTimeAsync(1);
-  expect(f.connection.inputs[1].enabled).toBe(false);
-  b.channel.onmessage?.({
-    data: JSON.stringify({ type: "session.input_transcript.delta", delta: "hidden", start_ms: 0, end_ms: 100 }),
-  });
-  b.channel.onmessage?.({ data: JSON.stringify({ type: "session.started" }) });
-  await vi.advanceTimersByTimeAsync(1001);
-  b.channel.onmessage?.({
-    data: JSON.stringify({ type: "session.input_transcript.delta", delta: "Two", start_ms: 900, end_ms: 1000 }),
-  });
-  f.say("retired", 6000);
-  await f.flush();
-  await f.finish();
-  const saved = (await f.saved())!;
-  const speech = saved.events.filter(e => e.evidence?.type === "utterance");
-  expect(speech.map(e => e.evidence?.type === "utterance" && e.evidence.text)).toEqual(["One", "Two"]);
-  expect(speech[1].evidence).toMatchObject({
-    providerTiming: { sourceId: 2, startMs: 900 },
-    sessionTiming: { sourceId: 2, sourceRequestedAtMs: 3600, inputOpenedAtMs: 3601, startMs: 4500 },
-  });
-  f.output([await f.proposal("One", 1), await f.proposal("Two", 2)]);
-  await f.run();
-  const view = await f.read();
-  expect(view.status).toBe("ready");
-  expect((await f.rows()).filter(row => row.kind === "response").map(row => row.trustedTiming)).toEqual([true, true]);
-  expect((await f.write({ operation: "acceptAll", sessionId: f.sessionId, analysisId: view.analysisId! })).status).toBe(
-    200,
-  );
-  expect((await f.gate()).evidence).toHaveLength(2);
-  expect((await f.saved())!.events).toEqual(saved.events);
-});
-
-it("joins delayed self-corrections and superseded evaluations to the persisted response without borrowing recognition", async () => {
-  const pending: Array<(result: Awaited<ReturnType<EvaluateAnswer>>) => void> = [];
-  const f = await recordedFlow(() => new Promise(resolve => pending.push(resolve)));
-  await vi.advanceTimersByTimeAsync(1000);
-  f.say("Eight", 2500);
-  await vi.advanceTimersByTimeAsync(1501);
-  f.say(" no, One", 2600);
-  await vi.advanceTimersByTimeAsync(1501);
-  pending[0]({ status: "evaluated", probability: 1, model: "late", latencyMs: 1 });
-  pending[1]({ status: "evaluated", probability: 0.01, model: "current", latencyMs: 1 });
-  await f.flush();
-  await f.finish();
-  const saved = (await f.saved())!;
-  const speech = saved.events.find(e => e.evidence?.type === "utterance")!;
-  expect(speech.evidence).toMatchObject({
-    text: "Eight no, One",
-    recognition: "needs_confirmation",
-    transcriptFragments: [{ key: "transcript_1" }, { key: "transcript_2" }],
-  });
-  const stale = saved.events.find(
-    e => e.timeline?.type === "evaluation_control" && e.timeline.action === "result_superseded",
-  )!;
-  const current = saved.events.find(
-    e => e.timeline?.type === "evaluation_control" && e.timeline.action === "evaluation_result",
-  )!;
-  expect(stale.timeline).toMatchObject({ responseIdentity: { fragmentKeys: ["transcript_1"] } });
-  expect(current.timeline).toMatchObject({
-    responseIdentity: {
-      fragmentKeys: ["transcript_1", "transcript_2"],
-      recognitionContext: { recognition: "needs_confirmation" },
-    },
-  });
-  f.output([uncertain(await f.proposal("Eight no, One", 1))]);
-  await f.run();
-  const view = await f.read();
-  expect(view.status).toBe("ready");
-  expect(await f.rows()).toContainEqual(
-    expect.objectContaining({
-      kind: "response",
-      eventId: speech._id,
-      fragmentKeys: ["transcript_1", "transcript_2"],
-      evaluationEventIds: expect.arrayContaining([stale._id, current._id]),
-    }),
-  );
-  expect((await f.write({ operation: "acceptAll", sessionId: f.sessionId, analysisId: view.analysisId! })).status).toBe(
-    200,
-  );
-  const plan = await f.gate();
-  expect(plan.evidence[0].observation).toMatchObject({ behavior: "uncertain_exchange", outcome: "uncertain" });
-  expect(plan.evidence[0].observation).not.toHaveProperty("targetQuantity");
-  expect(observationSummary(await f.read())[0].text).toContain("uncertain");
-});
-
-it("retains repeated-answer recognition after confirmation is cleared and publishes clarification separately from support", async () => {
-  let calls = 0;
-  const f = await recordedFlow(async () => ({
-    status: "evaluated",
-    probability: ++calls === 1 ? 0.01 : 0.99,
-    model: "synthetic",
-    latencyMs: 1,
-  }));
-  await vi.advanceTimersByTimeAsync(1000);
-  f.say("Eight", 2500);
-  await vi.advanceTimersByTimeAsync(2000);
-  f.say("Eight", 5500);
-  await vi.advanceTimersByTimeAsync(2000);
-  expect(f.session.snapshot.sceneIndex).toBe(1);
-  f.session.displayed(1);
-  await f.flush();
-  await f.finish();
-  const saved = (await f.saved())!;
-  expect(
-    saved.events
-      .filter(e => e.evidence?.type === "utterance")
-      .map(e => e.evidence?.type === "utterance" && e.evidence.recognition),
-  ).toEqual(["needs_confirmation", "no_ambiguity_detected"]);
-  expect(saved.events.filter(e => e.evidence?.type === "support")).toEqual([]);
-  const released = saved.events.filter(
-    e => e.timeline?.type === "evaluation_control" && e.timeline.action === "application_outcome_released",
-  );
-  expect(released[0].timeline).toMatchObject({
-    responseIdentity: { recognitionContext: { recovery: "clarification" } },
-  });
-  expect(released[1].timeline).toMatchObject({
-    responseIdentity: { recognitionContext: { repeatedTotal: 8, recognition: "no_ambiguity_detected" } },
-  });
-  // The synthetic evaluator advances on Eight; its advancement does not prove a correct total.
-  f.output([uncertain(await f.proposal("Eight", 1, 0)), uncertain(await f.proposal("Eight", 1, 1))]);
-  await f.run();
-  const view = await f.read();
-  expect(view.status).toBe("ready");
-  expect((await f.write({ operation: "acceptAll", sessionId: f.sessionId, analysisId: view.analysisId! })).status).toBe(
-    200,
-  );
-  expect((await f.gate()).evidence.map(e => [e.observation.outcome, e.observation.support.status])).toEqual([
-    ["uncertain", "not_established"],
-    ["uncertain", "not_established"],
-  ]);
-});
-
 it.each(["impossible", "delayed_crossing", "competing_display", "missing_source", "mixed_sources"] as const)(
   "rejects concrete %s material, preserves diagnostic reasons and accepts only uncertain review",
   async mode => {
-    const f = await recordedFlow(unavailable);
+    const f = await recordedFlow();
     await vi.advanceTimersByTimeAsync(1000);
     if (mode === "competing_display" || mode === "delayed_crossing") {
       await f.recorder.append("competing", mode === "competing_display" ? 100 : 700, {
@@ -631,41 +458,24 @@ it.each(["omitted", "rejected", "empty", "provider_failure"] as const)(
   },
 );
 
-it("keeps the historical 50600 provider / 43075 receipt / 43640 display case uncertain across persistence and review", async () => {
-  const f = await recordedFlow(unavailable);
-  // Separate historical fixture: these labels are supplied records, not newly
-  // measured anchors. Never derive an offset from receipt or evaluation identity.
-  await f.recorder.append("historical-butterflies", 16590, {
+it("keeps unmapped provider timing uncertain across persistence and review", async () => {
+  const f = await recordedFlow();
+  // Synthetic mismatched clocks: transcript receipt never maps provider offsets.
+  await f.recorder.append("synthetic-butterflies", 16590, {
     type: "scene_displayed",
     sceneId: "butterfly-garden",
     targetQuantity: 3,
     items: [{ emoji: "🦋", label: "butterfly" }],
     arrangement: "row",
   });
-  await f.recorder.appendTimeline("historical-evaluation", 43075, {
-    type: "evaluation_control",
-    action: "evaluation_result",
-    correlationKey: "historical-three",
-    sceneIndex: 2,
-    sourceId: 1,
-    transcriptRevision: 3,
-    answerVersion: "50600:Three",
-    applicationAction: "ADVANCE",
-    responseIdentity: {
-      provenance: "application_evaluation",
-      fragmentKeys: ["historical-fragment"],
-      sourceStatus: "known",
-      evaluatedScene: { sceneId: "butterfly-garden", displayedAtMs: 16590 },
-    },
-  });
-  await f.recorder.append("historical-strawberries", 43640, {
+  await f.recorder.append("synthetic-strawberries", 43640, {
     type: "scene_displayed",
     sceneId: "picnic",
     targetQuantity: 3,
     items: [{ emoji: "🍓", label: "strawberry" }],
     arrangement: "row",
   });
-  await f.recorder.append("historical-three", 45575, {
+  await f.recorder.append("synthetic-three", 45575, {
     type: "utterance",
     text: "Three",
     speaker: "child_or_nearby_speaker",
@@ -676,7 +486,7 @@ it("keeps the historical 50600 provider / 43075 receipt / 43640 display case unc
     firstObservedAtMs: 43075,
     lastObservedAtMs: 43075,
     recognition: "no_ambiguity_detected",
-    transcriptFragments: [{ key: "historical-fragment", textStart: 0, textEnd: 5 }],
+    transcriptFragments: [{ key: "synthetic-fragment", textStart: 0, textEnd: 5 }],
     responseScene: {
       provenance: "application_transcript_context",
       sceneId: "butterfly-garden",
@@ -696,8 +506,7 @@ it("keeps the historical 50600 provider / 43075 receipt / 43640 display case unc
       kind: "response",
       coverage: "returned",
       trustedTiming: false,
-      fragmentKeys: ["historical-fragment"],
-      evaluationEventIds: [original.find(e => e.eventKey === "historical-evaluation")!._id],
+      fragmentKeys: ["synthetic-fragment"],
       rejectedCount: 1,
     }),
   );
@@ -740,7 +549,7 @@ it("keeps the historical 50600 provider / 43075 receipt / 43640 display case unc
   expect(reviewPlaybackAtMs(p, ready.sources)).toBe(43075);
   const recovered = await f.recorder.getRecord(f.sessionId);
   expect(recordingOffsetSeconds(43075, recovered!.recording!)).toBe(43.075);
-  const response = original.find(e => e.eventKey === "historical-three")!.evidence;
+  const response = original.find(e => e.eventKey === "synthetic-three")!.evidence;
   expect(sessionSpeechInterval(response)).toBeUndefined();
   expect((await f.saved())!.events).toEqual(original);
 });
@@ -748,7 +557,7 @@ it("keeps the historical 50600 provider / 43075 receipt / 43640 display case unc
 it.each(["event_before", "event_inside", "recording_before", "recording_tied", "generated"] as const)(
   "validates %s assistance against the whole response bound through publication",
   async mode => {
-    const f = await recordedFlow(unavailable);
+    const f = await recordedFlow();
     const supportId = await f.t.mutation(api.sessions.appendEvent, {
       sessionId: f.sessionId,
       eventKey: "synthetic-parent-help",
@@ -859,7 +668,7 @@ it("enforces review-reader capability and local route boundaries for actual pers
 });
 
 it("exposes immutable legacy proposals as reject-only through the authorized review bridge and completes with no evidence", async () => {
-  const f = await recordedFlow(unavailable);
+  const f = await recordedFlow();
   await f.finish();
   await f.run();
   // Initialize an independent pre-timing fixture; do not downgrade, repair or

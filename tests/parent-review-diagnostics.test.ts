@@ -23,9 +23,6 @@ it("separates output absence, validation rejection and a valid unpublished row w
   expect(html).toContain("passed proposal validation");
   expect(html).toContain("not necessarily published or parent-reviewed");
   expect(html).toContain("observation.statedTotal");
-  expect(html).toContain("Canonical ID evaluation-event");
-  expect(html).toContain("Evaluated-scene context:");
-  expect(html).toContain("Association provenance: application_evaluation");
   expect(html).toContain("text offsets");
   expect(html).not.toContain("Accept unchanged");
   expect(html).not.toContain("Edit details");
@@ -41,17 +38,15 @@ it("does not substitute an event with the same event key/time for a missing hist
   expect(html).not.toContain("Three");
   expect(html).not.toContain("Play from");
 });
-it("labels trace truncation, historical unresolvable evaluation links and absent recordings", () => {
+it("labels trace truncation, unresolvable transcript fragments and absent recordings", () => {
   const f = reviewDiagnosticFixture();
   const row = f.rows.find(row => row.kind === "response")!;
   if (row.kind !== "response") throw new Error();
   row.traceTruncated = true;
-  row.evaluationEventIds = ["old-evaluation"];
   row.fragmentKeys = ["shortened-fragment"];
   delete f.record.recording;
   const html = renderToStaticMarkup(createElement(DiagnosticRowDetail, { row, record: f.record, seek: () => {} }));
   expect(html).toContain("Trace detail truncated");
-  expect(html).toContain("Evaluation source material unavailable");
   expect(html).toContain("truncated key may not resolve");
   expect(html).toContain("Full-session recording unavailable");
   expect(html).not.toContain("<button");

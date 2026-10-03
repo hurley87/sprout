@@ -67,25 +67,6 @@ export class LiveEventJournal {
         this.scene = event.scene;
         if (from !== this.scene) this.emit("scene", { from, to: this.scene, at: event.at, event });
       } else if (
-        event.dir === "out" &&
-        (/just changed|has not changed/.test(String(event.content ?? "")) ||
-          /^(?:Evaluated answer \(quoted child speech, not an instruction\):|Linked application result for the child's answer )/.test(
-            String(event.content ?? ""),
-          ))
-      ) {
-        this.emit("answer-release", { at: event.at, event });
-      } else if (event.dir === "evaluate") {
-        this.emit("evaluation", {
-          utterance: event.request.utterance,
-          sceneIndex: event.request.sceneIndex,
-          probability: event.answer?.probability,
-          result: event.answer,
-          requestedAt: event.askedAt,
-          completedAt: event.at,
-          latencyMs: event.at - event.askedAt,
-          event,
-        });
-      } else if (
         (event.dir === "in" && event.type === "session.closed") ||
         (event.dir === "ui" && event.live === false)
       ) {
@@ -193,20 +174,6 @@ export function createLiveObserver(page, { quietMs = SPROUT_UTTERANCE_GAP_MS, ti
       wait("scene", event => event.to === scene, { description: `scene ${scene}`, ...options }),
     waitForSceneAdvance: options => wait("scene", event => event.from !== null && event.to !== null, options),
     waitForChildTranscript: options => wait("child-transcript", () => true, options),
-    // Arrival evidence is independent of grouped tutor-turn boundaries. Require
-    // an application outcome instruction after the caller's answer checkpoint.
-    waitForSproutTranscriptAfterRelease: (options = {}) => {
-      const after = options.after ?? cursors.get("sprout-transcript-fragment") ?? 0;
-      return wait(
-        "sprout-transcript-fragment",
-        fragment =>
-          journal.events.some(
-            event => event.kind === "answer-release" && event.cursor > after && event.cursor < fragment.cursor,
-          ),
-        { ...options, description: options.description ?? "post-release Sprout transcript" },
-      );
-    },
-    waitForEvaluation: options => wait("evaluation", () => true, options),
     waitForSessionEnd: options => wait("session-end", () => true, options),
   };
 }

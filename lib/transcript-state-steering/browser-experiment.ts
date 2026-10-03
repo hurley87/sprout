@@ -1,6 +1,6 @@
 import { BrowserTransport } from "../browser-transport";
 import type { ProviderEvent, TranscriptEvent } from "../events";
-import { MICROPHONE_ONSET_MS, MICROPHONE_ONSET_QUIET_MS, MICROPHONE_QUIET_MS } from "../answer";
+import { MICROPHONE_ONSET_MS, MICROPHONE_ONSET_QUIET_MS, MICROPHONE_QUIET_MS } from "../microphone-turn";
 import { parseConversationStateProposal } from "./conversation-state-classifier";
 import { COUNTING_LESSON_GRAPH, INITIAL_COUNTING_NODE_ID } from "./counting-lesson";
 import { initialTeachingContext, teachingInstruction } from "./live-context";
@@ -67,7 +67,7 @@ function eventDiagnosticSource(event: LessonRuntimeEvent, before: LessonRuntimeS
   };
 }
 
-/** Local, disposable experiment wiring. LessonSession and persistence are not involved. */
+/** Live lesson wiring; durable session persistence remains a separate concern. */
 export class TranscriptSteeringExperiment {
   private readonly runtimeId = crypto.randomUUID();
   private readonly createdAt = performance.now();

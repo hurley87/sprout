@@ -109,10 +109,9 @@ export function diagnosticPage(x: unknown, request: DiagnosticRequest): Diagnost
       row =>
         matches(row, diagnosticRow) &&
         new TextEncoder().encode(JSON.stringify(row)).length <= 10_000 &&
-        (row.kind === "response"
-          ? [row.proposalOrdinals, row.fragmentKeys, row.evaluationEventIds]
-          : [row.responseEventIds, row.issues]
-        ).every(list => list.length <= DIAGNOSTIC_DETAIL_LIMIT),
+        (row.kind === "response" ? [row.proposalOrdinals, row.fragmentKeys] : [row.responseEventIds, row.issues]).every(
+          list => list.length <= DIAGNOSTIC_DETAIL_LIMIT,
+        ),
     )
   )
     throw new Error("Invalid diagnostic page");

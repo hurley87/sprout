@@ -1,21 +1,18 @@
 # Current-node transcript classification
 
-The spike is complete; see the
-[final engineering findings](transcript-state-steering-findings.md).
 This document describes the classifier's implementation contract. Broader live
 calibration continues in [#57](https://github.com/hurley87/sprout/issues/57).
 
-The classifier slice on `spike/transcript-state-steering` implements a server-side
+The root transcript-steering runtime uses a server-side
 `jevConversationStateClassifier`. It accepts an authored node ID, a nonnegative
 safe transcript revision, a recent ordered `Child:`/`Tutor:` transcript containing
 only that node's exchange, and an `AbortSignal`. It returns a descriptive
-`ConversationStateProposal` or `null`. The isolated browser experiment now calls
-it through a diagnostic endpoint. It remains separate from production
-`LessonSession` and has no transition, persistence, or GPT-Live authority.
+`ConversationStateProposal` or `null`. The browser runtime calls
+it through the retained classification/diagnostic endpoint. The classifier has no transition,
+persistence, or GPT-Live authority.
 
 The existing `lib/jev.ts` transport now projects validated Noul probabilities for
-one or more questions from a single TypeSafe/SystemOne request. `/api/evaluate`
-continues using its existing count question and response envelope. Both use the
+one or more questions from a single TypeSafe/SystemOne request. The classifier keeps the
 existing credential and pinned `jev-1.13.0`; provider bodies and errors remain
 private and are never logged.
 

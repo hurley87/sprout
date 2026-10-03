@@ -431,8 +431,6 @@ export function validateObserverProposal(
       citedSceneIsCurrent,
       fenceMatchesScene,
       attributionMatchesScene,
-      associationMatchesScene,
-      recognitionNeedsConfirmation,
     } = responseSceneValidity(responseEvent.evidence, sceneEvent, sourceRecord.events);
     if (!attributionMatchesScene) {
       if (
@@ -442,7 +440,7 @@ export function validateObserverProposal(
         issues.push({ path: "sources", message: "response scene attribution conflicts with the cited scene" });
     }
     if (
-      (responseEvent.evidence.recognition === "needs_confirmation" || recognitionNeedsConfirmation) &&
+      responseEvent.evidence.recognition === "needs_confirmation" &&
       (observation.behavior !== "uncertain_exchange" || !observation.uncertaintyReasons.includes("unclear_speech"))
     ) {
       issues.push({
@@ -456,18 +454,14 @@ export function validateObserverProposal(
           path: "sources",
           message: "a concrete behavior requires trustworthy speech start and end timestamps",
         });
-      } else if (transitionsDuringSpeech || !citedSceneIsCurrent || !fenceMatchesScene || !associationMatchesScene) {
+      } else if (transitionsDuringSpeech || !citedSceneIsCurrent || !fenceMatchesScene) {
         issues.push({
           path: "sources",
           message: "a concrete behavior requires the uniquely displayed scene throughout the response interval",
         });
       }
     } else if (
-      (!hasSpeechInterval ||
-        transitionsDuringSpeech ||
-        !citedSceneIsCurrent ||
-        !fenceMatchesScene ||
-        !associationMatchesScene) &&
+      (!hasSpeechInterval || transitionsDuringSpeech || !citedSceneIsCurrent || !fenceMatchesScene) &&
       !observation.uncertaintyReasons.includes("missing_scene_context") &&
       !observation.uncertaintyReasons.includes("conflicting_context")
     ) {

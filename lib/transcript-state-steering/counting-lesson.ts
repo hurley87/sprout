@@ -17,7 +17,7 @@ export type CountingLessonNode = {
 
 export const INITIAL_COUNTING_NODE_ID: CountingNodeId = "count-1-duck";
 
-/** Spike-only authored graph. Scene IDs identify existing content without importing the production lesson. */
+/** Authored graph used by the root lesson; scene IDs identify its counting content. */
 export const COUNTING_LESSON_GRAPH = {
   "count-1-duck": {
     id: "count-1-duck",

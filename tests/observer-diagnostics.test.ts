@@ -121,19 +121,11 @@ it("separates empty usable output from unavailable/invalid output and preserves 
   }
 });
 
-it("bounds trace details while retaining full counts, canonical fragment joins and evaluation identity", () => {
+it("bounds trace details while retaining full counts, canonical transcript fragments", () => {
   const { record, proposal } = fixture();
   const response = record.events[1].evidence!;
   if (response.type !== "utterance") throw new Error("fixture");
   response.transcriptFragments = [{ key: "source:1:fragment:2", textStart: 0, textEnd: 5 }];
-  record.events.push({
-    _id: "evaluation-control",
-    atMs: 2000,
-    timeline: {
-      type: "evaluation_control",
-      responseIdentity: { fragmentKeys: ["source:1:fragment:2"] },
-    },
-  });
   const output = Array.from({ length: 1000 }, (_, ordinal) => ({ ...proposal, proposalId: `p-${ordinal}` }));
   const report = diagnoseObserverOutput(record, output, "publication").diagnostics;
   expect(report.rows).toContainEqual(
@@ -143,7 +135,6 @@ it("bounds trace details while retaining full counts, canonical fragment joins a
       proposalOrdinals: [0, 1, 2, 3, 4, 5, 6, 7],
       traceTruncated: true,
       fragmentKeys: ["source:1:fragment:2"],
-      evaluationEventIds: ["evaluation-control"],
     }),
   );
   const long = diagnoseObserverOutput(record, [{ proposalId: "🦋".repeat(200) }], "publication").diagnostics.rows[0];
@@ -190,13 +181,13 @@ it("captures all provider rejections before publication while preserving timesta
 async function saved(recordStatus: "complete" | "incomplete" = "complete") {
   const t = convexTest(schema, import.meta.glob("../convex/**/*.ts"));
   const f = fixture();
-  const { sessionId, proposal, responseId, omittedId, evaluationId } = await t.run(async ctx => {
+  const { sessionId, proposal, responseId, omittedId } = await t.run(async ctx => {
     const sessionId = await ctx.db.insert("sessions", {
       state: "ended",
       recordStatus,
       createdAt: 1,
       endedAt: 2,
-      nextEventOrder: 4,
+      nextEventOrder: 3,
     });
     const ids = new Map<string, Id<"sessionEvents">>();
     for (const [order, event] of f.record.events.entries()) {
@@ -220,18 +211,6 @@ async function saved(recordStatus: "complete" | "incomplete" = "complete") {
       atMs: 1800,
       evidence: { type: "utterance", speaker: "unknown", text: "[unclear]", state: "interrupted" },
     });
-    const evaluationId = await ctx.db.insert("sessionEvents", {
-      sessionId,
-      order: 3,
-      eventKey: "evaluation",
-      atMs: 2000,
-      timeline: {
-        type: "evaluation_control",
-        action: "answer_evaluated",
-        correlationKey: "eval-1",
-        responseIdentity: { provenance: "application_evaluation", fragmentKeys: ["fragment-1"], sourceStatus: "known" },
-      },
-    });
     const proposal = {
       ...f.proposal!,
       sessionId,
@@ -239,7 +218,7 @@ async function saved(recordStatus: "complete" | "incomplete" = "complete") {
         "eventId" in source ? { ...source, eventId: ids.get(source.eventId)! } : source,
       ),
     };
-    return { sessionId, proposal, responseId: ids.get(f.record.events[1]._id)!, omittedId, evaluationId };
+    return { sessionId, proposal, responseId: ids.get(f.record.events[1]._id)!, omittedId };
   });
   const claim = await t.mutation(internal.observer.claim, { sessionId, now: 10 });
   if (claim.status !== "claimed") throw new Error("claim expected");
@@ -253,7 +232,7 @@ async function saved(recordStatus: "complete" | "incomplete" = "complete") {
       paginationOpts: { numItems: 100, cursor: null },
     });
   };
-  return { t, sessionId, proposal, responseId, omittedId, evaluationId, claim, view, rows };
+  return { t, sessionId, proposal, responseId, omittedId, claim, view, rows };
 }
 
 it("round-trips successful coverage through authorized review reads without bypassing review or promoting diagnostics to evidence", async () => {
@@ -286,7 +265,6 @@ it("round-trips successful coverage through authorized review reads without bypa
       kind: "response",
       eventId: f.responseId,
       fragmentKeys: ["fragment-1"],
-      evaluationEventIds: [f.evaluationId],
     }),
   );
   vi.stubEnv("OBSERVER_SERVER_CAPABILITY", "synthetic-capability");
@@ -667,7 +645,7 @@ it("keeps pre-diagnostics running workers compatible and records missing earlier
 it("settles failure and retains original diagnostics even if current canonical material exceeds its read limit", async () => {
   const f = await saved();
   await f.t.run(async ctx => {
-    for (let order = 4; order < 1001; order++)
+    for (let order = 3; order < 1001; order++)
       await ctx.db.insert("sessionEvents", { sessionId: f.sessionId, order, eventKey: `late-${order}`, atMs: order });
   });
   await expect(

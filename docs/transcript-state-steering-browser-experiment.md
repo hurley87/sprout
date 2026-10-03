@@ -1,23 +1,16 @@
 # Transcript state steering: manual browser guide
 
-The architecture spike is complete; see the
-[final engineering findings](transcript-state-steering-findings.md).
 This guide retains reproduction instructions and diagnostic interpretation for
 [continued behavioral evaluation (#57)](https://github.com/hurley87/sprout/issues/57).
-The final reported live run completed all three nodes and the terminal edge;
-no further experiment or tuning is required to close the spike.
 
-The browser integration adds `/experiments/transcript-state-steering` on
-`spike/transcript-state-steering`. This disposable experiment uses the existing
-`BrowserTransport`, local microphone detector, PCM output observer, and supported
-`session.instructions.append` command. It does not instantiate `LessonSession`,
-record audio, persist sessions, invoke the Observer, or use delegation.
+The browser integration now serves `/` and the temporary `/experiments/transcript-state-steering`
+alias. It uses `BrowserTransport`, the local microphone detector, PCM output observer, and supported
+`session.instructions.append` command. It does not record audio, persist sessions, invoke the
+post-session Observer, or use delegation. The superseded root lesson controller has been removed.
 
-The shared `/api/live` endpoint accepts the explicit
-`experiment: "transcript-state-steering"` selector for initial startup. This
-selects a separate tutor prompt with only the initial node's context and no
-delegation configuration. Requests without this selector retain the production
-configuration; an experiment selector cannot be combined with replacement.
+The shared `/api/live` endpoint retains the explicit `experiment: "transcript-state-steering"`
+selector for startup. Both selected and plain requests use the same tutor configuration with the
+initial node's context and no delegation. The old replacement lesson-state payload is rejected.
 The experiment's local-only classification endpoint uses the same Jev request and
 deterministic mapping as `jevConversationStateClassifier`, with an additional
 normalized mapping diagnostic. Its questions and thresholds are unchanged.
@@ -200,5 +193,4 @@ than silently trimming answer evidence. Focused fake-clock unit tests and mocked
 experiment scheduling tests cover partial transcripts, both clock orderings,
 resumed/unavailable output, revision and turn/visit invalidation, unchanged child
 debounce, independent drain timing and abort of an in-flight older revision.
-No generalized segmentation, persistence, browser automation, synthetic voice
-child, broader automated tests or production lesson integration is included.
+Persistence and generalized segmentation remain separate work. The root and temporary alias have browser smoke coverage; the existing live findings remain the behavioral evidence.

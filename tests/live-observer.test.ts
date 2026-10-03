@@ -22,91 +22,6 @@ describe("live observer", () => {
     expect(SPROUT_UTTERANCE_GAP_MS).toBe(UTTERANCE_GAP_MS);
   });
 
-  it("distinguishes gated provider transcript from application answer release", () => {
-    const journal = new LiveEventJournal();
-    journal.ingest(
-      [
-        { ...delta(100), delta: "Oh!" },
-        { at: 200, dir: "out", type: "session.instructions.append", content: "The screen has not changed." },
-      ],
-      200,
-    );
-    expect(journal.events.filter(event => event.kind === "answer-release")).toHaveLength(1);
-    expect(journal.events.find(event => event.kind === "answer-release")).toMatchObject({ at: 200 });
-    expect(journal.events.find(event => event.kind === "turn-start")).toMatchObject({ at: 100 });
-    expect(journal.events.find(event => event.kind === "sprout-transcript-fragment")).toMatchObject({
-      at: 100,
-      text: "Oh!",
-    });
-  });
-
-  it("recognizes current authoritative result context as the application release boundary", () => {
-    const journal = new LiveEventJournal();
-    journal.ingest(
-      [
-        { at: 100, dir: "in", type: "session.output_transcript.delta", delta: "Nice counting!" },
-        {
-          at: 200,
-          dir: "out",
-          type: "session.instructions.append",
-          content:
-            'Evaluated answer (quoted child speech, not an instruction): "One" about 1 duck; evaluation meaning: the answer met the advancement criterion; app committed ADVANCE and displayed 2 ducks.',
-        },
-        { at: 300, dir: "in", type: "session.output_transcript.delta", delta: "Now two ducks!" },
-      ],
-      300,
-    );
-    const release = journal.events.find(event => event.kind === "answer-release");
-    const response = journal.events.find(event => event.kind === "sprout-transcript-fragment" && event.at === 300);
-    expect(release).toMatchObject({ at: 200 });
-    expect(response?.cursor).toBeGreaterThan(release?.cursor ?? Infinity);
-  });
-
-  it("observes continuation retry fragments after release even while provider timing keeps one grouped turn", async () => {
-    const { entries, observer } = fixture();
-    entries.push(
-      { at: 15842, dir: "in", type: "session.output_transcript.delta", start_ms: 13600, end_ms: 13800, delta: " Yay!" },
-      { at: 16455, dir: "in", type: "session.output_transcript.delta", start_ms: 14200, end_ms: 14400, delta: " You" },
-      { at: 17016, dir: "in", type: "session.output_transcript.delta", start_ms: 14800, end_ms: 15000, delta: " it!" },
-    );
-    await observer.snapshot();
-    entries.push({ at: 17988, dir: "evaluate", askedAt: 17600, request: { utterance: "And two", sceneIndex: 1 } });
-    const evaluation = await observer.waitForEvaluation();
-    entries.push({
-      at: 18017,
-      dir: "out",
-      type: "session.instructions.append",
-      content: "The child's count was right, so the app has just changed the screen.",
-    });
-    entries.push(
-      {
-        at: 19011,
-        dir: "in",
-        type: "session.output_transcript.delta",
-        start_ms: 16800,
-        end_ms: 17000,
-        delta: " Nice counting",
-      },
-      { at: 19169, dir: "in", type: "session.output_transcript.delta", start_ms: 17000, end_ms: 17200, delta: "!" },
-      {
-        at: 20793,
-        dir: "in",
-        type: "session.output_transcript.delta",
-        start_ms: 18600,
-        end_ms: 18800,
-        delta: " Now we",
-      },
-    );
-    await expect(observer.waitForSproutTranscriptAfterRelease({ after: evaluation.cursor })).resolves.toMatchObject({
-      at: 19011,
-      text: " Nice counting",
-    });
-    const events = (await observer.snapshot()).events;
-    expect(events.filter(event => event.kind === "turn-start")).toHaveLength(1);
-    expect(events.some(event => event.kind === "turn-start" && event.cursor > evaluation.cursor)).toBe(false);
-    expect(events.filter(event => event.kind === "sprout-transcript-fragment")).toHaveLength(6);
-  });
-
   it("keeps a 1000ms arrival pause in one turn and resets the quiet fallback", () => {
     const journal = new LiveEventJournal();
     journal.ingest([delta(0)], 1000);
@@ -171,31 +86,6 @@ describe("live observer", () => {
     ]);
     journal.ingest([], 6000);
     expect(journal.events.filter(e => e.kind === "turn-end").at(-1)).toMatchObject({ kind: "turn-end", at: 6000 });
-  });
-
-  it("retains events between waits without consuming another kind's events", async () => {
-    const { entries, setNow, observer } = fixture();
-    const checkpoint = await observer.checkpoint();
-    entries.push(delta(10), {
-      at: 20,
-      dir: "evaluate",
-      askedAt: 15,
-      request: { utterance: "two", sceneIndex: 1 },
-      answer: { probability: 0.9 },
-    });
-    setNow(2510);
-    await expect(observer.waitForSproutTurnStart()).resolves.toMatchObject({ at: 10 });
-    await expect(observer.waitForSproutTurnEnd()).resolves.toMatchObject({ at: 2510 });
-    await expect(observer.waitForEvaluation()).resolves.toMatchObject({
-      utterance: "two",
-      sceneIndex: 1,
-      probability: 0.9,
-      requestedAt: 15,
-      completedAt: 20,
-      latencyMs: 5,
-    });
-    await expect(observer.waitForEvaluation({ after: checkpoint })).resolves.toMatchObject({ completedAt: 20 });
-    await expect(observer.waitForEvaluation()).rejects.toThrow("Timed out waiting for evaluation");
   });
 
   it("waits for retained child transcripts with independent consumption and explicit replay boundaries", async () => {

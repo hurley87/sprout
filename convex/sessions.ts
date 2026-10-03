@@ -136,85 +136,8 @@ export const appendEvent = mutation({
       nonnegative(timeline.quietMs, "quietMs");
       if (!Number.isFinite(timeline.estimatedAcousticEndAtMs)) throw new Error("Estimated acoustic end must be finite");
     }
-    if (
-      timeline &&
-      "correlationKey" in timeline &&
-      typeof timeline.correlationKey === "string" &&
-      !timeline.correlationKey.trim()
-    )
-      throw new Error("correlationKey is required");
-    if (
-      timeline &&
-      "sceneIndex" in timeline &&
-      typeof timeline.sceneIndex === "number" &&
-      (!Number.isInteger(timeline.sceneIndex) || timeline.sceneIndex < 0)
-    )
-      throw new Error("Invalid sceneIndex");
-    if (timeline?.type === "evaluation_control") {
-      if (timeline.responseIdentity) {
-        const identity = timeline.responseIdentity;
-        if (
-          !timeline.correlationKey?.trim() ||
-          !timeline.answerVersion?.trim() ||
-          !Number.isSafeInteger(timeline.transcriptRevision) ||
-          (timeline.transcriptRevision ?? 0) < 1 ||
-          timeline.sceneIndex === undefined ||
-          identity.fragmentKeys.some(key => !key.trim()) ||
-          new Set(identity.fragmentKeys).size !== identity.fragmentKeys.length ||
-          (identity.sourceStatus === "known" &&
-            (!Number.isSafeInteger(timeline.sourceId) || (timeline.sourceId ?? 0) < 1 || !identity.fragmentKeys.length))
-        )
-          throw new Error("Invalid evaluated response identity");
-        if (identity.evaluatedScene) {
-          if (!identity.evaluatedScene.sceneId.trim()) throw new Error("Evaluated scene identity is required");
-          nonnegative(identity.evaluatedScene.displayedAtMs, "evaluatedScene.displayedAtMs");
-        }
-        const recognition = identity.recognitionContext;
-        if (recognition) {
-          if (
-            recognition.recognition === "no_ambiguity_detected" &&
-            (recognition.recovery !== "instructional_support" ||
-              identity.sourceStatus !== "known" ||
-              !identity.evaluatedScene)
-          )
-            throw new Error("Clear recognition requires complete response context");
-          if (
-            recognition.repeatedTotal !== undefined &&
-            (!Number.isSafeInteger(recognition.repeatedTotal) ||
-              recognition.repeatedTotal < 0 ||
-              recognition.repeatedTotal > 99)
-          )
-            throw new Error("Invalid recognition confirmation total");
-        }
-      }
-      if (!timeline.action.trim()) throw new Error("Control action is required");
-      for (const [field, value] of Object.entries({
-        sceneIndex: timeline.sceneIndex,
-        transcriptRevision: timeline.transcriptRevision,
-        sourceId: timeline.sourceId,
-        offsetMs: timeline.offsetMs,
-      }))
-        if (value !== undefined) nonnegative(value, field);
-    }
-    if (timeline?.type === "answer_evaluation_requested")
-      nonnegative(timeline.turnEndToRequestMs, "turnEndToRequestMs");
-    if (timeline?.type === "answer_evaluation_resolved") {
-      nonnegative(timeline.latencyMs, "latencyMs");
-      if (
-        timeline.probability !== undefined &&
-        (!Number.isFinite(timeline.probability) || timeline.probability < 0 || timeline.probability > 1)
-      )
-        throw new Error("Invalid probability");
-      if (timeline.status === "unavailable" && timeline.probability !== undefined)
-        throw new Error("Unavailable evaluation has no probability");
-    }
     if (timeline?.type === "playback_gate_changed" && !timeline.reason.trim())
       throw new Error("Gate reason is required");
-    if (
-      timeline?.type === "scene_advance_committed" &&
-      (!Number.isInteger(timeline.fromScene) || timeline.fromScene < 0 || timeline.toScene !== timeline.fromScene + 1)
-    )
-      throw new Error("Invalid scene advancement");
     const existing = await ctx.db
       .query("sessionEvents")
       .withIndex("by_session_key", q => q.eq("sessionId", sessionId).eq("eventKey", eventKey))

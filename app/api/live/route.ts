@@ -1,4 +1,3 @@
-import { LIVE_CONFIG, parseReplacementSeed, replacementSessionInput } from "@/lib/lesson";
 import { isLocalRequest, readJsonBody } from "@/lib/local-request";
 import { TRANSCRIPT_STEERING_LIVE_CONFIG } from "@/lib/transcript-state-steering/live-context";
 
@@ -22,16 +21,14 @@ export async function POST(request: Request) {
     !payload ||
     typeof payload !== "object" ||
     Array.isArray(payload) ||
-    Object.keys(payload).some(key => key !== "sdp" && key !== "replacement" && key !== "experiment")
+    Object.keys(payload).some(key => key !== "sdp" && key !== "experiment")
   )
     return json({ error: "Invalid session request." }, 400);
-  const { sdp, replacement, experiment } = payload as { sdp?: unknown; replacement?: unknown; experiment?: unknown };
-  if (experiment !== undefined && (experiment !== "transcript-state-steering" || replacement !== undefined))
+  const { sdp, experiment } = payload as { sdp?: unknown; experiment?: unknown };
+  if (experiment !== undefined && experiment !== "transcript-state-steering")
     return json({ error: "Invalid experiment session request." }, 400);
   if (typeof sdp !== "string" || !sdp.startsWith("v=0") || sdp.length > LIMIT)
     return json({ error: "Invalid microphone connection offer." }, 400);
-  const seed = replacement === undefined ? undefined : parseReplacementSeed(replacement);
-  if (seed === null) return json({ error: "Invalid replacement lesson state." }, 400);
   if (!process.env.OPENAI_API_KEY)
     return json(
       {
@@ -45,12 +42,7 @@ export async function POST(request: Request) {
       method: "POST",
       headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        session:
-          experiment === "transcript-state-steering"
-            ? TRANSCRIPT_STEERING_LIVE_CONFIG
-            : seed
-              ? { ...LIVE_CONFIG, input: replacementSessionInput(seed) }
-              : LIVE_CONFIG,
+        session: TRANSCRIPT_STEERING_LIVE_CONFIG,
         transport: { type: "webrtc", sdp },
       }),
       signal: AbortSignal.any([request.signal, AbortSignal.timeout(20_000)]),

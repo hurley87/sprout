@@ -172,9 +172,6 @@ it.each(["mapped_provider", "source_input_bound", "source_timeline_bound"] as co
       "wrong_display_time",
       "missing_timing",
       "changed_context",
-      "mixed_response",
-      "missing_response_source",
-      "wrong_evaluated_scene",
       "invalid_provider_interval",
       "invalid_arrival_interval",
     ] as const) {
@@ -215,30 +212,6 @@ it.each(["mapped_provider", "source_input_bound", "source_timeline_bound"] as co
         if (defect === "changed_context") speech.responseScene!.status = "changed";
         if (defect === "invalid_provider_interval") speech.providerTiming!.endMs = speech.providerTiming!.startMs - 1;
         if (defect === "invalid_arrival_interval") speech.lastObservedAtMs = Number.NaN;
-        if (defect === "mixed_response" || defect === "missing_response_source" || defect === "wrong_evaluated_scene") {
-          speech.transcriptFragments = [{ key: "answer-fragment", textStart: 0, textEnd: speech.text.length }];
-          source.record.events.push({
-            _id: "latest-evaluation",
-            atMs: 2100,
-            timeline: {
-              type: "evaluation_control",
-              action: "evaluation_result",
-              correlationKey: "latest",
-              transcriptRevision: 2,
-              sourceId: 1,
-              responseIdentity: {
-                provenance: "application_evaluation",
-                fragmentKeys: ["answer-fragment", "correction-fragment"],
-                sourceStatus:
-                  defect === "mixed_response" ? "mixed" : defect === "missing_response_source" ? "missing" : "known",
-                evaluatedScene: {
-                  sceneId: defect === "wrong_evaluated_scene" ? "other-scene" : speech.responseScene!.sceneId,
-                  displayedAtMs: scene.atMs,
-                },
-              },
-            },
-          });
-        }
         source.proposal!.observation.uncertaintyReasons.push("conflicting_context");
         // Observer and parent correction must see the same complete canonical
         // history, including uncited displays and later response revisions.
@@ -343,38 +316,13 @@ it("allows explicit parent speech and assistance testimony while keeping product
   });
 });
 
-it("keeps later recognition uncertainty through fragment joins but allows explicit parent speech testimony", async () => {
+it("keeps recorded recognition uncertainty but allows explicit parent speech testimony", async () => {
   const f = await fixture("ambiguous-speaker", 1, source => {
     prepareTiming(source, "source_timeline_bound", true);
     const speech = source.record.events.find(event => event.evidence?.type === "utterance")!.evidence;
     if (speech?.type !== "utterance") throw new Error("speech");
-    speech.recognition = "no_ambiguity_detected";
+    speech.recognition = "needs_confirmation";
     speech.transcriptFragments = [{ key: "answer", textStart: 0, textEnd: speech.text.length }];
-    source.record.events.push({
-      _id: "revised-evaluation",
-      atMs: 2100,
-      timeline: {
-        type: "evaluation_control",
-        action: "evaluation_result",
-        correlationKey: "revised",
-        transcriptRevision: 2,
-        sourceId: 1,
-        responseIdentity: {
-          provenance: "application_evaluation",
-          sourceStatus: "known",
-          fragmentKeys: ["answer", "correction"],
-          evaluatedScene: {
-            sceneId: speech.responseScene!.sceneId,
-            displayedAtMs: speech.responseScene!.displayedAtMs,
-          },
-          recognitionContext: {
-            provenance: "application_text_policy",
-            recovery: "clarification",
-            recognition: "needs_confirmation",
-          },
-        },
-      },
-    });
     source.proposal!.observation.uncertaintyReasons.push("unclear_speech");
     const concrete = structuredClone(source.proposal!);
     concrete.observation = {

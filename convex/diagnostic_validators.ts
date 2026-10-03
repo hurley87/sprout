@@ -11,7 +11,6 @@ export const diagnosticRow = v.union(
     rejectedCount: v.number(),
     proposalOrdinals: v.array(v.number()),
     fragmentKeys: v.array(v.string()),
-    evaluationEventIds: v.array(v.string()),
     traceTruncated: v.boolean(),
     speaker: v.union(v.literal("child_or_nearby_speaker"), v.literal("unknown")),
     state: v.union(v.literal("finalized"), v.literal("interrupted")),

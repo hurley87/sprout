@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { POST } from "../app/api/live/route";
-import { LIVE_CONFIG, replacementSessionInput } from "../lib/lesson";
+import { TRANSCRIPT_STEERING_LIVE_CONFIG } from "../lib/transcript-state-steering/live-context";
 
 const request = (body: unknown = { sdp: "v=0\r\n" }, origin = "http://localhost:3000", host = "localhost:3000") =>
   new Request("http://localhost:3000/api/live", {
@@ -51,7 +51,7 @@ describe("local Live session endpoint", () => {
     expect(response.status).toBe(503);
     expect((await response.json()).error).toContain("OPENAI_API_KEY");
   });
-  it("uses exactly GPT-Live-1 with client delegation and returns only SDP/session ID", async () => {
+  it("uses exactly GPT-Live-1 with the canonical tutor config and returns only SDP/session ID", async () => {
     vi.stubEnv("OPENAI_API_KEY", "synthetic-test-key");
     const fetch = vi.fn(async () =>
       Response.json({ session: { id: "live_test", private: "omit" }, transport: { sdp: "answer" }, secret: "omit" }),
@@ -65,8 +65,8 @@ describe("local Live session endpoint", () => {
     });
     const calls = fetch.mock.calls as unknown as [string, RequestInit][];
     expect(calls[0][0]).toBe("https://api.openai.com/v1/live/sessions");
-    expect(JSON.parse(calls[0][1].body as string).session).toEqual(LIVE_CONFIG);
-    expect(LIVE_CONFIG.delegation).toEqual({ type: "client" });
+    expect(JSON.parse(calls[0][1].body as string).session).toEqual(TRANSCRIPT_STEERING_LIVE_CONFIG);
+    expect(JSON.parse(calls[0][1].body as string).session).not.toHaveProperty("delegation");
   });
   it("does not leak provider errors or retry paid creation", async () => {
     vi.stubEnv("OPENAI_API_KEY", "synthetic-test-key");
@@ -89,61 +89,22 @@ describe("local Live session endpoint", () => {
   });
 });
 
-const seed = {
-  sceneIndex: 2,
-  evaluatedSceneIndex: 1,
-  decision: "ADVANCE" as const,
-  childUtterance: "Two",
-  transcriptRevision: 5,
-  answerVersion: "20:Two",
-};
-it.each(["ADVANCE", "STAY", "UNAVAILABLE"] as const)(
-  "seeds %s with only canonical config plus generated history",
-  async decision => {
-    vi.stubEnv("OPENAI_API_KEY", "synthetic-test-key");
-    const fetch = vi.fn(async () => Response.json({ session: { id: "B" }, transport: { sdp: "answer" } }));
-    vi.stubGlobal("fetch", fetch);
-    const replacement = { ...seed, decision, evaluatedSceneIndex: decision === "ADVANCE" ? 1 : 2 };
-    expect((await POST(request({ sdp: "v=0", replacement }))).status).toBe(201);
-    const calls = fetch.mock.calls as unknown as [string, RequestInit][];
-    expect(JSON.parse(calls[0][1].body as string)).toEqual({
-      session: { ...LIVE_CONFIG, input: replacementSessionInput(replacement) },
-      transport: { type: "webrtc", sdp: "v=0" },
-    });
-    expect(fetch).toHaveBeenCalledOnce();
-  },
-);
-it.each(["instructions", "model", "voice", "session", "input", "audio", "delegation", "store"])(
-  "rejects arbitrary %s at both request and seed boundaries",
+it.each(["replacement", "instructions", "model", "voice", "session", "input", "audio", "delegation", "store"])(
+  "rejects obsolete or provider-controlled %s before billing",
   async key => {
     const fetch = vi.fn();
     vi.stubGlobal("fetch", fetch);
-    expect((await POST(request({ sdp: "v=0", [key]: "injected" }))).status).toBe(400);
-    expect((await POST(request({ sdp: "v=0", replacement: seed, [key]: "injected" }))).status).toBe(400);
-    expect((await POST(request({ sdp: "v=0", replacement: { ...seed, [key]: "injected" } }))).status).toBe(400);
+    expect((await POST(request({ sdp: "v=0", [key]: {} }))).status).toBe(400);
     expect(fetch).not.toHaveBeenCalled();
   },
 );
-it.each([
-  null,
-  {},
-  [],
-  { ...seed, sceneIndex: -1 },
-  { ...seed, sceneIndex: 999 },
-  { ...seed, sceneIndex: 1.5 },
-  { ...seed, sceneIndex: "2" },
-  { ...seed, sceneIndex: 0 },
-  { ...seed, evaluatedSceneIndex: 2 },
-  { ...seed, decision: "RIGHT" },
-  { ...seed, childUtterance: 1 },
-  { ...seed, childUtterance: " " },
-  { ...seed, childUtterance: "x".repeat(1001) },
-  { ...seed, childUtterance: "Two\u0000" },
-  { ...seed, transcriptRevision: -1 },
-  { ...seed, answerVersion: "" },
-])("rejects invalid seed %j before billing", async replacement => {
-  const fetch = vi.fn();
+it("retains the temporary transcript steering selector with the same canonical config", async () => {
+  vi.stubEnv("OPENAI_API_KEY", "synthetic-key");
+  const fetch = vi.fn(async () => Response.json({ session: { id: "test" }, transport: { sdp: "answer" } }));
   vi.stubGlobal("fetch", fetch);
-  expect((await POST(request({ sdp: "v=0", replacement }))).status).toBe(400);
-  expect(fetch).not.toHaveBeenCalled();
+  expect((await POST(request({ sdp: "v=0", experiment: "transcript-state-steering" }))).status).toBe(201);
+  expect(JSON.parse((fetch.mock.calls as unknown as [string, RequestInit][])[0][1].body as string).session).toEqual(
+    TRANSCRIPT_STEERING_LIVE_CONFIG,
+  );
+  expect((await POST(request({ sdp: "v=0", experiment: "unknown" }))).status).toBe(400);
 });

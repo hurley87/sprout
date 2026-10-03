@@ -1,12 +1,11 @@
 import { expect, vi } from "vitest";
 import { BrowserTransport } from "../../lib/browser-transport";
-import { LessonSession } from "../../lib/session";
-import type { EvaluateAnswer } from "../../lib/answer";
+import { SessionEvidenceRecorder } from "../../lib/session-evidence-recorder";
 import type { CanonicalObservationRecord, ObserverProposal } from "../../lib/observation-contracts";
 import type { SessionRecorder, TimelineEvent } from "../../lib/session-recorder";
 import { UTTERANCE_GAP_MS } from "../../lib/transcript";
 
-/** Synthetic WebRTC surfaces only; timing, input fences and lesson recording run production code. */
+/** Synthetic WebRTC surfaces; transport and reusable evidence recording run production code. */
 export function audioElement() {
   const audio = {
     muted: false,
@@ -79,8 +78,7 @@ export function liveConnection(autoStarted = true) {
   return { channel, peer, remoteTrack, micTrack, inputTrack, inputs };
 }
 
-export async function recordedBrowserLesson(
-  evaluator: EvaluateAnswer = async () => ({ status: "unavailable", reason: "synthetic", latencyMs: 1 }),
+export async function recordedBrowserEvidence(
   startupDelayMs = 2000,
   persistence?: { recorder: SessionRecorder; fetcher: typeof fetch },
 ) {
@@ -119,8 +117,64 @@ export async function recordedBrowserLesson(
       await persistence?.recorder.finalize(reason, incomplete);
     },
   };
-  const session = new LessonSession(transport, evaluator, vi.fn(), undefined, recorder);
-  await session.start();
+  const errors: unknown[] = [];
+  const capture = new SessionEvidenceRecorder(transport, recorder, (operation, error) =>
+    errors.push({ operation, error }),
+  );
+  const scenes = [
+    { id: "hello-duck", quantity: 1, emoji: "🦆", label: "duck" },
+    { id: "duck-friends", quantity: 2, emoji: "🦆", label: "duck" },
+    { id: "butterfly-garden", quantity: 3, emoji: "🦋", label: "butterfly" },
+    { id: "picnic", quantity: 3, emoji: "🍓", label: "strawberry" },
+  ];
+  let text = "";
+  let fragmentKeys: string[] = [];
+  let sourceId: number | undefined;
+  let lastEnd = -Infinity;
+  let fragments = 0;
+  const session = {
+    recordingSettled: () => capture.recordingSettled(),
+    end: (reason: "parent_stop") => {
+      capture.end(reason);
+      transport.close();
+    },
+    displayed: (index: number) => {
+      const scene = scenes[index];
+      capture.displayed({
+        type: "scene_displayed",
+        sceneId: scene.id,
+        targetQuantity: scene.quantity,
+        items: Array.from({ length: scene.quantity }, () => ({ emoji: scene.emoji, label: scene.label })),
+        arrangement: "row",
+      });
+    },
+    receive: (event: import("../../lib/events").TranscriptEvent) => {
+      capture.receive(event);
+      const key = `transcript_${++fragments}`;
+      if (event.speaker !== "child") return;
+      if (event.startMs - lastEnd > UTTERANCE_GAP_MS || sourceId !== event.sourceId) {
+        text = "";
+        fragmentKeys = [];
+      }
+      sourceId = event.sourceId;
+      lastEnd = event.endMs;
+      text += event.delta;
+      fragmentKeys.push(key);
+      // Explicit synthetic recognition fixture, not a semantic lesson decision.
+      capture.retainRecognition(
+        { text, fragmentsComplete: true, fragments: fragmentKeys.map(key => ({ key, sourceId })) },
+        "no_ambiguity_detected",
+      );
+    },
+  };
+  capture.create();
+  await transport.start(
+    event => {
+      if (event.type === "session.started") capture.begin();
+      if (event.type === "transcript") session.receive(event);
+    },
+    error => errors.push(error),
+  );
   // A realistic startup interval, measured by production before /api/live.
   // No test-supplied session timing or provider/browser clock mapping.
   await vi.advanceTimersByTimeAsync(startupDelayMs);
@@ -171,7 +225,7 @@ export async function recordedBrowserLesson(
       ],
     };
   };
-  return { connection, transport, session, record, timelines, say, flush, proposal };
+  return { connection, transport, session, record, timelines, say, flush, proposal, errors };
 }
 
 export function captureMocks() {

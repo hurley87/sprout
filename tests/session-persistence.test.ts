@@ -6,7 +6,7 @@ import { api } from "../convex/_generated/api";
 const modules = import.meta.glob("../convex/**/*.ts");
 const makeTest = () => convexTest(schema, modules);
 
-it("rejects corrupted fragment joins and complete evaluation identities with missing source fields", async () => {
+it("rejects corrupted transcript fragment identities", async () => {
   const t = makeTest();
   const sessionId = await t.mutation(api.sessions.create, {});
   await t.mutation(api.sessions.activate, { sessionId });
@@ -35,71 +35,6 @@ it("rejects corrupted fragment joins and complete evaluation identities with mis
       }),
     ).rejects.toThrow(/fragment identity/i);
   }
-  const timeline = {
-    type: "evaluation_control" as const,
-    action: "evaluation_result",
-    correlationKey: "0|1|100:One Two|1",
-    sceneIndex: 0,
-    transcriptRevision: 1,
-    answerVersion: "100:One Two",
-    sourceId: 1,
-    responseIdentity: {
-      provenance: "application_evaluation" as const,
-      sourceStatus: "known" as const,
-      fragmentKeys: ["first", "second"],
-      evaluatedScene: { sceneId: "hello-duck", displayedAtMs: 0 },
-      recognitionContext: {
-        provenance: "application_text_policy" as const,
-        recovery: "instructional_support" as const,
-        recognition: "no_ambiguity_detected" as const,
-      },
-    },
-  };
-  for (const payload of [
-    { ...timeline, sourceId: undefined },
-    { ...timeline, transcriptRevision: undefined },
-    { ...timeline, responseIdentity: { ...timeline.responseIdentity, fragmentKeys: ["first", "first"] } },
-  ]) {
-    await expect(
-      t.mutation(api.sessions.appendEvent, {
-        sessionId,
-        eventKey: "invalid-evaluation",
-        atMs: 100,
-        timeline: payload,
-      }),
-    ).rejects.toThrow("Invalid evaluated response identity");
-  }
-  for (const identity of [
-    { ...timeline.responseIdentity, sourceStatus: "mixed" as const },
-    { ...timeline.responseIdentity, evaluatedScene: undefined },
-    {
-      ...timeline.responseIdentity,
-      recognitionContext: { ...timeline.responseIdentity.recognitionContext, recovery: "clarification" as const },
-    },
-  ]) {
-    await expect(
-      t.mutation(api.sessions.appendEvent, {
-        sessionId,
-        eventKey: "invalid-recognition",
-        atMs: 100,
-        timeline: { ...timeline, responseIdentity: identity },
-      }),
-    ).rejects.toThrow("Clear recognition requires complete response context");
-  }
-  await expect(
-    t.mutation(api.sessions.appendEvent, {
-      sessionId,
-      eventKey: "invalid-confirmation",
-      atMs: 100,
-      timeline: {
-        ...timeline,
-        responseIdentity: {
-          ...timeline.responseIdentity,
-          recognitionContext: { ...timeline.responseIdentity.recognitionContext, repeatedTotal: Number.NaN },
-        },
-      },
-    }),
-  ).rejects.toThrow("Invalid recognition confirmation total");
   expect((await t.query(api.sessions.getRecord, { sessionId }))?.events).toHaveLength(0);
 });
 
@@ -399,24 +334,10 @@ it("persists analysis separately, preserving mixed order and event-key idempoten
     lastObservedAtMs: 450,
   };
   await t.mutation(api.sessions.appendEvent, { sessionId, eventKey: "child", atMs: 500, evidence: learner });
-  const control = {
-    type: "evaluation_control" as const,
-    action: "delegation_associated",
-    correlationKey: "0|1|100:Three|1",
-    sceneIndex: 0,
-    transcriptRevision: 1,
-    answerVersion: "100:Three",
-    sourceId: 1,
-    delegationId: "delegation_1",
-    offsetMs: 550,
-    origin: "both" as const,
-  };
-  await t.mutation(api.sessions.appendEvent, { sessionId, eventKey: "control", atMs: 510, timeline: control });
   const record = await t.query(api.sessions.getRecord, { sessionId });
   expect(record?.events.map(({ order, evidence, timeline }) => ({ order, evidence, timeline }))).toEqual([
     { order: 0, evidence: undefined, timeline: generated },
     { order: 1, evidence: learner, timeline: undefined },
-    { order: 2, evidence: undefined, timeline: control },
   ]);
   await expect(
     t.mutation(api.sessions.appendEvent, { ...args, timeline: { ...generated, text: "Other" } }),

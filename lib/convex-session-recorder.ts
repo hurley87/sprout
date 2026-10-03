@@ -10,7 +10,7 @@ import type {
   SessionRecordReader,
   InspectableSessionRecord,
 } from "./session-recorder";
-import type { EndReason } from "./session";
+import type { EndReason } from "./session-recorder";
 
 export class ConvexSessionRecorder implements SessionRecorder, SessionRecordReader {
   private client?: ConvexHttpClient;

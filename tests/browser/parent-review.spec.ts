@@ -1,3 +1,4 @@
+import { installReviewFixture } from "../helpers/review-browser-fixture";
 import { test, expect, type Page } from "@playwright/test";
 import { observationFixtures } from "../fixtures/observation-contracts";
 import type { ReviewCommand, ReviewSnapshot } from "../../lib/parent-review";
@@ -44,10 +45,7 @@ for (const width of [1280, 390])
     const response = h.diagnostics.getByRole("article", { name: `Response diagnostic ${h.source.responseId}` });
     await response.locator("summary").first().click();
     await expect(response.getByText(/Scene supported by trustworthy.*ducks-3/)).toBeVisible();
-    await response.getByText("Fragment and evaluation provenance", { exact: true }).click();
-    await response.getByText("Evaluation event evaluation-event", { exact: true }).click();
-    await expect(response.getByText(/Evaluated-scene context: ducks-3/)).toBeVisible();
-    await expect(response.getByText(/Association provenance: application_evaluation/)).toBeVisible();
+    await response.getByText("Transcript fragment provenance", { exact: true }).click();
     await expect(response.getByText(/text offsets 0–5: Three/)).toBeVisible();
     expect(await h.diagnostics.getByRole("button", { name: /Accept|Reject|Edit|Finish review/ }).count()).toBe(0);
     await expect(h.panel.getByText("Analysis failed. No observations are approved.")).toBeVisible();
@@ -548,7 +546,8 @@ async function harness(
     if (!localStorage.getItem("sprout.latest-session-reference.v1"))
       localStorage.setItem("sprout.latest-session-reference.v1", "saved-session");
   });
-  await page.goto("/");
+  await installReviewFixture(page);
+  await page.goto("/review-fixture");
   const panel = page.getByRole("region", { name: "Parent observation review" });
   await expect(panel).toBeVisible();
   if (expand && initial.status === "ready") await expandReview(page, panel);

@@ -23,9 +23,7 @@ export async function saveDiagnostics(
   if (diagnostics.rows.length > 2 * MAX_OBSERVER_ROWS) throw new Error("Diagnostic row limit exceeded");
   for (const row of diagnostics.rows) {
     const details =
-      row.kind === "response"
-        ? [row.proposalOrdinals, row.fragmentKeys, row.evaluationEventIds]
-        : [row.responseEventIds, row.issues];
+      row.kind === "response" ? [row.proposalOrdinals, row.fragmentKeys] : [row.responseEventIds, row.issues];
     if (
       details.some(list => list.length > DIAGNOSTIC_DETAIL_LIMIT) ||
       new TextEncoder().encode(JSON.stringify(row)).length > 10_000

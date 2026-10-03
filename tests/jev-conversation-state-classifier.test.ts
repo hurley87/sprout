@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { JEV_MODEL } from "../lib/answer";
+import { JEV_MODEL } from "../lib/jev";
 import { parseConversationStateProposal } from "../lib/transcript-state-steering/conversation-state-classifier";
 import type { ConversationStateClassifierInput } from "../lib/transcript-state-steering/conversation-state-classifier";
 import {

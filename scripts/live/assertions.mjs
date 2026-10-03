@@ -1,30 +1,7 @@
-// Intention matching tolerates casing, spacing, and simple terminal punctuation only.
-const normalizeUtterance = text =>
-  text
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, " ")
-    .replace(/[.!?,;:]+$/, "")
-    .trim();
-
-// Opt-in counting domain: only complete tokens for the supported lesson range.
-const countingTokens = new Map([
-  ["one", 1],
-  ["two", 2],
-  ["three", 3],
-  ["four", 4],
-  ["five", 5],
-  ["1", 1],
-  ["2", 2],
-  ["3", 3],
-  ["4", 4],
-  ["5", 5],
-]);
-
 /** Assertions inspect retained structured events, never tutor wording.
  * Pass `after` (or an action) and optionally `through` to bound evidence.
  * Negative and exactly-once assertions are observations through that boundary,
- * not promises about future events. Await evaluation/tutor response first.
+ * not promises about future events. Await the relevant tutor response first.
  */
 export function createScenarioAssertions(observer) {
   const cursor = value => (typeof value === "number" ? value : (value?.checkpointBefore ?? value?.cursor));
@@ -69,36 +46,6 @@ export function createScenarioAssertions(observer) {
     },
     sceneAdvanced: options => advanced(options, false),
     sceneAdvancedExactlyOnce: options => advanced(options, true),
-    async evaluated(options) {
-      if (
-        options.numericAnswer !== undefined &&
-        (!Number.isInteger(options.numericAnswer) || options.numericAnswer < 1 || options.numericAnswer > 5)
-      )
-        throw new Error("numericAnswer must be a supported counting value (1–5)");
-      const evidence = await window(options);
-      const utterance = options.utterance ?? options.after?.text;
-      const sceneIndex = options.sceneIndex ?? options.after?.sceneIndex;
-      const match = evidence.events.find(
-        e =>
-          e.kind === "evaluation" &&
-          (options.numericAnswer !== undefined && !options.exactUtterance
-            ? countingTokens.get(normalizeUtterance(e.utterance)) === options.numericAnswer
-            : utterance === undefined ||
-              (options.exactUtterance
-                ? e.utterance === utterance
-                : normalizeUtterance(e.utterance) === normalizeUtterance(utterance))) &&
-          (sceneIndex === undefined || e.sceneIndex === sceneIndex) &&
-          (options.result === undefined ||
-            Object.entries(options.result).every(([key, value]) => e.result?.[key] === value)),
-      );
-      if (!match)
-        fail(
-          `Expected evaluation of ${JSON.stringify({ utterance, numericAnswer: options.numericAnswer, exactUtterance: options.exactUtterance ?? false, sceneIndex, result: options.result })}`,
-          options,
-          evidence,
-        );
-      return match;
-    },
     async sessionEnded(options) {
       const evidence = await window(options);
       const match = evidence.events.find(e => e.kind === "session-end");
@@ -107,7 +54,7 @@ export function createScenarioAssertions(observer) {
     },
     async sproutRespondedAfter(checkpoint, options = {}) {
       const after = cursor(checkpoint);
-      // A turn must START after the evaluation/action boundary, not merely finish after it.
+      // A turn must START after the action boundary, not merely finish after it.
       const start = await observer.waitForSproutTurnStart({ ...options, after });
       return observer.waitForSproutTurnEnd({ ...options, after: start.cursor });
     },

@@ -29,46 +29,5 @@ export function TimelineDetail({ event }: { event: TimelineEvent }) {
           Sprout playback {event.state} · {event.reason} · Permission does not establish utterance delivery
         </p>
       );
-    case "answer_evaluation_requested":
-      return (
-        <p>
-          Answer evaluation requested · Scene {event.sceneIndex} · {event.correlationKey} · {event.turnSignal} · Turn
-          end to request: {event.turnEndToRequestMs} ms
-        </p>
-      );
-    case "answer_evaluation_resolved":
-      return (
-        <p>
-          Answer evaluation resolved · {event.correlationKey} · {event.status} · Latency: {event.latencyMs} ms ·
-          Decision: {event.decision} · {event.reason ?? event.model}{" "}
-          {event.probability === undefined ? "" : `Control probability: ${event.probability}`}
-        </p>
-      );
-    case "scene_advance_committed":
-      return (
-        <p>
-          Scene advance committed · {event.fromScene} → {event.toScene} · {event.correlationKey}
-        </p>
-      );
-    case "evaluation_control":
-      return (
-        <p>
-          Evaluation control · {event.action} · {event.correlationKey ?? "unassociated"}
-          {event.sceneIndex === undefined ? "" : ` · scene ${event.sceneIndex}`}
-          {event.transcriptRevision === undefined ? "" : ` · revision ${event.transcriptRevision}`}
-          {event.answerVersion ? ` · answer ${event.answerVersion}` : ""}
-          {event.sourceId === undefined ? "" : ` · source ${event.sourceId}`}
-          {event.delegationId ? ` · delegation ${event.delegationId}` : ""}
-          {event.offsetMs === undefined ? "" : ` · provider offset ${event.offsetMs} ms`}
-          {event.origin ? ` · origin ${event.origin}` : ""}
-          {event.status ? ` · work ${event.status}` : ""}
-          {event.result ? ` · result ${event.result}` : ""}
-          {event.applicationAction ? ` · action ${event.applicationAction}` : ""}
-          {event.displayStatus ? ` · display ${event.displayStatus}` : ""}
-          {event.contextEventId ? ` · context ${event.contextEventId}` : ""}
-          {event.ackState ? ` · acknowledgment ${event.ackState}` : ""}
-          {event.reason ? ` · ${event.reason}` : ""}
-        </p>
-      );
   }
 }

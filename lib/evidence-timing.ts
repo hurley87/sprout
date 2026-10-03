@@ -1,8 +1,8 @@
 import type { TranscriptEvent } from "./events";
-import type { Evidence, TimelineEvent } from "./session-recorder";
+import type { Evidence } from "./session-recorder";
 
 /** A session interval is an envelope, not necessarily exact acoustic timing.
- * Keep the historical mapped-provider shape compatible for existing readers. */
+ * Explicit mappings and conservative source bounds retain their own provenance. */
 export function sessionSpeechInterval(evidence: Evidence | undefined) {
   if (evidence?.type !== "utterance") return undefined;
   const timing = evidence.sessionTiming;
@@ -165,61 +165,17 @@ export function responseSceneValidity(
       scene?.evidence?.type === "scene_displayed" &&
       attribution.sceneId === scene.evidence.sceneId &&
       attribution.displayedAtMs === scene.atMs);
-  // Resolve joins per fragment, not per utterance or evaluator result. A later
-  // revision can span multiple durable utterances; a superseded revision's
-  // known source/scene cannot clarify its mixed or conflicting replacement.
-  const fragmentKeys =
-    response?.type === "utterance" ? (response.transcriptFragments?.map(fragment => fragment.key) ?? []) : [];
-  const associations = canonicalEvents.flatMap(event => {
-    const control = event.timeline as Extract<TimelineEvent, { type: "evaluation_control" }> | undefined;
-    return control?.type === "evaluation_control" &&
-      control.responseIdentity &&
-      Number.isSafeInteger(control.transcriptRevision) &&
-      control.responseIdentity.fragmentKeys.some(key => fragmentKeys.includes(key))
-      ? [control]
-      : [];
-  });
-  const latestRevisionByFragment = new Map<string, number>();
-  for (const control of associations) {
-    for (const key of control.responseIdentity!.fragmentKeys) {
-      if (fragmentKeys.includes(key))
-        latestRevisionByFragment.set(
-          key,
-          Math.max(latestRevisionByFragment.get(key) ?? -1, control.transcriptRevision!),
-        );
-    }
-  }
-  const latestAssociations = associations.filter(control =>
-    control.responseIdentity!.fragmentKeys.some(
-      key => latestRevisionByFragment.get(key) === control.transcriptRevision,
-    ),
-  );
-  const associationMatchesScene = latestAssociations.every(
-    control =>
-      control.responseIdentity!.sourceStatus === "known" &&
-      response?.type === "utterance" &&
-      control.sourceId === response.providerTiming?.sourceId &&
-      scene?.evidence?.type === "scene_displayed" &&
-      control.responseIdentity!.evaluatedScene?.sceneId === scene.evidence.sceneId &&
-      control.responseIdentity!.evaluatedScene?.displayedAtMs === scene.atMs,
-  );
-  const recognitionNeedsConfirmation = latestAssociations.some(
-    control => control.responseIdentity!.recognitionContext?.recognition === "needs_confirmation",
-  );
   return {
     hasSpeechInterval: Boolean(interval),
     transitionsDuringSpeech,
     citedSceneIsCurrent,
     fenceMatchesScene,
     attributionMatchesScene,
-    associationMatchesScene,
-    recognitionNeedsConfirmation,
     valid:
       Boolean(interval) &&
       !transitionsDuringSpeech &&
       citedSceneIsCurrent &&
       fenceMatchesScene &&
-      attributionMatchesScene &&
-      associationMatchesScene,
+      attributionMatchesScene,
   };
 }

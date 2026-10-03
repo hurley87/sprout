@@ -23,20 +23,6 @@ export function reviewDiagnosticFixture() {
   if (absent.evidence?.type === "utterance")
     absent.evidence.transcriptFragments = [{ key: "fragment-absent", textStart: 0, textEnd: 5 }];
   canonical.events.push(absent);
-  const timeline: TimelineEvent = {
-    type: "evaluation_control",
-    action: "application_result",
-    sourceId: 1,
-    transcriptRevision: 2,
-    applicationAction: "ADVANCE",
-    responseIdentity: {
-      provenance: "application_evaluation",
-      sourceStatus: "known",
-      fragmentKeys: ["fragment-one"],
-      evaluatedScene: { sceneId: "ducks-3", displayedAtMs: canonical.events[0].atMs },
-    },
-  };
-  canonical.events.push({ _id: "evaluation-event", atMs: 14500, timeline });
   const output = [
     proposal,
     { ...proposal!, proposalId: "rejected-proposal", observation: { ...proposal!.observation, statedTotal: 2 } },

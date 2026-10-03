@@ -36,7 +36,6 @@ export type ObserverDiagnosticRow =
       rejectedCount: number;
       proposalOrdinals: number[];
       fragmentKeys: string[];
-      evaluationEventIds: string[];
       traceTruncated: boolean;
       speaker: "child_or_nearby_speaker" | "unknown";
       state: "finalized" | "interrupted";
@@ -150,16 +149,6 @@ export function diagnoseObserverOutput(
     if (evidence.type !== "utterance" || evidence.speaker === "sprout") continue;
     const refs = references.get(event._id) ?? { ordinals: [], total: 0, rejected: 0 };
     const fragments = evidence.transcriptFragments?.map(fragment => fragment.key) ?? [];
-    const fragmentSet = new Set(fragments);
-    const evaluations = record.events
-      .filter(candidate => {
-        const timeline = candidate.timeline;
-        if (!object(timeline) || timeline.type !== "evaluation_control" || !object(timeline.responseIdentity))
-          return false;
-        const keys = timeline.responseIdentity.fragmentKeys;
-        return Array.isArray(keys) && keys.some(key => typeof key === "string" && fragmentSet.has(key));
-      })
-      .map(candidate => candidate._id);
     rows.push({
       kind: "response",
       eventId: event._id,
@@ -170,11 +159,9 @@ export function diagnoseObserverOutput(
       rejectedCount: refs.rejected,
       proposalOrdinals: refs.ordinals,
       fragmentKeys: fragments.slice(0, DIAGNOSTIC_DETAIL_LIMIT).map(short),
-      evaluationEventIds: evaluations.slice(0, DIAGNOSTIC_DETAIL_LIMIT),
       traceTruncated:
         refs.total > DIAGNOSTIC_DETAIL_LIMIT ||
         fragments.length > DIAGNOSTIC_DETAIL_LIMIT ||
-        evaluations.length > DIAGNOSTIC_DETAIL_LIMIT ||
         fragments.some(key => byteLength(key) > 200),
       speaker: evidence.speaker,
       state: evidence.state,

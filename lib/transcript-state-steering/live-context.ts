@@ -17,7 +17,7 @@ export function teachingInstruction(context: CurrentNodeSteeringContext) {
 Teach only this current scene and learning objective. It replaces all previous scene context; do not refer to the previous scene. Ask or continue naturally now, without announcing the displayed total before the child counts. You do not control lesson transitions; only the application changes the scene. Never invent a next scene or ask to change it.`;
 }
 
-/** Independent spike prompt: the production delegation/answer-check prompt cannot be inherited. */
+/** Conversational tutoring prompt; graph transitions remain application-owned. */
 export const TRANSCRIPT_STEERING_LIVE_CONFIG = {
   model: "gpt-live-1",
   audio: { output: { voice: "marin" } },

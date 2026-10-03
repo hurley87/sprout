@@ -1,13 +1,21 @@
 import { describe, expect, it, vi } from "vitest";
-import { countingBehavior } from "../scripts/live/lesson-behaviors/counting.mjs";
 import { readFileSync } from "node:fs";
-import { SCENES } from "../lib/lesson";
 import { createLiveObserver } from "../scripts/live/observer.mjs";
 import { createReactiveChild } from "../scripts/live/reactive-child.mjs";
 import { createScenarioAssertions } from "../scripts/live/assertions.mjs";
+const syntheticCountingBehavior = {
+  correctAnswer: ({ sceneId }: { sceneId: string | null }) => {
+    if (sceneId !== "hello-duck" && sceneId !== "duck-friends")
+      throw new Error(`scene "${sceneId}": counting behavior does not recognize it`);
+    return { text: sceneId === "hello-duck" ? "One!" : "Two!" };
+  },
+  wrongAnswer: () => ({ text: "Five!" }),
+};
 
-function fixture(lessonBehavior: Parameters<typeof createReactiveChild>[0]["lessonBehavior"] = countingBehavior) {
-  const entries: Record<string, unknown>[] = [{ dir: "scene", scene: SCENES[0].id, at: 0 }];
+function fixture(
+  lessonBehavior: Parameters<typeof createReactiveChild>[0]["lessonBehavior"] = syntheticCountingBehavior,
+) {
+  const entries: Record<string, unknown>[] = [{ dir: "scene", scene: "hello-duck", at: 0 }];
   let now = 10000;
   const observer = createLiveObserver({
     evaluate: async (_fn: unknown, offset: number) => ({ entries: entries.slice(offset), now }),
@@ -67,27 +75,6 @@ describe("reactive child", () => {
     expect(f.sleep.mock.calls).toEqual([[10], [20]]);
     await expect(child.correctAnswer()).rejects.toThrow("no lesson behavior supplied");
     await expect(child.wrongAnswer()).rejects.toThrow("no lesson behavior supplied");
-  });
-
-  it("derives correct and wrong answers from every production scene and observes scene changes", async () => {
-    const f = fixture();
-    for (const [index, scene] of SCENES.entries()) {
-      f.entries.push({ dir: "scene", scene: scene.id, at: index + 1 });
-      const correct = await f.child.correctAnswer();
-      expect(correct).toMatchObject({
-        scene: scene.id,
-        sceneIndex: index,
-        expected: scene.quantity,
-        answer: scene.quantity,
-      });
-      expect(f.speech.say).toHaveBeenLastCalledWith(correct.text);
-      const wrong = await f.child.wrongAnswer();
-      expect(wrong.answer).not.toBe(scene.quantity);
-      expect(wrong.answer).toBeGreaterThanOrEqual(1);
-      expect(wrong.answer).toBeLessThanOrEqual(5);
-      expect(f.speech.say).toHaveBeenLastCalledWith(wrong.text);
-    }
-    expect(f.speech.say).toHaveBeenCalledTimes(SCENES.length * 2);
   });
 
   it("carries action evidence and logs start/finish around the real speech abstraction", async () => {
@@ -181,119 +168,7 @@ describe("scenario assertions", () => {
     await expect(f.assertions.sceneAdvanced({ ...options, to: "pond" })).rejects.toThrow("Expected scene advance");
   });
 
-  it("checks evaluation utterance, scene index and result, with actionable mismatch evidence", async () => {
-    const f = fixture();
-    const action = await f.child.correctAnswer();
-    f.entries.push({
-      dir: "evaluate",
-      at: 5,
-      askedAt: 2,
-      request: { utterance: "One!", sceneIndex: 0 },
-      answer: { probability: 0.99 },
-    });
-    await expect(f.assertions.evaluated({ after: action, result: { probability: 0.99 } })).resolves.toMatchObject({
-      utterance: "One!",
-      sceneIndex: 0,
-    });
-    for (const mismatch of [{ utterance: "Two!" }, { sceneIndex: 1 }, { result: { probability: 0.1 } }]) {
-      await expect(f.assertions.evaluated({ after: action, ...mismatch })).rejects.toThrow(
-        /Expected evaluation.*evidence:/,
-      );
-    }
-  });
-
-  it.each(["one", "One.", "  ONE!  "])("normalizes intended One! against %s", async utterance => {
-    const f = fixture();
-    const action = await f.child.correctAnswer();
-    f.entries.push({
-      dir: "evaluate",
-      at: 5,
-      askedAt: 2,
-      request: { utterance, sceneIndex: 0 },
-      answer: { probability: 0.99 },
-    });
-    await expect(f.assertions.evaluated({ after: action })).resolves.toMatchObject({ utterance });
-    await expect(f.assertions.evaluated({ after: action, exactUtterance: true })).rejects.toThrow(
-      "Expected evaluation",
-    );
-    await expect(f.assertions.evaluated({ after: action, utterance, exactUtterance: true })).resolves.toMatchObject({
-      utterance,
-    });
-  });
-
-  it.each([
-    ["One!", 1],
-    ["one", 1],
-    ["1", 1],
-    ["  ONE!  ", 1],
-    ["TWO.", 2],
-    ["2", 2],
-    ["three", 3],
-    ["3", 3],
-    ["four", 4],
-    ["4", 4],
-    ["five", 5],
-    ["5", 5],
-  ])("matches counting token %s as %i only when opted in", async (utterance, numericAnswer) => {
-    const f = fixture();
-    const action = await f.child.correctAnswer();
-    f.entries.push({
-      dir: "evaluate",
-      at: 5,
-      askedAt: 2,
-      request: { utterance, sceneIndex: 0 },
-      answer: { probability: 0.99 },
-    });
-    await expect(f.assertions.evaluated({ after: action, numericAnswer })).resolves.toMatchObject({ utterance });
-    await expect(f.assertions.evaluated({ after: action, numericAnswer: numericAnswer === 1 ? 2 : 1 })).rejects.toThrow(
-      "Expected evaluation",
-    );
-    if (utterance !== "One!")
-      await expect(f.assertions.evaluated({ after: action, numericAnswer, exactUtterance: true })).rejects.toThrow(
-        "Expected evaluation",
-      );
-    if (utterance === "1")
-      await expect(f.assertions.evaluated({ after: action })).rejects.toThrow("Expected evaluation");
-  });
-
-  it.each(["someone", "one two", "I don't know", "10", "one maybe", "done", "six", "6"])(
-    "rejects non-counting token %s for numeric assertions",
-    async utterance => {
-      const f = fixture();
-      const action = await f.child.correctAnswer();
-      f.entries.push({
-        dir: "evaluate",
-        at: 5,
-        askedAt: 2,
-        request: { utterance, sceneIndex: 0 },
-        answer: { probability: 0.99 },
-      });
-      await expect(f.assertions.evaluated({ after: action, numericAnswer: 1 })).rejects.toThrow("Expected evaluation");
-    },
-  );
-
-  it.each([0, 6, 1.5, "1"])("rejects unsupported numericAnswer %s", async numericAnswer => {
-    const f = fixture();
-    await expect(f.assertions.evaluated({ after: 0, numericAnswer })).rejects.toThrow("supported counting value");
-  });
-
-  it("collapses repeated whitespace without accepting different words", async () => {
-    const f = fixture();
-    const action = await f.child.say("I don't know.");
-    f.entries.push({
-      dir: "evaluate",
-      at: 5,
-      askedAt: 2,
-      request: { utterance: " I   don't\nknow! ", sceneIndex: 0 },
-      answer: {},
-    });
-    await expect(f.assertions.evaluated({ after: action })).resolves.toMatchObject({ kind: "evaluation" });
-    await expect(f.assertions.evaluated({ after: action, utterance: "I do know" })).rejects.toThrow(
-      "Expected evaluation",
-    );
-  });
-
-  it("waits for a new tutor opportunity after evaluation and verifies session end", async () => {
+  it("waits for a new tutor opportunity after a boundary and verifies session end", async () => {
     const f = fixture();
     const after = await f.observer.checkpoint();
     f.entries.push({ dir: "in", type: "session.output_transcript.delta", at: 1 });

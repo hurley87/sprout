@@ -2,7 +2,15 @@
 
 A private, parent-supervised prototype for short counting lessons that adapt to reviewed evidence from earlier sessions. Start with the [MVP documentation](docs/README.md) for product scope, architecture, and the seven-day experiment.
 
-The application is currently a [Next.js](https://nextjs.org) starter bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+The root route runs the transcript-state-steering lesson. GPT-Live is the conversational tutor;
+Jev's `ConversationStateClassifier` proposes semantic state; the authored graph and deterministic
+reducer own the lesson and UI; local microphone and output activity provide choreography evidence.
+`/experiments/transcript-state-steering` remains a temporary alias. The superseded answer/delegation
+lesson controller has been removed.
+
+The root experience keeps its local diagnostic export. It does not yet record audio or persist
+sessions. The post-session Observer, stored evidence and parent-review infrastructure remain
+separate from the realtime classifier.
 
 ## Getting Started
 
@@ -26,9 +34,10 @@ The session-record schema and functions live in `convex/`. For local MVP develop
 `npm run convex:dev` in a second terminal and select a local deployment when prompted.
 The Convex CLI writes the deployment URL to an ignored local environment file and regenerates
 `convex/_generated/`. The CLI-generated bindings are committed so tests and typecheck work
-without a running deployment. The live lesson records lifecycle, displayed scenes, and child utterances
-through Convex. Configure `NEXT_PUBLIC_CONVEX_URL` for the browser recorder; recording failures are
-shown while the lesson continues. Sprout playback attribution and support capture are deferred.
+without a running deployment. `ConvexSessionRecorder`, `SessionEvidenceRecorder`, the recording queue,
+and the inspector remain available for durable evidence and existing saved sessions. Configure
+`NEXT_PUBLIC_CONVEX_URL` for callers of the browser recorder. These primitives are not yet wired
+into the transcript-steering root lesson. Sprout playback attribution and support capture remain deferred.
 
 Ended records are analyzed after the recording attachment is durably committed. The internal Convex
 action needs server-side `OPENAI_API_KEY`; `OPENAI_OBSERVER_MODEL` optionally selects a text model,
@@ -40,7 +49,7 @@ notification fails, the saved record remains available for explicit retry. Confi
 on both servers before enabling analysis; never set it in a `NEXT_PUBLIC_*` variable. No capability is configured or
 deployed by this repository change.
 
-The browser keeps only the latest durable session ID so the local inspector can reopen that saved record after reload. Session evidence and audio stay in Convex. The inspector offers a loopback-guarded retry for failed, expired, or not-yet-requested saved-record analysis without starting a live lesson. Active controller and microphone state are not restored; missing or invalid references and pending/incomplete records are identified explicitly.
+The retained browser-reference helper stores only the latest durable session ID, which an inspector host can use to reopen a saved record after reload. Session evidence and audio stay in Convex. The inspector offers a loopback-guarded retry for failed, expired, or not-yet-requested saved-record analysis without starting a live lesson. Active controller and microphone state are not restored; missing or invalid references and pending/incomplete records are identified explicitly.
 See [Observer provider feasibility](docs/observer-provider-feasibility.md) for limits, evidence rules,
 and the remaining synthetic evaluation gate. No live-provider suitability result is claimed.
 
@@ -63,11 +72,11 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 
-## Live lesson regression testing
+## Verification
 
-See [Reactive simulated-child E2E](scripts/live/REACTIVE.md) for requirements,
-scenarios, artifacts and measurement limits. With the local app configured and
-running, `npm run test:live:reactive happy-path` runs one scenario;
-`npm run test:live:reactive` runs all ten sequentially. These use billed real
-GPT-Live/Jev services and supplement deterministic unit/browser tests.
-The legacy fixed-timeline command remains `npm run test:live quick_answer`.
+Run `npm test`, `npm run lint`, `npm run typecheck`, and `npm run build`.
+`npm run test:browser` covers the root/temporary alias, reusable transport media,
+and a standalone saved-evidence inspector fixture. The retired live runners and answer-calibration
+commands were removed because they depended on the old lesson's evaluation endpoint and debug UI.
+Generic synthetic microphone, audio, event-journal and artifact tools remain for verification.
+See the [manual browser guide](docs/transcript-state-steering-browser-experiment.md) for live evaluation.

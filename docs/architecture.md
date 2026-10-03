@@ -2,14 +2,28 @@
 
 This document translates the [PRD](sprout-mvp-prd.md) into implementation boundaries. Most sections describe the proposed design; the first Convex persistence slice is identified below. Product requirements live in the PRD and are linked rather than restated here; terms are defined in [CONTEXT.md](../CONTEXT.md).
 
+## Current live implementation
+
+`/` and the temporary `/experiments/transcript-state-steering` alias use the same runtime.
+GPT-Live owns conversational tutoring. Jev / `ConversationStateClassifier` observes semantic
+conversation state. The authored graph and deterministic reducer own lesson transitions and UI.
+Local microphone/VAD and output activity provide choreography evidence. The realtime classifier
+is separate from the post-session Observer and produces no durable reviewed learning evidence.
+
+The transcript-steering root currently exports local diagnostics; it does not yet capture full-session audio or persist sessions.
+Recording/evidence primitives, Convex records, Observer analysis, inspector and parent review remain
+available for saved evidence. The product design below includes capabilities not yet wired to the
+new root experience.
+
 ## 1. Components and authority
 
 | Component | Responsibility | Authority boundary |
 | --- | --- | --- |
 | Parent browser view | Start/stop sessions, inspect evidence, submit review, record experiment feedback | Only the parent can accept, correct, or reject proposals. |
 | Child browser view | Microphone interaction, voice playback, deterministic emoji scenes | Render approved scene structures; do not execute model-generated code. |
-| Live voice layer | Conversation, pacing, clarification, bounded activity changes and help | Can adapt the current lesson; cannot write durable learning conclusions. |
-| Application session control | Timing, active scene, stopping, durable event capture | Owns the session lifecycle and validates requested actions. |
+| Live voice layer | Conversation, pacing, clarification and help | Teaches inside the supplied node; cannot choose lesson transitions or write durable learning conclusions. |
+| Authored graph and deterministic reducer | Active lesson node, stopping and validated render commits | Own lesson/UI authority; semantic proposals cannot choose destinations. |
+| ConversationStateClassifier | Semantic interpretation of the current transcript | Proposes state; cannot control the lesson or replace the post-session Observer. |
 | Observer | Interpret the ended session and propose observations | Produces proposals, not reviewed evidence. |
 | Learning profile | Provide reviewed evidence and its provenance | Excludes pending and rejected observations. |
 | Lesson planner | Generate the next bounded lesson and evidence-linked rationale | Reads reviewed evidence; cannot approve observations or change the learning scope. |
@@ -90,14 +104,13 @@ prevents later evidence writes. The existing diagnostic JSON remains separate. F
 
 ### Live recording (commit 2)
 
-`LessonSession` accepts a small `SessionRecorder` interface; the browser supplies a narrow
+`SessionEvidenceRecorder` preserves evidence capture independently of live lesson control. It accepts a small `SessionRecorder` interface; callers can supply a narrow
 `ConvexSessionRecorder` adapter. An ordered asynchronous queue creates the attempt before activation
 and evidence writes, activates at provider `session.started`, and writes all queued evidence before
-finalization. All seven application ending reasons map directly to the schema. Late callbacks and
+finalization. Late callbacks and
 repeated endings cannot append evidence. Network round trips do not block conversation control.
 
-Canonical utterances use a separate full-text accumulator, rather than the bounded answer/diagnostic
-window. Same-speaker fragments combine; a speaker switch finalizes the prior canonical turn,
+Canonical utterances use a full-text accumulator. Same-speaker fragments combine; a speaker switch finalizes the prior canonical turn,
 even if the incoming Sprout transcript is untrusted or gated and omitted from evidence. The prior
 turn’s quiet timer is cleared. A provider timestamp gap or 2.5 seconds of transcript quiet also
 finalizes an utterance. These are approximate utterance boundaries, not provider-confirmed speech
@@ -106,22 +119,18 @@ are approximate; canonical event timestamps use milliseconds from provider sessi
 matching the recording origin. Prototype diagnostics retain the attempt-creation clock. Child input retains
 `child_or_nearby_speaker` attribution.
 
-Sprout speech requires an explicit transport delivery attribution for the whole utterance. Muting
-invalidates the open utterance; gated fragments are never delivered evidence. BrowserTransport
+Sprout speech requires an explicit transport delivery attribution for the whole utterance. Gated or unverified fragments must never become delivered evidence. BrowserTransport
 currently cannot correlate output transcript intervals to actual audible playback, so production
 Sprout utterances are deliberately omitted. An unmuted audio element or resolved `play()` alone is
 insufficient proof. Diagnostic output transcripts remain available. A future transport can implement
 `delivered(startMs, endMs)` when it has reliable interval attribution, without changing persistence.
 
-Scenes are appended only by the existing post-render `displayed()` confirmation. Consuming the pending
-display prevents duplicate effect callbacks; the payload comes from the actual lesson scene and object
-catalog, including ordered items and the wrapping row arrangement. Requested/pending transitions
-are not evidence. No support events are emitted yet: instructions to offer help do not establish
-what help was played. Model-generated hints, counting together, and parent assistance remain deferred
-until reliable delivery/attribution exists; the recorder and schema accept support events.
+Callers supply `scene_displayed` evidence only after an actual render confirmation, including
+ordered items, target quantity and arrangement. The recording primitive does not request or commit
+transitions; avoiding duplicate display confirmations remains the caller's responsibility.
 
 Persistence failures are reported in diagnostics and a visible recording warning. The lesson continues
-with unchanged timing, answer decisions, and scene control. New durable attempts have
+without changing lesson control. New durable attempts have
 `recordStatus: pending` while required durable evidence is being assembled. Finalization ends the
 session without promoting completeness. Valid full-audio attachment atomically promotes only pending
 records to `complete`: an ended session with all required durable MVP evidence including full audio.
@@ -206,8 +215,8 @@ must be configured with the same high-entropy capability before enabling provide
 is set by this change. The provider path, limits, API compatibility evidence and remaining
 alignment/suitability gates are documented in [Observer provider feasibility](observer-provider-feasibility.md).
 The parent review UI and bridge are implemented; durable review operations are described in section 5.
-Local full-flow verification and remaining semantic/provider/manual gates are recorded in
-[issue #5 verification](issue-5-verification.md).
+Local deterministic and browser tests verify the saved-evidence flow; semantic/provider/manual
+acceptance remains open.
 
 The browser persists only the latest durable session ID, after Convex creates the record. On reload, a
 read-only Convex client fetches that record directly; inspection does not create a session or restore
@@ -308,8 +317,7 @@ remain inspectable rather than being promoted into new summary conclusions. “L
 existing atomic accept-all operation. Both individual acceptance and accept-all store the shared
 `reviewedObserverClaim` description derived from the validated structured fields, matching the summary.
 Raw model descriptions remain on immutable proposals for inspection, but do not enter accepted planner
-evidence. The planning read also projects legacy accepted rows through that same helper without
-rewriting history. Explicit parent corrections retain their supplied text/context; correction forms
+evidence. Explicit parent corrections retain their supplied text/context; correction forms
 start from the structured description so assistance shortcuts do not copy unchecked model prose.
 “Make a correction” and individual review expose assistance,
 speaker rejection, inaccurate-observation and context shortcuts plus the detailed controls. Canonical
@@ -390,9 +398,9 @@ During play, a new theme can replace the original setting while preserving the o
 
 ## 7. Stack and feasibility gate
 
-Retain the proposed Next.js/React/TypeScript application and Convex persistence. The experiment runs locally on the builder's MacBook; Vercel deployment is deferred. The repository contains the slice 1 GPT-Live-1 voice prototype ([baseline findings](gpt-live-baseline.md)) and the standalone Convex session-record foundation; live evidence persistence, the saved-file Observer adapter, and parent review are implemented and locally tested. Live Observer acceptance remains open; the planner is not implemented.
+Retain the proposed Next.js/React/TypeScript application and Convex persistence. The experiment runs locally on the builder's MacBook; Vercel deployment is deferred. The root uses transcript-state steering. The Convex session-record foundation, reusable evidence capture, saved-file Observer adapter and parent review are retained and locally tested. Live Observer acceptance remains open; the planner is not implemented.
 
-GPT-Live 1 is the initial voice candidate. OpenAI documents the model as `gpt-live-1`. Vercel documents Jev as `typesafe-ai/jev`; the prototype calls TypeSafe's own API directly and pins `jev-1.13.0`, because the advance threshold is calibrated against that version. Suitability for this child's speech is still unestablished: the results so far come from synthetic adult speech. Sources checked 2026-09-22: [GPT-Live 1](https://developers.openai.com/api/docs/models/gpt-live-1), [Jev](https://vercel.com/ai-gateway/models/jev).
+GPT-Live 1 is the initial voice candidate. OpenAI documents the model as `gpt-live-1`. Vercel documents Jev as `typesafe-ai/jev`; the classifier calls TypeSafe's API directly with the pinned `jev-1.13.0` model and its own documented classification mapping. Suitability for this child's speech is still unestablished: the results so far come from synthetic adult speech. Sources checked 2026-09-22: [GPT-Live 1](https://developers.openai.com/api/docs/models/gpt-live-1), [Jev](https://vercel.com/ai-gateway/models/jev).
 
 First implement one hardcoded activity in a browser on a MacBook. Record the actual browser/version used; iPad compatibility is deferred. Validate:
 
@@ -404,7 +412,9 @@ First implement one hardcoded activity in a browser on a MacBook. Record the act
 
 Use what this test reveals to decide where Jev fits. Do not commit to per-utterance evaluation, score scales, or model confidence thresholds before that need is established.
 
-That test led to one bounded use of Jev, kept after the [answer experiment](jev-answer-experiment.md): a single Noul question decides whether the child's count matches the displayed scene, and the application — not the live model — advances the scene. The probability is a control signal only and never becomes stored learner evidence. Jev has no other runtime responsibility; `choice` and `score` remain unused.
+The realtime classifier uses the
+[conversation-state contract](transcript-state-classifier-experiment.md); validated proposals feed
+the deterministic graph reducer. Its probabilities remain ephemeral control evidence.
 
 The post-session Observer uses the candidate adapter documented below with structured output and canonical validation. Its model suitability remains unverified; the planner model is not selected. Model confidence values are not a substitute for evidence or parent review.
 
@@ -456,27 +466,13 @@ warning; a startup attempt without usable audio is incomplete. Browser suspensio
 unload durability guarantee. Production Sprout delivered evidence remains omitted when delivery intervals cannot be verified.
 Generated transcripts are retained separately as analysis timeline events; full audio is authoritative for captured speech.
 
-### MVP inspection and explicit retry (commit 4)
+### Retained saved-session inspection
 
-Ended attempts expose their durable reference through the recorder/session snapshot seam. A private
-builder inspector fetches canonical Convex data and ordered events, with explicit pending, complete,
-and incomplete wording. Partial evidence stays visible. A Refresh record button handles finalization
-and audio upload races without indefinite polling. Missing records/audio are shown honestly.
-
-One full recording uses a Convex storage playback URL; evidence buttons seek approximately to
-`(event.atMs - recording.startOffsetMs) / 1000`, clamped to the available duration. No clips are created.
-The timeline preserves persisted speaker attribution and displays utterances, actually displayed scenes,
-and any support evidence. Convex is the canonical session-record source of truth; deeper developer
-analysis can use Convex tooling such as Convex MCP / Codex. A dedicated JSON/audio export or download
-workflow is intentionally not required for the MVP. Local prototype diagnostic downloads remain separate.
-
-Retry is available only for a fetched ended durable attempt. It disposes the old runtime and creates
-a fresh transport, recorder, controller, and linked session (`retryOf`), preserving the original record.
-Start a new lesson creates an unlinked attempt. The ended reference and reader are held independently
-of the live controller; late updates from old controllers cannot replace the new attempt's UI. The latest
-durable ID is also saved in browser storage and recovered by a fresh read-only recorder after reload, so
-the saved record, recording seek controls, and trusted Observer retry remain available without creating
-a new lesson. Only the ID is stored locally; active lesson state is never resumed.
+`SessionInspector` reads canonical Convex records and audio with explicit pending, complete and
+incomplete states. Refresh handles finalization/upload races. Evidence playback seeks within the
+full recording using session-relative times; no clips are created. Browser-reference helpers retain
+only the durable ID. The inspector and its Observer retry are tested independently of the root live
+lesson. Wiring these facilities into the new runtime remains separate work.
 
 ### Conversation timeline (commit 5)
 
@@ -498,34 +494,10 @@ and retains full-audio seeking.
 
 App-observed microphone start/stop events retain quiet duration and estimated acoustic end,
 which can be negative near session start and is not an exact child speech boundary. Gate state
-begins permitted and records only effective changes with reasons. Evaluation requests/results
-share a scene plus answer-version correlation key, turn signal, request delay, returned latency,
-status/reason, and deterministic decision (including stale results). Scene commits separately
-record from/to indices and the answer key; displayed evidence still requires actual display.
+records effective changes with reasons. Displayed-scene evidence requires actual display.
 
 Generated transcript = what GPT-Live produced. Playback timeline = what the app permitted or
 blocked, with no claim of per-utterance audibility. Full recording = what the capture path retained.
 Delivered evidence = only claims strong enough to represent learner experience. `audio.play()`
 resolution does not establish utterance delivery. Existing one-file gated capture stays unchanged;
 no clips, export/download workflow, naturalness score, or fake audible-start events are added.
-
-### GPT-Live and Jev evaluation cooperation (issue #40)
-
-For numeric counting answers, GPT-Live may request a client delegation, but the application
-identifies the answer from its own scene, transcript revision, answer version, and active source.
-The delegation ID correlates the request; it cannot select an answer. The application-triggered
-evaluation remains live without a delegation, and both triggers share one Jev result for that
-answer identity. Ambiguous, stale, superseded, or retired-source delegations are declined.
-
-Jev keeps the existing `jev-1.13.0` question and `0.90` threshold. The app validates the result,
-commits at most one scene transition, confirms the displayed scene, then sends explicit result
-context. The general application context uses `delegation_id: null`; an associated request also
-gets an ID-linked result. Playback remains behind the existing correction, display, output, and
-source-isolation gates. The 30-second delegation association age is a local matching heuristic,
-not a provider recommendation or a wait before application evaluation.
-
-Live validation is synthetic adult speech through the browser microphone and real GPT-Live/Jev.
-Generated tutor transcripts, media activity, and context acknowledgments are separate observations:
-an acknowledgment estimates context injection, while transcript or decoded-media activity does
-not establish acoustic onset or that the child heard the content. See [issue #40 findings](issue-40-cooperation-findings.md)
-for the targeted outcomes, retained artifacts, timing, and remaining live gaps.

@@ -68,16 +68,6 @@ function ResponseSource({
   const evidence = response.evidence;
   const scenes = diagnosticSpeechScenes(response, record);
   const fragments = row?.fragmentKeys ?? evidence.transcriptFragments?.map(fragment => fragment.key) ?? [];
-  const evaluations =
-    row?.evaluationEventIds ??
-    record.events
-      .filter(
-        event =>
-          event.timeline?.type === "evaluation_control" &&
-          event.timeline.responseIdentity?.fragmentKeys.some(key => fragments.includes(key)),
-      )
-      .map(event => event.id)
-      .filter((id): id is string => !!id);
   return (
     <details>
       <summary>Inspect canonical response {eventId}</summary>
@@ -89,8 +79,8 @@ function ResponseSource({
         {scenes.length === 1
           ? scenes[0].evidence?.type === "scene_displayed" && scenes[0].evidence.sceneId
           : "Not established"}
-        . Conservative bounds are not exact acoustic timing; evaluation and transcript-arrival context alone do not
-        establish a scene during speech.
+        . Conservative bounds are not exact acoustic timing; transcript-arrival context alone do not establish a scene
+        during speech.
       </p>
       {scenes.map(scene => (
         <details key={scene.id}>
@@ -99,7 +89,7 @@ function ResponseSource({
         </details>
       ))}
       <details>
-        <summary>Fragment and evaluation provenance</summary>
+        <summary>Transcript fragment provenance</summary>
         {!fragments.length && <p>No fragment references captured.</p>}
         <ul>
           {fragments.map((key, index) => {
@@ -114,53 +104,6 @@ function ResponseSource({
             );
           })}
         </ul>
-        {!evaluations.length && <p>No evaluation references captured; no evaluation is implied.</p>}
-        {evaluations.map(id => {
-          const event = diagnosticSource(record, id);
-          const identity = event?.timeline?.type === "evaluation_control" ? event.timeline.responseIdentity : undefined;
-          const evaluated = identity?.evaluatedScene;
-          const sceneMatches = evaluated
-            ? record.events.filter(
-                item =>
-                  item.evidence?.type === "scene_displayed" &&
-                  item.evidence.sceneId === evaluated.sceneId &&
-                  item.atMs === evaluated.displayedAtMs,
-              )
-            : [];
-          return (
-            <details key={id}>
-              <summary>Evaluation event {id}</summary>
-              {event?.timeline?.type === "evaluation_control" ? (
-                <>
-                  <EventDetail event={event} seek={seek} hasRecording={Boolean(record.recording)} />
-                  <p>
-                    Association provenance: {identity?.provenance ?? "Unavailable"} · Source status:{" "}
-                    {identity?.sourceStatus ?? "Unavailable"} · Fragment keys:{" "}
-                    {identity?.fragmentKeys.join(", ") || "Unavailable"}
-                  </p>
-                  <p>
-                    Evaluated-scene context:{" "}
-                    {evaluated ? `${evaluated.sceneId} · display ${evaluated.displayedAtMs} ms` : "Unavailable"}. This
-                    is application evaluation context, not a speech-timing assertion.
-                  </p>
-                  {sceneMatches.length === 1 ? (
-                    <EventDetail event={sceneMatches[0]} seek={seek} hasRecording={Boolean(record.recording)} />
-                  ) : (
-                    <p>Evaluated-scene source material unavailable or ambiguous in the current record.</p>
-                  )}
-                  {identity?.recognitionContext && (
-                    <p>
-                      Recognition context ({identity.recognitionContext.provenance}):{" "}
-                      {label(identity.recognitionContext.recognition)} · {label(identity.recognitionContext.recovery)}
-                    </p>
-                  )}
-                </>
-              ) : (
-                <p>Evaluation source material unavailable in the current record. No replacement event is used.</p>
-              )}
-            </details>
-          );
-        })}
       </details>
     </details>
   );
