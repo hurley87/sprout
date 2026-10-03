@@ -21,7 +21,7 @@ export type TutorStabilizationDiagnostic = {
   delayMs: number | null;
 };
 
-/** Experiment-only classification boundary. It never uses the reducer's audio-drain evidence. */
+/** Tutor classification boundary. It never uses the reducer's audio-drain evidence. */
 export class TutorStabilizationGate {
   private snapshot?: { identity: ClassificationSource; changedAtMs: number };
   private state?: LessonRuntimeState;

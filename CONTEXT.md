@@ -6,8 +6,8 @@ briefs and success edges. This defines the available lesson progression.
 **Lesson node**: One bounded teaching objective and its displayed scene. The current
 lesson counts one duck, two ducks, then three butterflies.
 
-**Runtime**: One in-memory lesson attempt. Its identifier scopes async work and
-render tokens; stopping or restarting invalidates its authority.
+**Lesson runtime**: `LessonRuntime` orchestrates one in-memory lesson attempt.
+Its identifier scopes async work and render tokens; stopping or restarting invalidates its authority.
 
 **Visit**: One activation of a node within a runtime. Each visit owns its transcript
 and steering boundary.
@@ -41,6 +41,9 @@ token, node and scene before new teaching context can be sent.
 
 **Current-node steering**: A bounded instruction containing only the confirmed
 node's scene facts, objective and tutor brief. It excludes future nodes and edges.
+
+**Lesson snapshot**: `LessonSnapshot` exposes current runtime state, display identity,
+transcript and recent diagnostics to the lesson UI.
 
 **Diagnostic export**: The current attempt's locally downloaded runtime events and
 conversation text. It is not a durable session record.

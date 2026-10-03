@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { COUNTING_NODE_IDS, type CountingNodeId } from "../lib/transcript-state-steering/counting-lesson";
+import { COUNTING_NODE_IDS, type CountingNodeId } from "../lib/lesson-runtime/counting-lesson";
 import {
   ANSWER_OUTCOMES,
   CHILD_ACTIVITIES,
@@ -9,7 +9,7 @@ import {
   type ConversationStateClassifier,
   type ConversationStateClassifierInput,
   type ConversationStateProposal,
-} from "../lib/transcript-state-steering/conversation-state-classifier";
+} from "../lib/lesson-runtime/conversation-state-classifier";
 
 const proposal: ConversationStateProposal = {
   nodeId: "count-1-duck",

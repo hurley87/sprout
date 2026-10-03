@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createLessonRuntime, type LessonRuntimeState } from "../lib/transcript-state-steering/lesson-runtime-reducer";
+import { createLessonRuntime, type LessonRuntimeState } from "../lib/lesson-runtime/lesson-runtime-reducer";
 import {
   TutorStabilizationGate,
   type TutorStabilizationDiagnostic,
-} from "../lib/transcript-state-steering/tutor-stabilization";
+} from "../lib/lesson-runtime/tutor-stabilization";
 
 const timing = { tutorTranscriptStableMs: 600, tutorClassificationQuietMs: 500 };
 beforeEach(() => {
@@ -39,7 +39,7 @@ function setup(patch: Partial<LessonRuntimeState> = {}) {
   return { gate, ready, diagnostics, observe };
 }
 
-describe("experiment tutor classification boundary", () => {
+describe("lesson tutor classification boundary", () => {
   it("does not classify a partial tutor transcript or a 350 ms pause while audio remains active", () => {
     const { observe, ready, diagnostics } = setup();
     vi.advanceTimersByTime(350);

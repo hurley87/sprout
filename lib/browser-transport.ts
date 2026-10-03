@@ -75,7 +75,6 @@ export class BrowserTransport {
   constructor(
     private audio: HTMLAudioElement,
     private microphoneDiagnostics = false,
-    private experiment?: "transcript-state-steering",
   ) {}
 
   private diagnosticSink?: (event: MicrophoneDiagnostic) => void;
@@ -313,7 +312,7 @@ export class BrowserTransport {
     const response = await fetch("/api/live", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sdp, ...(this.experiment ? { experiment: this.experiment } : {}) }),
+      body: JSON.stringify({ sdp }),
       signal: source.abort.signal,
     });
     if (!this.live(source)) return;

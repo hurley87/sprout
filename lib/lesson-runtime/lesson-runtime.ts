@@ -19,8 +19,8 @@ import {
   type RuntimeSource,
 } from "./lesson-runtime-reducer";
 
-/** Explicit experiment policy, not a provider turn boundary or calibrated setting. */
-export const EXPERIMENT_TIMING = {
+/** Explicit lesson policy, not a provider turn boundary or calibrated setting. */
+export const LESSON_TIMING = {
   childSnapshotDebounceMs: 300,
   // PCM observation samples every 50 ms. Require sustained quiet beyond a brief pause.
   tutorTranscriptStableMs: 600,
@@ -37,7 +37,7 @@ export const EXPERIMENT_TIMING = {
 
 type Speaker = "child" | "tutor" | "unknown";
 type Fragment = { event: TranscriptEvent; source: RuntimeSource; order: number };
-export type ExperimentDiagnostic = {
+export type LessonDiagnostic = {
   timestamp: string;
   atMs: number;
   type: string;
@@ -49,14 +49,14 @@ export type ExperimentDiagnostic = {
   transcriptSpeaker: Speaker;
   detail: unknown;
 };
-export type ExperimentSnapshot = {
+export type LessonSnapshot = {
   status: "prepared" | "connecting" | "live" | "ended";
   runtime: LessonRuntimeState | null;
   display: RenderIdentity;
   transcript: string;
   error: string | null;
   awaitingSteering: boolean;
-  diagnostics: readonly ExperimentDiagnostic[];
+  diagnostics: readonly LessonDiagnostic[];
 };
 
 function eventDiagnosticSource(event: LessonRuntimeEvent, before: LessonRuntimeState): ClassificationSource {
@@ -68,12 +68,12 @@ function eventDiagnosticSource(event: LessonRuntimeEvent, before: LessonRuntimeS
 }
 
 /** Live lesson wiring and current-attempt diagnostics. */
-export class TranscriptSteeringExperiment {
+export class LessonRuntime {
   private readonly runtimeId = crypto.randomUUID();
   private readonly createdAt = performance.now();
   private readonly transport: BrowserTransport;
   private state: LessonRuntimeState | null = null;
-  private status: ExperimentSnapshot["status"] = "prepared";
+  private status: LessonSnapshot["status"] = "prepared";
   private display: RenderIdentity = {
     token: `${this.runtimeId}:initial`,
     nodeId: INITIAL_COUNTING_NODE_ID,
@@ -88,7 +88,7 @@ export class TranscriptSteeringExperiment {
   private lastChildEndMs = 0;
   private childTurnFloorMs = 0;
   private readonly seenEventIds = new Set<string>();
-  private readonly events: ExperimentDiagnostic[] = [];
+  private readonly events: LessonDiagnostic[] = [];
   private classification?: { abort: AbortController; source: ClassificationSource; speaker: Speaker };
   private lastClassifiedKey?: string;
   private readonly tutorStabilization: TutorStabilizationGate;
@@ -104,12 +104,12 @@ export class TranscriptSteeringExperiment {
 
   constructor(
     audio: HTMLAudioElement,
-    private readonly changed: (snapshot: ExperimentSnapshot) => void,
+    private readonly changed: (snapshot: LessonSnapshot) => void,
   ) {
     this.tutorStabilization = new TutorStabilizationGate(
       {
-        tutorTranscriptStableMs: EXPERIMENT_TIMING.tutorTranscriptStableMs,
-        tutorClassificationQuietMs: EXPERIMENT_TIMING.tutorClassificationQuietMs,
+        tutorTranscriptStableMs: LESSON_TIMING.tutorTranscriptStableMs,
+        tutorClassificationQuietMs: LESSON_TIMING.tutorClassificationQuietMs,
       },
       () => this.now(),
       () => void this.classify("tutor_utterance_stable"),
@@ -118,13 +118,13 @@ export class TranscriptSteeringExperiment {
         this.publish();
       },
     );
-    this.transport = new BrowserTransport(audio, true, "transcript-state-steering");
+    this.transport = new BrowserTransport(audio, true);
     this.transport.setMicrophoneDiagnosticSink(event => {
       if (this.status === "ended") return;
       this.log(event.type, event.detail);
       // Measurements are exported, but do not rerender the page every VAD frame/window.
     });
-    this.log("experiment.prepared", { timing: EXPERIMENT_TIMING });
+    this.log("lesson.prepared", { timing: LESSON_TIMING });
   }
 
   private now() {
@@ -149,7 +149,7 @@ export class TranscriptSteeringExperiment {
     this.changed(this.snapshot());
   }
 
-  snapshot(): ExperimentSnapshot {
+  snapshot(): LessonSnapshot {
     return {
       status: this.status,
       runtime: this.state,
@@ -172,17 +172,14 @@ export class TranscriptSteeringExperiment {
       return;
     if (this.status === "prepared") {
       this.state = createLessonRuntime(this.runtimeId, {
-        quietDrainMs: EXPERIMENT_TIMING.quietDrainMs,
+        quietDrainMs: LESSON_TIMING.quietDrainMs,
         atMs: this.now(),
       });
       this.status = "connecting";
       this.log("render.confirmed", { identity, initial: true });
       this.log("runtime.created", this.state);
       this.publish();
-      this.startupTimer = setTimeout(
-        () => this.fail("GPT-Live startup timed out."),
-        EXPERIMENT_TIMING.startupTimeoutMs,
-      );
+      this.startupTimer = setTimeout(() => this.fail("GPT-Live startup timed out."), LESSON_TIMING.startupTimeoutMs);
       void this.transport
         .start(this.receive, () => this.fail("The voice connection or microphone became unavailable."))
         .catch(() => this.fail("Could not start GPT-Live. Check microphone access and local server configuration."));
@@ -250,7 +247,7 @@ export class TranscriptSteeringExperiment {
       return;
     this.clockTimer = setTimeout(() => {
       if (this.state) this.dispatch({ type: "clock.tick", source: runtimeSource(this.state), atMs: this.now() });
-    }, EXPERIMENT_TIMING.clockTickMs);
+    }, LESSON_TIMING.clockTickMs);
   }
 
   private receive = (event: ProviderEvent) => {
@@ -340,11 +337,6 @@ export class TranscriptSteeringExperiment {
       case "session.closed":
         this.stop("session_closed", true);
         return;
-      case "delegation":
-      case "delegation.unsupported":
-        this.log("delegation.ignored", { reason: "experiment_has_no_delegation" });
-        this.publish();
-        return;
     }
   };
 
@@ -408,7 +400,7 @@ export class TranscriptSteeringExperiment {
       .map(message => `${message.speaker}: ${message.text.trim()}`)
       .join("\n");
     if (text.length > 12_000) {
-      this.fail("This node's transcript reached the experiment limit. Export and restart.");
+      this.fail("This node's transcript reached the lesson limit. Export and restart.");
       return;
     }
     if (speaker === "child") this.lastChildEndMs = Math.max(this.lastChildEndMs, event.endMs);
@@ -440,7 +432,7 @@ export class TranscriptSteeringExperiment {
       return;
     }
     if (!classificationSource(this.state)) return;
-    const delayMs = EXPERIMENT_TIMING.childSnapshotDebounceMs;
+    const delayMs = LESSON_TIMING.childSnapshotDebounceMs;
     this.log("classifier.scheduled", { trigger, delayMs });
     this.stabilizationTimer = setTimeout(() => void this.classify(trigger), delayMs);
     this.publish();
@@ -466,11 +458,11 @@ export class TranscriptSteeringExperiment {
     this.publish();
     const startedAtMs = this.now();
     try {
-      const response = await fetch("/api/experiments/transcript-state-steering/classify", {
+      const response = await fetch("/api/classify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ nodeId: source.nodeId, transcriptRevision: source.transcriptRevision, transcript }),
-        signal: AbortSignal.any([abort.signal, AbortSignal.timeout(EXPERIMENT_TIMING.classifierTimeoutMs)]),
+        signal: AbortSignal.any([abort.signal, AbortSignal.timeout(LESSON_TIMING.classifierTimeoutMs)]),
       });
       const body: unknown = await response.json();
       if (abort.signal.aborted || this.status !== "live") return;
@@ -529,7 +521,7 @@ export class TranscriptSteeringExperiment {
       queued: [],
       timer: setTimeout(
         () => this.fail("GPT-Live steering acknowledgment timed out. Export diagnostics and restart."),
-        EXPERIMENT_TIMING.steeringAckTimeoutMs,
+        LESSON_TIMING.steeringAckTimeoutMs,
       ),
     };
     try {
@@ -569,7 +561,7 @@ export class TranscriptSteeringExperiment {
       };
     }
     this.status = "ended";
-    this.log("experiment.ended", { reason, runtime: this.state });
+    this.log("lesson.ended", { reason, runtime: this.state });
     // Request provider close when possible, then release all local resources immediately.
     try {
       this.transport.send({ type: "session.close", event_id: `${this.runtimeId}:close` });
@@ -582,11 +574,11 @@ export class TranscriptSteeringExperiment {
 
   report() {
     return {
-      experiment: "transcript-state-steering",
+      product: "sprout",
       version: 1,
       runtimeId: this.runtimeId,
       clock: "browser.performance.now-relative-to-attempt",
-      timing: EXPERIMENT_TIMING,
+      timing: LESSON_TIMING,
       runtime: this.state,
       status: this.status,
       error: this.error,

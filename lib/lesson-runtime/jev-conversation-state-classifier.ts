@@ -1,4 +1,4 @@
-// Server-only, like lib/jev.ts. The experiment endpoint exposes only normalized mapping diagnostics.
+// Server-only, like lib/jev.ts. The classifier endpoint exposes only normalized mapping diagnostics.
 import { evaluateNoulQuestions, type NoulQuestion } from "../jev";
 import { COUNTING_LESSON_GRAPH, isCountingNodeId } from "./counting-lesson";
 import type { ConversationStateClassifier, ConversationStateClassifierInput } from "./conversation-state-classifier";
@@ -94,7 +94,7 @@ export const CONVERSATION_QUESTIONS = {
   },
 } as const satisfies Record<string, NoulQuestion>;
 
-/** One request shared by the proposal-only contract and isolated experiment diagnostics. */
+/** One request shared by the proposal-only contract and normalized classifier diagnostics. */
 export async function classifyConversationStateWithDiagnostics(
   input: ConversationStateClassifierInput,
   signal: AbortSignal,

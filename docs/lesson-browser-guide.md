@@ -1,19 +1,17 @@
-# Transcript state steering: manual browser guide
+# Sprout lesson: manual browser guide
 
 This guide retains reproduction instructions and diagnostic interpretation for
 [continued behavioral evaluation (#57)](https://github.com/hurley87/sprout/issues/57).
 
-The browser integration now serves `/` and the temporary `/experiments/transcript-state-steering`
-alias. It uses `BrowserTransport`, the local microphone detector, PCM output observer, and supported
-`session.instructions.append` command. It does not record audio, persist sessions, invoke the
-a separate analysis/review system, or use delegation.
+The production prototype serves the lesson only at `/`. It uses `BrowserTransport`,
+the local microphone detector, PCM output observer, and supported
+`session.instructions.append` command. It does not record audio or persist sessions.
 
-The shared `/api/live` endpoint retains the explicit `experiment: "transcript-state-steering"`
-selector for startup. Both selected and plain requests use the same tutor configuration with the
-initial node's context and no delegation. Only the current request shape is accepted.
-The experiment's local-only classification endpoint uses the same Jev request and
-deterministic mapping as `jevConversationStateClassifier`, with an additional
-normalized mapping diagnostic. Its questions and thresholds are unchanged.
+`/api/live` accepts only `{ sdp }` and always uses the Sprout tutor configuration
+with the initial node's context. The local-only `/api/classify` endpoint uses the
+same Jev request and deterministic mapping as `jevConversationStateClassifier`,
+with an additional normalized mapping diagnostic. Its questions and thresholds
+are unchanged.
 
 ## Run and collect
 
@@ -22,8 +20,8 @@ normalized mapping diagnostic. Its questions and thresholds are unchanged.
    diagnostics. No database deployment or server is needed.
 2. Open <http://127.0.0.1:3000/> in a browser
    with microphone support. Keep this tab visible. Headphones can help separate
-   microphone activity from tutor playback in the first experiment.
-3. Click **Start experiment** and allow microphone access. One duck is rendered
+   microphone activity from tutor playback in the first attempt.
+3. Click **Start lesson** and allow microphone access. One duck is rendered
    before the runtime is created and before the live connection starts. Wait for
    GPT-Live to ask how many ducks you see.
 4. Say **"One"** once, then pause. Expect a natural acknowledgment. Inspect the
@@ -38,7 +36,7 @@ normalized mapping diagnostic. Its questions and thresholds are unchanged.
    terminal edge renders a completion view and releases the connection; no
    future-node or completion teaching prompt is sent.
 7. Click **Stop** if still running, then **Export diagnostics**. Save
-   `sprout-transcript-state-steering-<runtimeId>.json` for review. Export before
+   `sprout-lesson-<runtimeId>.json` for review. Export before
    restarting: each new attempt replaces the previous in-memory log. Refreshing
    also clears it. The export includes transcript text but no audio, credentials,
    SDP, raw Jev bodies, or durable evidence records.
@@ -87,7 +85,7 @@ requests are still aborted.
 
 The defaults (`tutorTranscriptStableMs` and `tutorClassificationQuietMs`) cover
 multiple samples from the existing 50 ms PCM observer; they are conservative
-experiment settings, not proof of utterance completion. The classification quiet
+prototype settings, not proof of utterance completion. The classification quiet
 clock belongs to `TutorStabilizationGate` and never uses the reducer's
 `quietSinceMs`, `tutorOutputDrained` or `quietDrainMs`. Local VAD uses the
 existing **900 ms** quiet threshold, **80 ms** sustained onset and **150 ms**
@@ -97,7 +95,7 @@ duplicate turn. A discarded candidate ends that turn, but cannot supply child
 transcript evidence by itself. The reducer uses **250 ms** PCM quiet and a
 **50 ms** monotonic tick while its drain gate is relevant. Classification has a
 **10 s** deadline; startup has **30 s**, and steering acknowledgment has **10 s**.
-These settings are in `EXPERIMENT_TIMING`, displayed in-page and exported.
+These settings are in `LESSON_TIMING`, displayed in-page and exported.
 
 Every meaningful speaker-labelled snapshot increments an app-owned revision.
 Fragment timing orders the transcript, while each fragment retains its captured
@@ -139,7 +137,7 @@ Use these events to explain a held scene:
   teaching context. Initial render confirmation is marked `initial: true`.
 - `gpt_live.context_appended`, `transcript.visit_boundary`, `transcript.reset`,
   and `transcript.ignored` explain the current visit's isolation and discarded
-  intervals. `error` and `experiment.ended` explain shutdown.
+  intervals. `error` and `lesson.ended` explain shutdown.
 
 The mapping reports the first blocked stage in answer, tutor, support, then
 acknowledgment order. Answer/tutor categories require a winner at **HIGH = 0.90**,
@@ -186,10 +184,10 @@ for transcript and append timing semantics.
 The reducer's PCM gate can mistake a pause within tutor speech for drain. Tutor
 output that starts before local VAD ends cannot satisfy its fresh-onset rule.
 These are existing reducer contracts, visible in diagnostics, not thresholds to
-silently relax during follow-up evaluation. The experiment stops at 12,000
+silently relax during follow-up evaluation. The lesson stops at 12,000
 current-node transcript characters or 256 fragments waiting for steering acknowledgment rather
 than silently trimming answer evidence. Focused fake-clock unit tests and mocked
-experiment scheduling tests cover partial transcripts, both clock orderings,
+lesson runtime scheduling tests cover partial transcripts, both clock orderings,
 resumed/unavailable output, revision and turn/visit invalidation, unchanged child
 debounce, independent drain timing and abort of an in-flight older revision.
-Generalized segmentation remains separate work. The root and temporary alias have browser smoke coverage; issue #55 records the prior live verification.
+Generalized segmentation remains separate work. The root and removed entry points have browser smoke coverage; issue #55 records the prior live verification.

@@ -1,7 +1,7 @@
 # Realtime lesson architecture
 
 ```text
-/ (and temporary /experiments/transcript-state-steering alias)
+/
   authored counting graph → deterministic lesson reducer → rendered scene
   GPT-Live ↔ microphone / local VAD + decoded tutor output activity
   speaker-labelled current-visit transcript → Jev ConversationStateClassifier
@@ -26,28 +26,31 @@ the handoff after a transition.
 
 | Module | Current responsibility |
 | --- | --- |
-| `app/transcript-state-steering-lesson.tsx` | Shared root/alias UI, render confirmation, diagnostic export |
-| `lib/transcript-state-steering/counting-lesson.ts` | Authored graph |
-| `lib/transcript-state-steering/lesson-runtime-reducer.ts` | Deterministic transitions and gates |
-| `lib/transcript-state-steering/browser-experiment.ts` | Runtime orchestration, transcript assembly, classification scheduling and steering |
-| `lib/transcript-state-steering/tutor-stabilization.ts` | Independent transcript stability and output quiet clocks |
-| `lib/transcript-state-steering/conversation-state-classifier.ts` | Closed proposal/input contract |
-| `lib/transcript-state-steering/jev-conversation-state-classifier.ts` | Authored current-node projection and Jev questions |
-| `lib/transcript-state-steering/classification-decision.ts` | Probability mapping and safe diagnostics |
-| `lib/transcript-state-steering/live-context.ts` | GPT-Live setup and bounded teaching instructions |
+| `app/lesson.tsx` | Root lesson UI, render confirmation, diagnostic export |
+| `lib/lesson-runtime/counting-lesson.ts` | Authored graph |
+| `lib/lesson-runtime/lesson-runtime-reducer.ts` | Deterministic transitions and gates |
+| `lib/lesson-runtime/lesson-runtime.ts` | Runtime orchestration, transcript assembly, classification scheduling and steering |
+| `lib/lesson-runtime/tutor-stabilization.ts` | Independent transcript stability and output quiet clocks |
+| `lib/lesson-runtime/conversation-state-classifier.ts` | Closed proposal/input contract |
+| `lib/lesson-runtime/jev-conversation-state-classifier.ts` | Authored current-node projection and Jev questions |
+| `lib/lesson-runtime/classification-decision.ts` | Probability mapping and safe diagnostics |
+| `lib/lesson-runtime/live-context.ts` | GPT-Live setup and bounded teaching instructions |
 | `lib/browser-transport.ts` | Single WebRTC connection, input fence, playback and resource teardown |
 | `lib/events.ts` | Provider event parsing and client command types |
 | `lib/microphone-turn.ts`, `lib/output-activity.ts` | Local VAD and decoded output observation |
 | `lib/jev.ts` | Generic server-only Noul transport |
 | `lib/local-request.ts` | Loopback request checks and bounded JSON reads |
 | `app/api/live/route.ts` | Server-only GPT-Live session setup |
-| `app/api/experiments/transcript-state-steering/classify/route.ts` | Server-only classification and normalized diagnostics |
+| `app/api/classify/route.ts` | Server-only classification and normalized diagnostics |
 
-Names and the explicit session selector remain for the next production naming/API
-cleanup. The transport retains its microphone input fence because the root opens
-provider input only after initial scene confirmation and session readiness. It
-retains app-owned source identity to reject unrelated provider events. Delegation
-events are parsed only to be ignored/diagnosed by this runtime.
+`/api/live` accepts only `{ sdp }` and always uses `SPROUT_LIVE_CONFIG`.
+`/api/classify` returns the current `{ proposal, diagnostic }` contract. Both
+routes retain loopback guards, bounded parsing, deadlines and safe provider errors.
+The transport retains its microphone input fence because the root opens provider
+input only after initial scene confirmation and session readiness. It retains
+app-owned source identity to reject unrelated provider events. Unused provider
+delegation events are discarded by the parser. Steering commands retain
+`delegation_id: null` as part of the provider wire contract.
 
 ## Lifecycle and recovery
 
@@ -68,8 +71,8 @@ meaningful new transcript allows new classification. Missing VAD/output evidence
 cannot authorize progression. Interrupted render confirmation, disconnect, failed
 startup or failed/missing steering acknowledgment ends the attempt; restart creates
 a fresh runtime. Stop, page hiding and navigation release microphone and connection.
-See the [reducer contract](transcript-state-runtime-reducer.md) and
-[browser guide](transcript-state-steering-browser-experiment.md) for exact timing
+See the [reducer contract](lesson-runtime-reducer.md) and
+[browser guide](lesson-browser-guide.md) for exact timing
 and known media/transcript limitations.
 
 ## Diagnostics and prototype reset

@@ -1,18 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { COUNTING_LESSON_GRAPH, INITIAL_COUNTING_NODE_ID } from "@/lib/transcript-state-steering/counting-lesson";
-import {
-  EXPERIMENT_TIMING,
-  TranscriptSteeringExperiment,
-  type ExperimentSnapshot,
-} from "@/lib/transcript-state-steering/browser-experiment";
+import { COUNTING_LESSON_GRAPH, INITIAL_COUNTING_NODE_ID } from "@/lib/lesson-runtime/counting-lesson";
+import { LESSON_TIMING, LessonRuntime, type LessonSnapshot } from "@/lib/lesson-runtime/lesson-runtime";
 
-export default function TranscriptStateSteeringPage() {
+export default function Lesson() {
   const audio = useRef<HTMLAudioElement>(null);
   const scene = useRef<HTMLDivElement>(null);
-  const experiment = useRef<TranscriptSteeringExperiment | null>(null);
-  const [snapshot, setSnapshot] = useState<ExperimentSnapshot | null>(null);
+  const lesson = useRef<LessonRuntime | null>(null);
+  const [snapshot, setSnapshot] = useState<LessonSnapshot | null>(null);
   const display = snapshot?.display;
   const status = snapshot?.status;
   const nodeId = display ? display.nodeId : INITIAL_COUNTING_NODE_ID;
@@ -22,7 +18,7 @@ export default function TranscriptStateSteeringPage() {
 
   useEffect(() => {
     if (!display || status === "ended") return;
-    const current = experiment.current;
+    const current = lesson.current;
     let second = 0;
     // This effect runs after React commits. Two frames also allow the scene to paint.
     const first = requestAnimationFrame(() => {
@@ -44,35 +40,35 @@ export default function TranscriptStateSteeringPage() {
 
   useEffect(() => {
     const hidden = () => {
-      if (document.hidden) experiment.current?.stop("page_hidden");
+      if (document.hidden) lesson.current?.stop("page_hidden");
     };
-    const leave = () => experiment.current?.stop("page_left");
+    const leave = () => lesson.current?.stop("page_left");
     document.addEventListener("visibilitychange", hidden);
     window.addEventListener("pagehide", leave);
     return () => {
       document.removeEventListener("visibilitychange", hidden);
       window.removeEventListener("pagehide", leave);
-      experiment.current?.stop("unmounted");
+      lesson.current?.stop("unmounted");
     };
   }, []);
 
   function start() {
     if (!audio.current || live) return;
-    experiment.current?.stop("restarted");
-    const current = new TranscriptSteeringExperiment(audio.current, value => {
-      if (experiment.current === current) setSnapshot(value);
+    lesson.current?.stop("restarted");
+    const current = new LessonRuntime(audio.current, value => {
+      if (lesson.current === current) setSnapshot(value);
     });
-    experiment.current = current;
+    lesson.current = current;
     setSnapshot(current.snapshot());
   }
 
   function download() {
-    const report = experiment.current?.report();
+    const report = lesson.current?.report();
     if (!report) return;
     const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }));
     const link = document.createElement("a");
     link.href = url;
-    link.download = `sprout-transcript-state-steering-${report.runtimeId}.json`;
+    link.download = `sprout-lesson-${report.runtimeId}.json`;
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
@@ -80,7 +76,7 @@ export default function TranscriptStateSteeringPage() {
   return (
     <main className="mx-auto w-full max-w-5xl space-y-6 p-6">
       <div>
-        <h1 className="text-2xl font-semibold">Transcript state steering experiment</h1>
+        <h1 className="text-2xl font-semibold">Sprout</h1>
         <p className="mt-2">
           Use your microphone to count the displayed group. Stop and export each attempt before restarting.
         </p>
@@ -91,12 +87,12 @@ export default function TranscriptStateSteeringPage() {
           disabled={live}
           onClick={start}
         >
-          Start experiment
+          Start lesson
         </button>
         <button
           className="rounded border px-4 py-2 disabled:opacity-40"
           disabled={!live}
-          onClick={() => experiment.current?.stop()}
+          onClick={() => lesson.current?.stop()}
         >
           Stop
         </button>
@@ -153,10 +149,10 @@ export default function TranscriptStateSteeringPage() {
           since: {state?.quietSinceMs?.toFixed(0) ?? "—"} ms
         </p>
         <p className="text-sm">
-          Timing: child debounce {EXPERIMENT_TIMING.childSnapshotDebounceMs} ms after VAD ends · tutor transcript stable{" "}
-          {EXPERIMENT_TIMING.tutorTranscriptStableMs} ms + classification quiet{" "}
-          {EXPERIMENT_TIMING.tutorClassificationQuietMs} ms · VAD quiet {EXPERIMENT_TIMING.microphoneQuietMs} ms ·
-          transition audio drain {EXPERIMENT_TIMING.quietDrainMs} ms · tick {EXPERIMENT_TIMING.clockTickMs} ms
+          Timing: child debounce {LESSON_TIMING.childSnapshotDebounceMs} ms after VAD ends · tutor transcript stable{" "}
+          {LESSON_TIMING.tutorTranscriptStableMs} ms + classification quiet {LESSON_TIMING.tutorClassificationQuietMs}{" "}
+          ms · VAD quiet {LESSON_TIMING.microphoneQuietMs} ms · transition audio drain {LESSON_TIMING.quietDrainMs} ms ·
+          tick {LESSON_TIMING.clockTickMs} ms
         </p>
         <p className="text-sm">
           All gates must agree on the current revision. Abstention holds the scene. Renewed speech clears completion

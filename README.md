@@ -18,9 +18,9 @@ Configure server-only `OPENAI_API_KEY` and `TYPESAFE_API_KEY` in your local envi
 Never expose these credentials through `NEXT_PUBLIC_*` variables. Provider routes
 accept loopback requests from the local page.
 
-`/experiments/transcript-state-steering` is a temporary alias for the same lesson.
-Experiment-named modules, UI labels and classifier endpoint remain until the next
-production naming/API cleanup commit.
+The canonical lesson is served only at `/`. `/api/live` accepts `{ sdp }` and
+uses the Sprout tutor configuration; `/api/classify` returns semantic proposals
+and normalized diagnostics. Both endpoints enforce local request boundaries.
 
 Attempts and speaker-labelled transcripts stay in page memory. **Export diagnostics**
 downloads the current attempt as JSON; restarting or refreshing clears it. The app
@@ -39,8 +39,8 @@ git diff --check
 ```
 
 Unit tests use synthetic proposals, provider responses and clocks. Browser tests
-cover both lesson routes and local WebRTC output without billed providers. Real
-conversational accuracy remains behavioral-evaluation work in
+cover the root lesson, removed route boundaries and local WebRTC output without
+billed providers. Real conversational accuracy remains behavioral-evaluation work in
 [#57](https://github.com/hurley87/sprout/issues/57).
 
 See [the documentation index](docs/README.md) for architecture and evaluation guidance.

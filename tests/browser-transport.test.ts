@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { audioElement, liveConnection } from "./helpers/browser-transport";
+import { parseProviderEvent } from "../lib/events";
 import { BrowserTransport, microphoneTrackSettings } from "../lib/browser-transport";
 
 afterEach(() => {
@@ -76,11 +77,7 @@ it("joins provider start, remote description, and channel readiness exactly once
 
 it("opens provider microphone only after the runtime fence, and sends bounded commands", async () => {
   const { channel, inputTrack } = liveConnection();
-  const transport = new BrowserTransport(
-    audioElement() as unknown as HTMLAudioElement,
-    false,
-    "transcript-state-steering",
-  );
+  const transport = new BrowserTransport(audioElement() as unknown as HTMLAudioElement, false);
   await transport.start(vi.fn(), vi.fn());
   expect(inputTrack.enabled).toBe(false);
   const fence = vi.fn(() => expect(inputTrack.enabled).toBe(false));
@@ -99,7 +96,6 @@ it("opens provider microphone only after the runtime fence, and sends bounded co
   expect(channel.send).toHaveBeenCalledWith(JSON.stringify(command));
   expect(JSON.parse(vi.mocked(fetch).mock.calls[0][1]!.body as string)).toEqual({
     sdp: "offer",
-    experiment: "transcript-state-steering",
   });
   transport.close();
   expect(transport.openInput(fence)).toBe(false);
@@ -172,3 +168,10 @@ it("releases a microphone obtained after startup was canceled without connecting
   expect(peer.createOffer).not.toHaveBeenCalled();
   expect(events).not.toHaveBeenCalled();
 });
+
+it.each([{ id: "obsolete", target: "client" }, { id: "obsolete", target: "server" }, null])(
+  "discards unused provider delegation events %j",
+  delegation => {
+    expect(parseProviderEvent({ type: "session.delegation.created", event_id: "obsolete", delegation })).toBeNull();
+  },
+);

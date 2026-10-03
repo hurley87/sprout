@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { JEV_MODEL } from "../lib/jev";
-import { parseConversationStateProposal } from "../lib/transcript-state-steering/conversation-state-classifier";
-import type { ConversationStateClassifierInput } from "../lib/transcript-state-steering/conversation-state-classifier";
+import { parseConversationStateProposal } from "../lib/lesson-runtime/conversation-state-classifier";
+import type { ConversationStateClassifierInput } from "../lib/lesson-runtime/conversation-state-classifier";
 import {
   CONVERSATION_QUESTIONS,
   jevConversationStateClassifier,
-} from "../lib/transcript-state-steering/jev-conversation-state-classifier";
+} from "../lib/lesson-runtime/jev-conversation-state-classifier";
 
 type QuestionId = keyof typeof CONVERSATION_QUESTIONS;
 const probabilities = (overrides: Partial<Record<QuestionId, number>> = {}) => ({

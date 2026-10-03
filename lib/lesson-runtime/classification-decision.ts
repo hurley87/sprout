@@ -186,7 +186,7 @@ export function mapConversationClassification(
   };
 }
 
-/** Experiment response projection, never a raw provider body or a learner-evidence payload. */
+/** Classifier response projection, never a raw provider body or a learner-evidence payload. */
 export function classificationDiagnostic(
   decision: ConversationClassificationDecision,
 ): ConversationClassificationDiagnostic {

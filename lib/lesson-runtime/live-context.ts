@@ -18,7 +18,7 @@ Teach only this current scene and learning objective. It replaces all previous s
 }
 
 /** Conversational tutoring prompt; graph transitions remain application-owned. */
-export const TRANSCRIPT_STEERING_LIVE_CONFIG = {
+export const SPROUT_LIVE_CONFIG = {
   model: "gpt-live-1",
   audio: { output: { voice: "marin" } },
   store: false,

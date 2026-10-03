@@ -27,8 +27,6 @@ export type ProviderEvent =
       startMs: number;
       endMs: number;
     })
-  | (Identified & { type: "delegation" })
-  | (Identified & { type: "delegation.unsupported" })
   | (Identified & { type: "context.appended"; name: string; clientEventId?: string; startMs?: number; endMs?: number });
 
 export type Speaker = "child" | "sprout";
@@ -74,14 +72,6 @@ export function parseProviderEvent(raw: unknown): ProviderEvent | null {
       if (typeof delta !== "string" || typeof startMs !== "number" || typeof endMs !== "number") return null;
       const speaker: Speaker = raw.type === "session.input_transcript.delta" ? "child" : "sprout";
       return { type: "transcript", eventId, speaker, delta, startMs, endMs };
-    }
-    case "session.delegation.created": {
-      const delegation = raw.delegation;
-      if (!isRecord(delegation) || typeof delegation.id !== "string" || delegation.target !== "client") {
-        return { type: "delegation.unsupported", eventId };
-      }
-      // The runtime diagnoses and ignores delegation; no handle or timing is retained.
-      return { type: "delegation", eventId };
     }
     default:
       if (!raw.type.endsWith(".appended")) return null;

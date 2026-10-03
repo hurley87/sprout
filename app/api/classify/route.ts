@@ -1,13 +1,13 @@
 import { isLocalRequest, readJsonBody } from "@/lib/local-request";
-import { isCountingNodeId } from "@/lib/transcript-state-steering/counting-lesson";
-import { classifyConversationStateWithDiagnostics } from "@/lib/transcript-state-steering/jev-conversation-state-classifier";
-import { classificationDiagnostic } from "@/lib/transcript-state-steering/classification-decision";
+import { isCountingNodeId } from "@/lib/lesson-runtime/counting-lesson";
+import { classifyConversationStateWithDiagnostics } from "@/lib/lesson-runtime/jev-conversation-state-classifier";
+import { classificationDiagnostic } from "@/lib/lesson-runtime/classification-decision";
 
 export const runtime = "nodejs";
 const json = (body: object, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 
 export async function POST(request: Request) {
-  if (!isLocalRequest(request)) return json({ error: "Use the local experiment window." }, 403);
+  if (!isLocalRequest(request)) return json({ error: "Use the local Sprout window." }, 403);
   if (!request.headers.get("content-type")?.startsWith("application/json"))
     return json({ error: "Invalid classification request." }, 415);
   const body = await readJsonBody(request, 65_536);
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     input.transcript.length > 12_000
   )
     return json({ error: "Invalid classification request." }, 400);
-  if (!process.env.TYPESAFE_API_KEY) return json({ error: "Configure TYPESAFE_API_KEY for the experiment." }, 503);
+  if (!process.env.TYPESAFE_API_KEY) return json({ error: "Configure TYPESAFE_API_KEY for Sprout." }, 503);
   try {
     const decision = await classifyConversationStateWithDiagnostics(
       {

@@ -1,1 +1,1 @@
-export { default } from "./transcript-state-steering-lesson";
+export { default } from "./lesson";

@@ -1,10 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ClientCommand, ProviderEvent } from "../lib/events";
-import { TranscriptSteeringExperiment } from "../lib/transcript-state-steering/browser-experiment";
-import {
-  classificationDiagnostic,
-  mapConversationClassification,
-} from "../lib/transcript-state-steering/classification-decision";
+import { LessonRuntime } from "../lib/lesson-runtime/lesson-runtime";
+import { classificationDiagnostic, mapConversationClassification } from "../lib/lesson-runtime/classification-decision";
 import { conversationProbabilities } from "./fixtures/conversation-classification";
 
 const transport = vi.hoisted(() => ({
@@ -28,14 +25,14 @@ vi.mock("../lib/browser-transport", () => ({
   },
 }));
 
-let experiment: TranscriptSteeringExperiment;
+let lesson: LessonRuntime;
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance", "Date"] });
   vi.clearAllMocks();
   transport.receive = undefined;
 });
 afterEach(() => {
-  experiment?.stop();
+  lesson?.stop();
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
@@ -43,8 +40,8 @@ function emit(event: ProviderEvent) {
   transport.receive?.(event);
 }
 function start() {
-  experiment = new TranscriptSteeringExperiment({} as HTMLAudioElement, () => {});
-  experiment.confirmRendered(experiment.snapshot().display);
+  lesson = new LessonRuntime({} as HTMLAudioElement, () => {});
+  lesson.confirmRendered(lesson.snapshot().display);
   const command = transport.send.mock.calls[0][0];
   emit({
     type: "context.appended",
@@ -69,13 +66,14 @@ it("keeps the child answer's 300 ms debounce independent of active tutor audio",
   expect(fetch).not.toHaveBeenCalled();
   await vi.advanceTimersByTimeAsync(1);
   expect(fetch).toHaveBeenCalledOnce();
+  expect(fetch.mock.calls[0][0]).toBe("/api/classify");
   expect(JSON.parse(fetch.mock.calls[0][1]?.body as string)).toMatchObject({
     transcriptRevision: 1,
     transcript: "Child: One.",
   });
 });
 
-it("routes real experiment output events through the tutor gate without using the reducer's drain", async () => {
+it("routes real lesson output events through the tutor gate without using the reducer's drain", async () => {
   const fetch = vi.fn(async () => Response.json({ proposal: null }));
   vi.stubGlobal("fetch", fetch);
   start();
@@ -85,7 +83,7 @@ it("routes real experiment output events through the tutor gate without using th
   expect(fetch).not.toHaveBeenCalled();
   emit({ type: "output.activity", state: "quiet" });
   await vi.advanceTimersByTimeAsync(250);
-  expect(experiment.snapshot().runtime?.tutorOutputDrained).toBe(true);
+  expect(lesson.snapshot().runtime?.tutorOutputDrained).toBe(true);
   expect(fetch).not.toHaveBeenCalled();
   await vi.advanceTimersByTimeAsync(249);
   expect(fetch).not.toHaveBeenCalled();
@@ -93,8 +91,8 @@ it("routes real experiment output events through the tutor gate without using th
   expect(fetch).toHaveBeenCalledOnce();
   await vi.advanceTimersByTimeAsync(1000);
   expect(fetch).toHaveBeenCalledOnce();
-  expect(experiment.snapshot().runtime?.nodeId).toBe("count-1-duck"); // An abstention still holds the scene.
-  expect(experiment.report().events).toContainEqual(expect.objectContaining({ type: "classifier.abstained" }));
+  expect(lesson.snapshot().runtime?.nodeId).toBe("count-1-duck"); // An abstention still holds the scene.
+  expect(lesson.report().events).toContainEqual(expect.objectContaining({ type: "classifier.abstained" }));
 });
 
 it("attributes an advancing proposal diagnostic to its source visit rather than the resulting visit", async () => {
@@ -119,12 +117,12 @@ it("attributes an advancing proposal diagnostic to its source visit rather than 
   emit({ type: "output.activity", state: "quiet" });
   await vi.advanceTimersByTimeAsync(600);
 
-  expect(experiment.snapshot().runtime).toMatchObject({ nodeId: "count-2-ducks", visitId: 2, phase: "rendering" });
-  const events = experiment.report().events;
+  expect(lesson.snapshot().runtime).toMatchObject({ nodeId: "count-2-ducks", visitId: 2, phase: "rendering" });
+  const events = lesson.report().events;
   const proposalIndex = events.findIndex(event => event.type === "runtime.event.proposal.received");
   expect(proposalIndex).toBeGreaterThanOrEqual(0);
   expect(events[proposalIndex]).toMatchObject({
-    runtimeId: experiment.report().runtimeId,
+    runtimeId: lesson.report().runtimeId,
     nodeId: "count-1-duck",
     visitId: 1,
     childTurnId: 1,
@@ -174,11 +172,11 @@ it("aborts an in-flight older revision and waits for the new tutor boundary befo
   await vi.advanceTimersByTimeAsync(1);
   expect(requests).toHaveLength(2);
   expect(requests[1].body).toMatchObject({ transcriptRevision: 3, transcript: "Child: One.\nTutor: Yes, one duck!" });
-  expect(experiment.report().events).toContainEqual(
+  expect(lesson.report().events).toContainEqual(
     expect.objectContaining({ type: "classifier.cancelled", transcriptRevision: 2 }),
   );
   expect(
-    experiment
+    lesson
       .report()
       .events.filter(event => event.type === "classifier.started")
       .map(event => event.transcriptRevision),
@@ -213,9 +211,9 @@ it("logs only normalized mapping diagnostics with the captured source and cannot
   vi.stubGlobal("fetch", fetch);
   start();
   await vi.advanceTimersByTimeAsync(300);
-  const mapping = experiment.report().events.find(event => event.type === "classifier.mapping");
+  const mapping = lesson.report().events.find(event => event.type === "classifier.mapping");
   expect(mapping).toMatchObject({
-    runtimeId: experiment.report().runtimeId,
+    runtimeId: lesson.report().runtimeId,
     visitId: 1,
     childTurnId: 1,
     nodeId: "count-1-duck",
@@ -224,9 +222,9 @@ it("logs only normalized mapping diagnostics with the captured source and cannot
     detail: diagnostic,
   });
   expect(JSON.stringify(mapping)).not.toMatch(/raw provider marker|rawBody|count-3-butterflies|999/);
-  expect(experiment.snapshot().runtime?.answerAccepted).toBe(false);
-  expect(experiment.snapshot().runtime?.nodeId).toBe("count-1-duck");
-  expect(experiment.report().events).toContainEqual(expect.objectContaining({ type: "classifier.abstained" }));
+  expect(lesson.snapshot().runtime?.answerAccepted).toBe(false);
+  expect(lesson.snapshot().runtime?.nodeId).toBe("count-1-duck");
+  expect(lesson.report().events).toContainEqual(expect.objectContaining({ type: "classifier.abstained" }));
   await vi.advanceTimersByTimeAsync(2000);
   expect(fetch).toHaveBeenCalledOnce();
   expect(transport.send).toHaveBeenCalledOnce(); // Only initial steering, never diagnostics-driven steering.
@@ -274,18 +272,18 @@ it.each(["abstained", "missing", "invalid"] as const)(
     );
     start();
     await vi.advanceTimersByTimeAsync(300);
-    expect(experiment.snapshot().runtime?.answerAccepted).toBe(true);
-    expect(experiment.report().events).toContainEqual(
+    expect(lesson.snapshot().runtime?.answerAccepted).toBe(true);
+    expect(lesson.report().events).toContainEqual(
       expect.objectContaining({ type: "classifier.result", detail: expect.objectContaining({ proposal }) }),
     );
     if (kind === "abstained")
-      expect(experiment.report().events).toContainEqual(
+      expect(lesson.report().events).toContainEqual(
         expect.objectContaining({ type: "classifier.mapping", detail: diagnostic }),
       );
     else
-      expect(experiment.report().events).toContainEqual(
+      expect(lesson.report().events).toContainEqual(
         expect.objectContaining({ type: "classifier.mapping_unavailable" }),
       );
-    expect(JSON.stringify(experiment.report())).not.toContain("raw provider marker");
+    expect(JSON.stringify(lesson.report())).not.toContain("raw provider marker");
   },
 );

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { POST } from "../app/api/live/route";
-import { TRANSCRIPT_STEERING_LIVE_CONFIG } from "../lib/transcript-state-steering/live-context";
+import { SPROUT_LIVE_CONFIG } from "../lib/lesson-runtime/live-context";
 
 const request = (body: unknown = { sdp: "v=0\r\n" }, origin = "http://localhost:3000", host = "localhost:3000") =>
   new Request("http://localhost:3000/api/live", {
@@ -65,7 +65,7 @@ describe("local Live session endpoint", () => {
     });
     const calls = fetch.mock.calls as unknown as [string, RequestInit][];
     expect(calls[0][0]).toBe("https://api.openai.com/v1/live/sessions");
-    expect(JSON.parse(calls[0][1].body as string).session).toEqual(TRANSCRIPT_STEERING_LIVE_CONFIG);
+    expect(JSON.parse(calls[0][1].body as string).session).toEqual(SPROUT_LIVE_CONFIG);
     expect(JSON.parse(calls[0][1].body as string).session).not.toHaveProperty("delegation");
   });
   it("does not leak provider errors or retry paid creation", async () => {
@@ -98,13 +98,14 @@ it.each(["replacement", "instructions", "model", "voice", "session", "input", "a
     expect(fetch).not.toHaveBeenCalled();
   },
 );
-it("retains the temporary transcript steering selector with the same canonical config", async () => {
-  vi.stubEnv("OPENAI_API_KEY", "synthetic-key");
-  const fetch = vi.fn(async () => Response.json({ session: { id: "test" }, transport: { sdp: "answer" } }));
-  vi.stubGlobal("fetch", fetch);
-  expect((await POST(request({ sdp: "v=0", experiment: "transcript-state-steering" }))).status).toBe(201);
-  expect(JSON.parse((fetch.mock.calls as unknown as [string, RequestInit][])[0][1].body as string).session).toEqual(
-    TRANSCRIPT_STEERING_LIVE_CONFIG,
-  );
-  expect((await POST(request({ sdp: "v=0", experiment: "unknown" }))).status).toBe(400);
-});
+it.each(["transcript-state-steering", "unknown"])(
+  "rejects the removed selector %s before billing",
+  async experiment => {
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    const response = await POST(request({ sdp: "v=0", experiment }));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "Invalid session request." });
+    expect(fetch).not.toHaveBeenCalled();
+  },
+);
