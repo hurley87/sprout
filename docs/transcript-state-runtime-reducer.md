@@ -48,23 +48,30 @@ turn, so revalidation can establish the subsequent acknowledgment. An incorrect,
 unclear, absent, or help-needed answer clears the candidate and audio evidence.
 Child speech and child/unknown transcript updates clear them immediately.
 
-Local `output.activity` requires a fresh onset of `active` after correct acceptance,
-then `quiet` sustained for the configured interval. Pre-answer audio and PCM that
-was already active at acceptance cannot satisfy this gate. Repeated quiet events
-preserve its start time; renewed activity resets it. `unavailable` clears audio
-evidence and is never silence; quiet alone after unavailable cannot restore it.
+Local `output.activity` remembers candidate tutor audio from a fresh onset of
+`active` after the current child turn has ended and has its own child transcript.
+This can happen before or after correct classification returns. Pre-turn audio,
+output starting during child speech, and PCM remaining active across that boundary
+cannot satisfy this gate. Candidate audio must then become `quiet` for the
+configured interval. Repeated quiet events preserve its start time; renewed
+activity resets it. `unavailable` clears candidate audio and is never silence;
+quiet alone after unavailable cannot restore it.
 
 Both orderings work: acknowledgment followed by audio drain, and audio drain
 followed by acknowledgment. In the second ordering, the still-current quiet
 interval can satisfy the gate immediately when acknowledgment arrives, or a
-later tick can finish it. All four conditions must hold together for the exact
-latest transcript: correct, acknowledgment, relevant audio observed, and drain.
+later tick can finish it. Audio can also fully drain before correct classification;
+later correct and acknowledgment classifications can use that still-current
+sustained quiet. Audio alone never authorizes progression. All four conditions
+must hold together for the exact latest transcript: correct, acknowledgment,
+relevant audio observed, and drain.
 
 PCM energy has no response identity and quiet may be a pause within tutor speech.
 This spike's gate proves these local observations, not that the audible content
 was an acknowledgment or that a provider response has definitively completed.
-It intentionally fails closed when activity began before correct acceptance;
-that case needs a later fresh onset to obtain audio evidence.
+It intentionally fails closed when activity began before the child turn ended
+with transcript evidence; that case needs a later fresh onset to obtain audio
+evidence. Classifier latency does not determine whether post-child audio counts.
 
 ## Render and steering handoff
 

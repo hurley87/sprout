@@ -49,6 +49,7 @@ export type LessonRuntimeState = {
   readonly answerAccepted: boolean;
   readonly acknowledgmentObserved: boolean;
   readonly outputActivity: OutputActivityEvent["state"];
+  /** Candidate audio for this ended child turn; semantic authority is still required to use it. */
   readonly tutorOutputObserved: boolean;
   readonly tutorOutputDrained: boolean;
   readonly quietSinceMs: number | null;
@@ -337,10 +338,11 @@ export function reduceLessonRuntime(state: LessonRuntimeState, event: LessonRunt
       } else if (event.state === "active") {
         next = {
           ...next,
-          // Require a fresh activity onset after acceptance. Already-active pre-answer PCM is insufficient.
+          // Anchor a fresh onset to the ended child turn, independent of classifier latency.
+          // Already-active pre-turn/during-child PCM cannot become relevant by remaining active.
           tutorOutputObserved:
             state.tutorOutputObserved ||
-            (state.outputActivity !== "active" && state.acceptedAnswerRevision !== null && !state.childSpeaking),
+            (state.outputActivity !== "active" && state.hasChildTranscript && !state.childSpeaking),
           quietSinceMs: null,
         };
       } else if (state.tutorOutputObserved && state.quietSinceMs === null) {

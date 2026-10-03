@@ -185,6 +185,69 @@ describe("transcript-state lesson runtime authority", () => {
     expect(runtime.state.phase).toBe("rendering");
   });
 
+  it("remembers post-child output that starts before the correct classification returns", () => {
+    const runtime = new Runtime();
+    runtime.childTurn();
+    const requestSource = classificationSource(runtime.state)!;
+    runtime.output("active");
+    expect(runtime.state).toMatchObject({ tutorOutputObserved: true, acceptedAnswerRevision: null });
+    expectNoTransition(runtime);
+    runtime.proposal({}, requestSource);
+    runtime.acknowledge();
+    expectNoTransition(runtime);
+    runtime.output("quiet");
+    const quietAt = runtime.state.quietSinceMs!;
+    runtime.tick(quietAt + 99);
+    expectNoTransition(runtime);
+    runtime.tick(quietAt + 100);
+    expect(runtime.state.phase).toBe("rendering");
+    expect(runtime.state.pendingRender!.identity.nodeId).toBe("count-2-ducks");
+  });
+
+  it("uses still-current sustained quiet when tutor audio fully drains before correct classification", () => {
+    const runtime = new Runtime();
+    runtime.childTurn();
+    const requestSource = classificationSource(runtime.state)!;
+    runtime.drain();
+    const quietAt = runtime.state.quietSinceMs!;
+    expect(runtime.state).toMatchObject({ tutorOutputObserved: true, tutorOutputDrained: true, answerAccepted: false });
+    expectNoTransition(runtime);
+    runtime.proposal({}, requestSource);
+    expect(runtime.state.quietSinceMs).toBe(quietAt);
+    expectNoTransition(runtime);
+    runtime.acknowledge();
+    expect(runtime.state.phase).toBe("rendering");
+    expect(runtime.result.effects.map(effect => effect.type)).toEqual(["render.requested"]);
+  });
+
+  it.each([
+    { answerOutcome: "incorrect" },
+    { answerOutcome: "unclear" },
+    { answerOutcome: "none" },
+    { supportState: "needs_help" },
+  ] satisfies Partial<ConversationStateProposal>[])(
+    "classification %j clears post-child audio captured while classification was in flight",
+    fields => {
+      const runtime = new Runtime();
+      runtime.childTurn();
+      runtime.drain();
+      expect(runtime.state.tutorOutputObserved).toBe(true);
+      runtime.proposal(fields);
+      expect(runtime.state).toMatchObject({
+        answerAccepted: false,
+        tutorOutputObserved: false,
+        tutorOutputDrained: false,
+        quietSinceMs: null,
+      });
+      // Even restored semantic authority cannot reuse the discarded audio.
+      runtime.acknowledge();
+      runtime.acknowledge();
+      runtime.tick();
+      expect(runtime.state.acknowledgmentObserved).toBe(true);
+      expectNoTransition(runtime);
+    },
+  );
+
   it.each(["incorrect", "unclear", "none"] as const)("%s never grants completion authority", answerOutcome => {
     const runtime = new Runtime();
     runtime.childTurn();
@@ -346,7 +409,7 @@ describe("transcript-state lesson runtime authority", () => {
     expect(runtime.state.answerAccepted).toBe(true);
   });
 
-  it("pre-answer output and already-active PCM cannot satisfy the audio requirement", () => {
+  it("pre-child-turn output and already-active PCM cannot satisfy the audio requirement", () => {
     const runtime = new Runtime();
     runtime.output("active");
     runtime.output("quiet");
@@ -366,6 +429,119 @@ describe("transcript-state lesson runtime authority", () => {
     expectNoTransition(active);
     active.drain();
     expect(active.state.phase).toBe("rendering");
+  });
+
+  it("output beginning during child speech cannot become relevant when that speech ends", () => {
+    const runtime = new Runtime();
+    runtime.childStart();
+    runtime.transcript("child");
+    runtime.output("active");
+    expect(runtime.state.tutorOutputObserved).toBe(false);
+    runtime.send({ type: "child.turn.ended", source: runtimeSource(runtime.state) });
+    runtime.proposal();
+    runtime.acknowledge();
+    runtime.output("active");
+    runtime.output("quiet");
+    runtime.tick();
+    expectNoTransition(runtime);
+    runtime.drain();
+    expect(runtime.state.phase).toBe("rendering");
+  });
+
+  it("an ended child turn without its own transcript cannot establish candidate audio", () => {
+    const runtime = new Runtime();
+    runtime.childStart();
+    runtime.send({ type: "child.turn.ended", source: runtimeSource(runtime.state) });
+    runtime.output("active");
+    runtime.transcript("child");
+    runtime.proposal();
+    runtime.acknowledge();
+    runtime.output("quiet");
+    runtime.tick();
+    expect(runtime.state.tutorOutputObserved).toBe(false);
+    expectNoTransition(runtime);
+  });
+
+  it("new child speech immediately clears unclassified candidate audio and cannot carry it forward", () => {
+    const runtime = new Runtime();
+    runtime.childTurn();
+    runtime.output("active");
+    expect(runtime.state.tutorOutputObserved).toBe(true);
+    runtime.childStart();
+    expect(runtime.state).toMatchObject({ tutorOutputObserved: false, tutorOutputDrained: false, quietSinceMs: null });
+    runtime.transcript("child");
+    runtime.send({ type: "child.turn.ended", source: runtimeSource(runtime.state) });
+    runtime.proposal();
+    runtime.acknowledge();
+    // Previous-turn output is still active; repeating active does not manufacture a new onset.
+    runtime.output("active");
+    runtime.output("quiet");
+    runtime.tick();
+    expectNoTransition(runtime);
+  });
+
+  it.each(["child", "unknown"] as const)("a %s update invalidates unclassified candidate audio", speaker => {
+    const runtime = new Runtime();
+    runtime.childTurn();
+    runtime.drain();
+    expect(runtime.state.tutorOutputObserved).toBe(true);
+    runtime.transcript(speaker);
+    expect(runtime.state).toMatchObject({ tutorOutputObserved: false, tutorOutputDrained: false, quietSinceMs: null });
+    runtime.tick();
+    expectNoTransition(runtime);
+  });
+
+  it.each([{ runtimeId: "old-runtime" }, { visitId: 0 }, { childTurnId: 0 }])(
+    "a stale audio source %j cannot establish post-child candidate audio",
+    staleSource => {
+      const runtime = new Runtime();
+      runtime.childTurn();
+      const state = runtime.state;
+      expect(
+        runtime.send({ type: "output.activity", source: { ...runtimeSource(state), ...staleSource }, state: "active" })
+          .state,
+      ).toBe(state);
+      runtime.proposal();
+      runtime.acknowledge();
+      runtime.output("quiet");
+      runtime.tick();
+      expectNoTransition(runtime);
+    },
+  );
+
+  it("unavailable clears candidate audio even before semantic acceptance", () => {
+    const runtime = new Runtime();
+    runtime.childTurn();
+    runtime.drain();
+    expect(runtime.state.tutorOutputObserved).toBe(true);
+    runtime.output("unavailable");
+    expect(runtime.state).toMatchObject({ tutorOutputObserved: false, tutorOutputDrained: false, quietSinceMs: null });
+    runtime.proposal();
+    runtime.acknowledge();
+    runtime.output("quiet");
+    runtime.tick();
+    expectNoTransition(runtime);
+    runtime.drain();
+    expect(runtime.state.phase).toBe("rendering");
+  });
+
+  it("renewed active output resets quiet captured before semantic acceptance", () => {
+    const runtime = new Runtime();
+    runtime.childTurn();
+    runtime.drain();
+    expect(runtime.state.tutorOutputDrained).toBe(true);
+    runtime.output("active");
+    expect(runtime.state).toMatchObject({ tutorOutputObserved: true, tutorOutputDrained: false, quietSinceMs: null });
+    runtime.proposal();
+    runtime.acknowledge();
+    runtime.tick();
+    expectNoTransition(runtime);
+    runtime.output("quiet");
+    const quietAt = runtime.state.quietSinceMs!;
+    runtime.tick(quietAt + 99);
+    expectNoTransition(runtime);
+    runtime.tick(quietAt + 100);
+    expect(runtime.state.phase).toBe("rendering");
   });
 
   it("renewed active output resets the sustained quiet deadline", () => {
