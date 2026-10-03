@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { JEV_MODEL } from "../lib/answer";
-import { parseConversationStateProposal } from "../lib/transcript-state-steering/conversation-state-classifier";
-import type { ConversationStateClassifierInput } from "../lib/transcript-state-steering/conversation-state-classifier";
+import { JEV_MODEL } from "../lib/jev";
+import { parseConversationStateProposal } from "../lib/lesson-runtime/conversation-state-classifier";
+import type { ConversationStateClassifierInput } from "../lib/lesson-runtime/conversation-state-classifier";
 import {
   CONVERSATION_QUESTIONS,
   jevConversationStateClassifier,
-} from "../lib/transcript-state-steering/jev-conversation-state-classifier";
+} from "../lib/lesson-runtime/jev-conversation-state-classifier";
 
 type QuestionId = keyof typeof CONVERSATION_QUESTIONS;
 const probabilities = (overrides: Partial<Record<QuestionId, number>> = {}) => ({
@@ -151,8 +151,8 @@ describe("Jev current-node semantic classifier", () => {
       ...snapshot,
       futureNodes: [{ id: "count-2-ducks", content: "future content marker" }],
       onSuccess: { kind: "node", nodeId: "count-2-ducks" },
-      parentContext: "parent review marker",
-      learnerProfile: "historical profile marker",
+      privateContext: "private context marker",
+      unrelatedState: "unrelated state marker",
     };
     await classify(extraCallerData, signal);
     expect(fetch).toHaveBeenCalledOnce();
@@ -181,8 +181,8 @@ describe("Jev current-node semantic classifier", () => {
       "onSuccess",
       "futureNodes",
       "tutorBrief",
-      "parent review marker",
-      "historical profile marker",
+      "private context marker",
+      "unrelated state marker",
       "future content marker",
     ])
       expect(init!.body).not.toContain(forbidden);

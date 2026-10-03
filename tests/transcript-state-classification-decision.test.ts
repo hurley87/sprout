@@ -6,7 +6,7 @@ import {
   mapConversationClassification,
   parseClassificationDiagnostic,
   type NormalizedConversationProbabilities,
-} from "../lib/transcript-state-steering/classification-decision";
+} from "../lib/lesson-runtime/classification-decision";
 import { conversationProbabilities } from "./fixtures/conversation-classification";
 
 const input = {

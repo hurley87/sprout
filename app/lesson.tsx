@@ -1,239 +1,185 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { fetchEvaluateAnswer } from "@/lib/answer";
-import { ConvexSessionRecorder } from "@/lib/convex-session-recorder";
-import { BrowserTransport, type VoiceActivity } from "@/lib/browser-transport";
-import { OBJECTS, objectName, sceneAt } from "@/lib/lesson";
-import { LessonSession, type Diagnostic, type Snapshot } from "@/lib/session";
-import { SessionInspector } from "./session-inspector";
-import type { DurableSessionRef, SessionRecordReader } from "@/lib/session-recorder";
-import { JevDiagnostics } from "./jev-diagnostics";
-import { readBrowserSessionReference, saveBrowserSessionReference } from "@/lib/durable-session-reference";
+import { COUNTING_LESSON_GRAPH, INITIAL_COUNTING_NODE_ID } from "@/lib/lesson-runtime/counting-lesson";
+import { LESSON_TIMING, LessonRuntime, type LessonSnapshot } from "@/lib/lesson-runtime/lesson-runtime";
 
-function Scene({ index }: { index: number }) {
-  const scene = sceneAt(index);
-  return (
-    <div className="scene" data-scene={scene.id} role="img" aria-label={`A group of ${objectName(scene)} to count`}>
-      {Array.from({ length: scene.quantity }, (_, position) => (
-        <span aria-hidden="true" key={`${scene.id}-${position}`}>
-          {OBJECTS[scene.object].emoji}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-export default function Lesson({ debug }: { debug: boolean }) {
-  const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
-  const [diagnosticEvents, setDiagnosticEvents] = useState<readonly Diagnostic[]>([]);
-  const [microphoneDiagnostics, setMicrophoneDiagnostics] = useState(false);
-  const [voiceActivity, setVoiceActivity] = useState<VoiceActivity>("unavailable");
-  const [endedAttempt, setEndedAttempt] = useState<{ ref?: DurableSessionRef; reader: SessionRecordReader } | null>(
-    null,
-  );
-  const [savedReferenceIssue, setSavedReferenceIssue] = useState<"missing" | "invalid" | null>(null);
+export default function Lesson() {
   const audio = useRef<HTMLAudioElement>(null);
-  const session = useRef<LessonSession | null>(null);
-  const live = snapshot !== null && snapshot.status !== "ended";
+  const scene = useRef<HTMLDivElement>(null);
+  const lesson = useRef<LessonRuntime | null>(null);
+  const [snapshot, setSnapshot] = useState<LessonSnapshot | null>(null);
+  const display = snapshot?.display;
+  const status = snapshot?.status;
+  const nodeId = display ? display.nodeId : INITIAL_COUNTING_NODE_ID;
+  const node = nodeId ? COUNTING_LESSON_GRAPH[nodeId] : null;
+  const state = snapshot?.runtime;
+  const live = snapshot !== null && status !== "ended";
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      const saved = readBrowserSessionReference();
-      if (saved.status === "available") {
-        setEndedAttempt({ ref: saved.ref, reader: new ConvexSessionRecorder() });
-        return;
-      }
-      setSavedReferenceIssue(saved.status);
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
-    const hide = () => {
-      if (document.hidden) session.current?.dispose();
-    };
-    const leave = () => session.current?.dispose();
-    document.addEventListener("visibilitychange", hide);
-    window.addEventListener("pagehide", leave);
-    return () => {
-      document.removeEventListener("visibilitychange", hide);
-      window.removeEventListener("pagehide", leave);
-      session.current?.dispose();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!snapshot || snapshot.status === "ended") return;
-    const current = session.current;
+    if (!display || status === "ended") return;
+    const current = lesson.current;
     let second = 0;
+    // This effect runs after React commits. Two frames also allow the scene to paint.
     const first = requestAnimationFrame(() => {
-      second = requestAnimationFrame(() => current?.displayed(snapshot.sceneIndex));
+      second = requestAnimationFrame(() => {
+        const element = scene.current;
+        if (
+          element?.dataset.renderToken === display.token &&
+          element.dataset.nodeId === (display.nodeId ?? "complete") &&
+          element.dataset.sceneId === (display.sceneId ?? "complete")
+        )
+          current?.confirmRendered(display);
+      });
     });
     return () => {
       cancelAnimationFrame(first);
       cancelAnimationFrame(second);
     };
-  }, [snapshot]);
+  }, [display, status]);
 
-  function start(retryOf?: DurableSessionRef) {
-    if (!audio.current || (session.current && session.current.snapshot.status !== "ended")) return;
-    session.current?.dispose();
-    setEndedAttempt(null);
-    setVoiceActivity("unavailable");
-    const recorder = new ConvexSessionRecorder(ref => {
-      if (session.current !== current) return;
-      const stored = saveBrowserSessionReference(ref);
-      setSavedReferenceIssue(stored ? null : "invalid");
-      if (session.current?.snapshot.status === "ended")
-        setEndedAttempt(attempt => (attempt ? { ...attempt, ref } : attempt));
+  useEffect(() => {
+    const hidden = () => {
+      if (document.hidden) lesson.current?.stop("page_hidden");
+    };
+    const leave = () => lesson.current?.stop("page_left");
+    document.addEventListener("visibilitychange", hidden);
+    window.addEventListener("pagehide", leave);
+    return () => {
+      document.removeEventListener("visibilitychange", hidden);
+      window.removeEventListener("pagehide", leave);
+      lesson.current?.stop("unmounted");
+    };
+  }, []);
+
+  function start() {
+    if (!audio.current || live) return;
+    lesson.current?.stop("restarted");
+    const current = new LessonRuntime(audio.current, value => {
+      if (lesson.current === current) setSnapshot(value);
     });
-    const current = new LessonSession(
-      new BrowserTransport(audio.current, microphoneDiagnostics, activity => {
-        if (session.current === current) setVoiceActivity(activity);
-      }),
-      fetchEvaluateAnswer,
-      snapshot => {
-        if (session.current === current) {
-          setSnapshot(snapshot);
-          if (snapshot.status === "ended") setEndedAttempt({ ref: snapshot.durableSessionRef, reader: recorder });
-        }
-      },
-      () => {
-        if (session.current === current) setDiagnosticEvents([...current.events]);
-      },
-      recorder,
-      retryOf,
-    );
-    session.current = current;
-    setDiagnosticEvents([]);
-    void current.start();
+    lesson.current = current;
+    setSnapshot(current.snapshot());
   }
+
   function download() {
-    if (!session.current) return;
-    const report = session.current.report(navigator.userAgent);
+    const report = lesson.current?.report();
+    if (!report) return;
     const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }));
     const link = document.createElement("a");
     link.href = url;
-    link.download = `sprout-attempt-${session.current.createdAt}.json`;
+    link.download = `sprout-lesson-${report.runtimeId}.json`;
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   return (
-    <main className={live ? "sprout live" : "sprout"}>
-      <audio ref={audio} aria-hidden="true" />
-      {snapshot?.recordingError && (
-        <p role="alert" className="error">
-          {snapshot.recordingError}
+    <main className="mx-auto w-full max-w-5xl space-y-6 p-6">
+      <div>
+        <h1 className="text-2xl font-semibold">Sprout</h1>
+        <p className="mt-2">
+          Use your microphone to count the displayed group. Stop and export each attempt before restarting.
+        </p>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          className="rounded bg-emerald-800 px-4 py-2 text-white disabled:opacity-40"
+          disabled={live}
+          onClick={start}
+        >
+          Start lesson
+        </button>
+        <button
+          className="rounded border px-4 py-2 disabled:opacity-40"
+          disabled={!live}
+          onClick={() => lesson.current?.stop()}
+        >
+          Stop
+        </button>
+        <button className="rounded border px-4 py-2 disabled:opacity-40" disabled={!snapshot} onClick={download}>
+          Export diagnostics
+        </button>
+        <span role="status">
+          {status ?? "Ready"}
+          {snapshot?.awaitingSteering ? " · waiting for steering acknowledgment" : ""}
+        </span>
+      </div>
+      {snapshot?.error && (
+        <p role="alert" className="rounded border border-red-400 p-3">
+          {snapshot.error}
         </p>
       )}
-      {live ? (
-        <>
-          <button className="end-button" onClick={() => session.current?.end("parent_stop")}>
-            End lesson
-          </button>
-          <section className="play-space" aria-label="Counting lesson">
-            <div className="tutor">
-              <div className="character" role="img" aria-label="Sprout">
-                <span className="leaf">🌱</span>
-                <span className="face">◡</span>
-              </div>
-              <p
-                className="voice-status"
-                data-activity={snapshot.status === "starting" ? "unavailable" : voiceActivity}
-              >
-                <span className="voice-dot" aria-hidden="true" />
-                <span>
-                  {snapshot.status === "starting"
-                    ? "Connecting…"
-                    : voiceActivity === "speaking"
-                      ? "Speaking"
-                      : voiceActivity === "listening"
-                        ? "Listening"
-                        : "Connected"}
-                </span>
-              </p>
-            </div>
-            <Scene index={snapshot.sceneIndex} />
-          </section>
-        </>
-      ) : (
-        <section className="welcome">
-          <div className="character" role="img" aria-label="Sprout">
-            <span className="leaf">🌱</span>
-            <span className="face">◡</span>
-          </div>
-          <h1>{snapshot ? "Bye for now." : "Let’s count together."}</h1>
-          {snapshot?.error ? (
-            <p className="error" role="alert">
-              {snapshot.error}
-            </p>
-          ) : (
-            <p className="intro">
-              {snapshot
-                ? "The microphone and voice playback are off."
-                : "Count ducks, butterflies, and strawberries. Say your answers out loud."}
-            </p>
-          )}
-          {snapshot?.reason === "page_hidden" && (
-            <p className="parent-note">
-              The lesson ended because the page was hidden. Keep this tab visible during the lesson.
-            </p>
-          )}
-          <button className="start-button" onClick={() => start()}>
-            {snapshot ? "Start a new lesson" : "Start counting together"}
-            <span aria-hidden="true">↗</span>
-          </button>
-          <label className="parent-note">
-            <input
-              type="checkbox"
-              checked={microphoneDiagnostics}
-              onChange={event => setMicrophoneDiagnostics(event.target.checked)}
-            />{" "}
-            Include microphone timing in the diagnostic download
-          </label>
-          <div className="parent-note">
-            <p>For a parent and child · About 5 minutes · Count from 1 to 5</p>
-            <p>
-              Stay with your child, allow microphone access, and keep this tab visible. The tutor uses an AI voice.
-              Audio is sent to OpenAI during the lesson and saved in a private session record for review. You can end
-              the lesson at any time.
-            </p>
-          </div>
-          {endedAttempt && (
-            <SessionInspector
-              key={endedAttempt.ref ?? "unavailable"}
-              sessionRef={endedAttempt.ref}
-              reader={endedAttempt.reader}
-              onRetry={ref => start(ref)}
-            />
-          )}
-          {!endedAttempt && savedReferenceIssue === "missing" && (
-            <p className="parent-note">No saved session reference is available on this browser.</p>
-          )}
-          {!endedAttempt && savedReferenceIssue === "invalid" && (
-            <p className="parent-note" role="status">
-              The saved session reference is invalid or unavailable on this browser.
-            </p>
-          )}
-          {snapshot && (
-            <details className="diagnostics">
-              <summary>Parent testing notes · Prototype diagnostics</summary>
-              <p>
-                Ended: {snapshot.reason?.replaceAll("_", " ")}. Download approximate transcripts, displayed scenes,
-                timing, and connection events before starting again. These stay in this tab and are lost on reload. The
-                private durable session record includes full-session audio when recording succeeds. No learning
-                assessment is saved.
-              </p>
-              <button className="download-button" onClick={download}>
-                Download attempt diagnostics
-              </button>
+      <div
+        ref={scene}
+        className="flex min-h-64 items-center justify-center gap-6 rounded-2xl bg-emerald-50 p-8 text-7xl"
+        role="img"
+        aria-label={
+          node ? `${node.quantity} ${node.object}${node.quantity === 1 ? "" : "s"} to count` : "Lesson complete"
+        }
+        data-render-token={display?.token}
+        data-node-id={nodeId ?? "complete"}
+        data-scene-id={node?.sceneId ?? "complete"}
+      >
+        {node ? (
+          Array.from({ length: node.quantity }, (_, index) => (
+            <span aria-hidden="true" key={`${node.id}:${index}`}>
+              {node.object === "duck" ? "🦆" : "🦋"}
+            </span>
+          ))
+        ) : (
+          <span className="text-2xl">Counting complete</span>
+        )}
+      </div>
+      <audio ref={audio} />
+      <section className="space-y-2 rounded border p-4">
+        <h2 className="font-semibold">Progression gate</h2>
+        <p>
+          Node: {state?.nodeId ?? INITIAL_COUNTING_NODE_ID} · Phase: {state?.phase ?? "not started"} · Visit:{" "}
+          {state?.visitId ?? "—"} · Child turn: {state?.childTurnId ?? "—"} · Revision: {state?.transcriptRevision ?? 0}{" "}
+          ({state?.transcriptSource ?? "unknown"})
+        </p>
+        <p>
+          Child speaking: {String(state?.childSpeaking ?? false)} · Child transcript:{" "}
+          {String(state?.hasChildTranscript ?? false)} · Correct accepted: {String(state?.answerAccepted ?? false)} ·
+          Acknowledgment: {String(state?.acknowledgmentObserved ?? false)}
+        </p>
+        <p>
+          Output: {state?.outputActivity ?? "unavailable"} · Relevant tutor audio:{" "}
+          {String(state?.tutorOutputObserved ?? false)} · Drained: {String(state?.tutorOutputDrained ?? false)} · Quiet
+          since: {state?.quietSinceMs?.toFixed(0) ?? "—"} ms
+        </p>
+        <p className="text-sm">
+          Timing: child debounce {LESSON_TIMING.childSnapshotDebounceMs} ms after VAD ends · tutor transcript stable{" "}
+          {LESSON_TIMING.tutorTranscriptStableMs} ms + classification quiet {LESSON_TIMING.tutorClassificationQuietMs}{" "}
+          ms · VAD quiet {LESSON_TIMING.microphoneQuietMs} ms · transition audio drain {LESSON_TIMING.quietDrainMs} ms ·
+          tick {LESSON_TIMING.clockTickMs} ms
+        </p>
+        <p className="text-sm">
+          All gates must agree on the current revision. Abstention holds the scene. Renewed speech clears completion
+          authority.
+        </p>
+      </section>
+      <section className="rounded border p-4">
+        <h2 className="font-semibold">Current visit transcript</h2>
+        <pre className="mt-2 whitespace-pre-wrap">{snapshot?.transcript || "No transcript yet."}</pre>
+      </section>
+      <section className="rounded border p-4">
+        <h2 className="font-semibold">Diagnostics (latest 100 events; export includes all)</h2>
+        <p className="mt-2 text-sm">
+          The export contains conversation text. It stays in this page until you download it; refreshing clears it.
+        </p>
+        <div className="mt-3 max-h-96 space-y-2 overflow-auto text-sm">
+          {snapshot?.diagnostics.map((event, index) => (
+            <details key={`${event.atMs}:${index}`}>
+              <summary className="cursor-pointer">
+                {event.atMs.toFixed(0)} ms · {event.type} · visit {event.visitId ?? "—"}, turn{" "}
+                {event.childTurnId ?? "—"}, rev {event.transcriptRevision}
+              </summary>
+              <pre className="overflow-auto whitespace-pre-wrap p-2">{JSON.stringify(event, null, 2)}</pre>
             </details>
-          )}
-        </section>
-      )}
-      {debug && <JevDiagnostics events={diagnosticEvents} />}
+          ))}
+        </div>
+      </section>
     </main>
   );
 }

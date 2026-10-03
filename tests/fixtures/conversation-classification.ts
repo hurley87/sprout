@@ -1,4 +1,4 @@
-import type { NormalizedConversationProbabilities } from "../../lib/transcript-state-steering/classification-decision";
+import type { NormalizedConversationProbabilities } from "../../lib/lesson-runtime/classification-decision";
 
 export const conversationProbabilities = (
   overrides: Partial<NormalizedConversationProbabilities> = {},

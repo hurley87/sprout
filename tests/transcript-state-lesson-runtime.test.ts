@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { ConversationStateProposal } from "../lib/transcript-state-steering/conversation-state-classifier";
-import { COUNTING_LESSON_GRAPH, type CountingNodeId } from "../lib/transcript-state-steering/counting-lesson";
+import type { ConversationStateProposal } from "../lib/lesson-runtime/conversation-state-classifier";
+import { COUNTING_LESSON_GRAPH, type CountingNodeId } from "../lib/lesson-runtime/counting-lesson";
 import {
   classificationSource,
   createLessonRuntime,
@@ -9,7 +9,7 @@ import {
   type ClassificationSource,
   type LessonRuntimeEvent,
   type LessonRuntimeResult,
-} from "../lib/transcript-state-steering/lesson-runtime-reducer";
+} from "../lib/lesson-runtime/lesson-runtime-reducer";
 
 type WithoutTime<T> = T extends unknown ? Omit<T, "atMs"> : never;
 

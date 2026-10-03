@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { COUNTING_NODE_IDS, type CountingNodeId } from "../lib/transcript-state-steering/counting-lesson";
+import { COUNTING_NODE_IDS, type CountingNodeId } from "../lib/lesson-runtime/counting-lesson";
 import {
   ANSWER_OUTCOMES,
   CHILD_ACTIVITIES,
@@ -9,7 +9,7 @@ import {
   type ConversationStateClassifier,
   type ConversationStateClassifierInput,
   type ConversationStateProposal,
-} from "../lib/transcript-state-steering/conversation-state-classifier";
+} from "../lib/lesson-runtime/conversation-state-classifier";
 
 const proposal: ConversationStateProposal = {
   nodeId: "count-1-duck",
@@ -189,33 +189,6 @@ describe("ConversationStateClassifier ephemeral runtime contract", () => {
     expect(
       parseConversationStateProposal({ ...proposal, answerOutcome: "correct", [key as string]: value }),
     ).toBeNull();
-  });
-
-  it("rejects the post-session Observer's evidence-oriented proposal envelope", () => {
-    expect(
-      parseConversationStateProposal({
-        kind: "observer_proposal",
-        proposalId: "post-session-proposal",
-        sessionId: "recorded-session",
-        exchangeAtMs: 1000,
-        observation: { behavior: "quantity_identification", outcome: "correct" },
-        sources: [{ eventId: "recorded-utterance", role: "response" }],
-      }),
-    ).toBeNull();
-  });
-
-  it.each([
-    ["kind", "observer_proposal"],
-    ["proposalId", "persisted-proposal"],
-    ["sessionId", "recorded-session"],
-    ["exchangeAtMs", 1000],
-    ["observation", { behavior: "quantity_identification", outcome: "correct" }],
-    ["sources", [{ eventId: "recorded-utterance", role: "response" }]],
-    ["decision", "accepted"],
-    ["reviewedAt", 2000],
-    ["parentContext", { provenance: "parent_review", note: "I helped." }],
-  ])("rejects evidence, persistence, or parent-review metadata %s on a runtime proposal", (key, value) => {
-    expect(parseConversationStateProposal({ ...proposal, [key as string]: value })).toBeNull();
   });
 
   it("round-trips only current-node interpretation without future-node or graph information", () => {

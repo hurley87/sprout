@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { POST } from "../app/api/experiments/transcript-state-steering/classify/route";
+import { POST } from "../app/api/classify/route";
 import {
   classifyConversationStateWithDiagnostics,
   jevConversationStateClassifier,
-} from "../lib/transcript-state-steering/jev-conversation-state-classifier";
+} from "../lib/lesson-runtime/jev-conversation-state-classifier";
 import { conversationProbabilities, conversationProviderBody } from "./fixtures/conversation-classification";
 
 const input = {
@@ -13,7 +13,7 @@ const input = {
     "Tutor: How many butterflies do you see?\nChild: What's a butterfly\nTutor: A butterfly is a little insect with big wings that flies around. Look at the butterflies on the screen. How many do you see?\nChild: Uh, two\nTutor: Nice try. Want to count them one at a time with me?\nChild: Yes\nTutor: Okay, point to each butterfly and say a number, starting with one.\nChild: One, two. Three\nTutor: Yes, three butterflies!",
 };
 const request = () =>
-  new Request("http://localhost:3000/api/experiments/transcript-state-steering/classify", {
+  new Request("http://localhost:3000/api/classify", {
     method: "POST",
     headers: { "Content-Type": "application/json", origin: "http://localhost:3000", host: "localhost:3000" },
     body: JSON.stringify(input),

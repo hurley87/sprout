@@ -6,7 +6,7 @@ import {
   isCountingNodeId,
   type CountingLessonNode,
   type CountingNodeId,
-} from "../lib/transcript-state-steering/counting-lesson";
+} from "../lib/lesson-runtime/counting-lesson";
 
 describe("transcript-state spike authored lesson graph", () => {
   it("authors exactly the three requested activities with stable content IDs", () => {
