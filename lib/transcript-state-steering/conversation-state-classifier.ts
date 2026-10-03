@@ -1,6 +1,6 @@
 import { isCountingNodeId, type CountingNodeId } from "./counting-lesson";
 
-export const CHILD_ACTIVITIES = ["waiting", "thinking", "answering"] as const;
+export const CHILD_ACTIVITIES = ["unknown", "waiting", "thinking", "answering"] as const;
 export type ChildActivity = (typeof CHILD_ACTIVITIES)[number];
 
 export const ANSWER_OUTCOMES = ["none", "correct", "incorrect", "unclear"] as const;
@@ -9,7 +9,7 @@ export type AnswerOutcome = (typeof ANSWER_OUTCOMES)[number];
 export const SUPPORT_STATES = ["none", "needs_help"] as const;
 export type SupportState = (typeof SUPPORT_STATES)[number];
 
-export const TUTOR_STATES = ["asking", "listening", "clarifying", "helping", "acknowledging"] as const;
+export const TUTOR_STATES = ["unknown", "asking", "listening", "clarifying", "helping", "acknowledging"] as const;
 export type TutorState = (typeof TUTOR_STATES)[number];
 
 /**
@@ -26,31 +26,31 @@ export type ConversationStateProposal = {
   readonly nodeId: CountingNodeId;
   /** Claimed snapshot revision; a nonnegative safe integer the app must match to the request. */
   readonly transcriptRevision: number;
-  /** What the child is currently doing, independently of their latest answer. */
+  /** Requires runtime turn/audio signals; a transcript-only classifier emits "unknown". */
   readonly childActivity: ChildActivity;
   /** Outcome of the latest answer for this node; "none" when no answer has been given. */
   readonly answerOutcome: AnswerOutcome;
   /** Current inferred need for help; "none" when no need is inferred. */
   readonly supportState: SupportState;
+  /** Transcript classification describes the latest tutor message, not live speech activity. */
   readonly tutorState: TutorState;
-  /** Finite confidence in the whole proposal, inclusive range [0, 1]. */
-  readonly confidence: number;
 };
 
 /** A supplied transcript snapshot, not an accumulator or a persisted session record. */
 export type ConversationStateClassifierInput = {
   readonly nodeId: CountingNodeId;
   readonly transcriptRevision: number;
+  /** Recent current-node exchange in order, with Child:/Tutor: speaker labels. */
   readonly transcript: string;
 };
 
 /**
- * Provider-independent runtime classification contract; implementation belongs to a later slice.
+ * Provider-independent runtime classification contract.
  * Classify only the supplied snapshot, returning a tentative state proposal or null to abstain.
  * The classifier has no lesson-transition authority and does not publish reviewed learning evidence.
  */
 export type ConversationStateClassifier = {
-  classify(input: ConversationStateClassifierInput): Promise<ConversationStateProposal | null>;
+  classify(input: ConversationStateClassifierInput, signal: AbortSignal): Promise<ConversationStateProposal | null>;
 };
 
 const PROPOSAL_KEYS = [
@@ -60,7 +60,6 @@ const PROPOSAL_KEYS = [
   "answerOutcome",
   "supportState",
   "tutorState",
-  "confidence",
 ] as const;
 
 /** Closed runtime payload: reject commands, future-node context, and evidence/review metadata. */
@@ -86,11 +85,7 @@ export function parseConversationStateProposal(value: unknown): ConversationStat
     typeof proposal.supportState !== "string" ||
     !SUPPORT_STATES.includes(proposal.supportState as SupportState) ||
     typeof proposal.tutorState !== "string" ||
-    !TUTOR_STATES.includes(proposal.tutorState as TutorState) ||
-    typeof proposal.confidence !== "number" ||
-    !Number.isFinite(proposal.confidence) ||
-    proposal.confidence < 0 ||
-    proposal.confidence > 1
+    !TUTOR_STATES.includes(proposal.tutorState as TutorState)
   )
     return null;
 
@@ -101,6 +96,5 @@ export function parseConversationStateProposal(value: unknown): ConversationStat
     answerOutcome: proposal.answerOutcome as AnswerOutcome,
     supportState: proposal.supportState as SupportState,
     tutorState: proposal.tutorState as TutorState,
-    confidence: proposal.confidence,
   };
 }

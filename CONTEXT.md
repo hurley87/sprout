@@ -77,7 +77,7 @@ The ConversationStateClassifier's ephemeral interpretation of child activity, la
 _Avoid_: Observer proposal, transition command, reviewed evidence
 
 **Child activity**:
-What the child is currently doing in the exchange: waiting, thinking, or answering, independently of their latest answer's outcome or need for help.
+What the child is currently doing in the exchange: waiting, thinking, or answering, independently of their latest answer's outcome or need for help. A transcript-only classifier reports unknown; establishing activity requires runtime turn or microphone signals.
 _Avoid_: Child state when combining activity, outcome, and support need
 
 **Answer outcome**:
@@ -91,6 +91,10 @@ _Avoid_: Incorrect answer, record of help provided
 **ConversationStateClassifier**:
 The runtime interpreter that classifies a live transcript snapshot into a conversation-state proposal. It proposes conversation state without directing lesson transitions or producing persistent, parent-reviewable learning evidence.
 _Avoid_: Observer, lesson controller
+
+**Tutor state**:
+The tutor's conversational function: asking, clarifying, helping, or acknowledging. Transcript classification describes the latest tutor message and reports unknown when none of these functions is evidenced; it cannot establish live speaking or listening activity.
+_Avoid_: Acoustic activity inferred from transcript
 
 **Reviewed evidence**:
 An observation accepted by the parent, either unchanged or after correction, with its supporting context.

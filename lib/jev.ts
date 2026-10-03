@@ -1,8 +1,8 @@
 import { ANSWER_QUESTION, ANSWER_QUESTION_ID, JEV_MODEL, answerState } from "./answer";
 import type { Scene } from "./lesson";
 
-// Server-only. Asks TypeSafe's Jev the single Noul question defined in
-// lib/answer.ts. The credential and every provider response body stay here.
+// Server-only shared TypeSafe/SystemOne transport. The credential and every
+// provider response body stay here; callers receive validated probabilities only.
 
 const ENDPOINT = "https://api.typesafe.ai/v1/systemone";
 /**
@@ -13,17 +13,32 @@ export { JEV_MODEL } from "./answer";
 
 export type JevOutcome =
   | { ok: true; probability: number; model: string }
-  | { ok: false; reason: "unconfigured" | "rejected" | "unreadable" | "unreachable" };
+  | { ok: false; reason: "unconfigured" | "rejected" | "unreadable" | "unreachable" | "cancelled" };
+
+export type NoulQuestion = {
+  readonly type: "noul";
+  readonly instructions: string;
+  readonly criteria: { readonly true: string; readonly false: string };
+};
+
+type NoulOutcome<Key extends string> =
+  { ok: true; probabilities: Record<Key, number>; model: string } | Extract<JevOutcome, { ok: false }>;
 
 export { answerState } from "./answer";
 
-function readNoul(body: unknown): number | null {
+function readNoul(body: unknown, questionId: string): number | null {
   const response = body as { answers?: Record<string, { noul?: unknown }> } | null;
-  const noul = response?.answers?.[ANSWER_QUESTION_ID]?.noul;
+  const noul = response?.answers?.[questionId]?.noul;
   return typeof noul === "number" && Number.isFinite(noul) && noul >= 0 && noul <= 1 ? noul : null;
 }
 
-export async function evaluateCount(scene: Scene, utterance: string, signal: AbortSignal): Promise<JevOutcome> {
+/** One paid call, pinned model, closed probability projection; no raw bodies escape. */
+export async function evaluateNoulQuestions<Key extends string>(
+  state: unknown,
+  questions: Record<Key, NoulQuestion>,
+  signal: AbortSignal,
+): Promise<NoulOutcome<Key>> {
+  if (signal.aborted) return { ok: false, reason: "cancelled" };
   const key = process.env.TYPESAFE_API_KEY;
   if (!key) return { ok: false, reason: "unconfigured" };
   let response: Response;
@@ -33,19 +48,35 @@ export async function evaluateCount(scene: Scene, utterance: string, signal: Abo
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: JEV_MODEL,
-        state: answerState(scene, utterance),
-        questions: { [ANSWER_QUESTION_ID]: ANSWER_QUESTION },
+        state,
+        questions,
       }),
       signal,
     });
   } catch {
-    return { ok: false, reason: "unreachable" };
+    return { ok: false, reason: signal.aborted ? "cancelled" : "unreachable" };
   }
   // Provider bodies can echo the state; never forward or log them.
+  if (signal.aborted) return { ok: false, reason: "cancelled" };
   if (!response.ok) return { ok: false, reason: "rejected" };
   const body: unknown = await response.json().catch(() => null);
-  const probability = readNoul(body);
-  if (probability === null) return { ok: false, reason: "unreadable" };
+  if (signal.aborted) return { ok: false, reason: "cancelled" };
+  const probabilities = {} as Record<Key, number>;
+  for (const id of Object.keys(questions) as Key[]) {
+    const probability = readNoul(body, id);
+    if (probability === null) return { ok: false, reason: "unreadable" };
+    probabilities[id] = probability;
+  }
   const model = (body as { model?: unknown }).model;
-  return { ok: true, probability, model: typeof model === "string" ? model : JEV_MODEL };
+  return { ok: true, probabilities, model: typeof model === "string" ? model : JEV_MODEL };
+}
+
+export async function evaluateCount(scene: Scene, utterance: string, signal: AbortSignal): Promise<JevOutcome> {
+  const outcome = await evaluateNoulQuestions(
+    answerState(scene, utterance),
+    { [ANSWER_QUESTION_ID]: ANSWER_QUESTION },
+    signal,
+  );
+  if (!outcome.ok) return outcome;
+  return { ok: true, probability: outcome.probabilities[ANSWER_QUESTION_ID], model: outcome.model };
 }

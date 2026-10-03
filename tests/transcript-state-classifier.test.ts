@@ -18,7 +18,6 @@ const proposal: ConversationStateProposal = {
   answerOutcome: "none",
   supportState: "none",
   tutorState: "listening",
-  confidence: 0.8,
 };
 
 describe("ConversationStateClassifier ephemeral runtime contract", () => {
@@ -27,7 +26,7 @@ describe("ConversationStateClassifier ephemeral runtime contract", () => {
       "nodeId" | "transcriptRevision" | "transcript"
     >();
     expectTypeOf<Parameters<ConversationStateClassifier["classify"]>>().toEqualTypeOf<
-      [input: ConversationStateClassifierInput]
+      [input: ConversationStateClassifierInput, signal: AbortSignal]
     >();
     expectTypeOf<ReturnType<ConversationStateClassifier["classify"]>>().toEqualTypeOf<
       Promise<ConversationStateProposal | null>
@@ -36,10 +35,12 @@ describe("ConversationStateClassifier ephemeral runtime contract", () => {
 
   it("types exactly the descriptive fields and restricts node identity to authored IDs", () => {
     expectTypeOf<keyof ConversationStateProposal>().toEqualTypeOf<
-      "nodeId" | "transcriptRevision" | "childActivity" | "answerOutcome" | "supportState" | "tutorState" | "confidence"
+      "nodeId" | "transcriptRevision" | "childActivity" | "answerOutcome" | "supportState" | "tutorState"
     >();
     expectTypeOf<ConversationStateProposal["nodeId"]>().toEqualTypeOf<CountingNodeId>();
-    expectTypeOf<ConversationStateProposal["childActivity"]>().toEqualTypeOf<"waiting" | "thinking" | "answering">();
+    expectTypeOf<ConversationStateProposal["childActivity"]>().toEqualTypeOf<
+      "unknown" | "waiting" | "thinking" | "answering"
+    >();
     expectTypeOf<ConversationStateProposal["answerOutcome"]>().toEqualTypeOf<
       "none" | "correct" | "incorrect" | "unclear"
     >();
@@ -94,16 +95,9 @@ describe("ConversationStateClassifier ephemeral runtime contract", () => {
     }
   });
 
-  it.each([0, 0.5, 1])("accepts finite confidence %s in inclusive range [0, 1]", confidence => {
-    expect(parseConversationStateProposal({ ...proposal, confidence })?.confidence).toBe(confidence);
+  it("rejects the obsolete whole-proposal confidence field", () => {
+    expect(parseConversationStateProposal({ ...proposal, confidence: 0.9 })).toBeNull();
   });
-
-  it.each([-0.01, 1.01, NaN, Infinity, -Infinity, "0.8", null, undefined])(
-    "rejects invalid confidence %s",
-    confidence => {
-      expect(parseConversationStateProposal({ ...proposal, confidence })).toBeNull();
-    },
-  );
 
   it.each([0, 1, 42, Number.MAX_SAFE_INTEGER])(
     "accepts nonnegative safe transcript revision %s",
@@ -163,7 +157,6 @@ describe("ConversationStateClassifier ephemeral runtime contract", () => {
         transcriptRevision: proposal.transcriptRevision,
         childState: "thinking",
         tutorState: proposal.tutorState,
-        confidence: proposal.confidence,
       }),
     ).toBeNull();
     expect(parseConversationStateProposal({ ...proposal, childState: "correct" })).toBeNull();
@@ -239,7 +232,6 @@ describe("ConversationStateClassifier ephemeral runtime contract", () => {
       "answerOutcome",
       "supportState",
       "tutorState",
-      "confidence",
     ]);
   });
 });
