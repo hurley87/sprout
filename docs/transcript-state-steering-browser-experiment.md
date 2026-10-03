@@ -55,14 +55,32 @@ Repeat fresh attempts for these cases:
 
 For each exported attempt, also note the spoken answers, whether headphones were
 used, whether anything sounded wrong or overlapped, and which visible scene held
-or advanced. This JSON does not establish what a human actually heard. These
-manual voice scenarios remain unverified until a person runs them; existing
-unit tests and local route compilation do not prove this browser interaction.
+or advanced. This JSON does not establish what a human actually heard. The first
+manual demo validated the architecture but exposed classification churn during
+longer tutor speech. Repeat that demo with the tutor stabilization gate, including
+the butterfly explanation and "What's a butterfly?" question. Inspect the export
+for fewer cancelled Jev requests and appropriate abstention; the repeat voice
+run remains pending. Scheduler tests do not prove the live browser interaction.
 
 ## Timing and diagnostic interpretation
 
-The experiment waits **300 ms** after a child snapshot stabilizes with local VAD
-inactive, or **350 ms** after a tutor snapshot stabilizes. Local VAD uses the
+The child path still waits **300 ms** after a snapshot stabilizes with local VAD
+inactive. Tutor classification instead requires **600 ms** of transcript stability
+and **500 ms** of continuous locally observed output quiet. Both conditions must
+hold for the active current visit, with no child speech, current-turn child
+transcript evidence and a latest tutor-authored revision. These are independent
+clocks: already-quiet audio counts toward quiet even before a tutor revision
+arrives, and already-stable transcript text does not restart its clock when audio
+goes quiet. Resumed or unavailable output resets classification quiet. No further
+quiet event is needed to release a waiting snapshot. A newer snapshot, child turn,
+visit change or shutdown invalidates pending work; superseded in-flight Jev
+requests are still aborted.
+
+The defaults (`tutorTranscriptStableMs` and `tutorClassificationQuietMs`) cover
+multiple samples from the existing 50 ms PCM observer; they are conservative
+experiment settings, not proof of utterance completion. The classification quiet
+clock belongs to `TutorStabilizationGate` and never uses the reducer's
+`quietSinceMs`, `tutorOutputDrained` or `quietDrainMs`. Local VAD uses the
 existing **900 ms** quiet threshold, **80 ms** sustained onset and **150 ms**
 candidate-discard threshold. Candidate onset immediately starts an app-owned
 child turn and clears completion authority; sustained onset does not start a
@@ -86,6 +104,12 @@ Use these events to explain a held scene:
 
 - `transcript.snapshot`, `classifier.scheduled`, and `classifier.started` show
   exact input text, revision, speaker, trigger, and debounce delay.
+- `tutor_stabilization.scheduled`, `.cancelled`, `.waiting_for_transcript`,
+  `.waiting_for_quiet` and `.ready` show the tutor boundary's exact revision,
+  elapsed transcript stability and quiet, output activity, configured thresholds,
+  cancellation reason or trigger, and remaining timer delay. Only `.ready` releases
+  tutor classification; `classificationSource(state)` and snapshot text are
+  captured together at that point.
 - `classifier.cancelled`, `.abstained`, `.error`, and `.result` show cancellation
   reasons, tentative proposals and latency. Jev provider failures are normal
   abstentions in the existing classifier; raw provider diagnostics are not exposed.
@@ -136,6 +160,9 @@ output that starts before local VAD ends cannot satisfy its fresh-onset rule.
 These are existing reducer contracts, visible in diagnostics, not thresholds to
 silently relax before the manual run. The experiment stops at 12,000 current-node
 transcript characters or 256 fragments waiting for steering acknowledgment rather
-than silently trimming answer evidence. No generalized segmentation, persistence,
-browser automation, synthetic child, new automated tests, or production lesson
-integration is included in this checkpoint.
+than silently trimming answer evidence. Focused fake-clock unit tests and mocked
+experiment scheduling tests cover partial transcripts, both clock orderings,
+resumed/unavailable output, revision and turn/visit invalidation, unchanged child
+debounce, independent drain timing and abort of an in-flight older revision.
+No generalized segmentation, persistence, browser automation, synthetic voice
+child, broader automated tests or production lesson integration is included.

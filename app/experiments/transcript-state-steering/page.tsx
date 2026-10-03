@@ -153,9 +153,10 @@ export default function TranscriptStateSteeringPage() {
           since: {state?.quietSinceMs?.toFixed(0) ?? "—"} ms
         </p>
         <p className="text-sm">
-          Timing: child debounce {EXPERIMENT_TIMING.childSnapshotDebounceMs} ms after VAD ends · tutor debounce{" "}
-          {EXPERIMENT_TIMING.tutorSnapshotDebounceMs} ms · VAD quiet {EXPERIMENT_TIMING.microphoneQuietMs} ms · audio
-          drain {EXPERIMENT_TIMING.quietDrainMs} ms · tick {EXPERIMENT_TIMING.clockTickMs} ms
+          Timing: child debounce {EXPERIMENT_TIMING.childSnapshotDebounceMs} ms after VAD ends · tutor transcript stable{" "}
+          {EXPERIMENT_TIMING.tutorTranscriptStableMs} ms + classification quiet{" "}
+          {EXPERIMENT_TIMING.tutorClassificationQuietMs} ms · VAD quiet {EXPERIMENT_TIMING.microphoneQuietMs} ms ·
+          transition audio drain {EXPERIMENT_TIMING.quietDrainMs} ms · tick {EXPERIMENT_TIMING.clockTickMs} ms
         </p>
         <p className="text-sm">
           All gates must agree on the current revision. Abstention holds the scene. Renewed speech clears completion

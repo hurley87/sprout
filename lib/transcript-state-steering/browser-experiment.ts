@@ -4,6 +4,7 @@ import { MICROPHONE_ONSET_MS, MICROPHONE_ONSET_QUIET_MS, MICROPHONE_QUIET_MS } f
 import { parseConversationStateProposal } from "./conversation-state-classifier";
 import { COUNTING_LESSON_GRAPH, INITIAL_COUNTING_NODE_ID } from "./counting-lesson";
 import { initialTeachingContext, teachingInstruction } from "./live-context";
+import { TutorStabilizationGate } from "./tutor-stabilization";
 import {
   classificationSource,
   createLessonRuntime,
@@ -20,7 +21,9 @@ import {
 /** Explicit experiment policy, not a provider turn boundary or calibrated setting. */
 export const EXPERIMENT_TIMING = {
   childSnapshotDebounceMs: 300,
-  tutorSnapshotDebounceMs: 350,
+  // PCM observation samples every 50 ms. Require sustained quiet beyond a brief pause.
+  tutorTranscriptStableMs: 600,
+  tutorClassificationQuietMs: 500,
   quietDrainMs: 250,
   clockTickMs: 50,
   classifierTimeoutMs: 10_000,
@@ -79,6 +82,7 @@ export class TranscriptSteeringExperiment {
   private readonly events: ExperimentDiagnostic[] = [];
   private classification?: { abort: AbortController; source: ClassificationSource; speaker: Speaker };
   private lastClassifiedKey?: string;
+  private readonly tutorStabilization: TutorStabilizationGate;
   private stabilizationTimer?: ReturnType<typeof setTimeout>;
   private clockTimer?: ReturnType<typeof setTimeout>;
   private startupTimer?: ReturnType<typeof setTimeout>;
@@ -93,6 +97,18 @@ export class TranscriptSteeringExperiment {
     audio: HTMLAudioElement,
     private readonly changed: (snapshot: ExperimentSnapshot) => void,
   ) {
+    this.tutorStabilization = new TutorStabilizationGate(
+      {
+        tutorTranscriptStableMs: EXPERIMENT_TIMING.tutorTranscriptStableMs,
+        tutorClassificationQuietMs: EXPERIMENT_TIMING.tutorClassificationQuietMs,
+      },
+      () => this.now(),
+      () => void this.classify("tutor_utterance_stable"),
+      event => {
+        this.log(event.type, event, event.source, "tutor");
+        this.publish();
+      },
+    );
     this.transport = new BrowserTransport(audio, true, undefined, "transcript-state-steering");
     this.transport.setMicrophoneDiagnosticSink(event => {
       if (this.status === "ended") return;
@@ -201,6 +217,7 @@ export class TranscriptSteeringExperiment {
         this.stop("lesson_completed");
       }
     }
+    this.syncTutorStabilization(event.type);
     this.scheduleClock();
     this.publish();
   }
@@ -405,14 +422,20 @@ export class TranscriptSteeringExperiment {
 
   private scheduleClassification(trigger: string) {
     clearTimeout(this.stabilizationTimer);
-    if (!this.state || this.status !== "live" || this.steering || !classificationSource(this.state)) return;
-    const delayMs =
-      this.state.transcriptSource === "tutor"
-        ? EXPERIMENT_TIMING.tutorSnapshotDebounceMs
-        : EXPERIMENT_TIMING.childSnapshotDebounceMs;
+    if (!this.state || this.status !== "live" || this.steering) return;
+    if (this.state.transcriptSource === "tutor") {
+      this.syncTutorStabilization(trigger);
+      return;
+    }
+    if (!classificationSource(this.state)) return;
+    const delayMs = EXPERIMENT_TIMING.childSnapshotDebounceMs;
     this.log("classifier.scheduled", { trigger, delayMs });
     this.stabilizationTimer = setTimeout(() => void this.classify(trigger), delayMs);
     this.publish();
+  }
+
+  private syncTutorStabilization(trigger: string) {
+    if (this.state) this.tutorStabilization.observe(this.state, this.status === "live" && !this.steering, trigger);
   }
 
   private async classify(trigger: string) {
@@ -469,6 +492,7 @@ export class TranscriptSteeringExperiment {
 
   private cancelClassification(reason: string) {
     clearTimeout(this.stabilizationTimer);
+    this.tutorStabilization.cancel(reason);
     if (!this.classification) return;
     this.classification.abort.abort();
     this.log("classifier.cancelled", { reason }, this.classification.source, this.classification.speaker);
