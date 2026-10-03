@@ -20,8 +20,7 @@ The classifier explicitly projects only `nodeId`, `scene.object`,
 `scene.quantity`, `learningObjective`, `transcript`, and `transcriptRevision`
 into the provider state. Scene facts and objective come from the requested
 authored node. Neither the whole node nor its tutor brief or success edge is
-serialized. Extra caller fields, future nodes, graph edges, reviewed evidence,
-and learner profiles are excluded. The caller remains responsible for supplying
+serialized. Extra caller fields, future nodes and graph edges are excluded. The caller remains responsible for supplying
 only a recent current-node transcript; the classifier does not accumulate or
 trim session history.
 
@@ -45,10 +44,8 @@ The deterministic mapping uses **experimental, uncalibrated** bands:
 - Acknowledging success with an answer outcome other than `correct` causes
   `null`. Any invalid/missing probability or provider failure causes `null`.
 
-These rules are not calibrated by the older single-count-question experiment.
 Mocked tests establish wiring and mapping, not Jev's real semantic accuracy.
-There is no joint confidence score: the old `confidence` field was removed
-because independent Noul probabilities cannot honestly supply it. Correctness
+Independent Noul probabilities do not supply a joint confidence score. Correctness
 is descriptive and never grants permission to advance.
 
 `childActivity` is always `unknown`. Transcript absence is never interpreted as

@@ -191,33 +191,6 @@ describe("ConversationStateClassifier ephemeral runtime contract", () => {
     ).toBeNull();
   });
 
-  it("rejects the post-session Observer's evidence-oriented proposal envelope", () => {
-    expect(
-      parseConversationStateProposal({
-        kind: "observer_proposal",
-        proposalId: "post-session-proposal",
-        sessionId: "recorded-session",
-        exchangeAtMs: 1000,
-        observation: { behavior: "quantity_identification", outcome: "correct" },
-        sources: [{ eventId: "recorded-utterance", role: "response" }],
-      }),
-    ).toBeNull();
-  });
-
-  it.each([
-    ["kind", "observer_proposal"],
-    ["proposalId", "persisted-proposal"],
-    ["sessionId", "recorded-session"],
-    ["exchangeAtMs", 1000],
-    ["observation", { behavior: "quantity_identification", outcome: "correct" }],
-    ["sources", [{ eventId: "recorded-utterance", role: "response" }]],
-    ["decision", "accepted"],
-    ["reviewedAt", 2000],
-    ["parentContext", { provenance: "parent_review", note: "I helped." }],
-  ])("rejects evidence, persistence, or parent-review metadata %s on a runtime proposal", (key, value) => {
-    expect(parseConversationStateProposal({ ...proposal, [key as string]: value })).toBeNull();
-  });
-
   it("round-trips only current-node interpretation without future-node or graph information", () => {
     const serialized = JSON.stringify(proposal);
     expect(serialized).not.toContain("count-2-ducks");

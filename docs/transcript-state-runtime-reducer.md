@@ -8,8 +8,7 @@ authority layer. It consumes descriptive proposals and local runtime evidence,
 and reads destinations exclusively from `COUNTING_LESSON_GRAPH[nodeId].onSuccess`.
 The root browser runtime supplies transcripts, local media evidence, and
 render confirmation and handles the reducer's effects. The reducer itself has
-no transcript accumulator, provider calls, steering sends, persistence, or
-Observer integration.
+no transcript accumulator, provider calls, steering sends, or persistence.
 
 ## Caller contract
 

@@ -6,11 +6,11 @@ This guide retains reproduction instructions and diagnostic interpretation for
 The browser integration now serves `/` and the temporary `/experiments/transcript-state-steering`
 alias. It uses `BrowserTransport`, the local microphone detector, PCM output observer, and supported
 `session.instructions.append` command. It does not record audio, persist sessions, invoke the
-post-session Observer, or use delegation. The superseded root lesson controller has been removed.
+a separate analysis/review system, or use delegation.
 
 The shared `/api/live` endpoint retains the explicit `experiment: "transcript-state-steering"`
 selector for startup. Both selected and plain requests use the same tutor configuration with the
-initial node's context and no delegation. The old replacement lesson-state payload is rejected.
+initial node's context and no delegation. Only the current request shape is accepted.
 The experiment's local-only classification endpoint uses the same Jev request and
 deterministic mapping as `jevConversationStateClassifier`, with an additional
 normalized mapping diagnostic. Its questions and thresholds are unchanged.
@@ -19,8 +19,8 @@ normalized mapping diagnostic. Its questions and thresholds are unchanged.
 
 1. Run `npm run dev` with the existing local configuration. GPT-Live needs
    `OPENAI_API_KEY`, and Jev needs `TYPESAFE_API_KEY`. Do not put credentials in
-   diagnostics. No Convex deployment or server is needed for this route.
-2. Open <http://127.0.0.1:3000/experiments/transcript-state-steering> in a browser
+   diagnostics. No database deployment or server is needed.
+2. Open <http://127.0.0.1:3000/> in a browser
    with microphone support. Keep this tab visible. Headphones can help separate
    microphone activity from tutor playback in the first experiment.
 3. Click **Start experiment** and allow microphone access. One duck is rendered
@@ -61,8 +61,7 @@ demos exposed classification churn during longer tutor speech. Tutor utterance
 stabilization substantially reduced unnecessary calls on partial fragments; a
 subsequent butterfly acknowledgment still caused abstention, leading to mapping
 diagnostics. The final manual run then completed the full lesson with strongly
-separated correct/acknowledging probabilities. See the findings for the supplied
-evidence and its limits. Scheduler tests do not prove live browser interaction.
+separated correct/acknowledging probabilities. Scheduler tests do not prove live browser interaction.
 
 The earlier butterfly reproduction remains useful in follow-up work: ask
 **"What's a butterfly"**, answer **"Uh, two"**, accept counting help with
@@ -193,4 +192,4 @@ than silently trimming answer evidence. Focused fake-clock unit tests and mocked
 experiment scheduling tests cover partial transcripts, both clock orderings,
 resumed/unavailable output, revision and turn/visit invalidation, unchanged child
 debounce, independent drain timing and abort of an in-flight older revision.
-Persistence and generalized segmentation remain separate work. The root and temporary alias have browser smoke coverage; the existing live findings remain the behavioral evidence.
+Generalized segmentation remains separate work. The root and temporary alias have browser smoke coverage; issue #55 records the prior live verification.

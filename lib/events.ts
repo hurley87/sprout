@@ -18,7 +18,7 @@ export type ProviderEvent =
   // Local decoded-media observation; provider JSON cannot manufacture it.
   | (Identified & OutputActivityEvent)
   | (Identified & { type: "session.started" })
-  | (Identified & { type: "session.closed"; reason?: string; usage?: unknown })
+  | (Identified & { type: "session.closed" })
   | (Identified & { type: "provider.error"; code?: string; clientEventId?: string })
   | (Identified & {
       type: "transcript";
@@ -26,23 +26,20 @@ export type ProviderEvent =
       delta: string;
       startMs: number;
       endMs: number;
-      /** Local causal lower bound on source creation; never parsed from JSON. */
-      sourceRequestedAt?: number;
     })
-  | (Identified & { type: "delegation"; id: string; offsetMs?: number })
+  | (Identified & { type: "delegation" })
   | (Identified & { type: "delegation.unsupported" })
-  | (Identified & { type: "context.appended"; name: string; clientEventId?: string; startMs?: number; endMs?: number })
-  | (Identified & { type: "usage"; usage: unknown });
+  | (Identified & { type: "context.appended"; name: string; clientEventId?: string; startMs?: number; endMs?: number });
 
 export type Speaker = "child" | "sprout";
 export type TranscriptEvent = Extract<ProviderEvent, { type: "transcript" }>;
 
 export type ClientCommand =
   | {
-      type: "session.instructions.append" | "session.thinking.append";
+      type: "session.instructions.append";
       event_id: string;
       content: string;
-      delegation_id: string | null;
+      delegation_id: null;
     }
   | { type: "session.close"; event_id: string };
 
@@ -58,7 +55,7 @@ export function parseProviderEvent(raw: unknown): ProviderEvent | null {
     case "session.started":
       return { type: "session.started", eventId };
     case "session.closed":
-      return { type: "session.closed", eventId, reason: text(raw.reason), usage: raw.usage };
+      return { type: "session.closed", eventId };
     case "error":
       // Provider messages can carry sensitive context; keep only the code.
       return {
@@ -83,19 +80,9 @@ export function parseProviderEvent(raw: unknown): ProviderEvent | null {
       if (!isRecord(delegation) || typeof delegation.id !== "string" || delegation.target !== "client") {
         return { type: "delegation.unsupported", eventId };
       }
-      // Delegation metadata carries no task text or answer arguments. Preserve
-      // only the documented provider-clock timestamp and opaque handle.
-      return {
-        type: "delegation",
-        eventId,
-        id: delegation.id,
-        ...(typeof raw.offset_ms === "number" && Number.isFinite(raw.offset_ms) && raw.offset_ms >= 0
-          ? { offsetMs: raw.offset_ms }
-          : {}),
-      };
+      // The runtime diagnoses and ignores delegation; no handle or timing is retained.
+      return { type: "delegation", eventId };
     }
-    case "session.usage.updated":
-      return { type: "usage", eventId, usage: raw.usage };
     default:
       if (!raw.type.endsWith(".appended")) return null;
       return {

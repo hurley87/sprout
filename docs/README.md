@@ -1,32 +1,22 @@
 # Sprout documentation
 
-Start with the [MVP PRD](sprout-mvp-prd.md) for the agreed product scope. These documents describe a private, parent-supervised, seven-day counting experiment in a browser on a MacBook.
+The current product is the realtime counting lesson at `/`. Its temporary alias is
+`/experiments/transcript-state-steering`.
 
 | Document | Purpose |
 | --- | --- |
-| [MVP PRD](sprout-mvp-prd.md) | Product behavior, boundaries, success criteria, and build sequence |
-| [Domain glossary](../CONTEXT.md) | Canonical meanings of lesson, session, observation, reviewed evidence, and adaptation |
-| [Architecture and evidence flow](architecture.md) | Component authority, session lifecycle, evidence records, review gate, and technical feasibility |
-| [Experiment protocol](experiment-protocol.md) | How to run the seven days and evaluate the results |
-| [ADR 0001](adr/0001-parent-reviewed-evidence.md) | Why only parent-reviewed evidence may inform future lessons |
+| [Architecture](architecture.md) | Authority boundaries, current modules, lifecycle and failure behavior |
+| [Domain glossary](../CONTEXT.md) | Current lesson/runtime terms |
+| [Classifier contract](transcript-state-classifier-experiment.md) | Jev input projection, probabilities and deterministic mapping |
+| [Reducer contract](transcript-state-runtime-reducer.md) | Identity, completion gate, render and steering handoff |
+| [Browser evaluation guide](transcript-state-steering-browser-experiment.md) | Reproduction steps, timing, diagnostic interpretation and limitations |
 
-## Tutoring principle
+Sprout separates pedagogical intent from conversational realization: the authored
+lesson specifies the objective and success edge; GPT-Live realizes the conversation
+within the displayed node. Jev describes semantic state; application code validates
+proposals and owns every scene transition.
 
-Sprout separates **pedagogical intent** from **conversational realization**: the lesson/curriculum determines what needs to happen and why; the live voice model has freedom over how the conversation unfolds inside those bounds. Application control owns deterministic state and validated commits. See [Architecture and evidence flow](architecture.md#tutoring-principle-what-vs-how).
-
-## Learning principles
-
-Sprout is built around a simple hypothesis: **personalized feedback, mastery, active practice, adaptive pacing, and sustained one-to-one intellectual interaction are serious candidate mechanisms for improving learning. AI may make those mechanisms dramatically more scalable.**
-
-Sprout should therefore optimize for those mechanisms—not for AI novelty itself. The tutor should help the learner practice, receive timely feedback, progress when ready, revisit weaknesses, and engage in an ongoing intellectual relationship that builds on prior sessions.
-
-Evidence supports the learning value of several of these mechanisms individually and in combination. What remains much less established is what happens when they can be delivered cheaply, continuously, and personally over years. **Whether that changes the upper tail of human intellectual accomplishment is an open experiment.**
-
-The PRD owns product requirements. The architecture document describes how to enforce them; the protocol defines how to evaluate them. The glossary contains terminology, and ADRs preserve decisions and their trade-offs.
-
-The root route now uses transcript-state steering, with a conversational GPT-Live tutor,
-Jev semantic observation, graph/reducer lesson authority, and local media choreography evidence.
-The old live controller has been removed. Durable recording primitives, saved-file Observer analysis,
-parent review and the reviewed-evidence gate remain implemented and locally tested; they are not
-yet connected to this root runtime. Observer/provider/manual acceptance remains open; profile inference and planning are
-not implemented.
+[#56](https://github.com/hurley87/sprout/issues/56) records the clean prototype reset.
+Historical prototype data is disposable; compatibility and migrations are out of
+scope. Repository docs describe the surviving system. Broader behavioral evaluation
+belongs to [#57](https://github.com/hurley87/sprout/issues/57).

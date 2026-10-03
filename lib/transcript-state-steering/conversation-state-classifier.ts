@@ -14,11 +14,10 @@ export type TutorState = (typeof TUTOR_STATES)[number];
 
 /**
  * The ConversationStateClassifier's ephemeral runtime interpretation for one node and revision.
- * This is input to the deterministic lesson reducer, with no persistence or parent-review lifecycle.
- * Sprout's post-session, evidence-oriented Observer has a separate proposal contract.
+ * This is ephemeral input to the deterministic lesson reducer.
  * Activity, latest answer outcome, and support need are independent: a child can be thinking
  * after an incorrect answer while needing help. Even "correct" is not permission to advance.
- * A future application reducer must match node/revision claims to the exact classification
+ * The application reducer must match node/revision claims to the exact classification
  * request before applying authored edges; this parser only checks shape.
  */
 export type ConversationStateProposal = {

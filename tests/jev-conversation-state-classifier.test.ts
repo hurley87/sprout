@@ -151,8 +151,8 @@ describe("Jev current-node semantic classifier", () => {
       ...snapshot,
       futureNodes: [{ id: "count-2-ducks", content: "future content marker" }],
       onSuccess: { kind: "node", nodeId: "count-2-ducks" },
-      parentContext: "parent review marker",
-      learnerProfile: "historical profile marker",
+      privateContext: "private context marker",
+      unrelatedState: "unrelated state marker",
     };
     await classify(extraCallerData, signal);
     expect(fetch).toHaveBeenCalledOnce();
@@ -181,8 +181,8 @@ describe("Jev current-node semantic classifier", () => {
       "onSuccess",
       "futureNodes",
       "tutorBrief",
-      "parent review marker",
-      "historical profile marker",
+      "private context marker",
+      "unrelated state marker",
       "future content marker",
     ])
       expect(init!.body).not.toContain(forbidden);

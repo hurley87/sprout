@@ -67,7 +67,7 @@ function eventDiagnosticSource(event: LessonRuntimeEvent, before: LessonRuntimeS
   };
 }
 
-/** Live lesson wiring; durable session persistence remains a separate concern. */
+/** Live lesson wiring and current-attempt diagnostics. */
 export class TranscriptSteeringExperiment {
   private readonly runtimeId = crypto.randomUUID();
   private readonly createdAt = performance.now();
@@ -118,7 +118,7 @@ export class TranscriptSteeringExperiment {
         this.publish();
       },
     );
-    this.transport = new BrowserTransport(audio, true, undefined, "transcript-state-steering");
+    this.transport = new BrowserTransport(audio, true, "transcript-state-steering");
     this.transport.setMicrophoneDiagnosticSink(event => {
       if (this.status === "ended") return;
       this.log(event.type, event.detail);
@@ -344,8 +344,6 @@ export class TranscriptSteeringExperiment {
       case "delegation.unsupported":
         this.log("delegation.ignored", { reason: "experiment_has_no_delegation" });
         this.publish();
-        return;
-      case "usage":
         return;
     }
   };
