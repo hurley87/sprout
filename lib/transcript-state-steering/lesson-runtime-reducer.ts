@@ -323,11 +323,9 @@ export function reduceLessonRuntime(state: LessonRuntimeState, event: LessonRunt
         ...next,
         answerAccepted: true,
         acceptedAnswerRevision: state.acceptedAnswerRevision ?? state.transcriptRevision,
-        acknowledgmentObserved:
-          state.acceptedAnswerRevision !== null &&
-          state.acceptedAnswerRevision < state.transcriptRevision &&
-          state.transcriptSource === "tutor" &&
-          proposal.tutorState === "acknowledging",
+        // This exact tutor snapshot includes the current turn's child answer and subsequent tutor message.
+        // It can establish both semantics even if an earlier child-only classification was superseded.
+        acknowledgmentObserved: state.transcriptSource === "tutor" && proposal.tutorState === "acknowledging",
       };
       break;
     }

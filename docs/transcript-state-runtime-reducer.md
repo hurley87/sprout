@@ -35,11 +35,15 @@ per revision. Abstentions and malformed/stale proposals have no effects.
 
 ## Completion gate
 
-A correct proposal with no unresolved need for help accepts an answer. It never
-acknowledges and advances in the same observation. A strictly later tutor
-transcript revision must again classify the latest answer as correct, with the
-tutor acknowledging success. Other tutor states do not establish acknowledgment.
-An `answering` proposal cannot establish completion authority during child speech.
+A correct proposal with no unresolved need for help accepts an answer.
+Acknowledgment requires a current tutor-authored transcript revision containing
+the same child turn's answer, classified as correct with the tutor acknowledging
+success. That snapshot can establish both semantic conditions even if the earlier
+child-only classification was superseded or never completed. The two-step path
+also works: a child revision classifies correct, then a later tutor revision again
+classifies correct and acknowledging. A child-authored revision cannot establish
+acknowledgment. Other tutor states do not establish acknowledgment. An `answering`
+proposal or ongoing local child speech cannot establish completion authority.
 
 Every newer transcript revision suspends both current answer and acknowledgment
 authority until that exact revision is classified. A tutor-only update retains

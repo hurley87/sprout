@@ -133,7 +133,7 @@ describe("transcript-state lesson runtime authority", () => {
     expectNoTransition(runtime);
   });
 
-  it("does not accept acknowledgment from the first correct snapshot or its duplicate", () => {
+  it("does not accept acknowledgment from a child-authored correct snapshot or its duplicate", () => {
     const runtime = new Runtime();
     runtime.childTurn();
     runtime.proposal({ tutorState: "acknowledging" });
@@ -141,6 +141,110 @@ describe("transcript-state lesson runtime authority", () => {
     expect(runtime.proposal({ tutorState: "acknowledging" }).state).toBe(state);
     runtime.drain();
     expect(runtime.state.acknowledgmentObserved).toBe(false);
+    expectNoTransition(runtime);
+  });
+
+  it.each([false, true])(
+    "a current tutor snapshot bootstraps completion after child classification is superseded (drained audio: %s)",
+    alreadyDrained => {
+      const runtime = new Runtime();
+      runtime.childTurn();
+      const childRequest = classificationSource(runtime.state)!;
+      const childClaims = { nodeId: childRequest.nodeId, transcriptRevision: childRequest.transcriptRevision };
+      if (alreadyDrained) runtime.drain();
+      runtime.transcript("tutor");
+      const tutorRequest = classificationSource(runtime.state)!;
+      const state = runtime.state;
+      expect(runtime.proposal(childClaims, childRequest).state).toBe(state);
+      expect(runtime.state.acceptedAnswerRevision).toBeNull();
+      runtime.proposal({ tutorState: "acknowledging" }, tutorRequest);
+      if (alreadyDrained) {
+        expect(runtime.state.phase).toBe("rendering");
+        expect(runtime.result.effects).toEqual([
+          {
+            type: "render.requested",
+            identity: { token: '["test-runtime",2]', nodeId: "count-2-ducks", sceneId: "duck-friends" },
+          },
+        ]);
+      } else {
+        expect(runtime.state).toMatchObject({ answerAccepted: true, acknowledgmentObserved: true });
+        expectNoTransition(runtime);
+      }
+      // The old child-only result remains stale even after semantic authority or a render is established.
+      const after = runtime.state;
+      expect(runtime.proposal(childClaims, childRequest).state).toBe(after);
+      expect(runtime.result.effects).toEqual([]);
+    },
+  );
+
+  it("a first tutor classification can establish both semantic conditions but still requires sustained audio drain", () => {
+    const runtime = new Runtime();
+    runtime.childTurn();
+    runtime.output("active");
+    runtime.transcript("tutor");
+    const source = classificationSource(runtime.state)!;
+    runtime.proposal({ tutorState: "acknowledging" }, source);
+    expect(runtime.state).toMatchObject({
+      answerAccepted: true,
+      acknowledgmentObserved: true,
+      acceptedAnswerRevision: source.transcriptRevision,
+    });
+    expectNoTransition(runtime);
+    const state = runtime.state;
+    expect(runtime.proposal({ tutorState: "acknowledging" }, source).state).toBe(state);
+    expect(runtime.result.effects).toEqual([]);
+    runtime.output("quiet");
+    const quietAt = runtime.state.quietSinceMs!;
+    runtime.tick(quietAt + 99);
+    expectNoTransition(runtime);
+    runtime.tick(quietAt + 100);
+    expect(runtime.state.phase).toBe("rendering");
+  });
+
+  it.each([
+    { answerOutcome: "incorrect" },
+    { answerOutcome: "unclear" },
+    { answerOutcome: "none" },
+    { supportState: "needs_help" },
+  ] satisfies Partial<ConversationStateProposal>[])(
+    "a tutor acknowledgment with %j cannot bootstrap completion even with drained audio",
+    fields => {
+      const runtime = new Runtime();
+      runtime.childTurn();
+      runtime.drain();
+      runtime.transcript("tutor");
+      runtime.proposal({ tutorState: "acknowledging", ...fields });
+      expect(runtime.state).toMatchObject({
+        answerAccepted: false,
+        acknowledgmentObserved: false,
+        acceptedAnswerRevision: null,
+        tutorOutputObserved: false,
+      });
+      expectNoTransition(runtime);
+    },
+  );
+
+  it("a tutor snapshot without current-turn child evidence cannot bootstrap semantics", () => {
+    const runtime = new Runtime();
+    runtime.childStart();
+    runtime.send({ type: "child.turn.ended", source: runtimeSource(runtime.state) });
+    runtime.transcript("tutor");
+    const source = { ...runtimeSource(runtime.state), nodeId: runtime.state.nodeId, transcriptRevision: 1 };
+    const state = runtime.state;
+    expect(runtime.proposal({ tutorState: "acknowledging" }, source).state).toBe(state);
+    expect(runtime.state).toMatchObject({ answerAccepted: false, acknowledgmentObserved: false });
+    expectNoTransition(runtime);
+  });
+
+  it("a tutor snapshot cannot bootstrap semantics while the child is speaking", () => {
+    const runtime = new Runtime();
+    runtime.childStart();
+    runtime.transcript("child");
+    runtime.transcript("tutor");
+    const source = { ...runtimeSource(runtime.state), nodeId: runtime.state.nodeId, transcriptRevision: 2 };
+    const state = runtime.state;
+    expect(runtime.proposal({ tutorState: "acknowledging" }, source).state).toBe(state);
+    expect(runtime.state).toMatchObject({ answerAccepted: false, acknowledgmentObserved: false });
     expectNoTransition(runtime);
   });
 
@@ -289,8 +393,10 @@ describe("transcript-state lesson runtime authority", () => {
       runtime.transcript("tutor");
       expect(runtime.state.answerAccepted).toBe(false);
       runtime.proposal({ answerOutcome });
+      expect(runtime.state).toMatchObject({ answerAccepted: false, acknowledgmentObserved: false });
+      expectNoTransition(runtime);
       runtime.acknowledge();
-      expect(runtime.state.acknowledgmentObserved).toBe(false);
+      expect(runtime.state.acknowledgmentObserved).toBe(true);
       expect(runtime.state.tutorOutputObserved).toBe(false);
       expectNoTransition(runtime);
     },
