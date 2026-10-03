@@ -1,10 +1,17 @@
 # Deterministic transcript-state lesson runtime
 
-Commit 3 adds the pure `lib/transcript-state-steering/lesson-runtime-reducer.ts`
+The spike is complete; see the
+[final engineering findings](transcript-state-steering-findings.md).
+This document retains the reducer's deterministic contract. Integration and
+recovery design continue in [#56](https://github.com/hurley87/sprout/issues/56).
+
+The pure `lib/transcript-state-steering/lesson-runtime-reducer.ts` is the
 authority layer. It consumes descriptive proposals and local runtime evidence,
 and reads destinations exclusively from `COUNTING_LESSON_GRAPH[nodeId].onSuccess`.
-It has no browser route, transcript accumulator, provider calls, steering sends,
-production `LessonSession` changes, persistence, or Observer integration.
+The isolated browser experiment supplies transcripts, local media evidence, and
+render confirmation and handles the reducer's effects. The reducer itself has
+no transcript accumulator, provider calls, steering sends, persistence, or
+Observer integration; production `LessonSession` remains separate.
 
 ## Caller contract
 

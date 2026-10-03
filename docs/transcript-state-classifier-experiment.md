@@ -1,11 +1,17 @@
 # Current-node transcript classification
 
-Commit 2 on `spike/transcript-state-steering` implements a server-side
+The spike is complete; see the
+[final engineering findings](transcript-state-steering-findings.md).
+This document describes the classifier's implementation contract. Broader live
+calibration continues in [#57](https://github.com/hurley87/sprout/issues/57).
+
+The classifier slice on `spike/transcript-state-steering` implements a server-side
 `jevConversationStateClassifier`. It accepts an authored node ID, a nonnegative
 safe transcript revision, a recent ordered `Child:`/`Tutor:` transcript containing
 only that node's exchange, and an `AbortSignal`. It returns a descriptive
-`ConversationStateProposal` or `null`. It is not connected to `LessonSession` or
-a browser route and has no transition, persistence, or GPT-Live authority.
+`ConversationStateProposal` or `null`. The isolated browser experiment now calls
+it through a diagnostic endpoint. It remains separate from production
+`LessonSession` and has no transition, persistence, or GPT-Live authority.
 
 The existing `lib/jev.ts` transport now projects validated Noul probabilities for
 one or more questions from a single TypeSafe/SystemOne request. `/api/evaluate`
@@ -55,5 +61,6 @@ waiting, thinking, silence, or speech. The existing other activity values and
 Returned identity is copied from the request before any await, never from
 provider output. Cancellation is checked before fetch, after fetch, after body
 parsing, and before returning the proposal. Superseded callers can abort their
-request; later application code must also compare both node and revision with
-current state. This slice cannot determine staleness without that future state.
+request; the browser runtime and reducer also validate the captured runtime,
+node, visit, child turn, and revision against current state. The classifier
+itself cannot determine staleness without that caller-owned state.

@@ -1,6 +1,13 @@
-# Transcript state steering: manual browser checkpoint
+# Transcript state steering: manual browser guide
 
-Commit 4 adds `/experiments/transcript-state-steering` on
+The architecture spike is complete; see the
+[final engineering findings](transcript-state-steering-findings.md).
+This guide retains reproduction instructions and diagnostic interpretation for
+[continued behavioral evaluation (#57)](https://github.com/hurley87/sprout/issues/57).
+The final reported live run completed all three nodes and the terminal edge;
+no further experiment or tuning is required to close the spike.
+
+The browser integration adds `/experiments/transcript-state-steering` on
 `spike/transcript-state-steering`. This disposable experiment uses the existing
 `BrowserTransport`, local microphone detector, PCM output observer, and supported
 `session.instructions.append` command. It does not instantiate `LessonSession`,
@@ -43,7 +50,7 @@ normalized mapping diagnostic. Its questions and thresholds are unchanged.
    also clears it. The export includes transcript text but no audio, credentials,
    SDP, raw Jev bodies, or durable evidence records.
 
-Repeat fresh attempts for these cases:
+For follow-up evaluation, repeat fresh attempts for these cases:
 
 | Case | Exact manual action | Inspect |
 | --- | --- | --- |
@@ -56,23 +63,21 @@ Repeat fresh attempts for these cases:
 
 For each exported attempt, also note the spoken answers, whether headphones were
 used, whether anything sounded wrong or overlapped, and which visible scene held
-or advanced. This JSON does not establish what a human actually heard. The first
-manual demo validated the architecture but exposed classification churn during
-longer tutor speech. Repeat that demo with the tutor stabilization gate, including
-the butterfly explanation and "What's a butterfly?" question. Inspect the export
-for fewer cancelled Jev requests and appropriate abstention. The stabilization
-rerun reached the final butterfly acknowledgment but Jev still abstained. The
-new mapping diagnostics need a fresh manual rerun to explain that probability
-pattern. Scheduler tests do not prove the live browser interaction.
+or advanced. This JSON does not establish what a human actually heard. Early
+demos exposed classification churn during longer tutor speech. Tutor utterance
+stabilization substantially reduced unnecessary calls on partial fragments; a
+subsequent butterfly acknowledgment still caused abstention, leading to mapping
+diagnostics. The final manual run then completed the full lesson with strongly
+separated correct/acknowledging probabilities. See the findings for the supplied
+evidence and its limits. Scheduler tests do not prove live browser interaction.
 
-For this checkpoint, refresh the experiment and repeat the final butterfly case:
-ask **"What's a butterfly"**, answer **"Uh, two"**, accept counting help with
-**"Yes"**, then count **"One, two. Three"** and wait for **"Yes, three
-butterflies!"**. Export the diagnostics before restarting. Find the final
-`classifier.mapping` for `count-3-butterflies`, matching its revision and source
-to `tutor_stabilization.ready` and `classifier.started`. Inspect `reason`, the nine
-`probabilities`, and `detail` to identify the failed mapping rule. No threshold
-or question tuning has been applied; that decision waits for the real values.
+The earlier butterfly reproduction remains useful in follow-up work: ask
+**"What's a butterfly"**, answer **"Uh, two"**, accept counting help with
+**"Yes"**, then count **"One, two. Three"**. Match the final `classifier.mapping`
+for `count-3-butterflies` by revision and source to `tutor_stabilization.ready`
+and `classifier.started`. Inspect `reason`, the nine `probabilities`, and `detail`
+to explain acceptance or abstention. Any future threshold or question adjustment
+belongs to evidence-driven follow-up evaluation.
 
 ## Timing and diagnostic interpretation
 
@@ -189,8 +194,8 @@ for transcript and append timing semantics.
 The reducer's PCM gate can mistake a pause within tutor speech for drain. Tutor
 output that starts before local VAD ends cannot satisfy its fresh-onset rule.
 These are existing reducer contracts, visible in diagnostics, not thresholds to
-silently relax before the manual run. The experiment stops at 12,000 current-node
-transcript characters or 256 fragments waiting for steering acknowledgment rather
+silently relax during follow-up evaluation. The experiment stops at 12,000
+current-node transcript characters or 256 fragments waiting for steering acknowledgment rather
 than silently trimming answer evidence. Focused fake-clock unit tests and mocked
 experiment scheduling tests cover partial transcripts, both clock orderings,
 resumed/unavailable output, revision and turn/visit invalidation, unchanged child
