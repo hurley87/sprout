@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ClientCommand, ProviderEvent } from "../lib/events";
 import { TranscriptSteeringExperiment } from "../lib/transcript-state-steering/browser-experiment";
+import {
+  classificationDiagnostic,
+  mapConversationClassification,
+} from "../lib/transcript-state-steering/classification-decision";
+import { conversationProbabilities } from "./fixtures/conversation-classification";
 
 const transport = vi.hoisted(() => ({
   receive: undefined as ((event: ProviderEvent) => void) | undefined,
@@ -131,3 +136,106 @@ it("aborts an in-flight older revision and waits for the new tutor boundary befo
   requests[1].resolve(Response.json({ proposal: null }));
   await vi.advanceTimersByTimeAsync(0);
 });
+
+it("logs only normalized mapping diagnostics with the captured source and cannot advance from diagnostics alone", async () => {
+  const diagnostic = classificationDiagnostic(
+    mapConversationClassification(
+      {
+        nodeId: "count-1-duck",
+        transcriptRevision: 1,
+        transcript: "Child: One.",
+      },
+      conversationProbabilities(),
+    ),
+  );
+  const fetch = vi.fn(async () =>
+    Response.json({
+      proposal: null,
+      diagnostic: {
+        ...diagnostic,
+        nodeId: "count-3-butterflies",
+        transcriptRevision: 999,
+        rawBody: "raw provider marker",
+        probabilities: { ...diagnostic.probabilities, rawBody: "raw provider marker" },
+      },
+    }),
+  );
+  vi.stubGlobal("fetch", fetch);
+  start();
+  await vi.advanceTimersByTimeAsync(300);
+  const mapping = experiment.report().events.find(event => event.type === "classifier.mapping");
+  expect(mapping).toMatchObject({
+    runtimeId: experiment.report().runtimeId,
+    visitId: 1,
+    childTurnId: 1,
+    nodeId: "count-1-duck",
+    transcriptRevision: 1,
+    transcriptSpeaker: "child",
+    detail: diagnostic,
+  });
+  expect(JSON.stringify(mapping)).not.toMatch(/raw provider marker|rawBody|count-3-butterflies|999/);
+  expect(experiment.snapshot().runtime?.answerAccepted).toBe(false);
+  expect(experiment.snapshot().runtime?.nodeId).toBe("count-1-duck");
+  expect(experiment.report().events).toContainEqual(expect.objectContaining({ type: "classifier.abstained" }));
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(fetch).toHaveBeenCalledOnce();
+  expect(transport.send).toHaveBeenCalledOnce(); // Only initial steering, never diagnostics-driven steering.
+});
+
+it.each(["abstained", "missing", "invalid"] as const)(
+  "leaves proposal handling unchanged with %s diagnostics",
+  async kind => {
+    const proposal = {
+      nodeId: "count-1-duck",
+      transcriptRevision: 1,
+      childActivity: "unknown",
+      answerOutcome: "correct",
+      supportState: "none",
+      tutorState: "unknown",
+    };
+    const diagnostic = classificationDiagnostic(
+      mapConversationClassification(
+        {
+          nodeId: "count-1-duck",
+          transcriptRevision: 1,
+          transcript: "Child: One.",
+        },
+        conversationProbabilities({ answerCorrect: 0.8 }),
+      ),
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          proposal,
+          ...(kind === "missing"
+            ? {}
+            : {
+                diagnostic:
+                  kind === "invalid"
+                    ? {
+                        ...diagnostic,
+                        probabilities: { ...diagnostic.probabilities, answerCorrect: "raw provider marker" },
+                      }
+                    : diagnostic,
+              }),
+        }),
+      ),
+    );
+    start();
+    await vi.advanceTimersByTimeAsync(300);
+    expect(experiment.snapshot().runtime?.answerAccepted).toBe(true);
+    expect(experiment.report().events).toContainEqual(
+      expect.objectContaining({ type: "classifier.result", detail: expect.objectContaining({ proposal }) }),
+    );
+    if (kind === "abstained")
+      expect(experiment.report().events).toContainEqual(
+        expect.objectContaining({ type: "classifier.mapping", detail: diagnostic }),
+      );
+    else
+      expect(experiment.report().events).toContainEqual(
+        expect.objectContaining({ type: "classifier.mapping_unavailable" }),
+      );
+    expect(JSON.stringify(experiment.report())).not.toContain("raw provider marker");
+  },
+);

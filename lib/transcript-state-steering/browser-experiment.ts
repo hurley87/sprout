@@ -5,6 +5,7 @@ import { parseConversationStateProposal } from "./conversation-state-classifier"
 import { COUNTING_LESSON_GRAPH, INITIAL_COUNTING_NODE_ID } from "./counting-lesson";
 import { initialTeachingContext, teachingInstruction } from "./live-context";
 import { TutorStabilizationGate } from "./tutor-stabilization";
+import { parseClassificationDiagnostic } from "./classification-decision";
 import {
   classificationSource,
   createLessonRuntime,
@@ -466,6 +467,13 @@ export class TranscriptSteeringExperiment {
       if (!body || typeof body !== "object" || !("proposal" in body)) throw new Error("Invalid classifier response");
       const proposal = body.proposal === null ? null : parseConversationStateProposal(body.proposal);
       if (body.proposal !== null && !proposal) throw new Error("Invalid classifier proposal");
+      const diagnostic = parseClassificationDiagnostic("diagnostic" in body ? body.diagnostic : undefined);
+      this.log(
+        diagnostic ? "classifier.mapping" : "classifier.mapping_unavailable",
+        diagnostic ?? { reason: "diagnostic_missing_or_invalid" },
+        source,
+        speaker,
+      );
       this.log(
         proposal ? "classifier.result" : "classifier.abstained",
         { proposal, elapsedMs: this.now() - startedAtMs },

@@ -11,8 +11,9 @@ The shared `/api/live` endpoint accepts the explicit
 selects a separate tutor prompt with only the initial node's context and no
 delegation configuration. Requests without this selector retain the production
 configuration; an experiment selector cannot be combined with replacement.
-The experiment's local-only classification endpoint calls the existing
-`jevConversationStateClassifier` on the server. Its thresholds are unchanged.
+The experiment's local-only classification endpoint uses the same Jev request and
+deterministic mapping as `jevConversationStateClassifier`, with an additional
+normalized mapping diagnostic. Its questions and thresholds are unchanged.
 
 ## Run and collect
 
@@ -59,8 +60,19 @@ or advanced. This JSON does not establish what a human actually heard. The first
 manual demo validated the architecture but exposed classification churn during
 longer tutor speech. Repeat that demo with the tutor stabilization gate, including
 the butterfly explanation and "What's a butterfly?" question. Inspect the export
-for fewer cancelled Jev requests and appropriate abstention; the repeat voice
-run remains pending. Scheduler tests do not prove the live browser interaction.
+for fewer cancelled Jev requests and appropriate abstention. The stabilization
+rerun reached the final butterfly acknowledgment but Jev still abstained. The
+new mapping diagnostics need a fresh manual rerun to explain that probability
+pattern. Scheduler tests do not prove the live browser interaction.
+
+For this checkpoint, refresh the experiment and repeat the final butterfly case:
+ask **"What's a butterfly"**, answer **"Uh, two"**, accept counting help with
+**"Yes"**, then count **"One, two. Three"** and wait for **"Yes, three
+butterflies!"**. Export the diagnostics before restarting. Find the final
+`classifier.mapping` for `count-3-butterflies`, matching its revision and source
+to `tutor_stabilization.ready` and `classifier.started`. Inspect `reason`, the nine
+`probabilities`, and `detail` to identify the failed mapping rule. No threshold
+or question tuning has been applied; that decision waits for the real values.
 
 ## Timing and diagnostic interpretation
 
@@ -113,6 +125,12 @@ Use these events to explain a held scene:
 - `classifier.cancelled`, `.abstained`, `.error`, and `.result` show cancellation
   reasons, tentative proposals and latency. Jev provider failures are normal
   abstentions in the existing classifier; raw provider diagnostics are not exposed.
+- `classifier.mapping` reports `decision`, a machine-readable abstention `reason`,
+  the nine normalized question `probabilities`, unchanged `thresholds`, and
+  relevant candidate/winner/competitor probabilities, margin and violated rules
+  in `detail`. Its source is the exact captured runtime, visit, child turn, node
+  and transcript revision. `classifier.mapping_unavailable` means the diagnostic
+  was missing or invalid; proposal handling still proceeds independently.
 - `runtime.event.*` and `runtime.changed` show local event acceptance and before/
   after reducer state, including child-turn evidence, accepted answer,
   acknowledgment, output activity, quiet start and drain. Repeated time-only
@@ -125,6 +143,19 @@ Use these events to explain a held scene:
 - `gpt_live.context_appended`, `transcript.visit_boundary`, `transcript.reset`,
   and `transcript.ignored` explain the current visit's isolation and discarded
   intervals. `error` and `experiment.ended` explain shutdown.
+
+The mapping reports the first blocked stage in answer, tutor, support, then
+acknowledgment order. Answer/tutor categories require a winner at **HIGH = 0.90**,
+competitors at most **COMPETITOR_CEILING = 0.20**, and a lead of at least
+**MIN_MARGIN = 0.70**. Support requires **HIGH = 0.90** or **LOW = 0.10**; all
+tutor categories at or below LOW still map to unknown. A deficient margin also
+exceeds the competitor ceiling at these bands: the reason reports
+`*_margin_too_small` when both fail, and `detail.violatedRules` records both.
+Other mapping reasons distinguish no winner, a high competitor, ambiguous help,
+and acknowledgment without a correct answer. Provider/input failures have a
+controlled reason and `probabilities: null`, never invented scores or a raw
+provider body. The isolated endpoint returns `{ proposal, diagnostic }`; only
+`proposal` can reach the reducer. Diagnostics never advance, steer or retry.
 
 Rendering is confirmed from a React effect after commit and two animation frames,
 with the DOM's exact render token/node/scene checked. No confirmation is sent

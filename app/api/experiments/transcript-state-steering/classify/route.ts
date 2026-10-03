@@ -1,6 +1,7 @@
 import { isLocalRequest, readJsonBody } from "@/lib/local-request";
 import { isCountingNodeId } from "@/lib/transcript-state-steering/counting-lesson";
-import { jevConversationStateClassifier } from "@/lib/transcript-state-steering/jev-conversation-state-classifier";
+import { classifyConversationStateWithDiagnostics } from "@/lib/transcript-state-steering/jev-conversation-state-classifier";
+import { classificationDiagnostic } from "@/lib/transcript-state-steering/classification-decision";
 
 export const runtime = "nodejs";
 const json = (body: object, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -28,7 +29,7 @@ export async function POST(request: Request) {
     return json({ error: "Invalid classification request." }, 400);
   if (!process.env.TYPESAFE_API_KEY) return json({ error: "Configure TYPESAFE_API_KEY for the experiment." }, 503);
   try {
-    const proposal = await jevConversationStateClassifier.classify(
+    const decision = await classifyConversationStateWithDiagnostics(
       {
         nodeId: input.nodeId,
         transcriptRevision: input.transcriptRevision,
@@ -36,8 +37,10 @@ export async function POST(request: Request) {
       },
       AbortSignal.any([request.signal, AbortSignal.timeout(10_000)]),
     );
-    // Abstention includes provider unavailability; never expose raw provider bodies.
-    return json({ proposal });
+    return json({
+      proposal: decision.status === "accepted" ? decision.proposal : null,
+      diagnostic: classificationDiagnostic(decision),
+    });
   } catch {
     return json({ error: "Classification did not finish." }, 502);
   }
