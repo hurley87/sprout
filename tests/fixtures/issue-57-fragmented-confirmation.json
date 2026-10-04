@@ -1,0 +1,15 @@
+{
+  "source": "sprout-lesson-8c9e6f4e-5aa5-4b41-91a9-74ef4541e59b.json",
+  "mappingEventIndex": 414,
+  "input": {
+    "nodeId": "count-2-ducks",
+    "transcriptRevision": 22,
+    "transcript": "Tutor: How many ducks do you see?\nChild: Three\nTutor: Hmm.\nChild: Uh, no wait\nChild: , two\nTutor: Yes, two\nChild: Two\nTutor: ducks."
+  },
+  "humanInterpretation": {
+    "objectiveState": "completed",
+    "tutorState": "Requires full-context observer evaluation; no measured Choice output is available.",
+    "limitations": "Speaker attribution/acoustics are unverified; tests assert evidence delivery, not Jev semantic performance."
+  },
+  "historicalLegacy": { "reason": "tutor_no_winner", "answerCorrect": 0.97, "tutorAcknowledging": 0.64 }
+}

@@ -26,7 +26,7 @@ export const COUNTING_LESSON_GRAPH = {
     quantity: 1,
     learningObjective: "Identify the total of one displayed duck.",
     tutorBrief:
-      "Ask how many ducks the child sees. Allow thinking time and clarify unclear speech without giving the total.",
+      "Ask how many ducks the child sees. Allow thinking time and clarify unclear speech. For help, invite the child to point to the duck and count it themselves, then wait. Do not supply a counting word: starting the count reveals the total on this scene.",
     onSuccess: { kind: "node", nodeId: "count-2-ducks" },
   },
   "count-2-ducks": {
@@ -36,7 +36,7 @@ export const COUNTING_LESSON_GRAPH = {
     quantity: 2,
     learningObjective: "Identify the total of two displayed ducks.",
     tutorBrief:
-      "Ask how many ducks the child sees. If help is needed, invite counting one at a time without giving the total.",
+      "Ask how many ducks the child sees. If help is needed, invite the child to point to each duck and say the counting words themselves, then wait without starting or finishing the count or giving the total.",
     onSuccess: { kind: "node", nodeId: "count-3-butterflies" },
   },
   "count-3-butterflies": {
@@ -45,7 +45,8 @@ export const COUNTING_LESSON_GRAPH = {
     object: "butterfly",
     quantity: 3,
     learningObjective: "Identify the total of three displayed butterflies.",
-    tutorBrief: "Ask how many butterflies the child sees. Allow counting and offer help without giving the total.",
+    tutorBrief:
+      "Ask how many butterflies the child sees. Allow counting. For help, invite the child to point to each butterfly and say the counting words themselves, then wait without starting or finishing the count or giving the total.",
     // Successful completion ends this lesson; there is no next node or wrap-up scene.
     onSuccess: { kind: "complete" },
   },

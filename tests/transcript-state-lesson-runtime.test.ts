@@ -922,3 +922,136 @@ describe("transcript-state lesson runtime authority", () => {
     expect(() => createLessonRuntime("runtime", { quietDrainMs })).toThrow();
   });
 });
+
+describe("discarded microphone candidate revalidation", () => {
+  function candidate(runtime: Runtime) {
+    return runtime.send({ type: "child.candidate.started", source: runtimeSource(runtime.state) });
+  }
+  function discard(runtime: Runtime) {
+    return runtime.send({ type: "child.candidate.discarded", source: runtimeSource(runtime.state) });
+  }
+
+  it("suspends accepted authority and requires a fresh new-turn result even for an unchanged revision", () => {
+    const runtime = new Runtime();
+    runtime.accept();
+    runtime.acknowledge();
+    runtime.output("active");
+    runtime.output("quiet");
+    const oldSource = classificationSource(runtime.state)!;
+    const oldTurn = runtime.state.childTurnId;
+    candidate(runtime);
+    expect(runtime.state).toMatchObject({ answerAccepted: false, acknowledgmentObserved: false, childSpeaking: true });
+    expect(classificationSource(runtime.state)).toBeNull();
+    runtime.tick();
+    expectNoTransition(runtime);
+    discard(runtime);
+    expect(runtime.state).toMatchObject({
+      childTurnId: oldTurn + 1,
+      hasChildTranscript: true,
+      answerAccepted: false,
+      acknowledgmentObserved: false,
+      consumedRevision: null,
+      tutorOutputObserved: true,
+      tutorOutputDrained: false,
+    });
+    runtime.proposal({ tutorState: "acknowledging" }, oldSource);
+    runtime.tick();
+    expectNoTransition(runtime);
+    runtime.proposal({ tutorState: "acknowledging" });
+    expect(runtime.state.phase).toBe("rendering");
+    expect(runtime.result.effects.map(effect => effect.type)).toEqual(["render.requested"]);
+    runtime.confirm();
+    expect(runtime.result.effects.map(effect => effect.type)).toEqual(["steering.ready"]);
+  });
+
+  it("can bind fresh output during a discarded candidate, with quiet measured again after discard", () => {
+    const runtime = new Runtime();
+    runtime.childTurn();
+    candidate(runtime);
+    runtime.transcript("tutor");
+    runtime.output("active");
+    runtime.output("quiet");
+    runtime.tick();
+    discard(runtime);
+    runtime.proposal({ tutorState: "acknowledging" });
+    expectNoTransition(runtime);
+    runtime.tick();
+    expect(runtime.state.phase).toBe("rendering");
+  });
+
+  it.each(["active", "unavailable"] as const)("does not manufacture audio from pre-turn %s output", activity => {
+    const runtime = new Runtime();
+    runtime.output(activity);
+    runtime.childTurn();
+    candidate(runtime);
+    runtime.transcript("tutor");
+    runtime.output("quiet");
+    discard(runtime);
+    runtime.proposal({ tutorState: "acknowledging" });
+    runtime.tick();
+    expect(runtime.state.tutorOutputObserved).toBe(false);
+    expectNoTransition(runtime);
+  });
+
+  it("unavailable output revokes suspended audio", () => {
+    const runtime = new Runtime();
+    runtime.childTurn();
+    runtime.output("active");
+    candidate(runtime);
+    runtime.output("unavailable");
+    runtime.output("quiet");
+    discard(runtime);
+    runtime.transcript("tutor");
+    runtime.proposal({ tutorState: "acknowledging" });
+    runtime.tick();
+    expect(runtime.state.tutorOutputObserved).toBe(false);
+    expectNoTransition(runtime);
+  });
+
+  it("confirmed detector activity permanently invalidates suspended eligibility and audio", () => {
+    const runtime = new Runtime();
+    runtime.childTurn();
+    runtime.output("active");
+    candidate(runtime);
+    runtime.transcript("tutor");
+    runtime.send({ type: "child.turn.confirmed", source: runtimeSource(runtime.state) });
+    discard(runtime); // A discard cannot undo confirmation.
+    runtime.send({ type: "child.turn.ended", source: runtimeSource(runtime.state) });
+    runtime.output("quiet");
+    expect(classificationSource(runtime.state)).toBeNull();
+    expect(runtime.state).toMatchObject({ hasChildTranscript: false, tutorOutputObserved: false });
+    expectNoTransition(runtime);
+  });
+
+  it.each(["child", "unknown"] as const)(
+    "a newer %s revision revokes suspension rather than restoring the old answer",
+    speaker => {
+      const runtime = new Runtime();
+      runtime.childTurn();
+      runtime.output("active");
+      candidate(runtime);
+      runtime.transcript(speaker);
+      expect(runtime.state.childCandidate).toBeNull();
+      discard(runtime);
+      expect(runtime.state.childSpeaking).toBe(true);
+      runtime.send({ type: "child.turn.ended", source: runtimeSource(runtime.state) });
+      runtime.output("quiet");
+      if (speaker === "child") runtime.proposal({ tutorState: "acknowledging" });
+      expect(runtime.state).toMatchObject({ acknowledgmentObserved: false, tutorOutputObserved: false });
+      expectNoTransition(runtime);
+    },
+  );
+
+  it("candidate onset during render handoff stops and cannot be recovered by discard or confirmation", () => {
+    const runtime = new Runtime();
+    runtime.pending();
+    const identity = runtime.state.pendingRender!.identity;
+    const origin = runtime.state.pendingRender!.origin;
+    runtime.send({ type: "child.candidate.started", source: origin });
+    expect(runtime.state).toMatchObject({ phase: "stopped", nodeId: "count-1-duck", pendingRender: null });
+    discard(runtime);
+    runtime.send({ type: "render.confirmed", runtimeId: runtime.state.runtimeId, identity });
+    expect(runtime.result.effects).toEqual([]);
+    expect(runtime.state.phase).toBe("stopped");
+  });
+});

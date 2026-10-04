@@ -1,0 +1,888 @@
+{
+  "version": 1,
+  "purpose": "Reviewed text evidence for offline projection/mapping tests and future authorized Jev replay, not calibrated semantic labels.",
+  "source": {
+    "file": "/Users/davidhurley/Downloads/sprout-lesson-39abf02a-8c9a-4144-ada0-9430673ab5d4.json",
+    "sha256": "f9c608b2fda6f7bd396a1707816d85201193a3701c567ef558167540357192c4",
+    "runtimeId": "39abf02a-8c9a-4144-ada0-9430673ab5d4",
+    "clock": "browser.performance.now-relative-to-attempt",
+    "audioIndependentlyReviewed": false
+  },
+  "recorded": [
+    {
+      "id": "before-clarification",
+      "requestEventIndex": 606,
+      "mappingEventIndex": 607,
+      "identity": {
+        "runtimeId": "39abf02a-8c9a-4144-ada0-9430673ab5d4",
+        "nodeId": "count-1-duck",
+        "visitId": 1,
+        "childTurnId": 5,
+        "transcriptRevision": 37
+      },
+      "transcriptSpeaker": "tutor",
+      "requestAtMs": 46931.09999999404,
+      "mappingAtMs": 47105.79999998212,
+      "input": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 37,
+        "transcript": "Tutor: Hey there! How many ducks do you see?\nChild: Uh, I think... [sigh\nChild: ] Two\nTutor: Mm. Try again, and look carefully at the duck. Tell me how many there are in all.\nChild: Maybe... Uh\nChild: ... One\nTutor: Yes, one duck. You counted carefully."
+      },
+      "observedMapping": {
+        "decision": "abstained",
+        "probabilities": {
+          "answerCorrect": 0.95,
+          "answerIncorrect": 0.06,
+          "answerUnclear": 0.15,
+          "answerNone": 0.02,
+          "needsHelp": 0.4,
+          "tutorAcknowledging": 0.97,
+          "tutorAsking": 0.02,
+          "tutorClarifying": 0.05,
+          "tutorHelping": 0.07
+        },
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        },
+        "reason": "support_ambiguous",
+        "detail": {
+          "category": "support",
+          "candidate": "needsHelp",
+          "candidateProbability": 0.4
+        }
+      },
+      "review": "Text permits settled one after earlier difficulty, but Maybe remains an interpretive uncertainty. No explicit child help request. Why help scored .40 is unproven.",
+      "expectedState": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 37,
+        "transcript": "Tutor: Hey there! How many ducks do you see?\nChild: Uh, I think... [sigh\nChild: ] Two\nTutor: Mm. Try again, and look carefully at the duck. Tell me how many there are in all.\nChild: Maybe... Uh\nChild: ... One\nTutor: Yes, one duck. You counted carefully.",
+        "scene": {
+          "object": "duck",
+          "quantity": 1
+        },
+        "learningObjective": "Identify the total of one displayed duck.",
+        "supportEvidence": {
+          "precedingContext": [
+            {
+              "speaker": "Tutor",
+              "text": "Hey there! How many ducks do you see?"
+            },
+            {
+              "speaker": "Child",
+              "text": "Uh, I think... [sigh\n] Two"
+            },
+            {
+              "speaker": "Tutor",
+              "text": "Mm. Try again, and look carefully at the duck. Tell me how many there are in all."
+            }
+          ],
+          "latestChildAttempt": {
+            "speaker": "Child",
+            "text": "Maybe... Uh\n... One"
+          },
+          "subsequentMessages": [
+            {
+              "speaker": "Tutor",
+              "text": "Yes, one duck. You counted carefully."
+            }
+          ]
+        },
+        "tutorObservation": {
+          "latestMessage": "Yes, one duck. You counted carefully.",
+          "precedingChildAttempt": "Maybe... Uh\n... One"
+        }
+      }
+    },
+    {
+      "id": "after-question",
+      "requestEventIndex": 751,
+      "mappingEventIndex": 753,
+      "identity": {
+        "runtimeId": "39abf02a-8c9a-4144-ada0-9430673ab5d4",
+        "nodeId": "count-1-duck",
+        "visitId": 1,
+        "childTurnId": 5,
+        "transcriptRevision": 47
+      },
+      "transcriptSpeaker": "tutor",
+      "requestAtMs": 57080.5,
+      "mappingAtMs": 57317.5,
+      "input": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 47,
+        "transcript": "Tutor: Hey there! How many ducks do you see?\nChild: Uh, I think... [sigh\nChild: ] Two\nTutor: Mm. Try again, and look carefully at the duck. Tell me how many there are in all.\nChild: Maybe... Uh\nChild: ... One\nTutor: Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?"
+      },
+      "observedMapping": {
+        "decision": "abstained",
+        "probabilities": {
+          "answerCorrect": 0.95,
+          "answerIncorrect": 0.06,
+          "answerUnclear": 0.13,
+          "answerNone": 0.02,
+          "needsHelp": 0.36,
+          "tutorAcknowledging": 0.94,
+          "tutorAsking": 0.06,
+          "tutorClarifying": 0.06,
+          "tutorHelping": 0.08
+        },
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        },
+        "reason": "support_ambiguous",
+        "detail": {
+          "category": "support",
+          "candidate": "needsHelp",
+          "candidateProbability": 0.36
+        }
+      },
+      "review": "Question is merged with earlier confirmation in a consecutive tutor block. It cannot by itself resolve child uncertainty.",
+      "expectedState": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 47,
+        "transcript": "Tutor: Hey there! How many ducks do you see?\nChild: Uh, I think... [sigh\nChild: ] Two\nTutor: Mm. Try again, and look carefully at the duck. Tell me how many there are in all.\nChild: Maybe... Uh\nChild: ... One\nTutor: Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?",
+        "scene": {
+          "object": "duck",
+          "quantity": 1
+        },
+        "learningObjective": "Identify the total of one displayed duck.",
+        "supportEvidence": {
+          "precedingContext": [
+            {
+              "speaker": "Tutor",
+              "text": "Hey there! How many ducks do you see?"
+            },
+            {
+              "speaker": "Child",
+              "text": "Uh, I think... [sigh\n] Two"
+            },
+            {
+              "speaker": "Tutor",
+              "text": "Mm. Try again, and look carefully at the duck. Tell me how many there are in all."
+            }
+          ],
+          "latestChildAttempt": {
+            "speaker": "Child",
+            "text": "Maybe... Uh\n... One"
+          },
+          "subsequentMessages": [
+            {
+              "speaker": "Tutor",
+              "text": "Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?"
+            }
+          ]
+        },
+        "tutorObservation": {
+          "latestMessage": "Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?",
+          "precedingChildAttempt": "Maybe... Uh\n... One"
+        }
+      }
+    },
+    {
+      "id": "child-reaffirmation",
+      "requestEventIndex": 796,
+      "mappingEventIndex": 798,
+      "identity": {
+        "runtimeId": "39abf02a-8c9a-4144-ada0-9430673ab5d4",
+        "nodeId": "count-1-duck",
+        "visitId": 1,
+        "childTurnId": 6,
+        "transcriptRevision": 51
+      },
+      "transcriptSpeaker": "child",
+      "requestAtMs": 61957.5,
+      "mappingAtMs": 62216.19999998808,
+      "input": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 51,
+        "transcript": "Tutor: Hey there! How many ducks do you see?\nChild: Uh, I think... [sigh\nChild: ] Two\nTutor: Mm. Try again, and look carefully at the duck. Tell me how many there are in all.\nChild: Maybe... Uh\nChild: ... One\nTutor: Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?\nChild: Yeah, I answered one"
+      },
+      "observedMapping": {
+        "decision": "accepted",
+        "probabilities": {
+          "answerCorrect": 0.97,
+          "answerIncorrect": 0.06,
+          "answerUnclear": 0.09,
+          "answerNone": 0.02,
+          "needsHelp": 0.1,
+          "tutorAcknowledging": 0.95,
+          "tutorAsking": 0.05,
+          "tutorClarifying": 0.07,
+          "tutorHelping": 0.07
+        },
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        }
+      },
+      "review": "Yeah, I answered one reaffirms prior correct total. Child-source accepted proposal cannot establish fresh tutor acknowledgment.",
+      "expectedState": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 51,
+        "transcript": "Tutor: Hey there! How many ducks do you see?\nChild: Uh, I think... [sigh\nChild: ] Two\nTutor: Mm. Try again, and look carefully at the duck. Tell me how many there are in all.\nChild: Maybe... Uh\nChild: ... One\nTutor: Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?\nChild: Yeah, I answered one",
+        "scene": {
+          "object": "duck",
+          "quantity": 1
+        },
+        "learningObjective": "Identify the total of one displayed duck.",
+        "supportEvidence": {
+          "precedingContext": [
+            {
+              "speaker": "Tutor",
+              "text": "Hey there! How many ducks do you see?"
+            },
+            {
+              "speaker": "Child",
+              "text": "Uh, I think... [sigh\n] Two"
+            },
+            {
+              "speaker": "Tutor",
+              "text": "Mm. Try again, and look carefully at the duck. Tell me how many there are in all."
+            }
+          ],
+          "latestChildAttempt": {
+            "speaker": "Child",
+            "text": "Maybe... Uh\n... One"
+          },
+          "subsequentMessages": [
+            {
+              "speaker": "Tutor",
+              "text": "Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?"
+            },
+            {
+              "speaker": "Child",
+              "text": "Yeah, I answered one"
+            }
+          ]
+        },
+        "tutorObservation": {
+          "latestMessage": "Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?",
+          "precedingChildAttempt": "Maybe... Uh\n... One"
+        }
+      }
+    },
+    {
+      "id": "generic-thanks",
+      "requestEventIndex": 855,
+      "mappingEventIndex": 857,
+      "identity": {
+        "runtimeId": "39abf02a-8c9a-4144-ada0-9430673ab5d4",
+        "nodeId": "count-1-duck",
+        "visitId": 1,
+        "childTurnId": 6,
+        "transcriptRevision": 55
+      },
+      "transcriptSpeaker": "tutor",
+      "requestAtMs": 64381.19999998808,
+      "mappingAtMs": 64546.29999998212,
+      "input": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 55,
+        "transcript": "Tutor: Hey there! How many ducks do you see?\nChild: Uh, I think... [sigh\nChild: ] Two\nTutor: Mm. Try again, and look carefully at the duck. Tell me how many there are in all.\nChild: Maybe... Uh\nChild: ... One\nTutor: Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?\nChild: Yeah, I answered one\nTutor: Thanks for telling me."
+      },
+      "observedMapping": {
+        "decision": "abstained",
+        "probabilities": {
+          "answerCorrect": 0.97,
+          "answerIncorrect": 0.05,
+          "answerUnclear": 0.07,
+          "answerNone": 0.02,
+          "needsHelp": 0.09,
+          "tutorAcknowledging": 0.43,
+          "tutorAsking": 0.02,
+          "tutorClarifying": 0.03,
+          "tutorHelping": 0.03
+        },
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        },
+        "reason": "tutor_no_winner",
+        "detail": {
+          "category": "tutor",
+          "candidate": "tutorAcknowledging",
+          "candidateProbability": 0.43
+        }
+      },
+      "review": "Current support is clear in observed scores; latest Thanks does not explicitly confirm current success. Hold until fresh explicit acknowledgment, relevant drain and render.",
+      "expectedState": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 55,
+        "transcript": "Tutor: Hey there! How many ducks do you see?\nChild: Uh, I think... [sigh\nChild: ] Two\nTutor: Mm. Try again, and look carefully at the duck. Tell me how many there are in all.\nChild: Maybe... Uh\nChild: ... One\nTutor: Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?\nChild: Yeah, I answered one\nTutor: Thanks for telling me.",
+        "scene": {
+          "object": "duck",
+          "quantity": 1
+        },
+        "learningObjective": "Identify the total of one displayed duck.",
+        "supportEvidence": {
+          "precedingContext": [
+            {
+              "speaker": "Tutor",
+              "text": "Hey there! How many ducks do you see?"
+            },
+            {
+              "speaker": "Child",
+              "text": "Uh, I think... [sigh\n] Two"
+            },
+            {
+              "speaker": "Tutor",
+              "text": "Mm. Try again, and look carefully at the duck. Tell me how many there are in all."
+            },
+            {
+              "speaker": "Child",
+              "text": "Maybe... Uh\n... One"
+            },
+            {
+              "speaker": "Tutor",
+              "text": "Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?"
+            }
+          ],
+          "latestChildAttempt": {
+            "speaker": "Child",
+            "text": "Yeah, I answered one"
+          },
+          "subsequentMessages": [
+            {
+              "speaker": "Tutor",
+              "text": "Thanks for telling me."
+            }
+          ]
+        },
+        "tutorObservation": {
+          "latestMessage": "Thanks for telling me.",
+          "precedingChildAttempt": "Yeah, I answered one"
+        }
+      }
+    }
+  ],
+  "synthetic": [
+    {
+      "id": "fresh-explicit-confirmation",
+      "input": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 1,
+        "transcript": "Tutor: Hey there! How many ducks do you see?\nChild: Uh, I think... [sigh\nChild: ] Two\nTutor: Mm. Try again, and look carefully at the duck. Tell me how many there are in all.\nChild: Maybe... Uh\nChild: ... One\nTutor: Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?\nChild: Yeah, I answered one\nTutor: Yes, one duck."
+      },
+      "review": "Settled reaffirmation followed by explicit fresh success; may progress only through existing gates.",
+      "observedMapping": null,
+      "expectedState": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 1,
+        "transcript": "Tutor: Hey there! How many ducks do you see?\nChild: Uh, I think... [sigh\nChild: ] Two\nTutor: Mm. Try again, and look carefully at the duck. Tell me how many there are in all.\nChild: Maybe... Uh\nChild: ... One\nTutor: Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?\nChild: Yeah, I answered one\nTutor: Yes, one duck.",
+        "scene": {
+          "object": "duck",
+          "quantity": 1
+        },
+        "learningObjective": "Identify the total of one displayed duck.",
+        "supportEvidence": {
+          "precedingContext": [
+            {
+              "speaker": "Tutor",
+              "text": "Hey there! How many ducks do you see?"
+            },
+            {
+              "speaker": "Child",
+              "text": "Uh, I think... [sigh\n] Two"
+            },
+            {
+              "speaker": "Tutor",
+              "text": "Mm. Try again, and look carefully at the duck. Tell me how many there are in all."
+            },
+            {
+              "speaker": "Child",
+              "text": "Maybe... Uh\n... One"
+            },
+            {
+              "speaker": "Tutor",
+              "text": "Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?"
+            }
+          ],
+          "latestChildAttempt": {
+            "speaker": "Child",
+            "text": "Yeah, I answered one"
+          },
+          "subsequentMessages": [
+            {
+              "speaker": "Tutor",
+              "text": "Yes, one duck."
+            }
+          ]
+        },
+        "tutorObservation": {
+          "latestMessage": "Yes, one duck.",
+          "precedingChildAttempt": "Yeah, I answered one"
+        }
+      }
+    },
+    {
+      "id": "help-then-settled",
+      "input": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 1,
+        "transcript": "Tutor: How many ducks?\nChild: Can you help?\nTutor: Point to the duck and count it yourself.\nChild: One\nTutor: Yes, one duck."
+      },
+      "review": "Earlier support can resolve; independent mastery remains separate.",
+      "observedMapping": null,
+      "expectedState": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 1,
+        "transcript": "Tutor: How many ducks?\nChild: Can you help?\nTutor: Point to the duck and count it yourself.\nChild: One\nTutor: Yes, one duck.",
+        "scene": {
+          "object": "duck",
+          "quantity": 1
+        },
+        "learningObjective": "Identify the total of one displayed duck.",
+        "supportEvidence": {
+          "precedingContext": [
+            {
+              "speaker": "Tutor",
+              "text": "How many ducks?"
+            },
+            {
+              "speaker": "Child",
+              "text": "Can you help?"
+            },
+            {
+              "speaker": "Tutor",
+              "text": "Point to the duck and count it yourself."
+            }
+          ],
+          "latestChildAttempt": {
+            "speaker": "Child",
+            "text": "One"
+          },
+          "subsequentMessages": [
+            {
+              "speaker": "Tutor",
+              "text": "Yes, one duck."
+            }
+          ]
+        },
+        "tutorObservation": {
+          "latestMessage": "Yes, one duck.",
+          "precedingChildAttempt": "One"
+        }
+      }
+    },
+    {
+      "id": "renewed-help",
+      "input": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 1,
+        "transcript": "Tutor: Hey there! How many ducks do you see?\nChild: Uh, I think... [sigh\nChild: ] Two\nTutor: Mm. Try again, and look carefully at the duck. Tell me how many there are in all.\nChild: Maybe... Uh\nChild: ... One\nTutor: Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?\nChild: Yeah, one, but I still need help"
+      },
+      "review": "Do not confirm success while help remains current.",
+      "observedMapping": null,
+      "expectedState": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 1,
+        "transcript": "Tutor: Hey there! How many ducks do you see?\nChild: Uh, I think... [sigh\nChild: ] Two\nTutor: Mm. Try again, and look carefully at the duck. Tell me how many there are in all.\nChild: Maybe... Uh\nChild: ... One\nTutor: Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?\nChild: Yeah, one, but I still need help",
+        "scene": {
+          "object": "duck",
+          "quantity": 1
+        },
+        "learningObjective": "Identify the total of one displayed duck.",
+        "supportEvidence": {
+          "precedingContext": [
+            {
+              "speaker": "Tutor",
+              "text": "Hey there! How many ducks do you see?"
+            },
+            {
+              "speaker": "Child",
+              "text": "Uh, I think... [sigh\n] Two"
+            },
+            {
+              "speaker": "Tutor",
+              "text": "Mm. Try again, and look carefully at the duck. Tell me how many there are in all."
+            }
+          ],
+          "latestChildAttempt": {
+            "speaker": "Child",
+            "text": "Maybe... Uh\n... One"
+          },
+          "subsequentMessages": [
+            {
+              "speaker": "Tutor",
+              "text": "Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?"
+            },
+            {
+              "speaker": "Child",
+              "text": "Yeah, one, but I still need help"
+            }
+          ]
+        },
+        "tutorObservation": {
+          "latestMessage": "Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?",
+          "precedingChildAttempt": "Maybe... Uh\n... One"
+        }
+      }
+    },
+    {
+      "id": "number-plus-help",
+      "input": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 1,
+        "transcript": "Tutor: Hey there! How many ducks do you see?\nChild: Uh, I think... [sigh\nChild: ] Two\nTutor: Mm. Try again, and look carefully at the duck. Tell me how many there are in all.\nChild: Maybe... Uh\nChild: ... One\nTutor: Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?\nChild: One... can you help?"
+      },
+      "review": "Matching number alone cannot resolve current help.",
+      "observedMapping": null,
+      "expectedState": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 1,
+        "transcript": "Tutor: Hey there! How many ducks do you see?\nChild: Uh, I think... [sigh\nChild: ] Two\nTutor: Mm. Try again, and look carefully at the duck. Tell me how many there are in all.\nChild: Maybe... Uh\nChild: ... One\nTutor: Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?\nChild: One... can you help?",
+        "scene": {
+          "object": "duck",
+          "quantity": 1
+        },
+        "learningObjective": "Identify the total of one displayed duck.",
+        "supportEvidence": {
+          "precedingContext": [
+            {
+              "speaker": "Tutor",
+              "text": "Hey there! How many ducks do you see?"
+            },
+            {
+              "speaker": "Child",
+              "text": "Uh, I think... [sigh\n] Two"
+            },
+            {
+              "speaker": "Tutor",
+              "text": "Mm. Try again, and look carefully at the duck. Tell me how many there are in all."
+            }
+          ],
+          "latestChildAttempt": {
+            "speaker": "Child",
+            "text": "Maybe... Uh\n... One"
+          },
+          "subsequentMessages": [
+            {
+              "speaker": "Tutor",
+              "text": "Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?"
+            },
+            {
+              "speaker": "Child",
+              "text": "One... can you help?"
+            }
+          ]
+        },
+        "tutorObservation": {
+          "latestMessage": "Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?",
+          "precedingChildAttempt": "Maybe... Uh\n... One"
+        }
+      }
+    },
+    {
+      "id": "alternatives",
+      "input": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 1,
+        "transcript": "Tutor: Hey there! How many ducks do you see?\nChild: Uh, I think... [sigh\nChild: ] Two\nTutor: Mm. Try again, and look carefully at the duck. Tell me how many there are in all.\nChild: Maybe... Uh\nChild: ... One\nTutor: Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?\nChild: One or two?"
+      },
+      "review": "Unresolved alternatives: clarify without total.",
+      "observedMapping": null,
+      "expectedState": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 1,
+        "transcript": "Tutor: Hey there! How many ducks do you see?\nChild: Uh, I think... [sigh\nChild: ] Two\nTutor: Mm. Try again, and look carefully at the duck. Tell me how many there are in all.\nChild: Maybe... Uh\nChild: ... One\nTutor: Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?\nChild: One or two?",
+        "scene": {
+          "object": "duck",
+          "quantity": 1
+        },
+        "learningObjective": "Identify the total of one displayed duck.",
+        "supportEvidence": {
+          "precedingContext": [
+            {
+              "speaker": "Tutor",
+              "text": "Hey there! How many ducks do you see?"
+            },
+            {
+              "speaker": "Child",
+              "text": "Uh, I think... [sigh\n] Two"
+            },
+            {
+              "speaker": "Tutor",
+              "text": "Mm. Try again, and look carefully at the duck. Tell me how many there are in all."
+            }
+          ],
+          "latestChildAttempt": {
+            "speaker": "Child",
+            "text": "Maybe... Uh\n... One"
+          },
+          "subsequentMessages": [
+            {
+              "speaker": "Tutor",
+              "text": "Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?"
+            },
+            {
+              "speaker": "Child",
+              "text": "One or two?"
+            }
+          ]
+        },
+        "tutorObservation": {
+          "latestMessage": "Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?",
+          "precedingChildAttempt": "Maybe... Uh\n... One"
+        }
+      }
+    },
+    {
+      "id": "repeated-wrong",
+      "input": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 1,
+        "transcript": "Tutor: How many ducks?\nChild: Two\nTutor: Point and try again.\nChild: Three"
+      },
+      "review": "Repeated wrong answers: help without total, no success.",
+      "observedMapping": null,
+      "expectedState": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 1,
+        "transcript": "Tutor: How many ducks?\nChild: Two\nTutor: Point and try again.\nChild: Three",
+        "scene": {
+          "object": "duck",
+          "quantity": 1
+        },
+        "learningObjective": "Identify the total of one displayed duck.",
+        "supportEvidence": {
+          "precedingContext": [
+            {
+              "speaker": "Tutor",
+              "text": "How many ducks?"
+            }
+          ],
+          "latestChildAttempt": {
+            "speaker": "Child",
+            "text": "Two"
+          },
+          "subsequentMessages": [
+            {
+              "speaker": "Tutor",
+              "text": "Point and try again."
+            },
+            {
+              "speaker": "Child",
+              "text": "Three"
+            }
+          ]
+        },
+        "tutorObservation": {
+          "latestMessage": "Point and try again.",
+          "precedingChildAttempt": "Two"
+        }
+      }
+    },
+    {
+      "id": "tutor-supplied-repetition",
+      "input": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 1,
+        "transcript": "Tutor: One duck. Say one.\nChild: One? I do not know"
+      },
+      "review": "Uncertain supplied repetition: no success or independent mastery.",
+      "observedMapping": null,
+      "expectedState": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 1,
+        "transcript": "Tutor: One duck. Say one.\nChild: One? I do not know",
+        "scene": {
+          "object": "duck",
+          "quantity": 1
+        },
+        "learningObjective": "Identify the total of one displayed duck.",
+        "supportEvidence": {
+          "precedingContext": [
+            {
+              "speaker": "Tutor",
+              "text": "One duck. Say one."
+            }
+          ],
+          "latestChildAttempt": {
+            "speaker": "Child",
+            "text": "One? I do not know"
+          },
+          "subsequentMessages": []
+        },
+        "tutorObservation": {
+          "latestMessage": "One duck. Say one.",
+          "precedingChildAttempt": null
+        }
+      }
+    },
+    {
+      "id": "non-speech",
+      "input": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 1,
+        "transcript": "Tutor: Hey there! How many ducks do you see?\nChild: Uh, I think... [sigh\nChild: ] Two\nTutor: Mm. Try again, and look carefully at the duck. Tell me how many there are in all.\nChild: Maybe... Uh\nChild: ... One\nTutor: Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?\nChild: [sigh\nChild: ] [breath]"
+      },
+      "review": "Non-speech alone is neither a settled reaffirmation nor explicit renewed help; preserve history and uncertainty.",
+      "observedMapping": null,
+      "expectedState": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 1,
+        "transcript": "Tutor: Hey there! How many ducks do you see?\nChild: Uh, I think... [sigh\nChild: ] Two\nTutor: Mm. Try again, and look carefully at the duck. Tell me how many there are in all.\nChild: Maybe... Uh\nChild: ... One\nTutor: Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?\nChild: [sigh\nChild: ] [breath]",
+        "scene": {
+          "object": "duck",
+          "quantity": 1
+        },
+        "learningObjective": "Identify the total of one displayed duck.",
+        "supportEvidence": {
+          "precedingContext": [
+            {
+              "speaker": "Tutor",
+              "text": "Hey there! How many ducks do you see?"
+            },
+            {
+              "speaker": "Child",
+              "text": "Uh, I think... [sigh\n] Two"
+            },
+            {
+              "speaker": "Tutor",
+              "text": "Mm. Try again, and look carefully at the duck. Tell me how many there are in all."
+            }
+          ],
+          "latestChildAttempt": {
+            "speaker": "Child",
+            "text": "Maybe... Uh\n... One"
+          },
+          "subsequentMessages": [
+            {
+              "speaker": "Tutor",
+              "text": "Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?"
+            },
+            {
+              "speaker": "Child",
+              "text": "[sigh\n] [breath]"
+            }
+          ]
+        },
+        "tutorObservation": {
+          "latestMessage": "Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?",
+          "precedingChildAttempt": "Maybe... Uh\n... One"
+        }
+      }
+    },
+    {
+      "id": "fresh-uncertain",
+      "input": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 1,
+        "transcript": "Tutor: Hey there! How many ducks do you see?\nChild: Uh, I think... [sigh\nChild: ] Two\nTutor: Mm. Try again, and look carefully at the duck. Tell me how many there are in all.\nChild: Maybe... Uh\nChild: ... One\nTutor: Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?\nChild: Maybe one? I am not finished"
+      },
+      "review": "Fresh uncertain attempt supersedes settled reaffirmation; wait or clarify.",
+      "observedMapping": null,
+      "expectedState": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 1,
+        "transcript": "Tutor: Hey there! How many ducks do you see?\nChild: Uh, I think... [sigh\nChild: ] Two\nTutor: Mm. Try again, and look carefully at the duck. Tell me how many there are in all.\nChild: Maybe... Uh\nChild: ... One\nTutor: Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?\nChild: Maybe one? I am not finished",
+        "scene": {
+          "object": "duck",
+          "quantity": 1
+        },
+        "learningObjective": "Identify the total of one displayed duck.",
+        "supportEvidence": {
+          "precedingContext": [
+            {
+              "speaker": "Tutor",
+              "text": "Hey there! How many ducks do you see?"
+            },
+            {
+              "speaker": "Child",
+              "text": "Uh, I think... [sigh\n] Two"
+            },
+            {
+              "speaker": "Tutor",
+              "text": "Mm. Try again, and look carefully at the duck. Tell me how many there are in all."
+            }
+          ],
+          "latestChildAttempt": {
+            "speaker": "Child",
+            "text": "Maybe... Uh\n... One"
+          },
+          "subsequentMessages": [
+            {
+              "speaker": "Tutor",
+              "text": "Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?"
+            },
+            {
+              "speaker": "Child",
+              "text": "Maybe one? I am not finished"
+            }
+          ]
+        },
+        "tutorObservation": {
+          "latestMessage": "Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?",
+          "precedingChildAttempt": "Maybe... Uh\n... One"
+        }
+      }
+    },
+    {
+      "id": "generic-finished",
+      "input": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 1,
+        "transcript": "Tutor: Hey there! How many ducks do you see?\nChild: Uh, I think... [sigh\nChild: ] Two\nTutor: Mm. Try again, and look carefully at the duck. Tell me how many there are in all.\nChild: Maybe... Uh\nChild: ... One\nTutor: Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?\nChild: Yeah, finished"
+      },
+      "review": "Generic assent alone is insufficient for fresh success confirmation; disambiguate if needed.",
+      "observedMapping": null,
+      "expectedState": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 1,
+        "transcript": "Tutor: Hey there! How many ducks do you see?\nChild: Uh, I think... [sigh\nChild: ] Two\nTutor: Mm. Try again, and look carefully at the duck. Tell me how many there are in all.\nChild: Maybe... Uh\nChild: ... One\nTutor: Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?\nChild: Yeah, finished",
+        "scene": {
+          "object": "duck",
+          "quantity": 1
+        },
+        "learningObjective": "Identify the total of one displayed duck.",
+        "supportEvidence": {
+          "precedingContext": [
+            {
+              "speaker": "Tutor",
+              "text": "Hey there! How many ducks do you see?"
+            },
+            {
+              "speaker": "Child",
+              "text": "Uh, I think... [sigh\n] Two"
+            },
+            {
+              "speaker": "Tutor",
+              "text": "Mm. Try again, and look carefully at the duck. Tell me how many there are in all."
+            }
+          ],
+          "latestChildAttempt": {
+            "speaker": "Child",
+            "text": "Maybe... Uh\n... One"
+          },
+          "subsequentMessages": [
+            {
+              "speaker": "Tutor",
+              "text": "Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?"
+            },
+            {
+              "speaker": "Child",
+              "text": "Yeah, finished"
+            }
+          ]
+        },
+        "tutorObservation": {
+          "latestMessage": "Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?",
+          "precedingChildAttempt": "Maybe... Uh\n... One"
+        }
+      }
+    }
+  ],
+  "interruptionReview": {
+    "beforeSend": "Candidate child activity immediately cancels pending timer; no append.",
+    "afterSend": "Locally invalidate sent request, ignore delayed append acknowledgment and stale classifier results. Provider cannot retract append; whether tutor ignores it needs authorized audio/visual validation."
+  }
+}

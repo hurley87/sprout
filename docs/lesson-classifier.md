@@ -1,60 +1,87 @@
-# Current-node transcript classification
+# Current-node conversation-state classifier
 
-This document describes the classifier's implementation contract. Broader live
-calibration continues in [#57](https://github.com/hurley87/sprout/issues/57).
+The sole runtime classifier is
+`lib/lesson-runtime/jev-conversation-state-classifier.ts`. Its shared Choice
+contract, validation, thresholds, and deterministic mapper are in
+`lib/lesson-runtime/conversation-observer-contract.ts`.
+The stable diagnostic identifier is `conversation-state-v2`.
 
-The root transcript-steering runtime uses a server-side
-`jevConversationStateClassifier`. It accepts an authored node ID, a nonnegative
-safe transcript revision, a recent ordered `Child:`/`Tutor:` transcript containing
-only that node's exchange, and an `AbortSignal`. It returns a descriptive
-`ConversationStateProposal` or `null`. The browser runtime calls
-it through the retained classification/diagnostic endpoint. The classifier has no transition,
-persistence, or GPT-Live authority.
+## Request and semantic contract
 
-The existing `lib/jev.ts` transport now projects validated Noul probabilities for
-one or more questions from a single TypeSafe/SystemOne request. The classifier keeps the
-existing credential and pinned `jev-1.13.0`; provider bodies and errors remain
-private and are never logged.
+`/api/classify` accepts exactly `nodeId`, `transcriptRevision`, and `transcript`.
+It directly calls `classifyConversationStateWithDiagnostics`, with one Jev
+request per classification. There is no mode switch, fallback, or classifier
+configuration environment variable. `TYPESAFE_API_KEY` remains server-only.
 
-The classifier explicitly projects only `nodeId`, `scene.object`,
-`scene.quantity`, `learningObjective`, `transcript`, and `transcriptRevision`
-into the provider state. Scene facts and objective come from the requested
-authored node. Neither the whole node nor its tutor brief or success edge is
-serialized. Extra caller fields, future nodes and graph edges are excluded. The caller remains responsible for supplying
-only a recent current-node transcript; the classifier does not accumulate or
-trim session history.
+The model receives only authored current-node state:
 
-Nine Noul questions cover four mutually exclusive answer outcomes (correct,
-incorrect, unclear/incomplete, no attempt), one unresolved need for help, and
-four primary functions of the latest tutor message (acknowledging success,
-asking for the total, clarifying the child's response, providing counting help).
-The answer questions judge the child's latest settled answer including
-self-corrections across messages. Tutor speech never supplies a child answer.
-Tutor questions describe the latest message's semantic function, not whether it
-is being spoken now. A message with conflicting functions can cause abstention.
+```text
+nodeId
+scene: { object, quantity }
+learningObjective
+transcript
+transcriptRevision
+```
 
-The deterministic mapping uses **experimental, uncalibrated** bands:
+The full ordered current-node transcript supplies context. No latest-message,
+preceding-attempt, or support projection enters the model input. Earlier tutor
+and child messages are context for interpreting the latest relevant tutor
+response; earlier tutor actions are not the current action. Speaker attribution
+remains unverified evidence. The caller supplies the current-node snapshot;
+the observer does not accumulate session history.
 
-- An answer or tutor category must score at least 0.90, every competing category
-  must score at most 0.20, and the winner must lead by at least 0.70.
-- Help scores at least 0.90 map to `needs_help`; at most 0.10 map to `none` (no
-  evidence of current need). Intermediate values cause `null`.
-- All four tutor scores at most 0.10 map to `unknown`, including a snapshot with
-  no tutor message. Intermediate or conflicting tutor scores cause `null`.
-- Acknowledging success with an answer outcome other than `correct` causes
-  `null`. Any invalid/missing probability or provider failure causes `null`.
+Two Choice questions classify:
 
-Mocked tests establish wiring and mapping, not Jev's real semantic accuracy.
-Independent Noul probabilities do not supply a joint confidence score. Correctness
-is descriptive and never grants permission to advance.
+- `objectiveState`: completed, incorrect, unclear_or_incomplete,
+  unresolved_help, no_attempt.
+- `tutorState`: confirmed_completion, clarifying, helping, asking, other.
 
-`childActivity` is always `unknown`. Transcript absence is never interpreted as
-waiting, thinking, silence, or speech. The existing other activity values and
-`tutorState: listening` remain available for a later deterministic runtime layer.
+Response validation checks the pinned model, closed option sets, finite scores,
+normalized distributions, and a selected maximum. The deterministic mapper
+retains the live path's existing confidence bands: HIGH 0.9,
+COMPETITOR_CEILING 0.2, MIN_MARGIN 0.7. Choice confidence and normalized
+probabilities are exported; thresholds are unchanged by promotion.
 
-Returned identity is copied from the request before any await, never from
-provider output. Cancellation is checked before fetch, after fetch, after body
-parsing, and before returning the proposal. Superseded callers can abort their
-request; the browser runtime and reducer also validate the captured runtime,
-node, visit, child turn, and revision against current state. The classifier
-itself cannot determine staleness without that caller-owned state.
+Only `completed` plus `confirmed_completion`, after validation and confidence
+gates, emits the existing correct/none/acknowledging proposal. Other accepted
+states hold the scene without a proposal. Ambiguous or invalid results abstain.
+The observer cannot select destinations or grant progression by itself.
+
+## Runtime authority and diagnostics
+
+The reducer still checks exact runtime/visit/child-turn/revision identity,
+current acknowledgment, relevant tutor audio and drain. Render confirmation
+still precedes authored-edge steering. Promotion changes neither VAD,
+cancellation, stabilization timing, GPT-Live prompts, nor reducer semantics.
+
+Exports include `classifierVersion` at the top level, on classifier events, and
+in normalized mapping diagnostics. Diagnostics retain both choices and their
+probabilities, mapped outcome, abstention reason, elapsed time, node ID, and
+transcript revision. Raw provider bodies and secrets are excluded. HTTP errors
+retain safe category/status/allowlisted-code diagnostics.
+
+The full-context live path did not use the legacy Noul-only clarification
+trigger. Promotion preserves that behavior: it does not introduce clarification
+requests for Choice abstentions. The existing clarification scheduler and
+instruction are unchanged; obsolete integration tests for the retired legacy
+trigger have been removed. Recovery-policy changes belong in a separate task.
+
+## Offline evidence
+
+Historical issue #57 documents and replay results remain unchanged.
+The retired nine-question observer and mapper live under
+`lib/experiments/issue-57/legacy/` solely for historical comparison scripts and
+fixtures; no production module imports them. The projection-A adapter keeps
+narrow evidence construction only for offline comparison. Both offline arms
+reuse canonical Choice criteria, normalization, mapping, and execution, so
+runtime-equivalent implementations cannot diverge.
+
+The former `simplified-full-context` name and `classifierMode` occur only in
+historical evidence or rejection tests. New sessions use the version identifier.
+The archived [legacy contract](issue-57-legacy-classifier-contract.md) preserves
+the earlier nine-question design for provenance.
+
+Mock provider tests establish transport, validation, and mapping; they do not
+calibrate Jev accuracy. The existing offline comparison hashes verify that the
+promoted full-context question contract remains identical to the measured arm.
+No paid provider call or live session is required by this cleanup.

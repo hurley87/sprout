@@ -1,0 +1,739 @@
+{
+  "version": 1,
+  "purpose": "Human text review and future explicitly authorized semantic evaluation; no provider calls or calibrated labels.",
+  "source": {
+    "file": "/Users/davidhurley/Downloads/sprout-lesson-8adca88d-2e69-4869-a512-dc31682fc071.json",
+    "sha256": "b17152bfe5df6da779e51cb3379a2e343a6276e05f8f036107a05b611110fe40",
+    "runtimeId": "8adca88d-2e69-4869-a512-dc31682fc071",
+    "clock": "browser.performance.now-relative-to-attempt",
+    "audioIndependentlyReviewed": false,
+    "recordedExportCount": 1
+  },
+  "limitations": [
+    "Text interpretation is separate from observed probabilities and acoustic evidence.",
+    "Recorded snapshots are correlated within one session, not independent calibration samples.",
+    "Synthetic contrasts have no observed probabilities or independent audio.",
+    "Uncertain review labels require adjudication before scoring provider accuracy.",
+    "Earlier exports cited in repository documentation are not available in Downloads and are not reproduced as newly verified evidence."
+  ],
+  "recorded": [
+    {
+      "id": "wrong-one-duck-before-retry",
+      "sourceKind": "recorded_export",
+      "requestEventIndex": 150,
+      "mappingEventIndex": 152,
+      "identity": {
+        "runtimeId": "8adca88d-2e69-4869-a512-dc31682fc071",
+        "nodeId": "count-1-duck",
+        "visitId": 1,
+        "childTurnId": 2,
+        "transcriptRevision": 12
+      },
+      "requestAtMs": 11659,
+      "mappingAtMs": 11925.899999976158,
+      "transcript": "Tutor: Okay. How many ducks do you see?\nTutor: Sorry, can you say that again?\nChild: Two",
+      "observedMapping": {
+        "decision": "abstained",
+        "probabilities": {
+          "answerCorrect": 0.05,
+          "answerIncorrect": 0.94,
+          "answerUnclear": 0.11,
+          "answerNone": 0.04,
+          "needsHelp": 0.56,
+          "tutorAcknowledging": 0.02,
+          "tutorAsking": 0.61,
+          "tutorClarifying": 0.64,
+          "tutorHelping": 0.28
+        },
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        },
+        "reason": "tutor_no_winner",
+        "detail": {
+          "category": "tutor",
+          "candidate": "tutorClarifying",
+          "candidateProbability": 0.64
+        }
+      },
+      "lastRuntimeBeforeRequest": {
+        "hasChildTranscript": true,
+        "childSpeaking": false,
+        "transcriptSource": "child",
+        "tutorOutputObserved": false,
+        "tutorOutputDrained": false,
+        "outputActivity": "quiet"
+      },
+      "textReview": {
+        "answer": "incorrect",
+        "support": "uncertain",
+        "tutor": "mixed asking/clarifying in adjacent tutor lines",
+        "authorityExpectation": "hold"
+      }
+    },
+    {
+      "id": "wrong-one-duck-after-hint",
+      "sourceKind": "recorded_export",
+      "requestEventIndex": 384,
+      "mappingEventIndex": 386,
+      "identity": {
+        "runtimeId": "8adca88d-2e69-4869-a512-dc31682fc071",
+        "nodeId": "count-1-duck",
+        "visitId": 1,
+        "childTurnId": 2,
+        "transcriptRevision": 26
+      },
+      "requestAtMs": 18120.79999998212,
+      "mappingAtMs": 18355.09999999404,
+      "transcript": "Tutor: Okay. How many ducks do you see?\nTutor: Sorry, can you say that again?\nChild: Two\nTutor: Hmm. Let's try carefully. Point to the duck and count it. What do you get?",
+      "observedMapping": {
+        "decision": "abstained",
+        "probabilities": {
+          "answerCorrect": 0.05,
+          "answerIncorrect": 0.82,
+          "answerUnclear": 0.37,
+          "answerNone": 0.05,
+          "needsHelp": 0.79,
+          "tutorAcknowledging": 0.02,
+          "tutorAsking": 0.18,
+          "tutorClarifying": 0.1,
+          "tutorHelping": 0.95
+        },
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        },
+        "reason": "answer_no_winner",
+        "detail": {
+          "category": "answer",
+          "candidate": "answerIncorrect",
+          "candidateProbability": 0.82
+        }
+      },
+      "lastRuntimeBeforeRequest": {
+        "hasChildTranscript": true,
+        "childSpeaking": false,
+        "transcriptSource": "tutor",
+        "tutorOutputObserved": true,
+        "tutorOutputDrained": true,
+        "outputActivity": "quiet"
+      },
+      "textReview": {
+        "answer": "incorrect",
+        "support": "uncertain",
+        "tutor": "helping",
+        "authorityExpectation": "hold"
+      }
+    },
+    {
+      "id": "settled-one-duck-correction",
+      "sourceKind": "recorded_export",
+      "requestEventIndex": 483,
+      "mappingEventIndex": 485,
+      "identity": {
+        "runtimeId": "8adca88d-2e69-4869-a512-dc31682fc071",
+        "nodeId": "count-1-duck",
+        "visitId": 1,
+        "childTurnId": 3,
+        "transcriptRevision": 32
+      },
+      "requestAtMs": 24121,
+      "mappingAtMs": 24380.19999998808,
+      "transcript": "Tutor: Okay. How many ducks do you see?\nTutor: Sorry, can you say that again?\nChild: Two\nTutor: Hmm. Let's try carefully. Point to the duck and count it. What do you get?\nChild: One\nTutor: Yes. There is one duck.",
+      "observedMapping": {
+        "decision": "accepted",
+        "probabilities": {
+          "answerCorrect": 0.94,
+          "answerIncorrect": 0.07,
+          "answerUnclear": 0.06,
+          "answerNone": 0.02,
+          "needsHelp": 0.1,
+          "tutorAcknowledging": 0.96,
+          "tutorAsking": 0.03,
+          "tutorClarifying": 0.04,
+          "tutorHelping": 0.07
+        },
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        }
+      },
+      "lastRuntimeBeforeRequest": {
+        "hasChildTranscript": true,
+        "childSpeaking": false,
+        "transcriptSource": "tutor",
+        "tutorOutputObserved": true,
+        "tutorOutputDrained": true,
+        "outputActivity": "quiet"
+      },
+      "textReview": {
+        "answer": "correct",
+        "support": "none",
+        "tutor": "acknowledging",
+        "authorityExpectation": "eligible only with runtime gates"
+      }
+    },
+    {
+      "id": "settled-two-ducks",
+      "sourceKind": "recorded_export",
+      "requestEventIndex": 695,
+      "mappingEventIndex": 697,
+      "identity": {
+        "runtimeId": "8adca88d-2e69-4869-a512-dc31682fc071",
+        "nodeId": "count-2-ducks",
+        "visitId": 2,
+        "childTurnId": 4,
+        "transcriptRevision": 46
+      },
+      "requestAtMs": 35321.09999999404,
+      "mappingAtMs": 35579.79999998212,
+      "transcript": "Tutor: Okay. How many ducks do you see now?\nChild: Two\nTutor: Yes. There are two ducks.",
+      "observedMapping": {
+        "decision": "accepted",
+        "probabilities": {
+          "answerCorrect": 0.97,
+          "answerIncorrect": 0.03,
+          "answerUnclear": 0.05,
+          "answerNone": 0.02,
+          "needsHelp": 0.06,
+          "tutorAcknowledging": 0.97,
+          "tutorAsking": 0.03,
+          "tutorClarifying": 0.04,
+          "tutorHelping": 0.07
+        },
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        }
+      },
+      "lastRuntimeBeforeRequest": {
+        "hasChildTranscript": true,
+        "childSpeaking": false,
+        "transcriptSource": "tutor",
+        "tutorOutputObserved": true,
+        "tutorOutputDrained": true,
+        "outputActivity": "quiet"
+      },
+      "textReview": {
+        "answer": "correct",
+        "support": "none",
+        "tutor": "acknowledging",
+        "authorityExpectation": "eligible only with runtime gates"
+      }
+    },
+    {
+      "id": "wrong-butterflies-after-hint",
+      "sourceKind": "recorded_export",
+      "requestEventIndex": 1004,
+      "mappingEventIndex": 1006,
+      "identity": {
+        "runtimeId": "8adca88d-2e69-4869-a512-dc31682fc071",
+        "nodeId": "count-3-butterflies",
+        "visitId": 3,
+        "childTurnId": 5,
+        "transcriptRevision": 68
+      },
+      "requestAtMs": 49420.39999997616,
+      "mappingAtMs": 49634.59999999404,
+      "transcript": "Tutor: Alright, how many butterflies do you see?\nChild: Two\nTutor: Hmm. Let's try it together. Point to each butterfly and say the counting words. Go ahead.",
+      "observedMapping": {
+        "decision": "abstained",
+        "probabilities": {
+          "answerCorrect": 0.05,
+          "answerIncorrect": 0.91,
+          "answerUnclear": 0.19,
+          "answerNone": 0.04,
+          "needsHelp": 0.73,
+          "tutorAcknowledging": 0.02,
+          "tutorAsking": 0.04,
+          "tutorClarifying": 0.05,
+          "tutorHelping": 0.97
+        },
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        },
+        "reason": "support_ambiguous",
+        "detail": {
+          "category": "support",
+          "candidate": "needsHelp",
+          "candidateProbability": 0.73
+        }
+      },
+      "lastRuntimeBeforeRequest": {
+        "hasChildTranscript": true,
+        "childSpeaking": false,
+        "transcriptSource": "tutor",
+        "tutorOutputObserved": true,
+        "tutorOutputDrained": true,
+        "outputActivity": "quiet"
+      },
+      "textReview": {
+        "answer": "incorrect",
+        "support": "uncertain",
+        "tutor": "helping",
+        "authorityExpectation": "hold"
+      }
+    },
+    {
+      "id": "finished-butterfly-count",
+      "sourceKind": "recorded_export",
+      "requestEventIndex": 1135,
+      "mappingEventIndex": 1137,
+      "identity": {
+        "runtimeId": "8adca88d-2e69-4869-a512-dc31682fc071",
+        "nodeId": "count-3-butterflies",
+        "visitId": 3,
+        "childTurnId": 6,
+        "transcriptRevision": 76
+      },
+      "requestAtMs": 57020.5,
+      "mappingAtMs": 57226.29999998212,
+      "transcript": "Tutor: Alright, how many butterflies do you see?\nChild: Two\nTutor: Hmm. Let's try it together. Point to each butterfly and say the counting words. Go ahead.\nChild: One two three\nTutor: Yes. There are three butterflies.",
+      "observedMapping": {
+        "decision": "abstained",
+        "probabilities": {
+          "answerCorrect": 0.8,
+          "answerIncorrect": 0.15,
+          "answerUnclear": 0.3,
+          "answerNone": 0.02,
+          "needsHelp": 0.17,
+          "tutorAcknowledging": 0.87,
+          "tutorAsking": 0.03,
+          "tutorClarifying": 0.06,
+          "tutorHelping": 0.08
+        },
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        },
+        "reason": "answer_no_winner",
+        "detail": {
+          "category": "answer",
+          "candidate": "answerCorrect",
+          "candidateProbability": 0.8
+        }
+      },
+      "lastRuntimeBeforeRequest": {
+        "hasChildTranscript": true,
+        "childSpeaking": false,
+        "transcriptSource": "tutor",
+        "tutorOutputObserved": true,
+        "tutorOutputDrained": true,
+        "outputActivity": "quiet"
+      },
+      "textReview": {
+        "answer": "correct",
+        "support": "none",
+        "tutor": "acknowledging",
+        "authorityExpectation": "eligible only with runtime gates"
+      }
+    },
+    {
+      "id": "same-count-after-discard",
+      "sourceKind": "recorded_export",
+      "requestEventIndex": 1155,
+      "mappingEventIndex": 1157,
+      "identity": {
+        "runtimeId": "8adca88d-2e69-4869-a512-dc31682fc071",
+        "nodeId": "count-3-butterflies",
+        "visitId": 3,
+        "childTurnId": 7,
+        "transcriptRevision": 76
+      },
+      "requestAtMs": 58761.89999997616,
+      "mappingAtMs": 58935,
+      "transcript": "Tutor: Alright, how many butterflies do you see?\nChild: Two\nTutor: Hmm. Let's try it together. Point to each butterfly and say the counting words. Go ahead.\nChild: One two three\nTutor: Yes. There are three butterflies.",
+      "observedMapping": {
+        "decision": "abstained",
+        "probabilities": {
+          "answerCorrect": 0.79,
+          "answerIncorrect": 0.14,
+          "answerUnclear": 0.35,
+          "answerNone": 0.03,
+          "needsHelp": 0.19,
+          "tutorAcknowledging": 0.88,
+          "tutorAsking": 0.03,
+          "tutorClarifying": 0.06,
+          "tutorHelping": 0.09
+        },
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        },
+        "reason": "answer_no_winner",
+        "detail": {
+          "category": "answer",
+          "candidate": "answerCorrect",
+          "candidateProbability": 0.79
+        }
+      },
+      "lastRuntimeBeforeRequest": {
+        "hasChildTranscript": true,
+        "childSpeaking": false,
+        "transcriptSource": "tutor",
+        "tutorOutputObserved": true,
+        "tutorOutputDrained": true,
+        "outputActivity": "quiet"
+      },
+      "textReview": {
+        "answer": "correct",
+        "support": "none",
+        "tutor": "acknowledging",
+        "authorityExpectation": "fresh identity and drain required"
+      }
+    },
+    {
+      "id": "follow-up-before-tutor-response",
+      "sourceKind": "recorded_export",
+      "requestEventIndex": 1209,
+      "mappingEventIndex": 1211,
+      "identity": {
+        "runtimeId": "8adca88d-2e69-4869-a512-dc31682fc071",
+        "nodeId": "count-3-butterflies",
+        "visitId": 3,
+        "childTurnId": 8,
+        "transcriptRevision": 79
+      },
+      "requestAtMs": 67021.5,
+      "mappingAtMs": 67251.89999997616,
+      "transcript": "Tutor: Alright, how many butterflies do you see?\nChild: Two\nTutor: Hmm. Let's try it together. Point to each butterfly and say the counting words. Go ahead.\nChild: One two three\nTutor: Yes. There are three butterflies.\nChild: Is that all",
+      "observedMapping": {
+        "decision": "abstained",
+        "probabilities": {
+          "answerCorrect": 0.64,
+          "answerIncorrect": 0.17,
+          "answerUnclear": 0.52,
+          "answerNone": 0.03,
+          "needsHelp": 0.4,
+          "tutorAcknowledging": 0.87,
+          "tutorAsking": 0.04,
+          "tutorClarifying": 0.08,
+          "tutorHelping": 0.11
+        },
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        },
+        "reason": "answer_no_winner",
+        "detail": {
+          "category": "answer",
+          "candidate": "answerCorrect",
+          "candidateProbability": 0.64
+        }
+      },
+      "lastRuntimeBeforeRequest": {
+        "hasChildTranscript": true,
+        "childSpeaking": false,
+        "transcriptSource": "child",
+        "tutorOutputObserved": false,
+        "tutorOutputDrained": false,
+        "outputActivity": "quiet"
+      },
+      "textReview": {
+        "answer": "uncertain",
+        "support": "uncertain",
+        "tutor": "earlier acknowledgment",
+        "authorityExpectation": "hold pending fresh interpretation"
+      }
+    },
+    {
+      "id": "follow-up-after-tutor-response",
+      "sourceKind": "recorded_export",
+      "requestEventIndex": 1286,
+      "mappingEventIndex": 1288,
+      "identity": {
+        "runtimeId": "8adca88d-2e69-4869-a512-dc31682fc071",
+        "nodeId": "count-3-butterflies",
+        "visitId": 3,
+        "childTurnId": 8,
+        "transcriptRevision": 84
+      },
+      "requestAtMs": 70820.59999999404,
+      "mappingAtMs": 70989.39999997616,
+      "transcript": "Tutor: Alright, how many butterflies do you see?\nChild: Two\nTutor: Hmm. Let's try it together. Point to each butterfly and say the counting words. Go ahead.\nChild: One two three\nTutor: Yes. There are three butterflies.\nChild: Is that all\nTutor: Yes, you counted all the butterflies.",
+      "observedMapping": {
+        "decision": "abstained",
+        "probabilities": {
+          "answerCorrect": 0.68,
+          "answerIncorrect": 0.16,
+          "answerUnclear": 0.64,
+          "answerNone": 0.04,
+          "needsHelp": 0.38,
+          "tutorAcknowledging": 0.82,
+          "tutorAsking": 0.03,
+          "tutorClarifying": 0.06,
+          "tutorHelping": 0.06
+        },
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        },
+        "reason": "answer_no_winner",
+        "detail": {
+          "category": "answer",
+          "candidate": "answerCorrect",
+          "candidateProbability": 0.68
+        }
+      },
+      "lastRuntimeBeforeRequest": {
+        "hasChildTranscript": true,
+        "childSpeaking": false,
+        "transcriptSource": "tutor",
+        "tutorOutputObserved": true,
+        "tutorOutputDrained": true,
+        "outputActivity": "quiet"
+      },
+      "textReview": {
+        "answer": "uncertain",
+        "support": "uncertain",
+        "tutor": "acknowledging if prior count remains settled",
+        "authorityExpectation": "hold pending fresh interpretation"
+      }
+    }
+  ],
+  "synthetic": [
+    {
+      "id": "direct-settled-total",
+      "sourceKind": "synthetic_contrast",
+      "nodeId": "count-3-butterflies",
+      "transcript": "Tutor: How many butterflies do you see?\nChild: Three\nTutor: Yes, three butterflies!",
+      "textReview": {
+        "answer": "correct",
+        "support": "none",
+        "tutor": "acknowledging",
+        "authorityExpectation": "eligible only with runtime gates"
+      },
+      "reviewNote": "Control without earlier wrong answer or hint.",
+      "observedProbabilities": null
+    },
+    {
+      "id": "finished-sequence-without-history",
+      "sourceKind": "synthetic_contrast",
+      "nodeId": "count-3-butterflies",
+      "transcript": "Tutor: How many butterflies do you see?\nChild: One two three\nTutor: Yes, three butterflies!",
+      "textReview": {
+        "answer": "correct",
+        "support": "none",
+        "tutor": "acknowledging",
+        "authorityExpectation": "eligible only with runtime gates"
+      },
+      "reviewNote": "Contrast counted form with direct total; acoustic settling unverified.",
+      "observedProbabilities": null
+    },
+    {
+      "id": "historical-help-resolved",
+      "sourceKind": "synthetic_contrast",
+      "nodeId": "count-3-butterflies",
+      "transcript": "Tutor: How many butterflies do you see?\nChild: Can you help\nTutor: Point to each butterfly and say the counting words. Go ahead.\nChild: One two three\nTutor: Yes, three butterflies!",
+      "textReview": {
+        "answer": "correct",
+        "support": "none",
+        "tutor": "acknowledging",
+        "authorityExpectation": "eligible only with runtime gates"
+      },
+      "reviewNote": "Explicit help can resolve; no tutor-supplied count or total.",
+      "observedProbabilities": null
+    },
+    {
+      "id": "partial-count",
+      "sourceKind": "synthetic_contrast",
+      "nodeId": "count-3-butterflies",
+      "transcript": "Tutor: How many butterflies do you see?\nChild: One two\nTutor: Can you finish your count?",
+      "textReview": {
+        "answer": "uncertain",
+        "support": "uncertain",
+        "tutor": "clarifying",
+        "authorityExpectation": "hold"
+      },
+      "reviewNote": "Two could be a finished wrong total or an unfinished count. Audio and timing matter; do not label correct.",
+      "observedProbabilities": null
+    },
+    {
+      "id": "explicitly-unfinished-count",
+      "sourceKind": "synthetic_contrast",
+      "nodeId": "count-3-butterflies",
+      "transcript": "Tutor: How many butterflies do you see?\nChild: One two, wait, I am still counting\nTutor: Take your time.",
+      "textReview": {
+        "answer": "unclear",
+        "support": "none",
+        "tutor": "unknown",
+        "authorityExpectation": "hold"
+      },
+      "reviewNote": "An explicit ongoing count is not settled.",
+      "observedProbabilities": null
+    },
+    {
+      "id": "settled-wrong-count",
+      "sourceKind": "synthetic_contrast",
+      "nodeId": "count-3-butterflies",
+      "transcript": "Tutor: How many butterflies do you see?\nChild: One two. There are two\nTutor: Try pointing to each butterfly and counting again.",
+      "textReview": {
+        "answer": "incorrect",
+        "support": "none",
+        "tutor": "helping",
+        "authorityExpectation": "hold"
+      },
+      "reviewNote": "An explicitly settled wrong total is incorrect; a single wrong answer alone does not establish needsHelp.",
+      "observedProbabilities": null
+    },
+    {
+      "id": "tentative-tutor-total-echo",
+      "sourceKind": "synthetic_contrast",
+      "nodeId": "count-3-butterflies",
+      "transcript": "Tutor: How many butterflies do you see?\nChild: Can you help\nTutor: There are three\nChild: Three? I do not know\nTutor: Yes, three butterflies!",
+      "textReview": {
+        "answer": "unclear",
+        "support": "needs_help",
+        "tutor": "not valid success acknowledgment",
+        "authorityExpectation": "hold"
+      },
+      "reviewNote": "Tutor confirmation cannot turn an unresolved echo into a settled child answer.",
+      "observedProbabilities": null
+    },
+    {
+      "id": "tutor-total-only",
+      "sourceKind": "synthetic_contrast",
+      "nodeId": "count-3-butterflies",
+      "transcript": "Tutor: How many butterflies do you see?\nTutor: There are three butterflies.",
+      "textReview": {
+        "answer": "none",
+        "support": "none",
+        "tutor": "not valid success acknowledgment",
+        "authorityExpectation": "hold"
+      },
+      "reviewNote": "Tutor speech alone never supplies a child answer.",
+      "observedProbabilities": null
+    },
+    {
+      "id": "self-correction-before-ack",
+      "sourceKind": "synthetic_contrast",
+      "nodeId": "count-3-butterflies",
+      "transcript": "Tutor: How many butterflies do you see?\nChild: Two, no, one two three. Three\nTutor: Yes, three butterflies!",
+      "textReview": {
+        "answer": "correct",
+        "support": "none",
+        "tutor": "acknowledging",
+        "authorityExpectation": "eligible only with runtime gates"
+      },
+      "reviewNote": "Ignore superseded wrong total, retain correction evidence.",
+      "observedProbabilities": null
+    },
+    {
+      "id": "renewed-explicit-help",
+      "sourceKind": "synthetic_contrast",
+      "nodeId": "count-3-butterflies",
+      "transcript": "Tutor: How many butterflies do you see?\nChild: Two\nTutor: Point to each butterfly and say the counting words. Go ahead.\nChild: One two three\nTutor: Yes. There are three butterflies.\nChild: I still need help\nTutor: Let us point to each butterfly again.",
+      "textReview": {
+        "answer": "correct",
+        "support": "needs_help",
+        "tutor": "helping",
+        "authorityExpectation": "hold"
+      },
+      "reviewNote": "Correct numeric evidence cannot coerce support to none.",
+      "observedProbabilities": null
+    },
+    {
+      "id": "retracted-total",
+      "sourceKind": "synthetic_contrast",
+      "nodeId": "count-3-butterflies",
+      "transcript": "Tutor: How many butterflies do you see?\nChild: Two\nTutor: Point to each butterfly and say the counting words. Go ahead.\nChild: One two three\nTutor: Yes. There are three butterflies.\nChild: No, I think there are two\nTutor: Can you try counting again?",
+      "textReview": {
+        "answer": "incorrect",
+        "support": "uncertain",
+        "tutor": "helping",
+        "authorityExpectation": "hold"
+      },
+      "reviewNote": "New task answer supersedes prior successful evidence; current uncertainty must be reviewed.",
+      "observedProbabilities": null
+    },
+    {
+      "id": "clear-completion-question",
+      "sourceKind": "synthetic_contrast",
+      "nodeId": "count-3-butterflies",
+      "transcript": "Tutor: How many butterflies do you see?\nChild: Two\nTutor: Point to each butterfly and say the counting words. Go ahead.\nChild: One two three\nTutor: Yes. There are three butterflies.\nChild: Am I finished with this lesson?\nTutor: You counted all three butterflies.",
+      "textReview": {
+        "answer": "correct",
+        "support": "none",
+        "tutor": "acknowledging",
+        "authorityExpectation": "fresh interpretation and all runtime gates required"
+      },
+      "reviewNote": "Question about lesson status does not itself retract the count; new turn still invalidates old authority.",
+      "observedProbabilities": null
+    },
+    {
+      "id": "explicit-doubt-question",
+      "sourceKind": "synthetic_contrast",
+      "nodeId": "count-3-butterflies",
+      "transcript": "Tutor: How many butterflies do you see?\nChild: Two\nTutor: Point to each butterfly and say the counting words. Go ahead.\nChild: One two three\nTutor: Yes. There are three butterflies.\nChild: Is it three? I am not sure\nTutor: Can you count again?",
+      "textReview": {
+        "answer": "unclear",
+        "support": "needs_help",
+        "tutor": "helping",
+        "authorityExpectation": "hold"
+      },
+      "reviewNote": "Question explicitly reopens uncertainty about the total.",
+      "observedProbabilities": null
+    },
+    {
+      "id": "ambiguous-is-that-all",
+      "sourceKind": "synthetic_contrast",
+      "nodeId": "count-3-butterflies",
+      "transcript": "Tutor: How many butterflies do you see?\nChild: Two\nTutor: Point to each butterfly and say the counting words. Go ahead.\nChild: One two three\nTutor: Yes. There are three butterflies.\nChild: Is that all\nTutor: Yes, you counted all the butterflies.",
+      "textReview": {
+        "answer": "uncertain",
+        "support": "uncertain",
+        "tutor": "acknowledging if prior count remains settled",
+        "authorityExpectation": "hold pending fresh interpretation"
+      },
+      "reviewNote": "Could ask about lesson status, count completeness, or numeric doubt. Do not force a semantic label from text alone.",
+      "observedProbabilities": null
+    },
+    {
+      "id": "interrupted-count",
+      "sourceKind": "synthetic_contrast",
+      "nodeId": "count-3-butterflies",
+      "transcript": "Tutor: How many butterflies do you see?\nChild: One two th\u2014\nTutor: Take your time.",
+      "textReview": {
+        "answer": "unclear",
+        "support": "none",
+        "tutor": "unknown",
+        "authorityExpectation": "hold"
+      },
+      "reviewNote": "Incomplete intelligible total. Synthetic text does not verify actual VAD or acoustic interruption.",
+      "observedProbabilities": null
+    },
+    {
+      "id": "interruption-during-ack",
+      "sourceKind": "synthetic_contrast",
+      "nodeId": "count-3-butterflies",
+      "transcript": "Tutor: How many butterflies do you see?\nChild: Two\nTutor: Point to each butterfly and say the counting words. Go ahead.\nChild: One two three\nTutor: Yes. There are three butterflies.\nChild: Wait",
+      "textReview": {
+        "answer": "uncertain",
+        "support": "uncertain",
+        "tutor": "earlier acknowledgment",
+        "authorityExpectation": "hold on onset; fresh evidence required"
+      },
+      "reviewNote": "Actual interruption is a runtime event, not inferred by the semantic fixture. A newer child turn cannot reuse prior authority.",
+      "observedProbabilities": null
+    }
+  ]
+}

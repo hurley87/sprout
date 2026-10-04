@@ -1,0 +1,17 @@
+--- a/lib/lesson-runtime/jev-conversation-state-classifier.ts
++++ b/lib/lesson-runtime/jev-conversation-state-classifier.ts
+@@ -61,11 +61,11 @@
+   },
+   tutorAcknowledging: {
+     type: "noul",
+-    instructions: `${tutorScope} Is the tutor acknowledging the child's successful answer to the current objective?`,
++    instructions: `${tutorScope} Does this tutor message confirm the final answer the child settled on as correct for the current objective?`,
+     criteria: {
+-      true: "The primary function is explicitly confirming or celebrating the child's correct current-node answer, such as 'Yes, one duck!'.",
++      true: "The message confirms the child's settled correct current-scene total. Interpret it in relation to precedingChildAttempt: use the final settled answer after any self-correction, not a superseded number. Agreement or a factual restatement of that total and object can serve as confirmation; celebration, praise, or repeating the child's exact words is not required.",
+       false:
+-        "Generic encouragement, giving the total without a successful child answer, asking the question, clarifying, helping, or no relevant tutor message.",
++        "Generic encouragement without confirming the answer; supplying the total with no settled correct child answer; correcting a still-wrong answer; treating unresolved alternatives or an unfinished correction as success; primarily asking, clarifying or scaffolding; or no relevant tutor message. A correct scene fact alone is insufficient: it must confirm the child's settled correct answer.",
+     },
+   },
+   tutorAsking: {

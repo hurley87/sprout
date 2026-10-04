@@ -69,6 +69,129 @@ and `classifier.started`. Inspect `reason`, the nine `probabilities`, and `detai
 to explain acceptance or abstention. Any future threshold or question adjustment
 belongs to evidence-driven follow-up evaluation.
 
+## Explicit confirmation after counted correction (#57)
+
+The October 3, 2026 export for runtime
+`6c336585-1939-49f7-9c03-2862c283574e` and
+`transcript-7npaspem5t2vw27.vtt` show a successful first-scene correction:
+wrong **"Two"**, counting help, **"One"**, then **"Yes! One duck."**.
+The correct/acknowledging mapping was accepted at runtime **21.059 s**;
+two-duck render confirmation followed at **21.0807 s**, then steering append
+at **21.081 s**.
+
+On two ducks, **"Three"** led to counting help, then **"Uhh, one, two"**,
+then **"Nice! You're counting carefully."**. That final response praised the
+process without explicitly confirming the total. The latest tutor revision
+was **50**, with child eligibility and relevant output drain present. At runtime
+**43.309 s**, mapping abstained with `answer_no_winner`: `answerCorrect` **0.87**,
+`answerUnclear` **0.53**, `tutorAcknowledging` **0.59**, and `tutorHelping` **0.06**.
+No butterfly transition or classifier error occurred; `page_hidden` ended the
+session at **54.0419 s**. These observations identify the missing confirmation;
+they do not establish classifier calibration or why the model produced it.
+Runtime times and recording offsets are separate clocks. Audio wording and pacing
+were not independently verified for this change; the recording filename is reused
+between demos and must be matched again before relying on it.
+
+The tutor prompt now explicitly covers a settled total expressed by counting up
+to the displayed quantity and stopping there, including after a retry or hint.
+It asks for the successful number and object, such as **"Yes, two ducks!"**;
+process praise may accompany that confirmation. A pause alone does not settle a
+count. Ongoing counting still gets thinking time; ambiguous, interrupted or
+partial attempts need clarification, wrong totals need retry, and unresolved
+difficulty needs a hint without supplying the total. Shared guidance is sent in
+both session setup and rendered current-node instructions. Node facts, graph
+edges, classifier questions/thresholds, runtime timing and authority are unchanged.
+
+`tests/counting-confirmation.test.ts` checks instruction construction and reducer
+behavior with mock semantic observations. It does not test real GPT-Live wording
+or Jev interpretation. Generic praise alone still cannot authorize completion.
+
+**Required live validation:** with explicit authorization for a fresh live session,
+repeat wrong answer → retry → counted correction, particularly **"Three"** then
+**"One, two"** on two ducks. Preserve the new runtime export and separately
+record what was spoken, heard and displayed. Verify an explicit successful total,
+the exact runtime/node/visit/turn/revision and tutor source for the accepted
+correct/no-help/acknowledging proposal, relevant audio onset and drain, transition,
+render confirmation, then steering append and its acknowledgment. Repeat a partial
+count with a pause, an ambiguous answer, and help that remains unresolved to check
+that no total or transition is supplied prematurely. A successful rerun establishes
+that case only; broader behavioral evaluation remains open.
+
+## Confirmed local activity without a child transcript (#57)
+
+The latest October 3 export, runtime `ef40acf8-2283-48fa-bc30-e27cb7641740`,
+holds on `count-1-duck`, visit 1. The transcript records **"Two"**, counting
+help, **"One"**, then **"Yes, one duck. You counted carefully."**. Unlike the
+earlier missing-total finding, explicit confirmation is present here.
+
+Child revision **22** established eligibility for turn **6** at runtime
+**18.1477 s**. Turn end at **18.6009 s** scheduled classification. A candidate
+at **18.6675 s** interrupted it, then discard at **18.8924 s** recovered
+eligibility and rescheduled. Another candidate at **19.1258 s** interrupted
+that schedule; confirmation at **19.2525 s** permanently cleared the saved
+eligibility. This was turn **8**, with no new child transcript. Tutor revision
+**23** had arrived at **19.2462 s**; decoded tutor PCM became active at
+**19.6521 s**. Turn **8** ended at **20.9009 s** without eligibility.
+Turn **9** was confirmed at **21.1499 s** and ended at **22.7085 s**, also
+without a child transcript. Final tutor revision **28** arrived at **21.2567 s**.
+Later discarded candidates could restore only false eligibility.
+
+Only one classifier request ran, for the earlier wrong-answer revision **7**;
+it abstained with `tutor_margin_too_small`. Neither the correction nor its
+acknowledgment reached Jev. No transition/render handoff followed the initial
+render. `page_hidden` ended the session at **31.3463 s**, with no runtime error.
+This is a deterministic scheduling/eligibility finding, not evidence that Jev
+misclassified the correction.
+
+The accompanying `transcript-xcxdx8p9jbqfmjz.vtt` also records the correction
+and explicit confirmation. The reused recording filename was rechecked: duration
+**32.665333 s**, **1920 × 900**, with an audio track. A frame at recording
+offset **27 s** shows one duck, visit 1, turn 10, revision 28, child eligibility
+false and relevant tutor audio false. Recording offsets and runtime timestamps
+remain separate clocks; audio wording/pacing was not independently verified.
+
+The local detector establishes sustained microphone energy, not speaker identity.
+Browser capture reports echo cancellation, noise suppression and automatic gain
+control enabled, but those settings do not prove echo was removed. The transport
+passes local detector events directly into turn arbitration; provider child
+transcripts are a separate signal. Confirmed onsets correctly cancel pending
+classification and drop saved candidate eligibility/audio. Tutor-only updates
+cannot supply a child transcript. The output observer sees decoded remote PCM,
+not which sound entered the microphone or what was played/heard. The available
+signals cannot distinguish untranscribed child speech from echo or other sound.
+Transcript absence alone cannot safely authorize recovery after confirmation.
+
+The focused addition is `classifier.blocked`, emitted once when an active
+confirmed turn ends without current-turn child-transcript eligibility. Its
+envelope identifies the current runtime/node/visit/turn/revision; `detail` gives
+`reason: missing_current_turn_child_transcript`, the stop trigger, output activity,
+and `latestChildTranscript` source plus provider interval (or `null`). That prior
+fragment is context, never authority for the blocked turn. A matching delayed
+child transcript can still arrive and establish eligibility normally. Duplicate
+stops and discarded candidates do not emit this diagnostic. No thresholds,
+timings, prompts, reducer recovery rules or transition gates were changed for
+this finding.
+
+The added mocked scheduling tests reproduce the correction's timing around
+discarded and confirmed candidates, hold through missing/stale child delivery,
+and recover on matching late delivery only with fresh semantic acknowledgment
+and relevant audio drain. They also retain render-confirmation-before-steering.
+The reduced replay does not reproduce microphone acoustics, provider attribution,
+GPT-Live or Jev behavior; its revision/turn counts differ from the full export.
+
+**Next controlled validation, requiring explicit authorization:** repeat
+**"Two" → retry → "One"** using headphones, keeping the child quiet after the
+correction and recording a human account of any further speech/noise. Preserve
+the JSON, separately named recording and VTT together. Compare confirmed onsets,
+detector windows, child transcript intervals, `classifier.blocked`, output
+activity, classification and transition/render/steering order. If unexplained
+confirmed activity persists, compare an explicitly authorized speaker-playback
+run under otherwise matching conditions. Headphone success alone supports a
+playback-related hypothesis, not proof of echo or permission to ignore barge-in.
+Also exercise a real interruption with delayed/missing transcript; it must hold
+without restoring the earlier answer's authority. This change improves diagnosis
+and regression coverage; it does not claim the live progression failure is fixed.
+
 ## Timing and diagnostic interpretation
 
 The child path still waits **300 ms** after a snapshot stabilizes with local VAD
@@ -191,3 +314,9 @@ lesson runtime scheduling tests cover partial transcripts, both clock orderings,
 resumed/unavailable output, revision and turn/visit invalidation, unchanged child
 debounce, independent drain timing and abort of an in-flight older revision.
 Generalized segmentation remains separate work. The root and removed entry points have browser smoke coverage; issue #55 records the prior live verification.
+
+## Help request recovery follow-up (issue #57)
+
+See [the help-case evidence and correction](issue-57-help-recovery.md) for the
+`support_ambiguous` finding, learner-led hint guidance, offline checks and required
+live rerun. The help case remains unverified.

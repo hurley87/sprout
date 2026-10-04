@@ -41,6 +41,11 @@ export type LessonRuntimeState = {
   readonly hasChildTurn: boolean;
   readonly hasChildTranscript: boolean;
   readonly childSpeaking: boolean;
+  /** Eligibility/audio only, never semantic authority; discarded onset requires fresh classification. */
+  readonly childCandidate: {
+    readonly hasChildTranscript: boolean;
+    readonly tutorOutputObserved: boolean;
+  } | null;
   readonly transcriptRevision: number;
   readonly transcriptSource: "child" | "tutor" | "unknown";
   readonly consumedRevision: number | null;
@@ -66,6 +71,9 @@ export type LessonRuntimeState = {
 /** atMs uses one local monotonic clock. The reducer has no timers or provider side effects. */
 export type LessonRuntimeEvent = { readonly atMs: number } & (
   | { readonly type: "child.turn.started"; readonly source: RuntimeSource }
+  | { readonly type: "child.candidate.started"; readonly source: RuntimeSource }
+  | { readonly type: "child.candidate.discarded"; readonly source: RuntimeSource }
+  | { readonly type: "child.turn.confirmed"; readonly source: RuntimeSource }
   | { readonly type: "child.turn.ended"; readonly source: RuntimeSource }
   | {
       readonly type: "transcript.updated";
@@ -119,6 +127,7 @@ export function createLessonRuntime(
     hasChildTurn: false,
     hasChildTranscript: false,
     childSpeaking: false,
+    childCandidate: null,
     transcriptRevision: 0,
     transcriptSource: "unknown",
     consumedRevision: null,
@@ -167,6 +176,7 @@ function stopped(state: LessonRuntimeState): LessonRuntimeState {
     pendingRender: null,
     outputActivity: "unavailable",
     childSpeaking: false,
+    childCandidate: null,
   };
 }
 
@@ -254,6 +264,7 @@ export function reduceLessonRuntime(state: LessonRuntimeState, event: LessonRunt
   if (
     state.phase === "rendering" &&
     (event.type === "child.turn.started" ||
+      event.type === "child.candidate.started" ||
       (event.type === "output.activity" && event.state !== "quiet") ||
       (event.type === "transcript.updated" &&
         event.speaker !== "tutor" &&
@@ -267,10 +278,19 @@ export function reduceLessonRuntime(state: LessonRuntimeState, event: LessonRunt
 
   let next: LessonRuntimeState = { ...state, nowMs: event.atMs };
   switch (event.type) {
+    case "child.candidate.started":
     case "child.turn.started":
+      if (event.type === "child.candidate.started" && state.childSpeaking) return ignored;
       next = {
         ...next,
         ...clearedEvidence,
+        childCandidate:
+          event.type === "child.candidate.started"
+            ? {
+                hasChildTranscript: state.hasChildTranscript,
+                tutorOutputObserved: state.tutorOutputObserved,
+              }
+            : null,
         childTurnId: state.childTurnId + 1,
         hasChildTurn: true,
         hasChildTranscript: false,
@@ -278,15 +298,34 @@ export function reduceLessonRuntime(state: LessonRuntimeState, event: LessonRunt
         consumedRevision: null,
       };
       break;
+    case "child.candidate.discarded":
+      if (!state.childSpeaking || !state.childCandidate) return ignored;
+      next = {
+        ...next,
+        ...clearedEvidence,
+        hasChildTranscript: state.childCandidate.hasChildTranscript,
+        tutorOutputObserved: state.childCandidate.tutorOutputObserved,
+        // Candidate time never satisfies drain. Recheck sustained quiet after discard.
+        quietSinceMs: state.childCandidate.tutorOutputObserved && state.outputActivity === "quiet" ? event.atMs : null,
+        childSpeaking: false,
+        childCandidate: null,
+        consumedRevision: null,
+      };
+      break;
+    case "child.turn.confirmed":
+      if (!state.childSpeaking || !state.childCandidate) return ignored;
+      next = { ...next, childCandidate: null };
+      break;
     case "child.turn.ended":
       if (!state.childSpeaking) return ignored;
-      next = { ...next, childSpeaking: false };
+      next = { ...next, childSpeaking: false, childCandidate: null };
       break;
     case "transcript.updated":
       if (!Number.isSafeInteger(event.revision) || event.revision <= state.transcriptRevision) return ignored;
       next = {
         ...next,
         ...(event.speaker === "tutor" ? {} : clearedEvidence),
+        childCandidate: event.speaker === "tutor" ? state.childCandidate : null,
         transcriptRevision: event.revision,
         transcriptSource: event.speaker,
         hasChildTranscript:
@@ -331,6 +370,20 @@ export function reduceLessonRuntime(state: LessonRuntimeState, event: LessonRunt
     }
     case "output.activity":
       next = { ...next, outputActivity: event.state };
+      if (state.childCandidate) {
+        const candidate = state.childCandidate;
+        const observed =
+          event.state !== "unavailable" &&
+          (candidate.tutorOutputObserved ||
+            (event.state === "active" && state.outputActivity !== "active" && candidate.hasChildTranscript));
+        next = {
+          ...next,
+          childCandidate: {
+            ...candidate,
+            tutorOutputObserved: observed,
+          },
+        };
+      }
       if (event.state === "unavailable") {
         next = { ...next, tutorOutputObserved: false, quietSinceMs: null };
       } else if (event.state === "active") {

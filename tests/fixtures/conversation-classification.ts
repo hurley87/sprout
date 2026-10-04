@@ -1,4 +1,4 @@
-import type { NormalizedConversationProbabilities } from "../../lib/lesson-runtime/classification-decision";
+import type { NormalizedConversationProbabilities } from "../../lib/experiments/issue-57/legacy/classification-decision";
 
 export const conversationProbabilities = (
   overrides: Partial<NormalizedConversationProbabilities> = {},

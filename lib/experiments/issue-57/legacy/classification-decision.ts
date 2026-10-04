@@ -1,9 +1,10 @@
+/** Historical nine-question baseline for offline comparison only; never imported by the runtime. */
 import type {
   AnswerOutcome,
   ConversationStateClassifierInput,
   ConversationStateProposal,
   TutorState,
-} from "./conversation-state-classifier";
+} from "../../../lesson-runtime/conversation-state-classifier";
 
 export const CONVERSATION_PROBABILITY_KEYS = [
   "answerCorrect",
@@ -184,6 +185,26 @@ export function mapConversationClassification(
       tutorState: tutor.value,
     },
   };
+}
+
+/** Recovery eligibility only: never converts uncertain scores into a proposal.
+ * Share the existing answer bands, and exclude unresolved support and competing
+ * tutor functions. Both ambiguity causes spend the same one-request visit budget. */
+export function needsConversationClarification(diagnostic: ConversationClassificationDiagnostic): boolean {
+  if (diagnostic.decision !== "abstained") return false;
+  if (diagnostic.reason === "support_ambiguous") return true;
+  const p = diagnostic.probabilities;
+  if (diagnostic.reason !== "tutor_no_winner" || !p || p.needsHelp > LOW) return false;
+  const answer = selectCategory(p, answerCategories, "answer");
+  return (
+    "value" in answer &&
+    answer.value === "correct" &&
+    p.tutorAcknowledging > LOW &&
+    p.tutorAcknowledging < HIGH &&
+    (["tutorAsking", "tutorClarifying", "tutorHelping"] as const).every(
+      id => p[id] <= COMPETITOR_CEILING && p[id] < p.tutorAcknowledging,
+    )
+  );
 }
 
 /** Classifier response projection, never a raw provider body or a learner-evidence payload. */
