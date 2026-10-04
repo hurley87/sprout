@@ -4,8 +4,10 @@ import { MICROPHONE_ONSET_MS, MICROPHONE_ONSET_QUIET_MS, MICROPHONE_QUIET_MS } f
 import { parseConversationStateProposal } from "./conversation-state-classifier";
 import { COUNTING_LESSON_GRAPH, INITIAL_COUNTING_NODE_ID } from "./counting-lesson";
 import { initialTeachingContext, teachingInstruction } from "./live-context";
+import { SupportClarification, SUPPORT_CLARIFICATION_INSTRUCTION } from "./support-clarification";
 import { TutorStabilizationGate } from "./tutor-stabilization";
-import { parseClassificationDiagnostic } from "./classification-decision";
+import { parseClassifierEndpointCode } from "./classifier-failure";
+import { needsConversationClarification, parseClassificationDiagnostic } from "./classification-decision";
 import {
   classificationSource,
   createLessonRuntime,
@@ -92,6 +94,8 @@ export class LessonRuntime {
   private classification?: { abort: AbortController; source: ClassificationSource; speaker: Speaker };
   private lastClassifiedKey?: string;
   private readonly tutorStabilization: TutorStabilizationGate;
+  private readonly supportClarification: SupportClarification;
+  private clarificationRequest?: { eventId: string; source: ClassificationSource };
   private stabilizationTimer?: ReturnType<typeof setTimeout>;
   private clockTimer?: ReturnType<typeof setTimeout>;
   private startupTimer?: ReturnType<typeof setTimeout>;
@@ -117,6 +121,26 @@ export class LessonRuntime {
         this.log(event.type, event, event.source, "tutor");
         this.publish();
       },
+    );
+    this.supportClarification = new SupportClarification(
+      source => {
+        const eventId = `${this.runtimeId}:clarify:${source.visitId}:${source.childTurnId}:${source.transcriptRevision}`;
+        this.clarificationRequest = { eventId, source };
+        try {
+          this.transport.send({
+            type: "session.instructions.append",
+            event_id: eventId,
+            delegation_id: null,
+            content: SUPPORT_CLARIFICATION_INSTRUCTION,
+          });
+          this.log("gpt_live.clarification_append", { eventId, content: SUPPORT_CLARIFICATION_INSTRUCTION }, source);
+        } catch {
+          this.supportClarification.cancel("send_failed");
+          this.log("clarification.send_failed", { message: "Scene held; request budget spent." }, source);
+        }
+        this.publish();
+      },
+      (type, source, detail) => this.log(type, detail, source),
     );
     this.transport = new BrowserTransport(audio, true);
     this.transport.setMicrophoneDiagnosticSink(event => {
@@ -275,8 +299,14 @@ export class LessonRuntime {
         if (!this.state.childSpeaking) {
           this.cancelClassification("child_turn_started");
           this.childTurnFloorMs = this.lastChildEndMs;
-          // Candidate onset invalidates authority immediately, before sustained VAD confirmation.
-          this.dispatch({ type: "child.turn.started", source, atMs: this.now() });
+          // Block progression immediately; only a discarded candidate can revalidate prior eligibility.
+          this.dispatch({
+            type: event.type === "microphone.activity_started" ? "child.candidate.started" : "child.turn.started",
+            source,
+            atMs: this.now(),
+          });
+        } else if (event.type === "microphone.speech_started") {
+          this.dispatch({ type: "child.turn.confirmed", source, atMs: this.now() });
         }
         return;
       case "microphone.activity_discarded":
@@ -284,7 +314,33 @@ export class LessonRuntime {
         if (this.status !== "live") return;
         this.log(event.type, event.type === "microphone.speech_stopped" ? { quietMs: event.quietMs } : null);
         if (this.state.childSpeaking) {
-          this.dispatch({ type: "child.turn.ended", source, atMs: this.now() });
+          if (event.type === "microphone.speech_stopped" && this.state.childCandidate)
+            this.dispatch({ type: "child.turn.confirmed", source, atMs: this.now() });
+          this.dispatch({
+            type:
+              event.type === "microphone.activity_discarded" && this.state.childCandidate
+                ? "child.candidate.discarded"
+                : "child.turn.ended",
+            source,
+            atMs: this.now(),
+          });
+          if (
+            event.type === "microphone.speech_stopped" &&
+            this.state.phase === "active" &&
+            !this.state.hasChildTranscript
+          ) {
+            const latestChild = this.fragments.findLast(fragment => fragment.event.speaker === "child");
+            // Report missing evidence at turn end, not missing speech. A late matching
+            // transcript may still arrive; neither this diagnostic nor old text grants eligibility.
+            this.log("classifier.blocked", {
+              reason: "missing_current_turn_child_transcript",
+              trigger: event.type,
+              outputActivity: this.state.outputActivity,
+              latestChildTranscript: latestChild
+                ? { source: latestChild.source, startMs: latestChild.event.startMs, endMs: latestChild.event.endMs }
+                : null,
+            });
+          }
           this.scheduleClassification(event.type);
         }
         return;
@@ -306,6 +362,19 @@ export class LessonRuntime {
       }
       case "context.appended": {
         this.log("gpt_live.context_appended", event);
+        const clarification = this.clarificationRequest;
+        if (
+          clarification &&
+          event.name === "session.instructions.appended" &&
+          event.clientEventId === clarification.eventId
+        ) {
+          this.supportClarification.acknowledge(
+            this.state,
+            this.status === "live" && !this.steering,
+            clarification.source,
+          );
+          return;
+        }
         const steering = this.steering;
         if (
           !steering ||
@@ -439,6 +508,7 @@ export class LessonRuntime {
   }
 
   private syncTutorStabilization(trigger: string) {
+    if (this.state) this.supportClarification.observe(this.state, this.status === "live" && !this.steering);
     if (this.state) this.tutorStabilization.observe(this.state, this.status === "live" && !this.steering, trigger);
   }
 
@@ -457,16 +527,31 @@ export class LessonRuntime {
     this.log("classifier.started", { trigger, transcript }, source, speaker);
     this.publish();
     const startedAtMs = this.now();
+    const timeout = AbortSignal.timeout(LESSON_TIMING.classifierTimeoutMs);
+    const signal = AbortSignal.any([abort.signal, timeout]);
+    let category: "network" | "http" | "invalid_json" | "invalid_schema" = "network";
+    let httpStatus: number | null = null;
+    let endpointCode: ReturnType<typeof parseClassifierEndpointCode> = null;
     try {
       const response = await fetch("/api/classify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ nodeId: source.nodeId, transcriptRevision: source.transcriptRevision, transcript }),
-        signal: AbortSignal.any([abort.signal, AbortSignal.timeout(LESSON_TIMING.classifierTimeoutMs)]),
+        signal,
       });
+      httpStatus = response.status;
+      if (abort.signal.aborted || this.status !== "live") return;
+      // Classify HTTP failures before parsing: Next can return an HTML 404/500.
+      if (!response.ok) {
+        category = "http";
+        endpointCode = parseClassifierEndpointCode(await response.json().catch(() => null));
+        throw new Error("Classification endpoint unavailable");
+      }
+      category = "invalid_json";
       const body: unknown = await response.json();
       if (abort.signal.aborted || this.status !== "live") return;
-      if (!response.ok) throw new Error("Classification endpoint unavailable");
+      if (timeout.aborted) throw new Error("Classification timed out");
+      category = "invalid_schema";
       if (!body || typeof body !== "object" || !("proposal" in body)) throw new Error("Invalid classifier response");
       const proposal = body.proposal === null ? null : parseConversationStateProposal(body.proposal);
       if (body.proposal !== null && !proposal) throw new Error("Invalid classifier proposal");
@@ -483,13 +568,21 @@ export class LessonRuntime {
         source,
         speaker,
       );
-      if (proposal) this.dispatch({ type: "proposal.received", source, proposal, atMs: this.now() });
+      if (proposal) {
+        this.supportClarification.cancel("proposal_received");
+        this.dispatch({ type: "proposal.received", source, proposal, atMs: this.now() });
+      } else if (diagnostic && needsConversationClarification(diagnostic) && this.state) {
+        this.supportClarification.consider(this.state, this.status === "live" && !this.steering, source);
+      }
     } catch {
       if (!abort.signal.aborted && this.status === "live")
         this.log(
           "classifier.error",
           {
-            message: "Classifier unavailable, timed out, or returned invalid data; scene held.",
+            message: "Classification failed; scene held.",
+            category: timeout.aborted ? "timeout" : category,
+            httpStatus,
+            endpointCode,
             elapsedMs: this.now() - startedAtMs,
           },
           source,
@@ -502,6 +595,7 @@ export class LessonRuntime {
   }
 
   private cancelClassification(reason: string) {
+    this.supportClarification.cancel(reason);
     clearTimeout(this.stabilizationTimer);
     this.tutorStabilization.cancel(reason);
     if (!this.classification) return;

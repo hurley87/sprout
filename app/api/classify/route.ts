@@ -7,13 +7,15 @@ export const runtime = "nodejs";
 const json = (body: object, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 
 export async function POST(request: Request) {
-  if (!isLocalRequest(request)) return json({ error: "Use the local Sprout window." }, 403);
+  if (!isLocalRequest(request))
+    return json({ error: "Use the local Sprout window.", code: "local_request_rejected" }, 403);
   if (!request.headers.get("content-type")?.startsWith("application/json"))
-    return json({ error: "Invalid classification request." }, 415);
+    return json({ error: "Invalid classification request.", code: "invalid_request" }, 415);
   const body = await readJsonBody(request, 65_536);
-  if (!body.ok) return json({ error: "Invalid classification request." }, body.tooLarge ? 413 : 400);
+  if (!body.ok)
+    return json({ error: "Invalid classification request.", code: "invalid_request" }, body.tooLarge ? 413 : 400);
   if (!body.value || typeof body.value !== "object" || Array.isArray(body.value))
-    return json({ error: "Invalid classification request." }, 400);
+    return json({ error: "Invalid classification request.", code: "invalid_request" }, 400);
   const input = body.value as Record<string, unknown>;
   if (
     Object.keys(input).length !== 3 ||
@@ -26,8 +28,11 @@ export async function POST(request: Request) {
     !input.transcript.trim() ||
     input.transcript.length > 12_000
   )
-    return json({ error: "Invalid classification request." }, 400);
-  if (!process.env.TYPESAFE_API_KEY) return json({ error: "Configure TYPESAFE_API_KEY for Sprout." }, 503);
+    return json({ error: "Invalid classification request.", code: "invalid_request" }, 400);
+  if (!process.env.TYPESAFE_API_KEY)
+    return json({ error: "Configure TYPESAFE_API_KEY for Sprout.", code: "unconfigured" }, 503);
+  const timeout = AbortSignal.timeout(10_000);
+  const signal = AbortSignal.any([request.signal, timeout]);
   try {
     const decision = await classifyConversationStateWithDiagnostics(
       {
@@ -35,13 +40,24 @@ export async function POST(request: Request) {
         transcriptRevision: input.transcriptRevision,
         transcript: input.transcript,
       },
-      AbortSignal.any([request.signal, AbortSignal.timeout(10_000)]),
+      signal,
     );
+    if (signal.aborted)
+      return json(
+        { error: "Classification did not finish.", code: timeout.aborted ? "timeout" : "cancelled" },
+        timeout.aborted ? 504 : 499,
+      );
     return json({
       proposal: decision.status === "accepted" ? decision.proposal : null,
       diagnostic: classificationDiagnostic(decision),
     });
   } catch {
-    return json({ error: "Classification did not finish." }, 502);
+    return json(
+      {
+        error: "Classification did not finish.",
+        code: timeout.aborted ? "timeout" : request.signal.aborted ? "cancelled" : "internal_error",
+      },
+      timeout.aborted ? 504 : request.signal.aborted ? 499 : 502,
+    );
   }
 }

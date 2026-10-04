@@ -115,3 +115,42 @@ it("reports cancellation without returning a superseded mapping decision", async
   finish(Response.json(conversationProviderBody()));
   expect(await pending).toEqual({ status: "abstained", reason: "cancelled", probabilities: null });
 });
+
+it("reports missing configuration without a provider request", async () => {
+  vi.stubEnv("TYPESAFE_API_KEY", "");
+  const fetch = vi.fn();
+  vi.stubGlobal("fetch", fetch);
+  const response = await POST(request());
+  expect(response.status).toBe(503);
+  expect(await response.json()).toMatchObject({ code: "unconfigured" });
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+it("reports server timeout separately from semantic abstention", async () => {
+  const timeout = new AbortController();
+  vi.spyOn(AbortSignal, "timeout").mockReturnValue(timeout.signal);
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => {
+      timeout.abort();
+      return Response.json(conversationProviderBody());
+    }),
+  );
+  const response = await POST(request());
+  expect(response.status).toBe(504);
+  expect(await response.json()).toMatchObject({ code: "timeout" });
+});
+
+it("does not forward unexpected server exception text", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      get ok() {
+        throw new Error("private marker");
+      },
+    })),
+  );
+  const response = await POST(request());
+  expect(response.status).toBe(502);
+  expect(await response.json()).toEqual({ error: "Classification did not finish.", code: "internal_error" });
+});

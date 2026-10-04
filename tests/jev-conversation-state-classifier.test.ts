@@ -4,6 +4,7 @@ import { parseConversationStateProposal } from "../lib/lesson-runtime/conversati
 import type { ConversationStateClassifierInput } from "../lib/lesson-runtime/conversation-state-classifier";
 import {
   CONVERSATION_QUESTIONS,
+  classifyConversationStateWithDiagnostics,
   jevConversationStateClassifier,
 } from "../lib/lesson-runtime/jev-conversation-state-classifier";
 
@@ -170,6 +171,12 @@ describe("Jev current-node semantic classifier", () => {
         scene: { object: "duck", quantity: 1 },
         learningObjective: "Identify the total of one displayed duck.",
         transcript: snapshot.transcript,
+        tutorObservation: { latestMessage: null, precedingChildAttempt: null },
+        supportEvidence: {
+          precedingContext: [],
+          latestChildAttempt: { speaker: "Child", text: '"One"' },
+          subsequentMessages: [],
+        },
         transcriptRevision: 7,
       },
       questions: CONVERSATION_QUESTIONS,
@@ -379,5 +386,118 @@ describe("request identity and cancellation", () => {
     mutableInput.transcriptRevision = 8;
     finish(Response.json(providerBody()));
     expect(await pending).toMatchObject({ nodeId: "count-1-duck", transcriptRevision: 7 });
+  });
+});
+
+describe("latest tutor evidence after a supported correction", () => {
+  const recordedInput: ConversationStateClassifierInput = {
+    nodeId: "count-2-ducks",
+    transcriptRevision: 40,
+    transcript:
+      "Tutor: Okay, how many ducks do you see?\nChild: Three\n" +
+      "Tutor: Hmm, let's try counting them one at a time. Look carefully. Can you point and count with me?\n" +
+      "Child: Uh two\nTutor: Yes, two ducks!",
+  };
+
+  it("sends full correction history for answer/support, with a separate latest tutor target in the same single request", async () => {
+    const fetch = mockJev(probabilities({ tutorAcknowledging: 0.95 }));
+    expect(await classify(recordedInput)).toMatchObject({
+      nodeId: "count-2-ducks",
+      transcriptRevision: 40,
+      answerOutcome: "correct",
+      tutorState: "acknowledging",
+      supportState: "none",
+    });
+    expect(fetch).toHaveBeenCalledOnce();
+    const wire = JSON.parse(fetch.mock.calls[0][1].body as string);
+    expect(wire.state.transcript).toBe(recordedInput.transcript);
+    expect(wire.state.tutorObservation).toEqual({ latestMessage: "Yes, two ducks!", precedingChildAttempt: "Uh two" });
+    for (const key of ["tutorAcknowledging", "tutorAsking", "tutorClarifying", "tutorHelping"] as const) {
+      expect(wire.questions[key].instructions).toContain("Classify only tutorObservation.latestMessage.");
+      expect(wire.questions[key].instructions).toContain("Do not classify earlier tutor messages");
+    }
+  });
+
+  it("still abstains on the demo's original conflicting probabilities instead of relaxing the gate", async () => {
+    mockJev({
+      answerCorrect: 0.94,
+      answerIncorrect: 0.08,
+      answerUnclear: 0.09,
+      answerNone: 0.02,
+      needsHelp: 0.08,
+      tutorAcknowledging: 0.95,
+      tutorAsking: 0.05,
+      tutorClarifying: 0.05,
+      tutorHelping: 0.27,
+    });
+    const decision = await classifyConversationStateWithDiagnostics(recordedInput, new AbortController().signal);
+    expect(decision).toMatchObject({ status: "abstained", reason: "tutor_margin_too_small" });
+  });
+
+  it("keeps unresolved current help and actual latest scaffolding eligible as helping, never acknowledgment", async () => {
+    const fetch = mockJev(probabilities({ needsHelp: 0.96, tutorHelping: 0.97 }));
+    const input = {
+      ...recordedInput,
+      transcript: recordedInput.transcript + "\nChild: I still need help\nTutor: Let's count them together again.",
+    };
+    expect(await classify(input)).toMatchObject({ supportState: "needs_help", tutorState: "helping" });
+    const wire = JSON.parse(fetch.mock.calls[0][1].body as string);
+    expect(wire.state.tutorObservation).toEqual({
+      latestMessage: "Let's count them together again.",
+      precedingChildAttempt: "I still need help",
+    });
+  });
+
+  it("does not cut a mixed acknowledgment/scaffold into a pure acknowledgment to bypass ambiguity", async () => {
+    const fetch = mockJev(probabilities({ tutorAcknowledging: 0.95, tutorHelping: 0.7 }));
+    expect(
+      await classify({
+        ...recordedInput,
+        transcript: recordedInput.transcript + "\nTutor: Let's count them together again.",
+      }),
+    ).toBeNull();
+    const wire = JSON.parse(fetch.mock.calls[0][1].body as string);
+    expect(wire.state.tutorObservation.latestMessage).toBe("Yes, two ducks!\nLet's count them together again.");
+  });
+
+  it("abstains before the provider call when speaker boundaries cannot be projected", async () => {
+    const fetch = mockJev();
+    expect(await classify({ ...recordedInput, transcript: "unlabelled text\nTutor: Yes, two ducks!" })).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+// These verify projection and score mapping, not Jev's interpretation of the words.
+describe("support evidence and unchanged probability gates", () => {
+  it.each([
+    {
+      transcript:
+        "Tutor: How many ducks do you see?\nChild: [breath ]I think [sigh\nChild: ] One\nTutor: Yes. One duck.",
+      help: 0.17,
+      expected: null,
+    },
+    {
+      transcript: "Child: Help please\nTutor: Point to each duck\nChild: One\nTutor: Yes, one duck",
+      help: 0.01,
+      expected: "none",
+    },
+    { transcript: "Child: One\nTutor: Yes, one duck\nChild: I need help", help: 0.98, expected: "needs_help" },
+    { transcript: "Child: One...\nChild: can you help?", help: 0.98, expected: "needs_help" },
+    { transcript: "Child: One or two?", help: 0.98, expected: "needs_help" },
+    { transcript: "Child: Two\nTutor: Try again\nChild: Three", help: 0.98, expected: "needs_help" },
+    { transcript: "Tutor: One duck\nChild: One?", help: 0.5, expected: null },
+    { transcript: "Child: [breath] I think...\nChild: no, one", help: 0.01, expected: "none" },
+  ])("passes all support evidence without overriding help from high correctness: $transcript", async example => {
+    const fetch = mockJev(probabilities({ needsHelp: example.help }));
+    const input = { ...snapshot, transcript: example.transcript };
+    const proposal = await classify(input);
+    if (example.expected === null) expect(proposal).toBeNull();
+    else expect(proposal).toMatchObject({ supportState: example.expected });
+    const wire = JSON.parse(fetch.mock.calls[0][1].body as string);
+    expect(wire.state.transcript).toBe(example.transcript);
+    expect(wire.state.supportEvidence).toBeTruthy();
+    expect(wire.questions.needsHelp.instructions).toContain("subsequentMessages");
+    expect(wire.questions.needsHelp.criteria.false).toContain("Pauses, breaths, sighs");
+    expect(wire.questions.needsHelp.criteria.false).toContain("not independent mastery");
   });
 });

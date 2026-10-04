@@ -1,0 +1,248 @@
+{
+  "status": "Unverified semantic calibration; synthetic scores are test inputs, not provider results.",
+  "exportSha256": "0fa670d9bf1881169266401d7c746881067fcefc54ec29a5068a659ba240fc0e",
+  "cases": [
+    {
+      "id": "recorded-1",
+      "kind": "recorded",
+      "eventIndex": 198,
+      "atMs": 15355.300000011921,
+      "source": {
+        "runtimeId": "55d1ca93-4bee-4bfc-a046-7c29b438673c",
+        "nodeId": "count-1-duck",
+        "visitId": 1,
+        "childTurnId": 2,
+        "transcriptRevision": 13
+      },
+      "transcript": "Tutor: How many ducks do you see?\nChild: Two. Oh, actually one\nTutor: Yes , there is one duck.",
+      "precedingChildAttempt": "Two. Oh, actually one",
+      "latestMessage": "Yes , there is one duck.",
+      "probabilities": {
+        "answerCorrect": 0.97,
+        "answerIncorrect": 0.06,
+        "answerUnclear": 0.07,
+        "answerNone": 0.02,
+        "needsHelp": 0.09,
+        "tutorAcknowledging": 0.87,
+        "tutorAsking": 0.02,
+        "tutorClarifying": 0.11,
+        "tutorHelping": 0.12
+      },
+      "reason": "tutor_no_winner",
+      "clarify": true
+    },
+    {
+      "id": "recorded-2",
+      "kind": "recorded",
+      "eventIndex": 219,
+      "atMs": 17212.30000001192,
+      "source": {
+        "runtimeId": "55d1ca93-4bee-4bfc-a046-7c29b438673c",
+        "nodeId": "count-1-duck",
+        "visitId": 1,
+        "childTurnId": 3,
+        "transcriptRevision": 13
+      },
+      "transcript": "Tutor: How many ducks do you see?\nChild: Two. Oh, actually one\nTutor: Yes , there is one duck.",
+      "precedingChildAttempt": "Two. Oh, actually one",
+      "latestMessage": "Yes , there is one duck.",
+      "probabilities": {
+        "answerCorrect": 0.97,
+        "answerIncorrect": 0.06,
+        "answerUnclear": 0.07,
+        "answerNone": 0.02,
+        "needsHelp": 0.1,
+        "tutorAcknowledging": 0.85,
+        "tutorAsking": 0.03,
+        "tutorClarifying": 0.11,
+        "tutorHelping": 0.13
+      },
+      "reason": "tutor_no_winner",
+      "clarify": true
+    },
+    {
+      "id": "settled-correction",
+      "kind": "synthetic",
+      "transcript": "Tutor: How many ducks do you see?\nChild: Two. Oh, actually one\nTutor: Yes , there is one duck.",
+      "precedingChildAttempt": "Two. Oh, actually one",
+      "latestMessage": "Yes , there is one duck.",
+      "probabilities": {
+        "answerCorrect": 0.97,
+        "answerIncorrect": 0.06,
+        "answerUnclear": 0.07,
+        "answerNone": 0.02,
+        "needsHelp": 0.09,
+        "tutorAcknowledging": 0.97,
+        "tutorAsking": 0.02,
+        "tutorClarifying": 0.11,
+        "tutorHelping": 0.12
+      },
+      "expectedAcknowledging": true,
+      "clarify": false
+    },
+    {
+      "id": "no-child-answer",
+      "kind": "synthetic",
+      "transcript": "Tutor: There is one duck.",
+      "precedingChildAttempt": null,
+      "latestMessage": "There is one duck.",
+      "probabilities": {
+        "answerCorrect": 0.02,
+        "answerIncorrect": 0.06,
+        "answerUnclear": 0.07,
+        "answerNone": 0.97,
+        "needsHelp": 0.09,
+        "tutorAcknowledging": 0.02,
+        "tutorAsking": 0.02,
+        "tutorClarifying": 0.11,
+        "tutorHelping": 0.12
+      },
+      "expectedAcknowledging": false,
+      "clarify": false
+    },
+    {
+      "id": "still-wrong",
+      "kind": "synthetic",
+      "transcript": "Tutor: How many ducks do you see?\nChild: Two\nTutor: No, there is one duck.",
+      "precedingChildAttempt": "Two",
+      "latestMessage": "No, there is one duck.",
+      "probabilities": {
+        "answerCorrect": 0.02,
+        "answerIncorrect": 0.97,
+        "answerUnclear": 0.07,
+        "answerNone": 0.02,
+        "needsHelp": 0.09,
+        "tutorAcknowledging": 0.02,
+        "tutorAsking": 0.02,
+        "tutorClarifying": 0.11,
+        "tutorHelping": 0.97
+      },
+      "expectedAcknowledging": false,
+      "clarify": false
+    },
+    {
+      "id": "encouragement",
+      "kind": "synthetic",
+      "transcript": "Tutor: How many ducks do you see?\nChild: One\nTutor: You are trying hard.",
+      "precedingChildAttempt": "One",
+      "latestMessage": "You are trying hard.",
+      "probabilities": {
+        "answerCorrect": 0.97,
+        "answerIncorrect": 0.06,
+        "answerUnclear": 0.07,
+        "answerNone": 0.02,
+        "needsHelp": 0.09,
+        "tutorAcknowledging": 0.03,
+        "tutorAsking": 0.02,
+        "tutorClarifying": 0.02,
+        "tutorHelping": 0.02
+      },
+      "expectedAcknowledging": false,
+      "clarify": false
+    },
+    {
+      "id": "unresolved-correction",
+      "kind": "synthetic",
+      "transcript": "Tutor: How many ducks do you see?\nChild: Two. Oh, actually one or two?\nTutor: There is one duck.",
+      "precedingChildAttempt": "Two. Oh, actually one or two?",
+      "latestMessage": "There is one duck.",
+      "probabilities": {
+        "answerCorrect": 0.02,
+        "answerIncorrect": 0.06,
+        "answerUnclear": 0.97,
+        "answerNone": 0.02,
+        "needsHelp": 0.97,
+        "tutorAcknowledging": 0.02,
+        "tutorAsking": 0.02,
+        "tutorClarifying": 0.11,
+        "tutorHelping": 0.12
+      },
+      "expectedAcknowledging": false,
+      "clarify": false
+    },
+    {
+      "id": "renewed-help",
+      "kind": "synthetic",
+      "transcript": "Tutor: How many ducks do you see?\nChild: One. Can you help me?\nTutor: Yes, one duck.",
+      "precedingChildAttempt": "One. Can you help me?",
+      "latestMessage": "Yes, one duck.",
+      "probabilities": {
+        "answerCorrect": 0.97,
+        "answerIncorrect": 0.06,
+        "answerUnclear": 0.07,
+        "answerNone": 0.02,
+        "needsHelp": 0.97,
+        "tutorAcknowledging": 0.97,
+        "tutorAsking": 0.02,
+        "tutorClarifying": 0.11,
+        "tutorHelping": 0.12
+      },
+      "expectedAcknowledging": false,
+      "clarify": false
+    },
+    {
+      "id": "renewed-uncertainty",
+      "kind": "synthetic",
+      "transcript": "Tutor: How many ducks do you see?\nChild: One... I am not sure.\nTutor: Yes, one duck.",
+      "precedingChildAttempt": "One... I am not sure.",
+      "latestMessage": "Yes, one duck.",
+      "probabilities": {
+        "answerCorrect": 0.02,
+        "answerIncorrect": 0.06,
+        "answerUnclear": 0.97,
+        "answerNone": 0.02,
+        "needsHelp": 0.97,
+        "tutorAcknowledging": 0.97,
+        "tutorAsking": 0.02,
+        "tutorClarifying": 0.11,
+        "tutorHelping": 0.12
+      },
+      "expectedAcknowledging": false,
+      "clarify": false
+    },
+    {
+      "id": "later-help",
+      "kind": "synthetic",
+      "transcript": "Child: One\nTutor: Yes, one duck.\nChild: I still need help",
+      "precedingChildAttempt": "One",
+      "latestMessage": "Yes, one duck.",
+      "probabilities": {
+        "answerCorrect": 0.97,
+        "answerIncorrect": 0.06,
+        "answerUnclear": 0.07,
+        "answerNone": 0.02,
+        "needsHelp": 0.97,
+        "tutorAcknowledging": 0.97,
+        "tutorAsking": 0.02,
+        "tutorClarifying": 0.11,
+        "tutorHelping": 0.12
+      },
+      "expectedAcknowledging": true,
+      "clarify": false
+    },
+    {
+      "id": "later-uncertainty",
+      "kind": "synthetic",
+      "transcript": "Child: One\nTutor: Yes, one duck.\nChild: Actually, one or two?",
+      "precedingChildAttempt": "One",
+      "latestMessage": "Yes, one duck.",
+      "probabilities": {
+        "answerCorrect": 0.02,
+        "answerIncorrect": 0.06,
+        "answerUnclear": 0.97,
+        "answerNone": 0.02,
+        "needsHelp": 0.97,
+        "tutorAcknowledging": 0.97,
+        "tutorAsking": 0.02,
+        "tutorClarifying": 0.11,
+        "tutorHelping": 0.12
+      },
+      "expectedAcknowledging": true,
+      "clarify": false
+    }
+  ],
+  "contracts": {
+    "baselineClassifierSha256": "040ad2aa13663b102c77baf44a9e35ba3b1188c70f5a9263055b9320fff76e39",
+    "candidateClassifierSha256": "9681bc3b42f3cf181ef7ccbcae47d87e85a1f8d48d83d8b1690f4721300e586f"
+  }
+}

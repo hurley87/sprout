@@ -1,0 +1,764 @@
+{
+  "version": 1,
+  "authorization": "User explicitly authorized latest exact snapshot plus reviewed counterexamples in this chat. Budget: 15 requests, no retries.",
+  "startedAtUtc": "2026-10-04T01:05:55.663073+00:00",
+  "endpoint": "http://127.0.0.1:3000/api/classify",
+  "requestedModel": "jev-1.13.0",
+  "modelVerification": "Pinned in current transport source; local endpoint does not expose provider-reported model.",
+  "reviewSetSha256": "7416b90b244909573da09f0d63659c0109354e4fb33fc8377f30dfbe82deed86",
+  "sourceHashes": {
+    "app/api/classify/route.ts": "359024fa6adea73027ee3b56cf05b5739a0c6b37a101f1cc42e8acd7f244e376",
+    "lib/jev.ts": "4b5c5c961bc499a6172496e3920ec6205a57b2c764e1b70e3259756d3913c51c",
+    "lib/lesson-runtime/jev-conversation-state-classifier.ts": "4a0effdb9cb8c7736222c1ca6f31854db87f10ac7a0da6b695930e1575fe26e3",
+    "lib/lesson-runtime/support-evidence.ts": "14f1e8f3c83eeed3f359aa425f690e5be5ecf42d1107180816168dde96500bbf",
+    "lib/lesson-runtime/tutor-observation.ts": "719758e7c5f5e250dd5aa57da546c5745eaa73f971c984f75bd3d15347457c07",
+    "lib/lesson-runtime/classification-decision.ts": "d1392008e764091fcf215223b84924fa4d0c89d9720128f61213e8a14fec4190"
+  },
+  "results": [
+    {
+      "id": "latest-finished-uh-one",
+      "input": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 36,
+        "transcript": "Tutor: How many ducks do you see?\nChild: Two\nTutor: Hmm, I heard \u201ctwo.\u201d Could you say that again for me?\nChild: One\nTutor: Yes, one duck. Are you finished with your answer, or would you like my help?\nChild: Finished, uh, one\nTutor: Yes, one duck."
+      },
+      "review": "Settled reaffirmation followed by fresh explicit success; previous live mapping held on help .12. Text alone cannot prove audio/attribution or mastery.",
+      "observedMapping": {
+        "decision": "abstained",
+        "probabilities": {
+          "answerCorrect": 0.96,
+          "answerIncorrect": 0.06,
+          "answerUnclear": 0.11,
+          "answerNone": 0.02,
+          "needsHelp": 0.12,
+          "tutorAcknowledging": 0.94,
+          "tutorAsking": 0.03,
+          "tutorClarifying": 0.06,
+          "tutorHelping": 0.07
+        },
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        },
+        "reason": "support_ambiguous",
+        "detail": {
+          "category": "support",
+          "candidate": "needsHelp",
+          "candidateProbability": 0.12
+        }
+      },
+      "source": {
+        "file": "/Users/davidhurley/Downloads/sprout-lesson-817101b0-2e13-4943-86d6-7d21689bf806.json",
+        "sha256": "4f2dc838fddc500c710110b28be4b139c934ebb9e8f144de7125c41728b90c43",
+        "requestEventIndex": 505,
+        "mappingEventIndex": 507,
+        "identity": {
+          "runtimeId": "817101b0-2e13-4943-86d6-7d21689bf806",
+          "nodeId": "count-1-duck",
+          "visitId": 1,
+          "childTurnId": 4,
+          "transcriptRevision": 36
+        }
+      },
+      "httpStatus": 200,
+      "proposal": null,
+      "diagnostic": {
+        "decision": "abstained",
+        "probabilities": {
+          "answerCorrect": 0.96,
+          "answerIncorrect": 0.06,
+          "answerUnclear": 0.09,
+          "answerNone": 0.02,
+          "needsHelp": 0.11,
+          "tutorAcknowledging": 0.94,
+          "tutorAsking": 0.03,
+          "tutorClarifying": 0.06,
+          "tutorHelping": 0.07
+        },
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        },
+        "reason": "support_ambiguous",
+        "detail": {
+          "category": "support",
+          "candidate": "needsHelp",
+          "candidateProbability": 0.11
+        }
+      },
+      "elapsedMs": 275.3
+    },
+    {
+      "id": "before-clarification",
+      "input": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 37,
+        "transcript": "Tutor: Hey there! How many ducks do you see?\nChild: Uh, I think... [sigh\nChild: ] Two\nTutor: Mm. Try again, and look carefully at the duck. Tell me how many there are in all.\nChild: Maybe... Uh\nChild: ... One\nTutor: Yes, one duck. You counted carefully."
+      },
+      "review": "Text permits settled one after earlier difficulty, but Maybe remains an interpretive uncertainty. No explicit child help request. Why help scored .40 is unproven.",
+      "observedMapping": {
+        "decision": "abstained",
+        "probabilities": {
+          "answerCorrect": 0.95,
+          "answerIncorrect": 0.06,
+          "answerUnclear": 0.15,
+          "answerNone": 0.02,
+          "needsHelp": 0.4,
+          "tutorAcknowledging": 0.97,
+          "tutorAsking": 0.02,
+          "tutorClarifying": 0.05,
+          "tutorHelping": 0.07
+        },
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        },
+        "reason": "support_ambiguous",
+        "detail": {
+          "category": "support",
+          "candidate": "needsHelp",
+          "candidateProbability": 0.4
+        }
+      },
+      "source": null,
+      "httpStatus": 200,
+      "proposal": null,
+      "diagnostic": {
+        "decision": "abstained",
+        "probabilities": {
+          "answerCorrect": 0.95,
+          "answerIncorrect": 0.07,
+          "answerUnclear": 0.15,
+          "answerNone": 0.02,
+          "needsHelp": 0.39,
+          "tutorAcknowledging": 0.97,
+          "tutorAsking": 0.02,
+          "tutorClarifying": 0.05,
+          "tutorHelping": 0.06
+        },
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        },
+        "reason": "support_ambiguous",
+        "detail": {
+          "category": "support",
+          "candidate": "needsHelp",
+          "candidateProbability": 0.39
+        }
+      },
+      "elapsedMs": 162.0
+    },
+    {
+      "id": "after-question",
+      "input": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 47,
+        "transcript": "Tutor: Hey there! How many ducks do you see?\nChild: Uh, I think... [sigh\nChild: ] Two\nTutor: Mm. Try again, and look carefully at the duck. Tell me how many there are in all.\nChild: Maybe... Uh\nChild: ... One\nTutor: Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?"
+      },
+      "review": "Question is merged with earlier confirmation in a consecutive tutor block. It cannot by itself resolve child uncertainty.",
+      "observedMapping": {
+        "decision": "abstained",
+        "probabilities": {
+          "answerCorrect": 0.95,
+          "answerIncorrect": 0.06,
+          "answerUnclear": 0.13,
+          "answerNone": 0.02,
+          "needsHelp": 0.36,
+          "tutorAcknowledging": 0.94,
+          "tutorAsking": 0.06,
+          "tutorClarifying": 0.06,
+          "tutorHelping": 0.08
+        },
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        },
+        "reason": "support_ambiguous",
+        "detail": {
+          "category": "support",
+          "candidate": "needsHelp",
+          "candidateProbability": 0.36
+        }
+      },
+      "source": null,
+      "httpStatus": 200,
+      "proposal": null,
+      "diagnostic": {
+        "decision": "abstained",
+        "probabilities": {
+          "answerCorrect": 0.95,
+          "answerIncorrect": 0.07,
+          "answerUnclear": 0.15,
+          "answerNone": 0.02,
+          "needsHelp": 0.36,
+          "tutorAcknowledging": 0.94,
+          "tutorAsking": 0.05,
+          "tutorClarifying": 0.07,
+          "tutorHelping": 0.08
+        },
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        },
+        "reason": "support_ambiguous",
+        "detail": {
+          "category": "support",
+          "candidate": "needsHelp",
+          "candidateProbability": 0.36
+        }
+      },
+      "elapsedMs": 148.9
+    },
+    {
+      "id": "child-reaffirmation",
+      "input": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 51,
+        "transcript": "Tutor: Hey there! How many ducks do you see?\nChild: Uh, I think... [sigh\nChild: ] Two\nTutor: Mm. Try again, and look carefully at the duck. Tell me how many there are in all.\nChild: Maybe... Uh\nChild: ... One\nTutor: Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?\nChild: Yeah, I answered one"
+      },
+      "review": "Yeah, I answered one reaffirms prior correct total. Child-source accepted proposal cannot establish fresh tutor acknowledgment.",
+      "observedMapping": {
+        "decision": "accepted",
+        "probabilities": {
+          "answerCorrect": 0.97,
+          "answerIncorrect": 0.06,
+          "answerUnclear": 0.09,
+          "answerNone": 0.02,
+          "needsHelp": 0.1,
+          "tutorAcknowledging": 0.95,
+          "tutorAsking": 0.05,
+          "tutorClarifying": 0.07,
+          "tutorHelping": 0.07
+        },
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        }
+      },
+      "source": null,
+      "httpStatus": 200,
+      "proposal": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 51,
+        "childActivity": "unknown",
+        "answerOutcome": "correct",
+        "supportState": "none",
+        "tutorState": "acknowledging"
+      },
+      "diagnostic": {
+        "decision": "accepted",
+        "probabilities": {
+          "answerCorrect": 0.97,
+          "answerIncorrect": 0.06,
+          "answerUnclear": 0.09,
+          "answerNone": 0.02,
+          "needsHelp": 0.1,
+          "tutorAcknowledging": 0.95,
+          "tutorAsking": 0.05,
+          "tutorClarifying": 0.08,
+          "tutorHelping": 0.08
+        },
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        }
+      },
+      "elapsedMs": 201.2
+    },
+    {
+      "id": "generic-thanks",
+      "input": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 55,
+        "transcript": "Tutor: Hey there! How many ducks do you see?\nChild: Uh, I think... [sigh\nChild: ] Two\nTutor: Mm. Try again, and look carefully at the duck. Tell me how many there are in all.\nChild: Maybe... Uh\nChild: ... One\nTutor: Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?\nChild: Yeah, I answered one\nTutor: Thanks for telling me."
+      },
+      "review": "Current support is clear in observed scores; latest Thanks does not explicitly confirm current success. Hold until fresh explicit acknowledgment, relevant drain and render.",
+      "observedMapping": {
+        "decision": "abstained",
+        "probabilities": {
+          "answerCorrect": 0.97,
+          "answerIncorrect": 0.05,
+          "answerUnclear": 0.07,
+          "answerNone": 0.02,
+          "needsHelp": 0.09,
+          "tutorAcknowledging": 0.43,
+          "tutorAsking": 0.02,
+          "tutorClarifying": 0.03,
+          "tutorHelping": 0.03
+        },
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        },
+        "reason": "tutor_no_winner",
+        "detail": {
+          "category": "tutor",
+          "candidate": "tutorAcknowledging",
+          "candidateProbability": 0.43
+        }
+      },
+      "source": null,
+      "httpStatus": 200,
+      "proposal": null,
+      "diagnostic": {
+        "decision": "abstained",
+        "probabilities": {
+          "answerCorrect": 0.97,
+          "answerIncorrect": 0.05,
+          "answerUnclear": 0.07,
+          "answerNone": 0.02,
+          "needsHelp": 0.09,
+          "tutorAcknowledging": 0.42,
+          "tutorAsking": 0.02,
+          "tutorClarifying": 0.03,
+          "tutorHelping": 0.03
+        },
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        },
+        "reason": "tutor_no_winner",
+        "detail": {
+          "category": "tutor",
+          "candidate": "tutorAcknowledging",
+          "candidateProbability": 0.42
+        }
+      },
+      "elapsedMs": 162.7
+    },
+    {
+      "id": "fresh-explicit-confirmation",
+      "input": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 1,
+        "transcript": "Tutor: Hey there! How many ducks do you see?\nChild: Uh, I think... [sigh\nChild: ] Two\nTutor: Mm. Try again, and look carefully at the duck. Tell me how many there are in all.\nChild: Maybe... Uh\nChild: ... One\nTutor: Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?\nChild: Yeah, I answered one\nTutor: Yes, one duck."
+      },
+      "review": "Settled reaffirmation followed by explicit fresh success; may progress only through existing gates.",
+      "observedMapping": null,
+      "source": null,
+      "httpStatus": 200,
+      "proposal": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 1,
+        "childActivity": "unknown",
+        "answerOutcome": "correct",
+        "supportState": "none",
+        "tutorState": "acknowledging"
+      },
+      "diagnostic": {
+        "decision": "accepted",
+        "probabilities": {
+          "answerCorrect": 0.97,
+          "answerIncorrect": 0.05,
+          "answerUnclear": 0.07,
+          "answerNone": 0.02,
+          "needsHelp": 0.09,
+          "tutorAcknowledging": 0.95,
+          "tutorAsking": 0.03,
+          "tutorClarifying": 0.06,
+          "tutorHelping": 0.05
+        },
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        }
+      },
+      "elapsedMs": 167.5
+    },
+    {
+      "id": "help-then-settled",
+      "input": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 1,
+        "transcript": "Tutor: How many ducks?\nChild: Can you help?\nTutor: Point to the duck and count it yourself.\nChild: One\nTutor: Yes, one duck."
+      },
+      "review": "Earlier support can resolve; independent mastery remains separate.",
+      "observedMapping": null,
+      "source": null,
+      "httpStatus": 200,
+      "proposal": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 1,
+        "childActivity": "unknown",
+        "answerOutcome": "correct",
+        "supportState": "none",
+        "tutorState": "acknowledging"
+      },
+      "diagnostic": {
+        "decision": "accepted",
+        "probabilities": {
+          "answerCorrect": 0.97,
+          "answerIncorrect": 0.02,
+          "answerUnclear": 0.07,
+          "answerNone": 0.02,
+          "needsHelp": 0.1,
+          "tutorAcknowledging": 0.98,
+          "tutorAsking": 0.02,
+          "tutorClarifying": 0.07,
+          "tutorHelping": 0.07
+        },
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        }
+      },
+      "elapsedMs": 194.7
+    },
+    {
+      "id": "renewed-help",
+      "input": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 1,
+        "transcript": "Tutor: Hey there! How many ducks do you see?\nChild: Uh, I think... [sigh\nChild: ] Two\nTutor: Mm. Try again, and look carefully at the duck. Tell me how many there are in all.\nChild: Maybe... Uh\nChild: ... One\nTutor: Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?\nChild: Yeah, one, but I still need help"
+      },
+      "review": "Do not confirm success while help remains current.",
+      "observedMapping": null,
+      "source": null,
+      "httpStatus": 200,
+      "proposal": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 1,
+        "childActivity": "unknown",
+        "answerOutcome": "correct",
+        "supportState": "needs_help",
+        "tutorState": "acknowledging"
+      },
+      "diagnostic": {
+        "decision": "accepted",
+        "probabilities": {
+          "answerCorrect": 0.93,
+          "answerIncorrect": 0.08,
+          "answerUnclear": 0.17,
+          "answerNone": 0.02,
+          "needsHelp": 0.94,
+          "tutorAcknowledging": 0.94,
+          "tutorAsking": 0.05,
+          "tutorClarifying": 0.09,
+          "tutorHelping": 0.1
+        },
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        }
+      },
+      "elapsedMs": 223.2
+    },
+    {
+      "id": "number-plus-help",
+      "input": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 1,
+        "transcript": "Tutor: Hey there! How many ducks do you see?\nChild: Uh, I think... [sigh\nChild: ] Two\nTutor: Mm. Try again, and look carefully at the duck. Tell me how many there are in all.\nChild: Maybe... Uh\nChild: ... One\nTutor: Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?\nChild: One... can you help?"
+      },
+      "review": "Matching number alone cannot resolve current help.",
+      "observedMapping": null,
+      "source": null,
+      "httpStatus": 200,
+      "proposal": null,
+      "diagnostic": {
+        "decision": "abstained",
+        "probabilities": {
+          "answerCorrect": 0.8,
+          "answerIncorrect": 0.1,
+          "answerUnclear": 0.35,
+          "answerNone": 0.02,
+          "needsHelp": 0.91,
+          "tutorAcknowledging": 0.9,
+          "tutorAsking": 0.06,
+          "tutorClarifying": 0.09,
+          "tutorHelping": 0.11
+        },
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        },
+        "reason": "answer_no_winner",
+        "detail": {
+          "category": "answer",
+          "candidate": "answerCorrect",
+          "candidateProbability": 0.8
+        }
+      },
+      "elapsedMs": 160.6
+    },
+    {
+      "id": "alternatives",
+      "input": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 1,
+        "transcript": "Tutor: Hey there! How many ducks do you see?\nChild: Uh, I think... [sigh\nChild: ] Two\nTutor: Mm. Try again, and look carefully at the duck. Tell me how many there are in all.\nChild: Maybe... Uh\nChild: ... One\nTutor: Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?\nChild: One or two?"
+      },
+      "review": "Unresolved alternatives: clarify without total.",
+      "observedMapping": null,
+      "source": null,
+      "httpStatus": 200,
+      "proposal": null,
+      "diagnostic": {
+        "decision": "abstained",
+        "probabilities": {
+          "answerCorrect": 0.28,
+          "answerIncorrect": 0.25,
+          "answerUnclear": 0.85,
+          "answerNone": 0.03,
+          "needsHelp": 0.92,
+          "tutorAcknowledging": 0.91,
+          "tutorAsking": 0.05,
+          "tutorClarifying": 0.1,
+          "tutorHelping": 0.1
+        },
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        },
+        "reason": "answer_no_winner",
+        "detail": {
+          "category": "answer",
+          "candidate": "answerUnclear",
+          "candidateProbability": 0.85
+        }
+      },
+      "elapsedMs": 184.7
+    },
+    {
+      "id": "repeated-wrong",
+      "input": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 1,
+        "transcript": "Tutor: How many ducks?\nChild: Two\nTutor: Point and try again.\nChild: Three"
+      },
+      "review": "Repeated wrong answers: help without total, no success.",
+      "observedMapping": null,
+      "source": null,
+      "httpStatus": 200,
+      "proposal": null,
+      "diagnostic": {
+        "decision": "abstained",
+        "probabilities": {
+          "answerCorrect": 0.04,
+          "answerIncorrect": 0.97,
+          "answerUnclear": 0.08,
+          "answerNone": 0.02,
+          "needsHelp": 0.8,
+          "tutorAcknowledging": 0.02,
+          "tutorAsking": 0.07,
+          "tutorClarifying": 0.25,
+          "tutorHelping": 0.85
+        },
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        },
+        "reason": "tutor_no_winner",
+        "detail": {
+          "category": "tutor",
+          "candidate": "tutorHelping",
+          "candidateProbability": 0.85
+        }
+      },
+      "elapsedMs": 155.2
+    },
+    {
+      "id": "tutor-supplied-repetition",
+      "input": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 1,
+        "transcript": "Tutor: One duck. Say one.\nChild: One? I do not know"
+      },
+      "review": "Uncertain supplied repetition: no success or independent mastery.",
+      "observedMapping": null,
+      "source": null,
+      "httpStatus": 200,
+      "proposal": null,
+      "diagnostic": {
+        "decision": "abstained",
+        "probabilities": {
+          "answerCorrect": 0.06,
+          "answerIncorrect": 0.07,
+          "answerUnclear": 0.96,
+          "answerNone": 0.07,
+          "needsHelp": 0.94,
+          "tutorAcknowledging": 0.02,
+          "tutorAsking": 0.72,
+          "tutorClarifying": 0.08,
+          "tutorHelping": 0.92
+        },
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        },
+        "reason": "tutor_margin_too_small",
+        "detail": {
+          "category": "tutor",
+          "winner": "tutorHelping",
+          "winnerProbability": 0.92,
+          "competitor": "tutorAsking",
+          "competitorProbability": 0.72,
+          "margin": 0.20000000000000007,
+          "violatedRules": [
+            "COMPETITOR_CEILING",
+            "MIN_MARGIN"
+          ]
+        }
+      },
+      "elapsedMs": 182.6
+    },
+    {
+      "id": "non-speech",
+      "input": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 1,
+        "transcript": "Tutor: Hey there! How many ducks do you see?\nChild: Uh, I think... [sigh\nChild: ] Two\nTutor: Mm. Try again, and look carefully at the duck. Tell me how many there are in all.\nChild: Maybe... Uh\nChild: ... One\nTutor: Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?\nChild: [sigh\nChild: ] [breath]"
+      },
+      "review": "Non-speech alone is neither a settled reaffirmation nor explicit renewed help; preserve history and uncertainty.",
+      "observedMapping": null,
+      "source": null,
+      "httpStatus": 200,
+      "proposal": null,
+      "diagnostic": {
+        "decision": "abstained",
+        "probabilities": {
+          "answerCorrect": 0.93,
+          "answerIncorrect": 0.07,
+          "answerUnclear": 0.17,
+          "answerNone": 0.02,
+          "needsHelp": 0.41,
+          "tutorAcknowledging": 0.94,
+          "tutorAsking": 0.06,
+          "tutorClarifying": 0.07,
+          "tutorHelping": 0.09
+        },
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        },
+        "reason": "support_ambiguous",
+        "detail": {
+          "category": "support",
+          "candidate": "needsHelp",
+          "candidateProbability": 0.41
+        }
+      },
+      "elapsedMs": 201.6
+    },
+    {
+      "id": "fresh-uncertain",
+      "input": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 1,
+        "transcript": "Tutor: Hey there! How many ducks do you see?\nChild: Uh, I think... [sigh\nChild: ] Two\nTutor: Mm. Try again, and look carefully at the duck. Tell me how many there are in all.\nChild: Maybe... Uh\nChild: ... One\nTutor: Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?\nChild: Maybe one? I am not finished"
+      },
+      "review": "Fresh uncertain attempt supersedes settled reaffirmation; wait or clarify.",
+      "observedMapping": null,
+      "source": null,
+      "httpStatus": 200,
+      "proposal": null,
+      "diagnostic": {
+        "decision": "abstained",
+        "probabilities": {
+          "answerCorrect": 0.31,
+          "answerIncorrect": 0.09,
+          "answerUnclear": 0.85,
+          "answerNone": 0.02,
+          "needsHelp": 0.9,
+          "tutorAcknowledging": 0.91,
+          "tutorAsking": 0.06,
+          "tutorClarifying": 0.11,
+          "tutorHelping": 0.1
+        },
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        },
+        "reason": "answer_no_winner",
+        "detail": {
+          "category": "answer",
+          "candidate": "answerUnclear",
+          "candidateProbability": 0.85
+        }
+      },
+      "elapsedMs": 161.7
+    },
+    {
+      "id": "generic-finished",
+      "input": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 1,
+        "transcript": "Tutor: Hey there! How many ducks do you see?\nChild: Uh, I think... [sigh\nChild: ] Two\nTutor: Mm. Try again, and look carefully at the duck. Tell me how many there are in all.\nChild: Maybe... Uh\nChild: ... One\nTutor: Yes, one duck. You counted carefully. Hey, are you finished with your answer, or would you like some help?\nChild: Yeah, finished"
+      },
+      "review": "Generic assent alone is insufficient for fresh success confirmation; disambiguate if needed.",
+      "observedMapping": null,
+      "source": null,
+      "httpStatus": 200,
+      "proposal": {
+        "nodeId": "count-1-duck",
+        "transcriptRevision": 1,
+        "childActivity": "unknown",
+        "answerOutcome": "correct",
+        "supportState": "none",
+        "tutorState": "acknowledging"
+      },
+      "diagnostic": {
+        "decision": "accepted",
+        "probabilities": {
+          "answerCorrect": 0.96,
+          "answerIncorrect": 0.06,
+          "answerUnclear": 0.1,
+          "answerNone": 0.02,
+          "needsHelp": 0.09,
+          "tutorAcknowledging": 0.95,
+          "tutorAsking": 0.05,
+          "tutorClarifying": 0.07,
+          "tutorHelping": 0.07
+        },
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        }
+      },
+      "elapsedMs": 168.0
+    }
+  ],
+  "completedAtUtc": "2026-10-04T01:05:58.429362+00:00",
+  "attemptedLocalRequests": 15
+}

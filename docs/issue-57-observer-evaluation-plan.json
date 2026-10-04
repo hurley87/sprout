@@ -1,0 +1,1281 @@
+{
+  "status": "Design only. No semantic comparisons run. Expected labels require human adjudication before paid calls. No audio or visual verification.",
+  "checkout": {
+    "branch": "main",
+    "head": "3ccb0231e30d7f9ab082e9df4f5228af1feba42b",
+    "sourceSha256": {
+      "lib/jev.ts": "4b5c5c961bc499a6172496e3920ec6205a57b2c764e1b70e3259756d3913c51c",
+      "lib/lesson-runtime/jev-conversation-state-classifier.ts": "9681bc3b42f3cf181ef7ccbcae47d87e85a1f8d48d83d8b1690f4721300e586f",
+      "lib/lesson-runtime/classification-decision.ts": "e58560841667e21f22e14a608c45bfe6854137ba630ab2d78bbbfa5ecd4fb5f7",
+      "lib/lesson-runtime/support-evidence.ts": "14f1e8f3c83eeed3f359aa425f690e5be5ecf42d1107180816168dde96500bbf",
+      "lib/lesson-runtime/tutor-observation.ts": "719758e7c5f5e250dd5aa57da546c5745eaa73f971c984f75bd3d15347457c07",
+      "lib/lesson-runtime/support-clarification.ts": "a4cce3b5a41d8e83073387226f7d643482d546f810b2831c6b8ee40a939de413",
+      "lib/lesson-runtime/lesson-runtime.ts": "ccf2f38f925419c1157b9198a7feeb1a86ddedfb949dc7ed31964fe4d952aedd",
+      "lib/lesson-runtime/lesson-runtime-reducer.ts": "85d62c2512cbe47d2989941cd2ccc6575962896c2d593888435504d6ab610b60"
+    }
+  },
+  "sources": {
+    "latest": {
+      "path": "/Users/davidhurley/Downloads/sprout-lesson-7e0dc7ae-1441-4da3-8d19-930415072b57.json",
+      "sha256": "a149edbb7bb3bfc73174afd5b29cb862a5dcad9ddc38200df197f7c00704b6a7",
+      "eventCount": 519
+    },
+    "older": {
+      "path": "/Users/davidhurley/Downloads/sprout-lesson-55d1ca93-4bee-4bfc-a046-7c29b438673c.json",
+      "available": false,
+      "secondaryReviewSet": "docs/issue-57-self-correction-review-set.json",
+      "reportedExportSha256": "0fa670d9bf1881169266401d7c746881067fcefc54ec29a5068a659ba240fc0e",
+      "sha256IndependentlyVerified": false
+    }
+  },
+  "forensicEvents": [
+    {
+      "eventIndex": 231,
+      "timestamp": "2026-10-04T18:28:25.270Z",
+      "atMs": 12680.90000000596,
+      "type": "runtime.changed",
+      "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+      "visitId": 1,
+      "childTurnId": 1,
+      "nodeId": "count-1-duck",
+      "transcriptRevision": 17,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "trigger": "clock.tick",
+        "before": {
+          "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+          "nodeId": "count-1-duck",
+          "visitId": 1,
+          "childTurnId": 1,
+          "hasChildTurn": true,
+          "hasChildTranscript": true,
+          "childSpeaking": false,
+          "childCandidate": null,
+          "transcriptRevision": 17,
+          "transcriptSource": "tutor",
+          "consumedRevision": null,
+          "acceptedAnswerRevision": null,
+          "answerAccepted": false,
+          "acknowledgmentObserved": false,
+          "tutorOutputObserved": true,
+          "tutorOutputDrained": false,
+          "quietSinceMs": 12425.700000017881,
+          "outputActivity": "quiet",
+          "quietDrainMs": 250,
+          "nowMs": 12629.90000000596,
+          "phase": "active",
+          "lessonComplete": false,
+          "pendingRender": null
+        },
+        "after": {
+          "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+          "nodeId": "count-1-duck",
+          "visitId": 1,
+          "childTurnId": 1,
+          "hasChildTurn": true,
+          "hasChildTranscript": true,
+          "childSpeaking": false,
+          "childCandidate": null,
+          "transcriptRevision": 17,
+          "transcriptSource": "tutor",
+          "consumedRevision": null,
+          "acceptedAnswerRevision": null,
+          "answerAccepted": false,
+          "acknowledgmentObserved": false,
+          "tutorOutputObserved": true,
+          "tutorOutputDrained": true,
+          "quietSinceMs": 12425.700000017881,
+          "outputActivity": "quiet",
+          "quietDrainMs": 250,
+          "nowMs": 12680.800000011921,
+          "phase": "active",
+          "lessonComplete": false,
+          "pendingRender": null
+        }
+      }
+    },
+    {
+      "eventIndex": 234,
+      "timestamp": "2026-10-04T18:28:25.515Z",
+      "atMs": 12926.700000017881,
+      "type": "classifier.started",
+      "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+      "visitId": 1,
+      "childTurnId": 1,
+      "nodeId": "count-1-duck",
+      "transcriptRevision": 17,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "trigger": "tutor_utterance_stable",
+        "transcript": "Tutor: How many ducks do you see?\nChild: Two, oh wait, uh one\nTutor: Yes, one duck. You counted carefully."
+      }
+    },
+    {
+      "eventIndex": 235,
+      "timestamp": "2026-10-04T18:28:25.638Z",
+      "atMs": 13049.09999999404,
+      "type": "microphone.activity_started",
+      "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+      "visitId": 1,
+      "childTurnId": 1,
+      "nodeId": "count-1-duck",
+      "transcriptRevision": 17,
+      "transcriptSpeaker": "tutor",
+      "detail": null
+    },
+    {
+      "eventIndex": 236,
+      "timestamp": "2026-10-04T18:28:25.638Z",
+      "atMs": 13049.200000017881,
+      "type": "classifier.cancelled",
+      "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+      "visitId": 1,
+      "childTurnId": 1,
+      "nodeId": "count-1-duck",
+      "transcriptRevision": 17,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "reason": "child_turn_started"
+      }
+    },
+    {
+      "eventIndex": 240,
+      "timestamp": "2026-10-04T18:28:25.821Z",
+      "atMs": 13232.40000000596,
+      "type": "microphone.activity_discarded",
+      "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+      "visitId": 1,
+      "childTurnId": 2,
+      "nodeId": "count-1-duck",
+      "transcriptRevision": 17,
+      "transcriptSpeaker": "tutor",
+      "detail": null
+    },
+    {
+      "eventIndex": 241,
+      "timestamp": "2026-10-04T18:28:25.821Z",
+      "atMs": 13232.5,
+      "type": "runtime.event.child.candidate.discarded",
+      "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+      "visitId": 1,
+      "childTurnId": 2,
+      "nodeId": "count-1-duck",
+      "transcriptRevision": 17,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "event": {
+          "type": "child.candidate.discarded",
+          "source": {
+            "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+            "visitId": 1,
+            "childTurnId": 2
+          },
+          "atMs": 13232.40000000596
+        },
+        "accepted": true
+      }
+    },
+    {
+      "eventIndex": 246,
+      "timestamp": "2026-10-04T18:28:26.077Z",
+      "atMs": 13488.09999999404,
+      "type": "runtime.changed",
+      "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+      "visitId": 1,
+      "childTurnId": 2,
+      "nodeId": "count-1-duck",
+      "transcriptRevision": 17,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "trigger": "clock.tick",
+        "before": {
+          "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+          "nodeId": "count-1-duck",
+          "visitId": 1,
+          "childTurnId": 2,
+          "hasChildTurn": true,
+          "hasChildTranscript": true,
+          "childSpeaking": false,
+          "childCandidate": null,
+          "transcriptRevision": 17,
+          "transcriptSource": "tutor",
+          "consumedRevision": null,
+          "acceptedAnswerRevision": null,
+          "answerAccepted": false,
+          "acknowledgmentObserved": false,
+          "tutorOutputObserved": true,
+          "tutorOutputDrained": false,
+          "quietSinceMs": 13232.40000000596,
+          "outputActivity": "quiet",
+          "quietDrainMs": 250,
+          "nowMs": 13437.09999999404,
+          "phase": "active",
+          "lessonComplete": false,
+          "pendingRender": null
+        },
+        "after": {
+          "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+          "nodeId": "count-1-duck",
+          "visitId": 1,
+          "childTurnId": 2,
+          "hasChildTurn": true,
+          "hasChildTranscript": true,
+          "childSpeaking": false,
+          "childCandidate": null,
+          "transcriptRevision": 17,
+          "transcriptSource": "tutor",
+          "consumedRevision": null,
+          "acceptedAnswerRevision": null,
+          "answerAccepted": false,
+          "acknowledgmentObserved": false,
+          "tutorOutputObserved": true,
+          "tutorOutputDrained": true,
+          "quietSinceMs": 13232.40000000596,
+          "outputActivity": "quiet",
+          "quietDrainMs": 250,
+          "nowMs": 13488.09999999404,
+          "phase": "active",
+          "lessonComplete": false,
+          "pendingRender": null
+        }
+      }
+    },
+    {
+      "eventIndex": 250,
+      "timestamp": "2026-10-04T18:28:26.238Z",
+      "atMs": 13649.59999999404,
+      "type": "classifier.started",
+      "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+      "visitId": 1,
+      "childTurnId": 2,
+      "nodeId": "count-1-duck",
+      "transcriptRevision": 17,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "trigger": "tutor_utterance_stable",
+        "transcript": "Tutor: How many ducks do you see?\nChild: Two, oh wait, uh one\nTutor: Yes, one duck. You counted carefully."
+      }
+    },
+    {
+      "eventIndex": 252,
+      "timestamp": "2026-10-04T18:28:26.481Z",
+      "atMs": 13892.5,
+      "type": "classifier.mapping",
+      "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+      "visitId": 1,
+      "childTurnId": 2,
+      "nodeId": "count-1-duck",
+      "transcriptRevision": 17,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "decision": "accepted",
+        "probabilities": {
+          "answerCorrect": 0.96,
+          "answerIncorrect": 0.06,
+          "answerUnclear": 0.09,
+          "answerNone": 0.03,
+          "needsHelp": 0.1,
+          "tutorAcknowledging": 0.97,
+          "tutorAsking": 0.02,
+          "tutorClarifying": 0.09,
+          "tutorHelping": 0.09
+        },
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        }
+      }
+    },
+    {
+      "eventIndex": 253,
+      "timestamp": "2026-10-04T18:28:26.481Z",
+      "atMs": 13892.5,
+      "type": "classifier.result",
+      "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+      "visitId": 1,
+      "childTurnId": 2,
+      "nodeId": "count-1-duck",
+      "transcriptRevision": 17,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "proposal": {
+          "nodeId": "count-1-duck",
+          "transcriptRevision": 17,
+          "childActivity": "unknown",
+          "answerOutcome": "correct",
+          "supportState": "none",
+          "tutorState": "acknowledging"
+        },
+        "elapsedMs": 242.90000000596046
+      }
+    },
+    {
+      "eventIndex": 254,
+      "timestamp": "2026-10-04T18:28:26.481Z",
+      "atMs": 13892.700000017881,
+      "type": "runtime.event.proposal.received",
+      "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+      "visitId": 1,
+      "childTurnId": 2,
+      "nodeId": "count-1-duck",
+      "transcriptRevision": 17,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "event": {
+          "type": "proposal.received",
+          "source": {
+            "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+            "visitId": 1,
+            "childTurnId": 2,
+            "nodeId": "count-1-duck",
+            "transcriptRevision": 17
+          },
+          "proposal": {
+            "nodeId": "count-1-duck",
+            "transcriptRevision": 17,
+            "childActivity": "unknown",
+            "answerOutcome": "correct",
+            "supportState": "none",
+            "tutorState": "acknowledging"
+          },
+          "atMs": 13892.59999999404
+        },
+        "accepted": true
+      }
+    },
+    {
+      "eventIndex": 256,
+      "timestamp": "2026-10-04T18:28:26.482Z",
+      "atMs": 13892.800000011921,
+      "type": "render.requested",
+      "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+      "visitId": 2,
+      "childTurnId": 2,
+      "nodeId": "count-2-ducks",
+      "transcriptRevision": 17,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "type": "render.requested",
+        "identity": {
+          "token": "[\"7e0dc7ae-1441-4da3-8d19-930415072b57\",2]",
+          "nodeId": "count-2-ducks",
+          "sceneId": "duck-friends"
+        }
+      }
+    },
+    {
+      "eventIndex": 259,
+      "timestamp": "2026-10-04T18:28:26.509Z",
+      "atMs": 13920.200000017881,
+      "type": "render.confirmed",
+      "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+      "visitId": 2,
+      "childTurnId": 2,
+      "nodeId": "count-2-ducks",
+      "transcriptRevision": 17,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "identity": {
+          "token": "[\"7e0dc7ae-1441-4da3-8d19-930415072b57\",2]",
+          "nodeId": "count-2-ducks",
+          "sceneId": "duck-friends"
+        }
+      }
+    },
+    {
+      "eventIndex": 264,
+      "timestamp": "2026-10-04T18:28:26.509Z",
+      "atMs": 13920.40000000596,
+      "type": "gpt_live.steering_append",
+      "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+      "visitId": 2,
+      "childTurnId": 2,
+      "nodeId": "count-2-ducks",
+      "transcriptRevision": 17,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "eventId": "7e0dc7ae-1441-4da3-8d19-930415072b57:steer:2",
+        "renderToken": "[\"7e0dc7ae-1441-4da3-8d19-930415072b57\",2]",
+        "context": {
+          "nodeId": "count-2-ducks",
+          "scene": {
+            "id": "duck-friends",
+            "object": "duck",
+            "quantity": 2
+          },
+          "learningObjective": "Identify the total of two displayed ducks.",
+          "tutorBrief": "Ask how many ducks the child sees. If help is needed, invite the child to point to each duck and say the counting words themselves, then wait without starting or finishing the count or giving the total."
+        },
+        "content": "Application screen confirmation: this current scene is now rendered. Private current-node teaching context: {\"nodeId\":\"count-2-ducks\",\"scene\":{\"id\":\"duck-friends\",\"object\":\"duck\",\"quantity\":2},\"learningObjective\":\"Identify the total of two displayed ducks.\",\"tutorBrief\":\"Ask how many ducks the child sees. If help is needed, invite the child to point to each duck and say the counting words themselves, then wait without starting or finishing the count or giving the total.\"}.\nTeach only this current scene and learning objective. It replaces all previous scene context; do not refer to the previous scene. Follow the session counting and help guidance. Ask or continue naturally now; let the child supply the count and total. Confirm a settled successful answer with its number and object, then pause. Wait or clarify unfinished/uncertain attempts; never supply the count or total as a hint. You do not control lesson transitions; only the application changes the scene. Never invent a next scene or ask to change it."
+      }
+    },
+    {
+      "eventIndex": 438,
+      "timestamp": "2026-10-04T18:28:38.069Z",
+      "atMs": 25480.70000001788,
+      "type": "runtime.changed",
+      "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+      "visitId": 2,
+      "childTurnId": 4,
+      "nodeId": "count-2-ducks",
+      "transcriptRevision": 28,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "trigger": "clock.tick",
+        "before": {
+          "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+          "nodeId": "count-2-ducks",
+          "visitId": 2,
+          "childTurnId": 4,
+          "hasChildTurn": true,
+          "hasChildTranscript": true,
+          "childSpeaking": false,
+          "childCandidate": null,
+          "transcriptRevision": 28,
+          "transcriptSource": "tutor",
+          "consumedRevision": null,
+          "acceptedAnswerRevision": null,
+          "answerAccepted": false,
+          "acknowledgmentObserved": false,
+          "tutorOutputObserved": true,
+          "tutorOutputDrained": false,
+          "quietSinceMs": 25226.20000001788,
+          "outputActivity": "quiet",
+          "quietDrainMs": 250,
+          "nowMs": 25429.70000001788,
+          "phase": "active",
+          "lessonComplete": false,
+          "pendingRender": null
+        },
+        "after": {
+          "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+          "nodeId": "count-2-ducks",
+          "visitId": 2,
+          "childTurnId": 4,
+          "hasChildTurn": true,
+          "hasChildTranscript": true,
+          "childSpeaking": false,
+          "childCandidate": null,
+          "transcriptRevision": 28,
+          "transcriptSource": "tutor",
+          "consumedRevision": null,
+          "acceptedAnswerRevision": null,
+          "answerAccepted": false,
+          "acknowledgmentObserved": false,
+          "tutorOutputObserved": true,
+          "tutorOutputDrained": true,
+          "quietSinceMs": 25226.20000001788,
+          "outputActivity": "quiet",
+          "quietDrainMs": 250,
+          "nowMs": 25480.70000001788,
+          "phase": "active",
+          "lessonComplete": false,
+          "pendingRender": null
+        }
+      }
+    },
+    {
+      "eventIndex": 441,
+      "timestamp": "2026-10-04T18:28:38.316Z",
+      "atMs": 25727.70000001788,
+      "type": "classifier.started",
+      "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+      "visitId": 2,
+      "childTurnId": 4,
+      "nodeId": "count-2-ducks",
+      "transcriptRevision": 28,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "trigger": "tutor_utterance_stable",
+        "transcript": "Tutor: How many ducks do you see?\nChild: Three. Uh two\nTutor: Yes, two ducks."
+      }
+    },
+    {
+      "eventIndex": 443,
+      "timestamp": "2026-10-04T18:28:38.577Z",
+      "atMs": 25988.5,
+      "type": "classifier.mapping",
+      "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+      "visitId": 2,
+      "childTurnId": 4,
+      "nodeId": "count-2-ducks",
+      "transcriptRevision": 28,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "decision": "abstained",
+        "probabilities": {
+          "answerCorrect": 0.91,
+          "answerIncorrect": 0.09,
+          "answerUnclear": 0.18,
+          "answerNone": 0.02,
+          "needsHelp": 0.15,
+          "tutorAcknowledging": 0.95,
+          "tutorAsking": 0.03,
+          "tutorClarifying": 0.12,
+          "tutorHelping": 0.16
+        },
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        },
+        "reason": "support_ambiguous",
+        "detail": {
+          "category": "support",
+          "candidate": "needsHelp",
+          "candidateProbability": 0.15
+        }
+      }
+    },
+    {
+      "eventIndex": 444,
+      "timestamp": "2026-10-04T18:28:38.577Z",
+      "atMs": 25988.59999999404,
+      "type": "classifier.abstained",
+      "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+      "visitId": 2,
+      "childTurnId": 4,
+      "nodeId": "count-2-ducks",
+      "transcriptRevision": 28,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "proposal": null,
+        "elapsedMs": 260.89999997615814
+      }
+    },
+    {
+      "eventIndex": 445,
+      "timestamp": "2026-10-04T18:28:38.578Z",
+      "atMs": 25989,
+      "type": "clarification.scheduled",
+      "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+      "visitId": 2,
+      "childTurnId": 4,
+      "nodeId": "count-2-ducks",
+      "transcriptRevision": 28,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "waitMs": 4000,
+        "maxRequestsPerVisit": 1
+      }
+    },
+    {
+      "eventIndex": 446,
+      "timestamp": "2026-10-04T18:28:38.589Z",
+      "atMs": 26000.59999999404,
+      "type": "microphone.activity_started",
+      "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+      "visitId": 2,
+      "childTurnId": 4,
+      "nodeId": "count-2-ducks",
+      "transcriptRevision": 28,
+      "transcriptSpeaker": "tutor",
+      "detail": null
+    },
+    {
+      "eventIndex": 447,
+      "timestamp": "2026-10-04T18:28:38.589Z",
+      "atMs": 26000.59999999404,
+      "type": "clarification.cancelled",
+      "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+      "visitId": 2,
+      "childTurnId": 4,
+      "nodeId": "count-2-ducks",
+      "transcriptRevision": 28,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "reason": "child_turn_started"
+      }
+    },
+    {
+      "eventIndex": 450,
+      "timestamp": "2026-10-04T18:28:38.663Z",
+      "atMs": 26074.30000001192,
+      "type": "microphone.speech_started",
+      "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+      "visitId": 2,
+      "childTurnId": 5,
+      "nodeId": "count-2-ducks",
+      "transcriptRevision": 28,
+      "transcriptSpeaker": "tutor",
+      "detail": null
+    },
+    {
+      "eventIndex": 451,
+      "timestamp": "2026-10-04T18:28:38.663Z",
+      "atMs": 26074.30000001192,
+      "type": "runtime.event.child.turn.confirmed",
+      "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+      "visitId": 2,
+      "childTurnId": 5,
+      "nodeId": "count-2-ducks",
+      "transcriptRevision": 28,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "event": {
+          "type": "child.turn.confirmed",
+          "source": {
+            "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+            "visitId": 2,
+            "childTurnId": 5
+          },
+          "atMs": 26074.30000001192
+        },
+        "accepted": true
+      }
+    },
+    {
+      "eventIndex": 458,
+      "timestamp": "2026-10-04T18:28:39.583Z",
+      "atMs": 26994.20000001788,
+      "type": "runtime.event.child.turn.ended",
+      "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+      "visitId": 2,
+      "childTurnId": 5,
+      "nodeId": "count-2-ducks",
+      "transcriptRevision": 28,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "event": {
+          "type": "child.turn.ended",
+          "source": {
+            "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+            "visitId": 2,
+            "childTurnId": 5
+          },
+          "atMs": 26994.20000001788
+        },
+        "accepted": true
+      }
+    },
+    {
+      "eventIndex": 460,
+      "timestamp": "2026-10-04T18:28:39.583Z",
+      "atMs": 26994.59999999404,
+      "type": "classifier.blocked",
+      "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+      "visitId": 2,
+      "childTurnId": 5,
+      "nodeId": "count-2-ducks",
+      "transcriptRevision": 28,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "reason": "missing_current_turn_child_transcript",
+        "trigger": "microphone.speech_stopped",
+        "outputActivity": "quiet",
+        "latestChildTranscript": {
+          "source": {
+            "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+            "visitId": 2,
+            "childTurnId": 4
+          },
+          "startMs": 21200,
+          "endMs": 21400
+        }
+      }
+    },
+    {
+      "eventIndex": 518,
+      "timestamp": "2026-10-04T18:28:49.549Z",
+      "atMs": 36959.09999999404,
+      "type": "lesson.ended",
+      "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+      "visitId": 2,
+      "childTurnId": 8,
+      "nodeId": "count-2-ducks",
+      "transcriptRevision": 28,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "reason": "parent_stop",
+        "runtime": {
+          "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+          "nodeId": "count-2-ducks",
+          "visitId": 2,
+          "childTurnId": 8,
+          "hasChildTurn": true,
+          "hasChildTranscript": false,
+          "childSpeaking": false,
+          "childCandidate": null,
+          "transcriptRevision": 28,
+          "transcriptSource": "tutor",
+          "consumedRevision": null,
+          "acceptedAnswerRevision": null,
+          "answerAccepted": false,
+          "acknowledgmentObserved": false,
+          "tutorOutputObserved": false,
+          "tutorOutputDrained": false,
+          "quietSinceMs": null,
+          "outputActivity": "unavailable",
+          "quietDrainMs": 250,
+          "nowMs": 36959,
+          "phase": "stopped",
+          "lessonComplete": false,
+          "pendingRender": null
+        }
+      }
+    }
+  ],
+  "olderRecordedVectorsSecondaryEvidence": [
+    {
+      "id": "recorded-1",
+      "kind": "recorded",
+      "eventIndex": 198,
+      "atMs": 15355.300000011921,
+      "source": {
+        "runtimeId": "55d1ca93-4bee-4bfc-a046-7c29b438673c",
+        "nodeId": "count-1-duck",
+        "visitId": 1,
+        "childTurnId": 2,
+        "transcriptRevision": 13
+      },
+      "transcript": "Tutor: How many ducks do you see?\nChild: Two. Oh, actually one\nTutor: Yes , there is one duck.",
+      "precedingChildAttempt": "Two. Oh, actually one",
+      "latestMessage": "Yes , there is one duck.",
+      "probabilities": {
+        "answerCorrect": 0.97,
+        "answerIncorrect": 0.06,
+        "answerUnclear": 0.07,
+        "answerNone": 0.02,
+        "needsHelp": 0.09,
+        "tutorAcknowledging": 0.87,
+        "tutorAsking": 0.02,
+        "tutorClarifying": 0.11,
+        "tutorHelping": 0.12
+      },
+      "reason": "tutor_no_winner",
+      "clarify": true
+    },
+    {
+      "id": "recorded-2",
+      "kind": "recorded",
+      "eventIndex": 219,
+      "atMs": 17212.30000001192,
+      "source": {
+        "runtimeId": "55d1ca93-4bee-4bfc-a046-7c29b438673c",
+        "nodeId": "count-1-duck",
+        "visitId": 1,
+        "childTurnId": 3,
+        "transcriptRevision": 13
+      },
+      "transcript": "Tutor: How many ducks do you see?\nChild: Two. Oh, actually one\nTutor: Yes , there is one duck.",
+      "precedingChildAttempt": "Two. Oh, actually one",
+      "latestMessage": "Yes , there is one duck.",
+      "probabilities": {
+        "answerCorrect": 0.97,
+        "answerIncorrect": 0.06,
+        "answerUnclear": 0.07,
+        "answerNone": 0.02,
+        "needsHelp": 0.1,
+        "tutorAcknowledging": 0.85,
+        "tutorAsking": 0.03,
+        "tutorClarifying": 0.11,
+        "tutorHelping": 0.13
+      },
+      "reason": "tutor_no_winner",
+      "clarify": true
+    }
+  ],
+  "cases": [
+    {
+      "id": "01-older-correction",
+      "split": "development",
+      "kind": "recorded_secondary",
+      "nodeId": "count-1-duck",
+      "scene": {
+        "object": "duck",
+        "quantity": 1
+      },
+      "learningObjective": "Identify the total of 1 displayed duck.",
+      "transcript": "Tutor: How many ducks do you see?\nChild: Two. Oh, actually one\nTutor: Yes , there is one duck.",
+      "draftExpected": {
+        "answer": "settled_correct",
+        "support": "no_unresolved_need",
+        "acknowledgment": "confirms_settled_answer",
+        "semanticCompletionEligible": true
+      },
+      "humanAdjudication": "pending",
+      "source": {
+        "runtimeId": "55d1ca93-4bee-4bfc-a046-7c29b438673c",
+        "mappingEventIndices": [
+          198,
+          219
+        ],
+        "primaryExportMissing": true
+      }
+    },
+    {
+      "id": "02-latest-one",
+      "split": "development",
+      "kind": "recorded_primary",
+      "nodeId": "count-1-duck",
+      "scene": {
+        "object": "duck",
+        "quantity": 1
+      },
+      "learningObjective": "Identify the total of 1 displayed duck.",
+      "transcript": "Tutor: How many ducks do you see?\nChild: Two, oh wait, uh one\nTutor: Yes, one duck. You counted carefully.",
+      "draftExpected": {
+        "answer": "settled_correct",
+        "support": "no_unresolved_need",
+        "acknowledgment": "confirms_settled_answer",
+        "semanticCompletionEligible": true
+      },
+      "humanAdjudication": "pending",
+      "source": {
+        "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+        "nodeId": "count-1-duck",
+        "visitId": 1,
+        "childTurnId": 2,
+        "transcriptRevision": 17,
+        "mappingEventIndex": 252,
+        "requestEventIndex": 250
+      }
+    },
+    {
+      "id": "03-latest-two",
+      "split": "development",
+      "kind": "recorded_primary",
+      "nodeId": "count-2-ducks",
+      "scene": {
+        "object": "duck",
+        "quantity": 2
+      },
+      "learningObjective": "Identify the total of 2 displayed ducks.",
+      "transcript": "Tutor: How many ducks do you see?\nChild: Three. Uh two\nTutor: Yes, two ducks.",
+      "draftExpected": {
+        "answer": "settled_correct",
+        "support": "no_unresolved_need",
+        "acknowledgment": "confirms_settled_answer",
+        "semanticCompletionEligible": true
+      },
+      "humanAdjudication": "pending",
+      "source": {
+        "runtimeId": "7e0dc7ae-1441-4da3-8d19-930415072b57",
+        "nodeId": "count-2-ducks",
+        "visitId": 2,
+        "childTurnId": 4,
+        "transcriptRevision": 28,
+        "mappingEventIndex": 443,
+        "requestEventIndex": 441
+      }
+    },
+    {
+      "id": "04-no-child",
+      "split": "development",
+      "kind": "synthetic",
+      "nodeId": "count-1-duck",
+      "scene": {
+        "object": "duck",
+        "quantity": 1
+      },
+      "learningObjective": "Identify the total of 1 displayed duck.",
+      "transcript": "Tutor: There is one duck.",
+      "draftExpected": {
+        "answer": "none",
+        "support": "no_unresolved_need",
+        "acknowledgment": "does_not_confirm",
+        "semanticCompletionEligible": false
+      },
+      "humanAdjudication": "pending"
+    },
+    {
+      "id": "05-still-wrong",
+      "split": "development",
+      "kind": "synthetic",
+      "nodeId": "count-1-duck",
+      "scene": {
+        "object": "duck",
+        "quantity": 1
+      },
+      "learningObjective": "Identify the total of 1 displayed duck.",
+      "transcript": "Child: Two.\nTutor: Yes, two ducks.",
+      "draftExpected": {
+        "answer": "settled_incorrect",
+        "support": "no_unresolved_need",
+        "acknowledgment": "does_not_confirm",
+        "semanticCompletionEligible": false
+      },
+      "humanAdjudication": "pending"
+    },
+    {
+      "id": "06-generic-praise",
+      "split": "development",
+      "kind": "synthetic",
+      "nodeId": "count-1-duck",
+      "scene": {
+        "object": "duck",
+        "quantity": 1
+      },
+      "learningObjective": "Identify the total of 1 displayed duck.",
+      "transcript": "Child: One.\nTutor: Nice trying!",
+      "draftExpected": {
+        "answer": "settled_correct",
+        "support": "no_unresolved_need",
+        "acknowledgment": "does_not_confirm",
+        "semanticCompletionEligible": false
+      },
+      "humanAdjudication": "pending"
+    },
+    {
+      "id": "07-unfinished-correction",
+      "split": "development",
+      "kind": "synthetic",
+      "nodeId": "count-1-duck",
+      "scene": {
+        "object": "duck",
+        "quantity": 1
+      },
+      "learningObjective": "Identify the total of 1 displayed duck.",
+      "transcript": "Child: Two. Wait, actually...\nTutor: Yes, one duck.",
+      "draftExpected": {
+        "answer": "unsettled",
+        "support": "no_unresolved_need",
+        "acknowledgment": "does_not_confirm",
+        "semanticCompletionEligible": false
+      },
+      "humanAdjudication": "pending"
+    },
+    {
+      "id": "08-hesitation-settled",
+      "split": "development",
+      "kind": "synthetic",
+      "nodeId": "count-1-duck",
+      "scene": {
+        "object": "duck",
+        "quantity": 1
+      },
+      "learningObjective": "Identify the total of 1 displayed duck.",
+      "transcript": "Child: I think maybe\nChild: One.\nTutor: Yes, one duck.",
+      "draftExpected": {
+        "answer": "settled_correct",
+        "support": "no_unresolved_need",
+        "acknowledgment": "confirms_settled_answer",
+        "semanticCompletionEligible": true
+      },
+      "humanAdjudication": "pending"
+    },
+    {
+      "id": "09-supported-settlement",
+      "split": "development",
+      "kind": "synthetic",
+      "nodeId": "count-2-ducks",
+      "scene": {
+        "object": "duck",
+        "quantity": 2
+      },
+      "learningObjective": "Identify the total of 2 displayed ducks.",
+      "transcript": "Child: Help me count.\nTutor: Point to each duck and count.\nChild: One, two. Two ducks.\nTutor: Yes, two ducks.",
+      "draftExpected": {
+        "answer": "settled_correct",
+        "support": "no_unresolved_need",
+        "acknowledgment": "confirms_settled_answer",
+        "semanticCompletionEligible": true
+      },
+      "humanAdjudication": "pending"
+    },
+    {
+      "id": "10-renewed-help",
+      "split": "development",
+      "kind": "synthetic",
+      "nodeId": "count-2-ducks",
+      "scene": {
+        "object": "duck",
+        "quantity": 2
+      },
+      "learningObjective": "Identify the total of 2 displayed ducks.",
+      "transcript": "Child: Two ducks.\nTutor: Yes, two ducks.\nChild: I still need help counting them.",
+      "draftExpected": {
+        "answer": "settled_correct",
+        "support": "unresolved_need",
+        "acknowledgment": "confirms_settled_answer",
+        "semanticCompletionEligible": false
+      },
+      "humanAdjudication": "pending"
+    },
+    {
+      "id": "11-tentative-repetition",
+      "split": "development",
+      "kind": "synthetic",
+      "nodeId": "count-2-ducks",
+      "scene": {
+        "object": "duck",
+        "quantity": 2
+      },
+      "learningObjective": "Identify the total of 2 displayed ducks.",
+      "transcript": "Child: I do not know.\nTutor: There are two.\nChild: Two? I am not sure.\nTutor: Yes, two ducks.",
+      "draftExpected": {
+        "answer": "unsettled",
+        "support": "unresolved_need",
+        "acknowledgment": "does_not_confirm",
+        "semanticCompletionEligible": false
+      },
+      "humanAdjudication": "pending"
+    },
+    {
+      "id": "12-confirmation-then-question",
+      "split": "development",
+      "kind": "synthetic",
+      "nodeId": "count-1-duck",
+      "scene": {
+        "object": "duck",
+        "quantity": 1
+      },
+      "learningObjective": "Identify the total of 1 displayed duck.",
+      "transcript": "Child: One.\nTutor: Yes, one duck. How did you count?",
+      "draftExpected": {
+        "answer": "settled_correct",
+        "support": "no_unresolved_need",
+        "acknowledgment": "confirms_settled_answer",
+        "semanticCompletionEligible": true
+      },
+      "humanAdjudication": "pending"
+    },
+    {
+      "id": "13-different-settled-correction",
+      "split": "holdout",
+      "kind": "synthetic",
+      "nodeId": "count-2-ducks",
+      "scene": {
+        "object": "duck",
+        "quantity": 2
+      },
+      "learningObjective": "Identify the total of 2 displayed ducks.",
+      "transcript": "Child: Four, no, two ducks.\nTutor: That is right, two ducks.",
+      "draftExpected": {
+        "answer": "settled_correct",
+        "support": "no_unresolved_need",
+        "acknowledgment": "confirms_settled_answer",
+        "semanticCompletionEligible": true
+      },
+      "humanAdjudication": "pending"
+    },
+    {
+      "id": "14-fragmented-settlement",
+      "split": "holdout",
+      "kind": "synthetic",
+      "nodeId": "count-2-ducks",
+      "scene": {
+        "object": "duck",
+        "quantity": 2
+      },
+      "learningObjective": "Identify the total of 2 displayed ducks.",
+      "transcript": "Child: Um\nChild: one, two\nChild: Two ducks.\nTutor: Yes, two ducks.",
+      "draftExpected": {
+        "answer": "settled_correct",
+        "support": "no_unresolved_need",
+        "acknowledgment": "confirms_settled_answer",
+        "semanticCompletionEligible": true
+      },
+      "humanAdjudication": "pending"
+    },
+    {
+      "id": "15-help-resolved-reaffirmation",
+      "split": "holdout",
+      "kind": "synthetic",
+      "nodeId": "count-1-duck",
+      "scene": {
+        "object": "duck",
+        "quantity": 1
+      },
+      "learningObjective": "Identify the total of 1 displayed duck.",
+      "transcript": "Child: I need help.\nTutor: Point to what you see.\nChild: One duck. I am finished.\nTutor: There is one duck, yes.",
+      "draftExpected": {
+        "answer": "settled_correct",
+        "support": "no_unresolved_need",
+        "acknowledgment": "confirms_settled_answer",
+        "semanticCompletionEligible": true
+      },
+      "humanAdjudication": "pending"
+    },
+    {
+      "id": "16-supplied-settled-total",
+      "split": "holdout",
+      "kind": "synthetic",
+      "nodeId": "count-2-ducks",
+      "scene": {
+        "object": "duck",
+        "quantity": 2
+      },
+      "learningObjective": "Identify the total of 2 displayed ducks.",
+      "transcript": "Child: Help please.\nTutor: Two ducks.\nChild: Two ducks. That is my answer.\nTutor: Yes, two ducks.",
+      "draftExpected": {
+        "answer": "settled_correct",
+        "support": "no_unresolved_need",
+        "acknowledgment": "confirms_settled_answer",
+        "semanticCompletionEligible": true
+      },
+      "humanAdjudication": "pending"
+    },
+    {
+      "id": "17-unresolved-alternatives",
+      "split": "holdout",
+      "kind": "synthetic",
+      "nodeId": "count-2-ducks",
+      "scene": {
+        "object": "duck",
+        "quantity": 2
+      },
+      "learningObjective": "Identify the total of 2 displayed ducks.",
+      "transcript": "Child: One or two, I cannot tell.\nTutor: Yes, two ducks.",
+      "draftExpected": {
+        "answer": "unsettled",
+        "support": "unresolved_need",
+        "acknowledgment": "does_not_confirm",
+        "semanticCompletionEligible": false
+      },
+      "humanAdjudication": "pending"
+    },
+    {
+      "id": "18-no-answer-generic",
+      "split": "holdout",
+      "kind": "synthetic",
+      "nodeId": "count-1-duck",
+      "scene": {
+        "object": "duck",
+        "quantity": 1
+      },
+      "learningObjective": "Identify the total of 1 displayed duck.",
+      "transcript": "Child: Hello.\nTutor: Great job!",
+      "draftExpected": {
+        "answer": "none",
+        "support": "no_unresolved_need",
+        "acknowledgment": "does_not_confirm",
+        "semanticCompletionEligible": false
+      },
+      "humanAdjudication": "pending"
+    },
+    {
+      "id": "19-wrong-with-help",
+      "split": "holdout",
+      "kind": "synthetic",
+      "nodeId": "count-2-ducks",
+      "scene": {
+        "object": "duck",
+        "quantity": 2
+      },
+      "learningObjective": "Identify the total of 2 displayed ducks.",
+      "transcript": "Child: Help me.\nTutor: Point and count.\nChild: Three ducks.\nTutor: Try counting again.",
+      "draftExpected": {
+        "answer": "settled_incorrect",
+        "support": "unresolved_need",
+        "acknowledgment": "does_not_confirm",
+        "semanticCompletionEligible": false
+      },
+      "humanAdjudication": "pending"
+    },
+    {
+      "id": "20-help-after-ack",
+      "split": "holdout",
+      "kind": "synthetic",
+      "nodeId": "count-1-duck",
+      "scene": {
+        "object": "duck",
+        "quantity": 1
+      },
+      "learningObjective": "Identify the total of 1 displayed duck.",
+      "transcript": "Child: One duck.\nTutor: Yes, one duck.\nChild: Can you help me count it again?",
+      "draftExpected": {
+        "answer": "settled_correct",
+        "support": "unresolved_need",
+        "acknowledgment": "confirms_settled_answer",
+        "semanticCompletionEligible": false
+      },
+      "humanAdjudication": "pending"
+    },
+    {
+      "id": "21-uncertainty-after-ack",
+      "split": "holdout",
+      "kind": "synthetic",
+      "nodeId": "count-2-ducks",
+      "scene": {
+        "object": "duck",
+        "quantity": 2
+      },
+      "learningObjective": "Identify the total of 2 displayed ducks.",
+      "transcript": "Child: Two ducks.\nTutor: Yes, two ducks.\nChild: Wait, maybe three? I am not sure.",
+      "draftExpected": {
+        "answer": "unsettled",
+        "support": "unresolved_need",
+        "acknowledgment": "does_not_confirm",
+        "semanticCompletionEligible": false
+      },
+      "humanAdjudication": "pending"
+    },
+    {
+      "id": "22-generic-yes-recovery",
+      "split": "holdout",
+      "kind": "synthetic",
+      "nodeId": "count-1-duck",
+      "scene": {
+        "object": "duck",
+        "quantity": 1
+      },
+      "learningObjective": "Identify the total of 1 displayed duck.",
+      "transcript": "Child: One.\nTutor: Have you finished or do you need help?\nChild: Yes.",
+      "draftExpected": {
+        "answer": "settled_correct",
+        "support": "uncertain",
+        "acknowledgment": "does_not_confirm",
+        "semanticCompletionEligible": false
+      },
+      "humanAdjudication": "pending"
+    },
+    {
+      "id": "23-praise-without-confirmation",
+      "split": "holdout",
+      "kind": "synthetic",
+      "nodeId": "count-2-ducks",
+      "scene": {
+        "object": "duck",
+        "quantity": 2
+      },
+      "learningObjective": "Identify the total of 2 displayed ducks.",
+      "transcript": "Child: Two.\nTutor: You worked hard on that.",
+      "draftExpected": {
+        "answer": "settled_correct",
+        "support": "no_unresolved_need",
+        "acknowledgment": "does_not_confirm",
+        "semanticCompletionEligible": false
+      },
+      "humanAdjudication": "pending"
+    },
+    {
+      "id": "24-ambiguous-attribution",
+      "split": "holdout",
+      "kind": "synthetic",
+      "nodeId": "count-1-duck",
+      "scene": {
+        "object": "duck",
+        "quantity": 1
+      },
+      "learningObjective": "Identify the total of 1 displayed duck.",
+      "transcript": "Tutor: How many ducks?\nChild: [inaudible]\nTutor: One duck.",
+      "draftExpected": {
+        "answer": "uncertain",
+        "support": "uncertain",
+        "acknowledgment": "does_not_confirm",
+        "semanticCompletionEligible": false
+      },
+      "humanAdjudication": "pending"
+    }
+  ],
+  "budgetProposal": {
+    "authorized": false,
+    "coreArms": [
+      "current_jev_nine_noul",
+      "simplified_jev_three_choice",
+      "openai_structured_output"
+    ],
+    "inputs": 24,
+    "repeatsPerArm": 2,
+    "coreRequests": 144,
+    "jevChoiceOrderProbeRequests": 6,
+    "conditionalDecisionsRequests": 48,
+    "maximumRequests": 198,
+    "maximumUSD": 5,
+    "retryRequests": 0
+  }
+}
