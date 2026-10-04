@@ -1,12 +1,10 @@
 import { isLocalRequest, readJsonBody } from "@/lib/local-request";
 import { isCountingNodeId } from "@/lib/lesson-runtime/counting-lesson";
 import { classifyConversationStateWithDiagnostics } from "@/lib/lesson-runtime/jev-conversation-state-classifier";
-import { classifyFullContextObserver } from "@/lib/lesson-runtime/live-experimental-classifier";
-import { localClassifierMode, parseClassifierMode } from "@/lib/lesson-runtime/classifier-mode";
 import {
+  CLASSIFIER_VERSION,
   CONVERSATION_CLASSIFICATION_THRESHOLDS,
-  classificationDiagnostic,
-} from "@/lib/lesson-runtime/classification-decision";
+} from "@/lib/lesson-runtime/conversation-observer-contract";
 
 export const runtime = "nodejs";
 const json = (body: object, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -23,9 +21,8 @@ export async function POST(request: Request) {
     return json({ error: "Invalid classification request.", code: "invalid_request" }, 400);
   const input = body.value as Record<string, unknown>;
   if (
-    ![3, 4].includes(Object.keys(input).length) ||
-    Object.keys(input).some(key => !["nodeId", "transcriptRevision", "transcript", "classifierMode"].includes(key)) ||
-    ("classifierMode" in input && !parseClassifierMode(input.classifierMode)) ||
+    Object.keys(input).length !== 3 ||
+    Object.keys(input).some(key => !["nodeId", "transcriptRevision", "transcript"].includes(key)) ||
     !isCountingNodeId(input.nodeId) ||
     typeof input.transcriptRevision !== "number" ||
     !Number.isSafeInteger(input.transcriptRevision) ||
@@ -35,9 +32,11 @@ export async function POST(request: Request) {
     input.transcript.length > 12_000
   )
     return json({ error: "Invalid classification request.", code: "invalid_request" }, 400);
-  const classifierMode = parseClassifierMode(input.classifierMode) ?? localClassifierMode();
   if (!process.env.TYPESAFE_API_KEY)
-    return json({ error: "Configure TYPESAFE_API_KEY for Sprout.", code: "unconfigured", classifierMode }, 503);
+    return json(
+      { error: "Configure TYPESAFE_API_KEY for Sprout.", code: "unconfigured", classifierVersion: CLASSIFIER_VERSION },
+      503,
+    );
   const timeout = AbortSignal.timeout(10_000);
   const signal = AbortSignal.any([request.signal, timeout]);
   try {
@@ -47,27 +46,23 @@ export async function POST(request: Request) {
       transcript: input.transcript,
     };
     const startedAt = performance.now();
-    const selected =
-      classifierMode === "legacy"
-        ? { mode: "legacy" as const, decision: await classifyConversationStateWithDiagnostics(snapshot, signal) }
-        : { mode: "simplified-full-context" as const, decision: await classifyFullContextObserver(snapshot, signal) };
+    const decision = await classifyConversationStateWithDiagnostics(snapshot, signal);
     const elapsedMs = performance.now() - startedAt;
     if (signal.aborted)
       return json(
-        { error: "Classification did not finish.", code: timeout.aborted ? "timeout" : "cancelled", classifierMode },
+        {
+          error: "Classification did not finish.",
+          code: timeout.aborted ? "timeout" : "cancelled",
+          classifierVersion: CLASSIFIER_VERSION,
+        },
         timeout.aborted ? 504 : 499,
       );
     const identity = { nodeId: snapshot.nodeId, transcriptRevision: snapshot.transcriptRevision, elapsedMs };
-    if (selected.mode === "legacy")
-      return json({
-        proposal: selected.decision.status === "accepted" ? selected.decision.proposal : null,
-        diagnostic: { ...classificationDiagnostic(selected.decision), classifierMode, ...identity },
-      });
-    const { proposal, outputs, outcome, status, reason, labelCompletionEligible } = selected.decision;
+    const { proposal, outputs, outcome, status, reason, labelCompletionEligible } = decision;
     return json({
       proposal,
       diagnostic: {
-        classifierMode,
+        classifierVersion: CLASSIFIER_VERSION,
         decision: status,
         outputs,
         outcome,
@@ -82,7 +77,7 @@ export async function POST(request: Request) {
       {
         error: "Classification did not finish.",
         code: timeout.aborted ? "timeout" : request.signal.aborted ? "cancelled" : "internal_error",
-        classifierMode,
+        classifierVersion: CLASSIFIER_VERSION,
       },
       timeout.aborted ? 504 : request.signal.aborted ? 499 : 502,
     );

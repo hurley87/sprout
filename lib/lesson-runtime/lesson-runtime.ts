@@ -7,9 +7,8 @@ import { initialTeachingContext, teachingInstruction } from "./live-context";
 import { SupportClarification, SUPPORT_CLARIFICATION_INSTRUCTION } from "./support-clarification";
 import { TutorStabilizationGate } from "./tutor-stabilization";
 import { parseClassifierEndpointCode } from "./classifier-failure";
-import { localClassifierMode, type ClassifierMode } from "./classifier-mode";
+import { CLASSIFIER_VERSION } from "./conversation-observer-contract";
 import { parseLiveClassificationDiagnostic } from "./live-classification-diagnostic";
-import { needsConversationClarification } from "./classification-decision";
 import {
   classificationSource,
   createLessonRuntime,
@@ -51,7 +50,7 @@ export type LessonDiagnostic = {
   nodeId: string;
   transcriptRevision: number;
   transcriptSpeaker: Speaker;
-  classifierMode?: ClassifierMode;
+  classifierVersion?: typeof CLASSIFIER_VERSION;
   detail: unknown;
 };
 export type LessonSnapshot = {
@@ -74,7 +73,6 @@ function eventDiagnosticSource(event: LessonRuntimeEvent, before: LessonRuntimeS
 
 /** Live lesson wiring and current-attempt diagnostics. */
 export class LessonRuntime {
-  private readonly classifierMode = localClassifierMode();
   private readonly runtimeId = crypto.randomUUID();
   private readonly createdAt = performance.now();
   private readonly transport: BrowserTransport;
@@ -163,7 +161,7 @@ export class LessonRuntime {
       timestamp: new Date().toISOString(),
       atMs: this.now(),
       type,
-      ...(type.startsWith("classifier.") ? { classifierMode: this.classifierMode } : {}),
+      ...(type.startsWith("classifier.") ? { classifierVersion: CLASSIFIER_VERSION } : {}),
       runtimeId: source?.runtimeId ?? this.runtimeId,
       visitId: source?.visitId ?? this.state?.visitId ?? null,
       childTurnId: source?.childTurnId ?? this.state?.childTurnId ?? null,
@@ -545,7 +543,6 @@ export class LessonRuntime {
           nodeId: source.nodeId,
           transcriptRevision: source.transcriptRevision,
           transcript,
-          classifierMode: this.classifierMode,
         }),
         signal,
       });
@@ -575,7 +572,7 @@ export class LessonRuntime {
       this.log(
         proposal
           ? "classifier.result"
-          : diagnostic?.classifierMode === "simplified-full-context" && diagnostic.decision === "accepted"
+          : diagnostic?.decision === "accepted"
             ? "classifier.held"
             : "classifier.abstained",
         { proposal, elapsedMs: this.now() - startedAtMs },
@@ -585,13 +582,6 @@ export class LessonRuntime {
       if (proposal) {
         this.supportClarification.cancel("proposal_received");
         this.dispatch({ type: "proposal.received", source, proposal, atMs: this.now() });
-      } else if (
-        diagnostic &&
-        "probabilities" in diagnostic &&
-        needsConversationClarification(diagnostic) &&
-        this.state
-      ) {
-        this.supportClarification.consider(this.state, this.status === "live" && !this.steering, source);
       }
     } catch {
       if (!abort.signal.aborted && this.status === "live")
@@ -688,7 +678,7 @@ export class LessonRuntime {
   report() {
     return {
       product: "sprout",
-      classifierMode: this.classifierMode,
+      classifierVersion: CLASSIFIER_VERSION,
       version: 1,
       runtimeId: this.runtimeId,
       clock: "browser.performance.now-relative-to-attempt",

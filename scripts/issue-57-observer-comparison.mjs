@@ -8,8 +8,8 @@ const read = name => JSON.parse(readFileSync(`docs/${name}`, "utf8"));
 const server = await createServer({ configFile: false, server: { middlewareMode: true }, appType: "custom" });
 try {
   const candidate = await server.ssrLoadModule("/lib/experiments/issue-57/simplified-observer.ts");
-  const baseline = await server.ssrLoadModule("/lib/lesson-runtime/jev-conversation-state-classifier.ts");
-  const mapper = await server.ssrLoadModule("/lib/lesson-runtime/classification-decision.ts");
+  const baseline = await server.ssrLoadModule("/lib/experiments/issue-57/legacy/jev-conversation-state-classifier.ts");
+  const mapper = await server.ssrLoadModule("/lib/experiments/issue-57/legacy/classification-decision.ts");
   const { JEV_MODEL } = await server.ssrLoadModule("/lib/jev.ts");
   const rows = new Map();
   function add(file, group, entry, historical = []) {

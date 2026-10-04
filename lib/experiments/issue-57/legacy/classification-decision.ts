@@ -1,9 +1,10 @@
+/** Historical nine-question baseline for offline comparison only; never imported by the runtime. */
 import type {
   AnswerOutcome,
   ConversationStateClassifierInput,
   ConversationStateProposal,
   TutorState,
-} from "./conversation-state-classifier";
+} from "../../../lesson-runtime/conversation-state-classifier";
 
 export const CONVERSATION_PROBABILITY_KEYS = [
   "answerCorrect",

@@ -5,11 +5,11 @@ import {
   classificationDiagnostic,
   mapConversationClassification,
   needsConversationClarification,
-} from "../lib/lesson-runtime/classification-decision";
+} from "../lib/experiments/issue-57/legacy/classification-decision";
 import {
   classifyConversationStateWithDiagnostics,
   CONVERSATION_QUESTIONS,
-} from "../lib/lesson-runtime/jev-conversation-state-classifier";
+} from "../lib/experiments/issue-57/legacy/jev-conversation-state-classifier";
 import { supportEvidence } from "../lib/lesson-runtime/support-evidence";
 import {
   classificationSource,

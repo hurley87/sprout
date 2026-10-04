@@ -15,7 +15,7 @@ import {
 import {
   CONVERSATION_QUESTIONS,
   classifyConversationStateWithDiagnostics,
-} from "../lib/lesson-runtime/jev-conversation-state-classifier";
+} from "../lib/experiments/issue-57/legacy/jev-conversation-state-classifier";
 import { isCountingNodeId } from "../lib/lesson-runtime/counting-lesson";
 import {
   classificationSource,

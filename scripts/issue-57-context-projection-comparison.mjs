@@ -29,7 +29,7 @@ const server = await createServer({
 try {
   const experiment = await server.ssrLoadModule("/lib/experiments/issue-57/context-projection.ts");
   const baseline = await server.ssrLoadModule("/lib/experiments/issue-57/simplified-observer.ts");
-  const mapper = await server.ssrLoadModule("/lib/lesson-runtime/classification-decision.ts");
+  const mapper = await server.ssrLoadModule("/lib/experiments/issue-57/legacy/classification-decision.ts");
   const contract = { model: source.model, questions: experiment.CONTEXT_PROJECTION_QUESTIONS };
   const contractHash = hash(contract);
   const cases = source.cases.map(row => {

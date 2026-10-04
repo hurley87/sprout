@@ -6,7 +6,7 @@ import {
   CONVERSATION_QUESTIONS,
   classifyConversationStateWithDiagnostics,
   jevConversationStateClassifier,
-} from "../lib/lesson-runtime/jev-conversation-state-classifier";
+} from "../lib/experiments/issue-57/legacy/jev-conversation-state-classifier";
 
 type QuestionId = keyof typeof CONVERSATION_QUESTIONS;
 const probabilities = (overrides: Partial<Record<QuestionId, number>> = {}) => ({

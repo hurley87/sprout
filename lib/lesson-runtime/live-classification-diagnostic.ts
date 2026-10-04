@@ -1,36 +1,23 @@
 import {
+  CLASSIFIER_VERSION,
   CONVERSATION_CLASSIFICATION_THRESHOLDS,
-  parseClassificationDiagnostic,
-  type ConversationClassificationDiagnostic,
-} from "./classification-decision";
-import {
-  normalizeSimplifiedOutputs,
-  type SimplifiedDecision,
-  type SimplifiedOutputs,
-} from "../experiments/issue-57/simplified-observer-contract";
+  normalizeConversationOutputs,
+  type ConversationStateDecision,
+  type ConversationStateOutputs,
+} from "./conversation-observer-contract";
 import { isCountingNodeId, type CountingNodeId } from "./counting-lesson";
-import { parseClassifierMode } from "./classifier-mode";
-
-export type ExperimentalClassificationDiagnostic = {
-  classifierMode: "simplified-full-context";
-  decision: SimplifiedDecision["status"];
-  outcome: SimplifiedDecision["outcome"];
+export type LiveClassificationDiagnostic = {
+  classifierVersion: typeof CLASSIFIER_VERSION;
+  decision: ConversationStateDecision["status"];
+  outcome: ConversationStateDecision["outcome"];
   reason?: string;
-  outputs: SimplifiedOutputs | null;
+  outputs: ConversationStateOutputs | null;
   labelCompletionEligible: boolean;
   thresholds: typeof CONVERSATION_CLASSIFICATION_THRESHOLDS;
   nodeId: CountingNodeId;
   transcriptRevision: number;
   elapsedMs: number;
 };
-export type LiveClassificationDiagnostic =
-  | ExperimentalClassificationDiagnostic
-  | (ConversationClassificationDiagnostic & {
-      classifierMode?: "legacy";
-      nodeId?: CountingNodeId;
-      transcriptRevision?: number;
-      elapsedMs?: number;
-    });
 const record = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const reasons = [
   "invalid_input",
@@ -51,30 +38,8 @@ const reasons = [
 /** Closed diagnostic projection only; never provider text, commands, or identity authority. */
 export function parseLiveClassificationDiagnostic(value: unknown): LiveClassificationDiagnostic | null {
   if (!record(value)) return null;
-  const mode = parseClassifierMode(value.classifierMode);
-  if (value.classifierMode === undefined || mode === "legacy") {
-    const diagnostic = parseClassificationDiagnostic(value);
-    if (!diagnostic) return null;
-    if (value.classifierMode === undefined) return diagnostic; // Historical/mock exports.
-    if (
-      !isCountingNodeId(value.nodeId) ||
-      !Number.isSafeInteger(value.transcriptRevision) ||
-      (value.transcriptRevision as number) < 0 ||
-      typeof value.elapsedMs !== "number" ||
-      !Number.isFinite(value.elapsedMs) ||
-      value.elapsedMs < 0
-    )
-      return null;
-    return {
-      ...diagnostic,
-      classifierMode: "legacy",
-      nodeId: value.nodeId,
-      transcriptRevision: value.transcriptRevision as number,
-      elapsedMs: value.elapsedMs,
-    };
-  }
   if (
-    mode !== "simplified-full-context" ||
+    value.classifierVersion !== CLASSIFIER_VERSION ||
     !isCountingNodeId(value.nodeId) ||
     !Number.isSafeInteger(value.transcriptRevision) ||
     (value.transcriptRevision as number) < 0 ||
@@ -96,9 +61,9 @@ export function parseLiveClassificationDiagnostic(value: unknown): LiveClassific
   if (value.decision === "abstained" && (typeof value.reason !== "string" || !reasons.includes(value.reason)))
     return null;
   if (value.decision === "accepted" && value.reason !== undefined) return null;
-  let outputs: SimplifiedOutputs | null = null;
+  let outputs: ConversationStateOutputs | null = null;
   if (record(value.outputs))
-    outputs = normalizeSimplifiedOutputs({
+    outputs = normalizeConversationOutputs({
       answers: Object.fromEntries(
         Object.entries(value.outputs).map(([id, output]) => [
           id,
@@ -118,9 +83,9 @@ export function parseLiveClassificationDiagnostic(value: unknown): LiveClassific
   )
     return null;
   return {
-    classifierMode: mode,
-    decision: value.decision as SimplifiedDecision["status"],
-    outcome: value.outcome as SimplifiedDecision["outcome"],
+    classifierVersion: CLASSIFIER_VERSION,
+    decision: value.decision as ConversationStateDecision["status"],
+    outcome: value.outcome as ConversationStateDecision["outcome"],
     ...(value.reason ? { reason: value.reason as string } : {}),
     outputs,
     labelCompletionEligible: eligible,

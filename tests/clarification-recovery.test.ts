@@ -4,8 +4,8 @@ import review from "../docs/issue-57-clarification-review-set.json";
 import {
   CONVERSATION_QUESTIONS,
   classifyConversationStateWithDiagnostics,
-} from "../lib/lesson-runtime/jev-conversation-state-classifier";
-import { mapConversationClassification } from "../lib/lesson-runtime/classification-decision";
+} from "../lib/experiments/issue-57/legacy/jev-conversation-state-classifier";
+import { mapConversationClassification } from "../lib/experiments/issue-57/legacy/classification-decision";
 import { SUPPORT_CLARIFICATION_INSTRUCTION } from "../lib/lesson-runtime/support-clarification";
 import { SPROUT_LIVE_CONFIG } from "../lib/lesson-runtime/live-context";
 import {

@@ -1,8 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ClientCommand, ProviderEvent } from "../lib/events";
 import { LessonRuntime } from "../lib/lesson-runtime/lesson-runtime";
-import { classificationDiagnostic, mapConversationClassification } from "../lib/lesson-runtime/classification-decision";
-import { conversationProbabilities } from "./fixtures/conversation-classification";
 
 const transport = vi.hoisted(() => ({
   receive: undefined as ((event: ProviderEvent) => void) | undefined,
@@ -188,25 +186,13 @@ it("aborts an in-flight older revision and waits for the new tutor boundary befo
 });
 
 it("logs only normalized mapping diagnostics with the captured source and cannot advance from diagnostics alone", async () => {
-  const diagnostic = classificationDiagnostic(
-    mapConversationClassification(
-      {
-        nodeId: "count-1-duck",
-        transcriptRevision: 1,
-        transcript: "Child: One.",
-      },
-      conversationProbabilities(),
-    ),
-  );
+  const diagnostic = choiceDiagnostic();
   const fetch = vi.fn(async () =>
     Response.json({
       proposal: null,
       diagnostic: {
         ...diagnostic,
-        nodeId: "count-3-butterflies",
-        transcriptRevision: 999,
         rawBody: "raw provider marker",
-        probabilities: { ...diagnostic.probabilities, rawBody: "raw provider marker" },
       },
     }),
   );
@@ -226,7 +212,7 @@ it("logs only normalized mapping diagnostics with the captured source and cannot
   expect(JSON.stringify(mapping)).not.toMatch(/raw provider marker|rawBody|count-3-butterflies|999/);
   expect(lesson.snapshot().runtime?.answerAccepted).toBe(false);
   expect(lesson.snapshot().runtime?.nodeId).toBe("count-1-duck");
-  expect(lesson.report().events).toContainEqual(expect.objectContaining({ type: "classifier.abstained" }));
+  expect(lesson.report().events).toContainEqual(expect.objectContaining({ type: "classifier.held" }));
   await vi.advanceTimersByTimeAsync(2000);
   expect(fetch).toHaveBeenCalledOnce();
   expect(transport.send).toHaveBeenCalledOnce(); // Only initial steering, never diagnostics-driven steering.
@@ -243,16 +229,12 @@ it.each(["abstained", "missing", "invalid"] as const)(
       supportState: "none",
       tutorState: "unknown",
     };
-    const diagnostic = classificationDiagnostic(
-      mapConversationClassification(
-        {
-          nodeId: "count-1-duck",
-          transcriptRevision: 1,
-          transcript: "Child: One.",
-        },
-        conversationProbabilities({ answerCorrect: 0.8 }),
-      ),
-    );
+    const diagnostic = {
+      ...choiceDiagnostic(),
+      decision: "abstained",
+      outcome: "unresolved",
+      reason: "tutorState_no_winner",
+    };
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>
@@ -265,7 +247,7 @@ it.each(["abstained", "missing", "invalid"] as const)(
                   kind === "invalid"
                     ? {
                         ...diagnostic,
-                        probabilities: { ...diagnostic.probabilities, answerCorrect: "raw provider marker" },
+                        outputs: "raw provider marker",
                       }
                     : diagnostic,
               }),
@@ -797,11 +779,31 @@ it("reports null child provenance when a confirmed first turn ends without any c
   expect(fetch).not.toHaveBeenCalled();
 });
 
-it.each(["simplified-full-context", "legacy"] as const)(
-  "exports the selected classifier mode %s and normalized live diagnostics",
-  async classifierMode => {
-    vi.stubEnv("NEXT_PUBLIC_SPROUT_CLASSIFIER_MODE", classifierMode);
-    const outputs = {
+it("exports the canonical classifier version and held-scene diagnostics", async () => {
+  const diagnostic = choiceDiagnostic();
+  const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json({ proposal: null, diagnostic }));
+  vi.stubGlobal("fetch", fetch);
+  start();
+  await vi.advanceTimersByTimeAsync(300);
+  expect(Object.keys(JSON.parse(fetch.mock.calls[0][1]?.body as string))).toEqual([
+    "nodeId",
+    "transcriptRevision",
+    "transcript",
+  ]);
+  expect(lesson.report().classifierVersion).toBe("conversation-state-v2");
+  for (const event of lesson.report().events.filter(e => e.type.startsWith("classifier.")))
+    expect(event.classifierVersion).toBe("conversation-state-v2");
+  expect(lesson.report().events).toContainEqual(expect.objectContaining({ type: "classifier.held" }));
+  expect(lesson.snapshot().runtime?.nodeId).toBe("count-1-duck");
+});
+
+function choiceDiagnostic() {
+  return {
+    classifierVersion: "conversation-state-v2",
+    decision: "accepted",
+    outcome: "hold_scene",
+    labelCompletionEligible: false,
+    outputs: {
       objectiveState: {
         choice: "completed",
         confidence: 1,
@@ -812,46 +814,10 @@ it.each(["simplified-full-context", "legacy"] as const)(
         confidence: 1,
         probabilities: { confirmed_completion: 0, clarifying: 0, helping: 0, asking: 0, other: 1 },
       },
-    };
-    const diagnostic =
-      classifierMode === "legacy"
-        ? {
-            ...classificationDiagnostic(
-              mapConversationClassification(
-                { nodeId: "count-1-duck", transcriptRevision: 1, transcript: "Child: One." },
-                conversationProbabilities(),
-              ),
-            ),
-            classifierMode,
-            nodeId: "count-1-duck",
-            transcriptRevision: 1,
-            elapsedMs: 200,
-          }
-        : {
-            classifierMode,
-            decision: "accepted",
-            outputs,
-            outcome: "hold_scene",
-            labelCompletionEligible: false,
-            thresholds: { HIGH: 0.9, LOW: 0.1, COMPETITOR_CEILING: 0.2, MIN_MARGIN: 0.7 },
-            nodeId: "count-1-duck",
-            transcriptRevision: 1,
-            elapsedMs: 200,
-          };
-    const fetch = vi.fn<typeof globalThis.fetch>(async () =>
-      Response.json({ proposal: null, diagnostic: { ...diagnostic, rawBody: "private marker" } }),
-    );
-    vi.stubGlobal("fetch", fetch);
-    start();
-    await vi.advanceTimersByTimeAsync(300);
-    expect(JSON.parse(fetch.mock.calls[0][1]?.body as string).classifierMode).toBe(classifierMode);
-    const report = lesson.report();
-    expect(report.classifierMode).toBe(classifierMode);
-    const events = report.events.filter(event => event.type.startsWith("classifier."));
-    expect(events.length).toBeGreaterThanOrEqual(3);
-    for (const event of events) expect(event.classifierMode).toBe(classifierMode);
-    expect(events.find(event => event.type === "classifier.mapping")?.detail).toEqual(diagnostic);
-    expect(JSON.stringify(report)).not.toContain("private marker");
-    expect(lesson.snapshot().runtime?.nodeId).toBe("count-1-duck");
-  },
-);
+    },
+    thresholds: { HIGH: 0.9, LOW: 0.1, COMPETITOR_CEILING: 0.2, MIN_MARGIN: 0.7 },
+    nodeId: "count-1-duck",
+    transcriptRevision: 1,
+    elapsedMs: 200,
+  };
+}

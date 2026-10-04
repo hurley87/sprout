@@ -1,42 +1,19 @@
 /** Shared request construction for the offline ablation and explicit live Issue #57 arm. */
 import { JEV_MODEL } from "../../jev";
-import { COUNTING_LESSON_GRAPH, isCountingNodeId } from "../../lesson-runtime/counting-lesson";
 import type { ConversationStateClassifierInput } from "../../lesson-runtime/conversation-state-classifier";
 import { SIMPLIFIED_QUESTIONS, simplifiedObserverState, type SimplifiedDecision } from "./simplified-observer-contract";
 
 export type ProjectionArm = "A" | "B";
 
 /** Only the evidence locator changes, identically in both arms. All semantic criteria stay frozen. */
-export const CONTEXT_PROJECTION_QUESTIONS = {
-  ...SIMPLIFIED_QUESTIONS,
-  tutorState: {
-    ...SIMPLIFIED_QUESTIONS.tutorState,
-    instructions: SIMPLIFIED_QUESTIONS.tutorState.instructions.replace(
-      "Describe only tutorObservation.latestMessage using precedingChildAttempt and the full transcript as context.",
-      "Describe only the latest relevant tutor response in the ordered transcript, using earlier child and tutor messages as context. Earlier messages are context only, never the latest tutor action.",
-    ),
-  },
-} as const;
-
-/** Caller supplies a complete current-node/visit snapshot, never a session transcript. */
-export function fullTranscriptObserverState(input: ConversationStateClassifierInput) {
-  if (
-    !isCountingNodeId(input.nodeId) ||
-    !Number.isSafeInteger(input.transcriptRevision) ||
-    input.transcriptRevision < 0 ||
-    typeof input.transcript !== "string" ||
-    !input.transcript.trim()
-  )
-    return null;
-  const node = COUNTING_LESSON_GRAPH[input.nodeId];
-  return {
-    nodeId: input.nodeId,
-    scene: { object: node.object, quantity: node.quantity },
-    learningObjective: node.learningObjective,
-    transcript: input.transcript,
-    transcriptRevision: input.transcriptRevision,
-  };
-}
+export {
+  CONVERSATION_STATE_QUESTIONS as CONTEXT_PROJECTION_QUESTIONS,
+  conversationObserverState as fullTranscriptObserverState,
+} from "../../lesson-runtime/conversation-observer-contract";
+import {
+  CONVERSATION_STATE_QUESTIONS as CONTEXT_PROJECTION_QUESTIONS,
+  conversationObserverState as fullTranscriptObserverState,
+} from "../../lesson-runtime/conversation-observer-contract";
 
 /** Explicit closed request plan only. This function cannot make provider calls. */
 export function contextProjectionRequest(input: ConversationStateClassifierInput, arm: ProjectionArm) {

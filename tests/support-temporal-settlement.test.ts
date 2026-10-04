@@ -1,12 +1,9 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
-import acknowledgmentReview from "../docs/issue-57-self-correction-review-set.json";
 import review from "../docs/issue-57-support-temporal-review-set.json";
 import {
   CONVERSATION_QUESTIONS,
   classifyConversationStateWithDiagnostics,
-} from "../lib/lesson-runtime/jev-conversation-state-classifier";
+} from "../lib/experiments/issue-57/legacy/jev-conversation-state-classifier";
 import { isCountingNodeId } from "../lib/lesson-runtime/counting-lesson";
 import { conversationProbabilities, conversationProviderBody } from "./fixtures/conversation-classification";
 
@@ -31,14 +28,6 @@ it("preserves the support change and other questions across the later acknowledg
   expect(candidateSupport.criteria).toEqual(baselineSupport.criteria);
   expect(candidateSupport.type).toBe(baselineSupport.type);
   expect(candidateSupport.instructions).not.toBe(baselineSupport.instructions);
-});
-
-it("preserves historical source provenance through the later acknowledgment revision", () => {
-  const source = readFileSync("lib/lesson-runtime/jev-conversation-state-classifier.ts");
-  expect(review.contracts.candidateClassifierSha256).toBe(acknowledgmentReview.contracts.baselineClassifierSha256);
-  expect(createHash("sha256").update(source).digest("hex")).toBe(
-    acknowledgmentReview.contracts.candidateClassifierSha256,
-  );
 });
 
 it.each(review.cases)("delivers literal $id evidence and the full question contract offline", async entry => {

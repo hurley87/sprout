@@ -20,7 +20,7 @@ import {
   type SimplifiedOutputs,
 } from "../lib/experiments/issue-57/simplified-observer";
 import { isCountingNodeId } from "../lib/lesson-runtime/counting-lesson";
-import { CONVERSATION_CLASSIFICATION_THRESHOLDS } from "../lib/lesson-runtime/classification-decision";
+import { CONVERSATION_CLASSIFICATION_THRESHOLDS } from "../lib/experiments/issue-57/legacy/classification-decision";
 
 const hash = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).digest("hex");
 const input = {

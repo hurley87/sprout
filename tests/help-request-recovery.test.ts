@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { classifyConversationStateWithDiagnostics } from "../lib/lesson-runtime/jev-conversation-state-classifier";
+import { classifyConversationStateWithDiagnostics } from "../lib/experiments/issue-57/legacy/jev-conversation-state-classifier";
 import { COUNTING_LESSON_GRAPH, COUNTING_NODE_IDS } from "../lib/lesson-runtime/counting-lesson";
 import { SPROUT_LIVE_CONFIG, teachingInstruction } from "../lib/lesson-runtime/live-context";
 import {

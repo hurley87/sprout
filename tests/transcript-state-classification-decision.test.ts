@@ -6,7 +6,7 @@ import {
   mapConversationClassification,
   parseClassificationDiagnostic,
   type NormalizedConversationProbabilities,
-} from "../lib/lesson-runtime/classification-decision";
+} from "../lib/experiments/issue-57/legacy/classification-decision";
 import { conversationProbabilities } from "./fixtures/conversation-classification";
 
 const input = {
