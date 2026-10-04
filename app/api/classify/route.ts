@@ -1,7 +1,12 @@
 import { isLocalRequest, readJsonBody } from "@/lib/local-request";
 import { isCountingNodeId } from "@/lib/lesson-runtime/counting-lesson";
 import { classifyConversationStateWithDiagnostics } from "@/lib/lesson-runtime/jev-conversation-state-classifier";
-import { classificationDiagnostic } from "@/lib/lesson-runtime/classification-decision";
+import { classifyFullContextObserver } from "@/lib/lesson-runtime/live-experimental-classifier";
+import { localClassifierMode, parseClassifierMode } from "@/lib/lesson-runtime/classifier-mode";
+import {
+  CONVERSATION_CLASSIFICATION_THRESHOLDS,
+  classificationDiagnostic,
+} from "@/lib/lesson-runtime/classification-decision";
 
 export const runtime = "nodejs";
 const json = (body: object, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -18,8 +23,9 @@ export async function POST(request: Request) {
     return json({ error: "Invalid classification request.", code: "invalid_request" }, 400);
   const input = body.value as Record<string, unknown>;
   if (
-    Object.keys(input).length !== 3 ||
-    Object.keys(input).some(key => !["nodeId", "transcriptRevision", "transcript"].includes(key)) ||
+    ![3, 4].includes(Object.keys(input).length) ||
+    Object.keys(input).some(key => !["nodeId", "transcriptRevision", "transcript", "classifierMode"].includes(key)) ||
+    ("classifierMode" in input && !parseClassifierMode(input.classifierMode)) ||
     !isCountingNodeId(input.nodeId) ||
     typeof input.transcriptRevision !== "number" ||
     !Number.isSafeInteger(input.transcriptRevision) ||
@@ -29,33 +35,54 @@ export async function POST(request: Request) {
     input.transcript.length > 12_000
   )
     return json({ error: "Invalid classification request.", code: "invalid_request" }, 400);
+  const classifierMode = parseClassifierMode(input.classifierMode) ?? localClassifierMode();
   if (!process.env.TYPESAFE_API_KEY)
-    return json({ error: "Configure TYPESAFE_API_KEY for Sprout.", code: "unconfigured" }, 503);
+    return json({ error: "Configure TYPESAFE_API_KEY for Sprout.", code: "unconfigured", classifierMode }, 503);
   const timeout = AbortSignal.timeout(10_000);
   const signal = AbortSignal.any([request.signal, timeout]);
   try {
-    const decision = await classifyConversationStateWithDiagnostics(
-      {
-        nodeId: input.nodeId,
-        transcriptRevision: input.transcriptRevision,
-        transcript: input.transcript,
-      },
-      signal,
-    );
+    const snapshot = {
+      nodeId: input.nodeId,
+      transcriptRevision: input.transcriptRevision,
+      transcript: input.transcript,
+    };
+    const startedAt = performance.now();
+    const selected =
+      classifierMode === "legacy"
+        ? { mode: "legacy" as const, decision: await classifyConversationStateWithDiagnostics(snapshot, signal) }
+        : { mode: "simplified-full-context" as const, decision: await classifyFullContextObserver(snapshot, signal) };
+    const elapsedMs = performance.now() - startedAt;
     if (signal.aborted)
       return json(
-        { error: "Classification did not finish.", code: timeout.aborted ? "timeout" : "cancelled" },
+        { error: "Classification did not finish.", code: timeout.aborted ? "timeout" : "cancelled", classifierMode },
         timeout.aborted ? 504 : 499,
       );
+    const identity = { nodeId: snapshot.nodeId, transcriptRevision: snapshot.transcriptRevision, elapsedMs };
+    if (selected.mode === "legacy")
+      return json({
+        proposal: selected.decision.status === "accepted" ? selected.decision.proposal : null,
+        diagnostic: { ...classificationDiagnostic(selected.decision), classifierMode, ...identity },
+      });
+    const { proposal, outputs, outcome, status, reason, labelCompletionEligible } = selected.decision;
     return json({
-      proposal: decision.status === "accepted" ? decision.proposal : null,
-      diagnostic: classificationDiagnostic(decision),
+      proposal,
+      diagnostic: {
+        classifierMode,
+        decision: status,
+        outputs,
+        outcome,
+        ...(reason ? { reason } : {}),
+        labelCompletionEligible,
+        thresholds: { ...CONVERSATION_CLASSIFICATION_THRESHOLDS },
+        ...identity,
+      },
     });
   } catch {
     return json(
       {
         error: "Classification did not finish.",
         code: timeout.aborted ? "timeout" : request.signal.aborted ? "cancelled" : "internal_error",
+        classifierMode,
       },
       timeout.aborted ? 504 : request.signal.aborted ? 499 : 502,
     );

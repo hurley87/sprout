@@ -1,8 +1,8 @@
-/** Offline input ablation. Never imported by production routes or runtime. */
+/** Shared request construction for the offline ablation and explicit live Issue #57 arm. */
 import { JEV_MODEL } from "../../jev";
 import { COUNTING_LESSON_GRAPH, isCountingNodeId } from "../../lesson-runtime/counting-lesson";
 import type { ConversationStateClassifierInput } from "../../lesson-runtime/conversation-state-classifier";
-import { SIMPLIFIED_QUESTIONS, simplifiedObserverState, type SimplifiedDecision } from "./simplified-observer";
+import { SIMPLIFIED_QUESTIONS, simplifiedObserverState, type SimplifiedDecision } from "./simplified-observer-contract";
 
 export type ProjectionArm = "A" | "B";
 
@@ -44,7 +44,7 @@ export function contextProjectionRequest(input: ConversationStateClassifierInput
   // Capture identity and transcript, dropping any caller-supplied graph or future context.
   const snapshot = { nodeId: input.nodeId, transcriptRevision: input.transcriptRevision, transcript: input.transcript };
   const state = arm === "A" ? simplifiedObserverState(snapshot) : fullTranscriptObserverState(snapshot);
-  return state ? { model: JEV_MODEL, state, questions: CONTEXT_PROJECTION_QUESTIONS } : null;
+  return state ? ({ model: JEV_MODEL, state, questions: CONTEXT_PROJECTION_QUESTIONS } as const) : null;
 }
 
 export type ProjectionComparison = {

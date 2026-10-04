@@ -7,7 +7,9 @@ import { initialTeachingContext, teachingInstruction } from "./live-context";
 import { SupportClarification, SUPPORT_CLARIFICATION_INSTRUCTION } from "./support-clarification";
 import { TutorStabilizationGate } from "./tutor-stabilization";
 import { parseClassifierEndpointCode } from "./classifier-failure";
-import { needsConversationClarification, parseClassificationDiagnostic } from "./classification-decision";
+import { localClassifierMode, type ClassifierMode } from "./classifier-mode";
+import { parseLiveClassificationDiagnostic } from "./live-classification-diagnostic";
+import { needsConversationClarification } from "./classification-decision";
 import {
   classificationSource,
   createLessonRuntime,
@@ -49,6 +51,7 @@ export type LessonDiagnostic = {
   nodeId: string;
   transcriptRevision: number;
   transcriptSpeaker: Speaker;
+  classifierMode?: ClassifierMode;
   detail: unknown;
 };
 export type LessonSnapshot = {
@@ -71,6 +74,7 @@ function eventDiagnosticSource(event: LessonRuntimeEvent, before: LessonRuntimeS
 
 /** Live lesson wiring and current-attempt diagnostics. */
 export class LessonRuntime {
+  private readonly classifierMode = localClassifierMode();
   private readonly runtimeId = crypto.randomUUID();
   private readonly createdAt = performance.now();
   private readonly transport: BrowserTransport;
@@ -159,6 +163,7 @@ export class LessonRuntime {
       timestamp: new Date().toISOString(),
       atMs: this.now(),
       type,
+      ...(type.startsWith("classifier.") ? { classifierMode: this.classifierMode } : {}),
       runtimeId: source?.runtimeId ?? this.runtimeId,
       visitId: source?.visitId ?? this.state?.visitId ?? null,
       childTurnId: source?.childTurnId ?? this.state?.childTurnId ?? null,
@@ -536,7 +541,12 @@ export class LessonRuntime {
       const response = await fetch("/api/classify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nodeId: source.nodeId, transcriptRevision: source.transcriptRevision, transcript }),
+        body: JSON.stringify({
+          nodeId: source.nodeId,
+          transcriptRevision: source.transcriptRevision,
+          transcript,
+          classifierMode: this.classifierMode,
+        }),
         signal,
       });
       httpStatus = response.status;
@@ -555,7 +565,7 @@ export class LessonRuntime {
       if (!body || typeof body !== "object" || !("proposal" in body)) throw new Error("Invalid classifier response");
       const proposal = body.proposal === null ? null : parseConversationStateProposal(body.proposal);
       if (body.proposal !== null && !proposal) throw new Error("Invalid classifier proposal");
-      const diagnostic = parseClassificationDiagnostic("diagnostic" in body ? body.diagnostic : undefined);
+      const diagnostic = parseLiveClassificationDiagnostic("diagnostic" in body ? body.diagnostic : undefined);
       this.log(
         diagnostic ? "classifier.mapping" : "classifier.mapping_unavailable",
         diagnostic ?? { reason: "diagnostic_missing_or_invalid" },
@@ -563,7 +573,11 @@ export class LessonRuntime {
         speaker,
       );
       this.log(
-        proposal ? "classifier.result" : "classifier.abstained",
+        proposal
+          ? "classifier.result"
+          : diagnostic?.classifierMode === "simplified-full-context" && diagnostic.decision === "accepted"
+            ? "classifier.held"
+            : "classifier.abstained",
         { proposal, elapsedMs: this.now() - startedAtMs },
         source,
         speaker,
@@ -571,7 +585,12 @@ export class LessonRuntime {
       if (proposal) {
         this.supportClarification.cancel("proposal_received");
         this.dispatch({ type: "proposal.received", source, proposal, atMs: this.now() });
-      } else if (diagnostic && needsConversationClarification(diagnostic) && this.state) {
+      } else if (
+        diagnostic &&
+        "probabilities" in diagnostic &&
+        needsConversationClarification(diagnostic) &&
+        this.state
+      ) {
         this.supportClarification.consider(this.state, this.status === "live" && !this.steering, source);
       }
     } catch {
@@ -669,6 +688,7 @@ export class LessonRuntime {
   report() {
     return {
       product: "sprout",
+      classifierMode: this.classifierMode,
       version: 1,
       runtimeId: this.runtimeId,
       clock: "browser.performance.now-relative-to-attempt",

@@ -34,6 +34,7 @@ beforeEach(() => {
 afterEach(() => {
   lesson?.stop();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
   vi.useRealTimers();
 });
@@ -795,3 +796,62 @@ it("reports null child provenance when a confirmed first turn ends without any c
   await vi.advanceTimersByTimeAsync(1000);
   expect(fetch).not.toHaveBeenCalled();
 });
+
+it.each(["simplified-full-context", "legacy"] as const)(
+  "exports the selected classifier mode %s and normalized live diagnostics",
+  async classifierMode => {
+    vi.stubEnv("NEXT_PUBLIC_SPROUT_CLASSIFIER_MODE", classifierMode);
+    const outputs = {
+      objectiveState: {
+        choice: "completed",
+        confidence: 1,
+        probabilities: { completed: 1, incorrect: 0, unclear_or_incomplete: 0, unresolved_help: 0, no_attempt: 0 },
+      },
+      tutorState: {
+        choice: "other",
+        confidence: 1,
+        probabilities: { confirmed_completion: 0, clarifying: 0, helping: 0, asking: 0, other: 1 },
+      },
+    };
+    const diagnostic =
+      classifierMode === "legacy"
+        ? {
+            ...classificationDiagnostic(
+              mapConversationClassification(
+                { nodeId: "count-1-duck", transcriptRevision: 1, transcript: "Child: One." },
+                conversationProbabilities(),
+              ),
+            ),
+            classifierMode,
+            nodeId: "count-1-duck",
+            transcriptRevision: 1,
+            elapsedMs: 200,
+          }
+        : {
+            classifierMode,
+            decision: "accepted",
+            outputs,
+            outcome: "hold_scene",
+            labelCompletionEligible: false,
+            thresholds: { HIGH: 0.9, LOW: 0.1, COMPETITOR_CEILING: 0.2, MIN_MARGIN: 0.7 },
+            nodeId: "count-1-duck",
+            transcriptRevision: 1,
+            elapsedMs: 200,
+          };
+    const fetch = vi.fn<typeof globalThis.fetch>(async () =>
+      Response.json({ proposal: null, diagnostic: { ...diagnostic, rawBody: "private marker" } }),
+    );
+    vi.stubGlobal("fetch", fetch);
+    start();
+    await vi.advanceTimersByTimeAsync(300);
+    expect(JSON.parse(fetch.mock.calls[0][1]?.body as string).classifierMode).toBe(classifierMode);
+    const report = lesson.report();
+    expect(report.classifierMode).toBe(classifierMode);
+    const events = report.events.filter(event => event.type.startsWith("classifier."));
+    expect(events.length).toBeGreaterThanOrEqual(3);
+    for (const event of events) expect(event.classifierMode).toBe(classifierMode);
+    expect(events.find(event => event.type === "classifier.mapping")?.detail).toEqual(diagnostic);
+    expect(JSON.stringify(report)).not.toContain("private marker");
+    expect(lesson.snapshot().runtime?.nodeId).toBe("count-1-duck");
+  },
+);

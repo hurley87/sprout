@@ -16,7 +16,7 @@ const request = () =>
   new Request("http://localhost:3000/api/classify", {
     method: "POST",
     headers: { "Content-Type": "application/json", origin: "http://localhost:3000", host: "localhost:3000" },
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...input, classifierMode: "legacy" }),
   });
 beforeEach(() => vi.stubEnv("TYPESAFE_API_KEY", "synthetic-test-key"));
 afterEach(() => {
@@ -89,6 +89,10 @@ it.each([
   expect(await response.json()).toEqual({
     proposal: null,
     diagnostic: {
+      classifierMode: "legacy",
+      nodeId: input.nodeId,
+      transcriptRevision: input.transcriptRevision,
+      elapsedMs: expect.any(Number),
       decision: "abstained",
       reason,
       probabilities: null,
@@ -152,5 +156,9 @@ it("does not forward unexpected server exception text", async () => {
   );
   const response = await POST(request());
   expect(response.status).toBe(502);
-  expect(await response.json()).toEqual({ error: "Classification did not finish.", code: "internal_error" });
+  expect(await response.json()).toEqual({
+    error: "Classification did not finish.",
+    code: "internal_error",
+    classifierMode: "legacy",
+  });
 });
