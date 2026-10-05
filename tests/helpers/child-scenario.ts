@@ -1,3 +1,5 @@
+import { installOutboundAudio, outboundPlaybackEvidence, type AudioCapture } from "./outbound-audio";
+import { defaultRetentionRoot, newAttemptId, retainAttempt, retainedLocation } from "./retained-evidence";
 import type { Page, TestInfo } from "@playwright/test";
 import { setTimeout as delay } from "node:timers/promises";
 import { writeFile } from "node:fs/promises";
@@ -6,6 +8,8 @@ import type { LessonDiagnostic, LessonObservation } from "../../lib/lesson-runti
 import { installLessonObserver, type LessonObserver, type LessonEventScope } from "./lesson-observer";
 import { installSyntheticMicrophone, type NoiseOptions, type SpeechFixture } from "./synthetic-microphone";
 import manifest from "../fixtures/speech/manifest.json";
+import { installTranscriptWire, transcriptDeliveryEvidence, type WireCapture } from "./transcript-wire";
+import { injectInWindow, type WindowRequest } from "./injection-window";
 
 type Microphone = Awaited<ReturnType<typeof installSyntheticMicrophone>>;
 type Report = Awaited<ReturnType<LessonObserver["report"]>>;
@@ -38,12 +42,27 @@ export function countingAnswer(node: CountingNodeId | null, correct: boolean): S
 }
 
 /** Merge unchanged production diagnostics with companion records, using only the attempt clock. */
-export function scenarioTimeline(report: Report, records: HarnessRecord[]) {
+export function scenarioTimeline(
+  report: Report,
+  records: HarnessRecord[],
+  wire: WireCapture | null = null,
+  audio: AudioCapture | null = null,
+) {
   const rows = [
     ...(report?.events ?? []).map((event, index) => ({
       atMs: event.atMs,
       order: index,
       text: `runtime ${event.type} ${JSON.stringify(event)}`,
+    })),
+    ...(wire?.records ?? []).map(record => ({
+      atMs: record.atMs,
+      order: record.sequence,
+      text: `wire ${record.eventType} ${JSON.stringify(record)}`,
+    })),
+    ...(audio?.records ?? []).map((record, index) => ({
+      atMs: record.atMs,
+      order: index,
+      text: `audio ${JSON.stringify(record)}`,
     })),
     ...records.map(record => ({
       atMs: record.atMs,
@@ -96,14 +115,14 @@ export class ChildScenario {
     this.records.push({ ...(await this.stamp()), sequence: this.records.length, action, name, trigger, kind, detail });
   }
 
-  private action<T>(name: string, trigger: string, body: () => Promise<T>): Promise<T> {
+  private action<T>(name: string, trigger: string, body: (actionId: number) => Promise<T>): Promise<T> {
     if (this.sealed) return Promise.reject(new Error("Attempt is closed"));
     const id = ++this.actionId;
     const task = (async () => {
       await this.record(id, name, trigger, "start");
       try {
         this.abort.signal.throwIfAborted();
-        const result = await body();
+        const result = await body(id);
         await this.record(id, name, trigger, result === "cancelled" ? "cancelled" : "end");
         return result;
       } catch (error) {
@@ -167,6 +186,26 @@ export class ChildScenario {
   }
   sayFixture(fixture: SpeechFixture) {
     return this.action("sayFixture", `committed fixture: ${fixture}`, () => this.speak(fixture));
+  }
+  preload(fixture: SpeechFixture) {
+    return this.action("preload", `decode/checksum ${fixture} before timing window`, async () => {
+      if (!this.loaded.has(fixture)) {
+        await this.microphone.loadSpeech(fixture);
+        this.loaded.add(fixture);
+      }
+    });
+  }
+  injectInWindow(request: WindowRequest, timeoutMs = 25_000) {
+    return this.action("injectInWindow", `${request.timing} ${JSON.stringify(request.audio)}`, async actionId => {
+      if ("fixture" in request.audio && !this.loaded.has(request.audio.fixture))
+        throw new Error("Preload speech before waiting for an injection window");
+      const evidence = await injectInWindow(this.page, request, this.abort.signal, timeoutMs);
+      // Preserve actual start evidence even if playback/observation later fails.
+      await this.record(actionId, "injectionLanded", request.timing, "end", evidence);
+      const result = await this.microphone.waitForPlayback(evidence.playback.id);
+      if (result !== "ended") throw new Error("Window injection was cancelled before audio ended");
+      return evidence;
+    });
   }
   private async speak(fixture: SpeechFixture) {
     if (!this.loaded.has(fixture)) {
@@ -319,23 +358,36 @@ export function scopeFromEvent(event: LessonDiagnostic): LessonEventScope {
 }
 
 /** Install once before navigation; each run retains evidence before cleanup and the next run. */
-export async function installChildScenarios(page: Page, testInfo: Pick<TestInfo, "outputPath" | "attach">) {
+export async function installChildScenarios(
+  page: Page,
+  testInfo: Pick<TestInfo, "outputPath" | "attach"> & Partial<Pick<TestInfo, "project">>,
+  options: { retentionRoot?: string } = {},
+) {
+  const audio = await installOutboundAudio(page);
   const microphone = await installSyntheticMicrophone(page);
   const observer = await installLessonObserver(page);
+  const wire = await installTranscriptWire(page);
   let attempt = 0;
   let running = false;
   return {
     observer,
     microphone,
-    dispose: () => microphone.dispose(),
+    dispose: async () => {
+      await wire.dispose();
+      await audio.dispose();
+      await microphone.dispose();
+    },
     async run(name: string, body: (child: ChildScenario) => Promise<void>) {
       if (running) throw new Error("Scenario attempts must run serially");
       running = true;
       const prefix = `attempt-${++attempt}-${name.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 80) || "scenario"}`;
+      const attemptId = newAttemptId();
       const child = new ChildScenario(page, observer, microphone);
       let failed = false;
       let original: unknown;
       let report: Report = null;
+      let wireCapture: WireCapture | null = null;
+      let audioCapture: AudioCapture | null = null;
       const problems: string[] = [];
       try {
         await body(child);
@@ -345,6 +397,11 @@ export async function installChildScenarios(page: Page, testInfo: Pick<TestInfo,
         await child.failure(error);
       }
       // Capture production evidence before cancellation, Stop, dispose, or restart.
+      try {
+        wireCapture = await wire.read();
+      } catch {
+        problems.push("transcript wire capture unavailable");
+      }
       try {
         report = await child.evidence();
       } catch (error) {
@@ -356,12 +413,23 @@ export async function installChildScenarios(page: Page, testInfo: Pick<TestInfo,
         problems.push(`cleanup: ${errorMessage(error)}`);
       }
       try {
+        audioCapture = await audio.read();
+      } catch {
+        problems.push("outbound audio capture unavailable");
+      }
+      try {
         if (report && report.status !== "ended") await page.getByRole("button", { name: "Stop", exact: true }).click();
       } catch (error) {
         problems.push(`parent cleanup Stop: ${errorMessage(error)}`);
       }
       const companion = {
-        version: 1,
+        version: 2,
+        attemptId,
+        retention: null as Awaited<ReturnType<typeof retainAttempt>> | null,
+        outboundAudio: audioCapture,
+        outboundPlayback: outboundPlaybackEvidence(audioCapture),
+        transcriptWire: wireCapture,
+        transcriptDelivery: transcriptDeliveryEvidence(wireCapture, report?.events ?? [], report?.runtimeId ?? null),
         scenario: name,
         attempt,
         clock: "browser.performance.now-relative-to-attempt",
@@ -389,12 +457,30 @@ export async function installChildScenarios(page: Page, testInfo: Pick<TestInfo,
           }
         }
       };
+      const timeline = () =>
+        `Scenario: ${name}\nAttempt: ${attemptId}\nEvidence: ${companion.completeEvidence ? "complete" : "incomplete"}\n${problems.join("\n")}\n${scenarioTimeline(report, child.records, wireCapture, audioCapture)}`;
+      try {
+        companion.retention = retainedLocation(options.retentionRoot ?? defaultRetentionRoot(), {
+          attemptId,
+          runtimeId: companion.runtimeId,
+        });
+        companion.retention = await retainAttempt(
+          options.retentionRoot ?? defaultRetentionRoot(),
+          { attemptId, runtimeId: companion.runtimeId, scenario: name },
+          {
+            "report.json": JSON.stringify(report, null, 2),
+            "timeline.txt": timeline(),
+            "harness.json": JSON.stringify(companion, null, 2),
+          },
+          testInfo.project?.outputDir,
+        );
+      } catch (error) {
+        companion.retention = null;
+        problems.push(`retention: ${errorMessage(error)}`);
+        companion.completeEvidence = false;
+      }
       await save("report.json", JSON.stringify(report, null, 2), "application/json");
-      await save(
-        "timeline.txt",
-        `Scenario: ${name}\nEvidence: ${companion.completeEvidence ? "complete" : "incomplete"}\n${problems.join("\n")}\n${scenarioTimeline(report, child.records)}`,
-        "text/plain",
-      );
+      await save("timeline.txt", timeline(), "text/plain");
       await save("harness.json", JSON.stringify(companion, null, 2), "application/json");
       running = false;
       if (failed) throw original;

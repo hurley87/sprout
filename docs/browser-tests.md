@@ -10,8 +10,8 @@ route mocks remain provider-free.
 The separate `lesson-live` project is enabled only by deliberately selecting
 `playwright.live.config.ts`, normally through `npm run test:browser:live`. It
 discovers only `tests/browser/live/**/*.spec.ts` and cannot select normal browser
-tests. It now contains three complete-lesson scenarios: happy path, incorrect
-then correct, and self-correction. See [live scenario scope and assertions](../tests/browser/live/README.md)
+tests. It contains 14 cases: three complete-lesson baselines, six support cases,
+and five butterfly cancellation regressions. See [live scenario scope and assertions](../tests/browser/live/README.md)
 for their evidence contracts, fixture limitations and pending live validation.
 
 ## Live configuration and cost
@@ -35,7 +35,8 @@ sequentially.
 
 ## Selection commands
 
-The three scenarios have individual tags and the shared `@baseline` tag.
+Baseline cases share `@baseline`; support cases share `@support`; butterfly cases
+share `@butterfly` and distinct audio/timing tags.
 
 ```bash
 # Normal provider-free browser tests
@@ -128,6 +129,6 @@ not inject transcripts or VAD events. Detector scheduling and stream resampling
 are browser-dependent: audio samples are deterministic, event timestamps are
 not. These tests validate audio plumbing and current energy-based detection,
 not recognition accuracy, GPT-Live/Jev behavior, child voice realism, acoustic
-room noise, device processing, or lesson progression. The three live scenarios
-reuse the read-only observation bridge and child helper; wider child behavior
-coverage remains later work.
+room noise, device processing, or lesson progression. Live scenarios reuse the read-only observation bridge and child helper;
+[acceptance and pending provider coverage](issue-30-harness-acceptance.md) remain
+explicit.

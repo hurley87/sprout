@@ -139,6 +139,34 @@ it("merges on attempt atMs only and labels missing clock evidence", () => {
     { action: 1, sequence: 0, atMs: 12, runtimeId: "r", name: "say", kind: "start", trigger: "One." },
     { action: 1, sequence: 1, atMs: null, runtimeId: "r", name: "say", kind: "failure", trigger: "destroyed page" },
   );
-  const timeline = scenarioTimeline(null, child.records);
+  const timeline = scenarioTimeline(null, child.records, null, {
+    dropped: 0,
+    errors: 0,
+    records: [
+      {
+        playbackId: 1,
+        fixture: "one",
+        boundary: "start",
+        atMs: 5,
+        runtimeId: "r",
+        peers: [],
+      },
+    ],
+  });
+  expect(timeline.indexOf("5.000ms audio")).toBeLessThan(timeline.indexOf("12.000ms"));
   expect(timeline.indexOf("12.000ms")).toBeLessThan(timeline.indexOf("unavailablems"));
+});
+
+it("preloads precise-window speech only once and refuses undeclared decoding inside the trigger", async () => {
+  const { child, microphone } = fixture();
+  const from = await child.checkpoint();
+  await expect(child.injectInWindow({ from, timing: "during-output", audio: { fixture: "uh" } }, 0)).rejects.toThrow(
+    /Preload speech/,
+  );
+  expect(microphone.loadSpeech).not.toHaveBeenCalled();
+  await child.preload("uh");
+  await child.preload("uh");
+  expect(microphone.loadSpeech).toHaveBeenCalledExactlyOnceWith("uh");
+  expect(microphone.playSpeech).not.toHaveBeenCalled();
+  await child.finish();
 });

@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import {
   assertCompletedLesson,
   assertSettledCorrection,
@@ -50,7 +50,7 @@ it("live baseline answers match each scene, including butterflies on the final n
 });
 
 /** Offline report builder uses actual reducer gates and canonical mapping; never used by live tests. */
-function completedReport(correction = false): Report {
+function completedReport(correction = false, discardedNoise = false): Report {
   let state = createLessonRuntime("offline-runtime");
   let clock = 0;
   const events: LessonDiagnostic[] = [];
@@ -101,6 +101,13 @@ function completedReport(correction = false): Report {
     apply({ type: "child.turn.ended", source: runtimeSource(state), atMs: ++clock });
     log("output.activity", { state: "active" });
     apply({ type: "output.activity", source: runtimeSource(state), state: "active", atMs: ++clock });
+    if (discardedNoise && index === 2) {
+      log("transcript.snapshot", { transcript: "Child: Three." });
+      log("microphone.activity_started", null);
+      apply({ type: "child.candidate.started", source: runtimeSource(state), atMs: ++clock });
+      log("microphone.activity_discarded", null);
+      apply({ type: "child.candidate.discarded", source: runtimeSource(state), atMs: ++clock });
+    }
     apply({
       type: "transcript.updated",
       source: runtimeSource(state),
@@ -604,4 +611,344 @@ it("hold rejects orphan render activity and missing normalized diagnostics acros
   report.events.pop();
   report.events.push({ ...result, type: "classifier.mapping_unavailable" });
   expect(() => assertHoldWindow(report, from, 0, 3000)).toThrow(/missing diagnostics/);
+});
+
+/** Fabricated successful noise journal for regression assertions, never imported by live cases. */
+function butterflyCompletion() {
+  const report = completedReport();
+  const request = report.events.find(e => e.type === "classifier.started" && e.nodeId === "count-3-butterflies")!;
+  detail<{ transcript: string }>(request).transcript = "Child: Uh, I think, uh, three.\nTutor: Yes, three butterflies.";
+  const prior = report.events.slice(0, report.events.indexOf(request));
+  const state = detail<Change>(prior.findLast(e => e.type === "runtime.changed")!).after;
+  const child = {
+    ...request,
+    type: "transcript.snapshot",
+    atMs: request.atMs - 0.3,
+    transcriptSpeaker: "child" as const,
+    detail: { transcript: "Child: Uh, I think, uh, three." },
+  };
+  const tutor = { ...request, type: "transcript.snapshot", atMs: request.atMs - 0.2, detail: request.detail };
+  report.events.splice(report.events.indexOf(request), 0, child, tutor);
+  const cursor = { runtimeId: report.runtimeId, offset: report.events.indexOf(request) + 1 };
+  const offset = report.events.findIndex(e => e.type === "gpt_live.steering_append" && e.visitId === 3) + 1;
+  const landed: import("./helpers/injection-window").WindowEvidence = {
+    request: {
+      from: {
+        after: { runtimeId: report.runtimeId, offset },
+        scope: { runtimeId: report.runtimeId, visitId: 3, nodeId: "count-3-butterflies", childTurnId: 0 },
+      },
+      timing: "classifier-in-flight",
+      audio: { noise: { seed: 30, durationMs: 40, amplitude: 0.2 } },
+    },
+    atMs: request.atMs + 0.01,
+    afterStartMs: request.atMs + 0.02,
+    cursor,
+    state,
+    afterState: structuredClone(state),
+    trigger: request,
+    child,
+    tutor,
+    output: prior.findLast(e => e.type === "output.activity")!,
+    playback: { id: 1, startedAt: 900000, durationSeconds: 0.04 },
+  };
+  report.events.splice(
+    cursor.offset,
+    0,
+    { ...request, type: "microphone.activity_started", atMs: request.atMs + 0.1, detail: null },
+    { ...request, type: "microphone.activity_discarded", atMs: request.atMs + 0.2, detail: null },
+  );
+  return { report, landed, request };
+}
+
+it("butterfly outcome summary only reports safe recovery after full completion validation", async () => {
+  const { butterflySummary, assertButterflySafety } = await import("./browser/live/butterfly-evidence");
+  const { report, landed } = butterflyCompletion();
+  assertButterflySafety(report, landed, false);
+  const summary = butterflySummary(report, landed, 9000, false);
+  expect(summary.outcome).toBe("safely-progressed");
+  expect(summary.recoveryVerified).toBe(true);
+  expect(summary.classifier?.find(e => e.type === "classifier.mapping")?.detail).toMatchObject({
+    outputs: { objectiveState: { choice: "completed" }, tutorState: { choice: "confirmed_completion" } },
+    outcome: "allow_semantic_completion_evidence",
+    elapsedMs: 1,
+  });
+});
+it.each(["cancelled authority", "stale revision", "duplicate completion", "render ordering", "genuine interruption"])(
+  "butterfly summary cannot call %s safe recovery",
+  async fault => {
+    const { butterflySummary } = await import("./browser/live/butterfly-evidence");
+    const { report, landed, request } = butterflyCompletion();
+    if (fault === "cancelled authority")
+      report.events.splice(landed.cursor.offset + 2, 0, {
+        ...request,
+        type: "classifier.cancelled",
+        detail: { reason: "child_turn_started" },
+      });
+    if (fault === "stale revision")
+      report.events.find(e => e.type === "classifier.result" && e.visitId === 3)!.transcriptRevision++;
+    if (fault === "duplicate completion") report.events.push(transitions(report.events).at(-1)!);
+    if (fault === "render ordering")
+      report.events = report.events.filter(e => !(e.type === "render.confirmed" && e.visitId === 4));
+    const summary = butterflySummary(report, landed, 9000, fault === "genuine interruption");
+    expect(summary.outcome).toBe("unsafe-or-incomplete");
+    expect(summary.recoveryVerified).toBe(false);
+  },
+);
+
+it("discarded noise uses preserved confirmed-answer speech only with new current classifier authority and exact reducer lineage", () => {
+  const report = completedReport(false, true);
+  expect(() => assertCompletedLesson(report)).toThrow(/authored child answer absent/);
+  const onset = report.events.find(e => e.type === "microphone.activity_started")!;
+  assertCompletedLesson(report, false, { visitId: 3, answerTurnId: onset.childTurnId!, afterMs: onset.atMs });
+});
+it.each([
+  "confirmed speech",
+  "fresh child transcript",
+  "restored authority",
+  "preservation",
+  "wrong turn",
+  "cancelled revalidation",
+])("discarded noise lineage rejects %s", fault => {
+  const report = completedReport(false, true);
+  const onset = report.events.find(e => e.type === "microphone.activity_started")!;
+  const started = report.events.find(
+    e => e.type === "runtime.changed" && detail<Change>(e).trigger === "child.candidate.started",
+  )!;
+  const discarded = report.events.find(
+    e => e.type === "runtime.changed" && detail<Change>(e).trigger === "child.candidate.discarded",
+  )!;
+  const request = report.events.find(e => e.type === "classifier.started" && e.visitId === 3)!;
+  if (fault === "confirmed speech")
+    report.events.splice(report.events.indexOf(discarded), 0, {
+      ...discarded,
+      type: "runtime.event.child.turn.confirmed",
+    });
+  if (fault === "fresh child transcript")
+    report.events.splice(report.events.indexOf(discarded), 0, {
+      ...discarded,
+      type: "transcript.snapshot",
+      transcriptSpeaker: "child",
+      detail: { transcript: "Child: Uh." },
+    });
+  if (fault === "restored authority")
+    detail<Change>(discarded).after = { ...detail<Change>(discarded).after, answerAccepted: true };
+  if (fault === "preservation")
+    detail<Change>(started).after = {
+      ...detail<Change>(started).after,
+      childCandidate: { hasChildTranscript: false, tutorOutputObserved: true },
+    };
+  if (fault === "wrong turn") request.childTurnId = request.childTurnId! + 1;
+  if (fault === "cancelled revalidation")
+    report.events.splice(report.events.indexOf(request) + 1, 0, {
+      ...request,
+      type: "classifier.cancelled",
+      detail: { reason: "child_turn_started" },
+    });
+  expect(() =>
+    assertCompletedLesson(report, false, { visitId: 3, answerTurnId: onset.childTurnId!, afterMs: onset.atMs }),
+  ).toThrow();
+});
+
+it("a current canonical hold awaiting tutor confirmation is explicit held, never recovery; an older hold cannot describe a newer revision", async () => {
+  const { butterflySummary } = await import("./browser/live/butterfly-evidence");
+  const { report, landed } = butterflyCompletion();
+  const result = report.events.find(e => e.type === "classifier.result" && e.visitId === 3)!;
+  const mapping = report.events.find(e => e.type === "classifier.mapping" && e.visitId === 3)!;
+  result.type = "classifier.held";
+  detail<{ proposal: unknown }>(result).proposal = null;
+  const diagnostic = detail<Record<string, unknown>>(mapping);
+  const outputs = detail<{ outputs: ConversationStateOutputs }>(mapping).outputs;
+  outputs.tutorState = {
+    choice: "asking",
+    confidence: 1,
+    probabilities: { asking: 1, confirmed_completion: 0, clarifying: 0, helping: 0, other: 0 },
+  };
+  Object.assign(diagnostic, { labelCompletionEligible: false, outcome: "hold_scene" });
+  report.events = report.events.slice(0, report.events.indexOf(result) + 1);
+  report.runtime = structuredClone(landed.state);
+  report.status = "live";
+  let summary = butterflySummary(report, landed, 9000, false);
+  expect(summary.safetyFailure).toBeNull();
+  expect(summary.outcome).toBe("explicit-held");
+  expect(summary.recoveryVerified).toBe(false);
+  const newer = { ...report.runtime, transcriptRevision: report.runtime.transcriptRevision + 1 };
+  report.events.push({
+    ...result,
+    type: "runtime.changed",
+    detail: { trigger: "transcript.updated", before: report.runtime, after: newer },
+  });
+  report.runtime = newer;
+  summary = butterflySummary(report, landed, 9000, false);
+  expect(summary.safetyFailure).toBeNull();
+  expect(summary.outcome).toBe("bounded-starvation-or-pending");
+  expect(summary.recoveryVerified).toBe(false);
+});
+
+function prerequisiteAbstention() {
+  const report = completedReport();
+  const request = report.events.find(e => e.type === "classifier.started" && e.visitId === 2)!;
+  const result = report.events.find(e => e.type === "classifier.result" && e.visitId === 2)!;
+  const mapping = report.events.find(e => e.type === "classifier.mapping" && e.visitId === 2)!;
+  const state = structuredClone(
+    detail<Change>(report.events.slice(0, report.events.indexOf(request)).findLast(e => e.type === "runtime.changed")!)
+      .after,
+  );
+  const tutor = {
+    ...request,
+    type: "transcript.snapshot",
+    atMs: request.atMs - 0.1,
+    detail: { transcript: "Child: I see two\nTutor: That's\nChild: ducks\nTutor: right, there are two ducks." },
+  };
+  report.events.splice(report.events.indexOf(request), 0, tutor);
+  detail<{ transcript: string }>(request).transcript = detail<{ transcript: string }>(tutor).transcript;
+  result.type = "classifier.abstained";
+  detail<{ proposal: unknown }>(result).proposal = null;
+  Object.assign(detail<Record<string, unknown>>(mapping), {
+    decision: "abstained",
+    outcome: "unresolved",
+    reason: "objectiveState_no_winner",
+  });
+  const objective = detail<{ outputs: ConversationStateOutputs }>(mapping).outputs.objectiveState;
+  Object.assign(objective, {
+    confidence: 0.84,
+    probabilities: { completed: 0.87, incorrect: 0, unclear_or_incomplete: 0.11, unresolved_help: 0.02, no_attempt: 0 },
+  });
+  report.events = report.events.slice(0, report.events.indexOf(result) + 1);
+  const from = {
+    after: {
+      runtimeId: report.runtimeId,
+      offset: report.events.findIndex(e => e.type === "gpt_live.steering_append" && e.visitId === 2) + 1,
+    },
+    scope: { runtimeId: report.runtimeId, visitId: 2, nodeId: "count-2-ducks" as const, childTurnId: 1 },
+  };
+  const value: import("../lib/lesson-runtime/lesson-runtime").LessonObservation = {
+    nowMs: 5000,
+    cursor: { runtimeId: report.runtimeId, offset: report.events.length },
+    events: report.events,
+    snapshot: {
+      status: "live",
+      runtime: state,
+      transcript: detail<{ transcript: string }>(request).transcript,
+      diagnostics: [],
+      error: null,
+      awaitingSteering: false,
+      display: { token: "offline", nodeId: "count-2-ducks", sceneId: "duck-friends" },
+    },
+  };
+  return { value, from, request, result, mapping };
+}
+it("butterfly setup records semantic completion-score abstention as a clarification opportunity, never an advance", async () => {
+  const { prerequisiteDecision } = await import("./browser/live/setup");
+  const f = prerequisiteAbstention();
+  const decision = prerequisiteDecision(f.value, f.from, "count-3-butterflies");
+  expect(decision?.kind).toBe("clarify");
+  expect(f.value.snapshot.runtime?.answerAccepted).toBe(false);
+  expect(f.value.events.some(e => e.type === "render.confirmed" && e.nodeId === "count-3-butterflies")).toBe(false);
+});
+it.each([
+  "provider failure",
+  "stale identity",
+  "cancelled request",
+  "wrong heard total",
+  "no tutor confirmation",
+  "ongoing speech",
+])("butterfly setup cannot clarify after %s", async fault => {
+  const { prerequisiteDecision } = await import("./browser/live/setup");
+  const f = prerequisiteAbstention();
+  if (fault === "provider failure") detail<Record<string, unknown>>(f.mapping).reason = "provider_unreachable";
+  if (fault === "stale identity") f.result.transcriptRevision++;
+  if (fault === "cancelled request")
+    f.value.events = [
+      ...f.value.events.slice(0, f.value.events.indexOf(f.result)),
+      { ...f.request, type: "classifier.cancelled" },
+      f.result,
+    ];
+  if (fault === "wrong heard total")
+    detail<{ transcript: string }>(f.request).transcript = "Child: Three.\nTutor: Two ducks.";
+  if (fault === "no tutor confirmation") {
+    const diagnostic = detail<Record<string, unknown>>(f.mapping);
+    const outputs = diagnostic.outputs as ConversationStateOutputs;
+    outputs.tutorState = {
+      choice: "asking",
+      confidence: 1,
+      probabilities: { asking: 1, confirmed_completion: 0, clarifying: 0, helping: 0, other: 0 },
+    };
+    diagnostic.labelCompletionEligible = false;
+  }
+  if (fault === "stale identity") {
+    expect(prerequisiteDecision(f.value, f.from, "count-3-butterflies")).toBeNull();
+  } else if (fault === "ongoing speech") {
+    f.value.snapshot.runtime = { ...f.value.snapshot.runtime!, childSpeaking: true };
+    expect(prerequisiteDecision(f.value, f.from, "count-3-butterflies")).toBeNull();
+  } else expect(() => prerequisiteDecision(f.value, f.from, "count-3-butterflies")).toThrow();
+});
+it.each(["rendered", "abstained again"])("setup sends at most one fresh clarification then %s", async mode => {
+  const { completeButterflyPrerequisite } = await import("./browser/live/setup");
+  const f = prerequisiteAbstention();
+  let value = f.value;
+  const secondFrom = {
+    after: value.cursor,
+    scope: { ...f.from.scope, childTurnId: value.snapshot.runtime!.childTurnId },
+  };
+  const child = {
+    checkpoint: vi.fn().mockResolvedValueOnce(f.from).mockResolvedValueOnce(secondFrom),
+    sayFixture: vi.fn(async (fixture: import("./helpers/synthetic-microphone").SpeechFixture) => {
+      expect(fixture).toBe("answer-two");
+      if (child.sayFixture.mock.calls.length === 2) {
+        const state = { ...value.snapshot.runtime!, childTurnId: 3, transcriptRevision: 31 };
+        const base = { ...f.result, childTurnId: 3, transcriptRevision: 31, atMs: 6000 };
+        const additions =
+          mode === "rendered"
+            ? [{ ...base, type: "render.confirmed", nodeId: "count-3-butterflies" as const, visitId: 3 }]
+            : [
+                {
+                  ...base,
+                  type: "runtime.changed",
+                  detail: { trigger: "transcript.updated", before: value.snapshot.runtime, after: state },
+                },
+                {
+                  ...base,
+                  type: "transcript.snapshot",
+                  transcriptSpeaker: "tutor" as const,
+                  detail: { transcript: `${f.value.snapshot.transcript}\nChild: Two.\nTutor: Two ducks.` },
+                },
+                {
+                  ...base,
+                  type: "classifier.started",
+                  detail: { transcript: `${f.value.snapshot.transcript}\nChild: Two.\nTutor: Two ducks.` },
+                },
+                {
+                  ...base,
+                  type: "classifier.mapping",
+                  detail: { ...detail<Record<string, unknown>>(f.mapping), transcriptRevision: 31 },
+                },
+                { ...base, type: "output.activity", atMs: 6100, detail: { state: "active" } },
+                { ...base, type: "output.activity", atMs: 6200, detail: { state: "quiet" } },
+                { ...base, type: "classifier.abstained", atMs: 6300 },
+              ];
+        const events = [...value.events, ...additions];
+        value = {
+          ...value,
+          nowMs: 8000,
+          events,
+          cursor: { ...value.cursor, offset: events.length },
+          snapshot: { ...value.snapshot, runtime: state },
+        };
+      }
+      return "ended";
+    }),
+    assert: vi.fn(async (_name: string, body: () => Promise<void>) => body()),
+  };
+  const observer = { read: vi.fn(async () => value) };
+  const run = completeButterflyPrerequisite(
+    child as unknown as import("./helpers/child-scenario").ChildScenario,
+    observer as unknown as import("./helpers/lesson-observer").LessonObserver,
+    "count-2-ducks",
+    () => 100,
+  );
+  if (mode === "rendered") expect(await run).toEqual(secondFrom);
+  else await expect(run).rejects.toThrow(/still abstained after one learner clarification/);
+  expect(child.sayFixture).toHaveBeenCalledTimes(2);
+  expect(child.sayFixture.mock.calls.every(call => call[0] === "answer-two")).toBe(true);
+  expect(child.checkpoint).toHaveBeenCalledTimes(2);
 });

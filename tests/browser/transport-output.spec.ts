@@ -1,12 +1,18 @@
+import { installOutboundAudio, outboundPlaybackEvidence, type AudioWindow } from "../helpers/outbound-audio";
 import { test, expect, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import ts from "typescript";
+import { installTranscriptWire, type WireWindow } from "../helpers/transcript-wire";
 import { installSyntheticMicrophone } from "../helpers/synthetic-microphone";
 
 // A local provider peer exercises actual RTP, decoded output, and Web Audio.
 // No billed providers or recording machinery are involved.
-async function fixture(page: Page) {
+async function fixture(page: Page, observeWire = false) {
+  if (observeWire) {
+    await installOutboundAudio(page);
+    await installTranscriptWire(page);
+  }
   const microphone = await installSyntheticMicrophone(page);
   await page.route("**/transport-fixture/**", async route => {
     const name = new URL(route.request().url()).pathname.split("/").at(-1)!;
@@ -284,4 +290,87 @@ test("idle synthetic microphone advances the outgoing WebRTC audio clock before 
   const after = await samples();
   expect(after.duration - cancelled.duration).toBeGreaterThan(0.5);
   expect(after.packets - cancelled.packets).toBeGreaterThan(10);
+});
+
+test("wire diagnostics precede production parsing on real local WebRTC without changing delivered events", async ({
+  page,
+}) => {
+  const microphone = await fixture(page, true);
+  await page.evaluate(() => {
+    const host = window as unknown as WireWindow & { events: unknown[] };
+    Object.defineProperty(host, "sproutLessonObservation", {
+      configurable: true,
+      value: {
+        read: () => ({
+          nowMs: 42,
+          cursor: { runtimeId: "local-wire", offset: host.events.length },
+          snapshot: { runtime: { visitId: 3, childTurnId: 2, nodeId: "count-3-butterflies", transcriptRevision: 0 } },
+        }),
+      },
+    });
+  });
+  await expect.poll(() => page.evaluate("window.channel?.readyState")).toBe("open");
+  const before = await page.evaluate<number>("window.events.length");
+  await page.evaluate(`(() => {
+    const channel = window.channel;
+    channel.send(JSON.stringify({type: 'session.input_transcript.delta', delta: 'PRIVATE_WORDS', start_ms: 10, end_ms: 20, event_id: 'PRIVATE_ID'}));
+    channel.send(JSON.stringify({type: 'session.input_transcript.delta', delta: null, start_ms: 10, end_ms: 20}));
+    channel.send(JSON.stringify({type: 'session.input_transcript.done', transcript: 'PRIVATE_WORDS'}));
+  })()`);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as WireWindow).sproutTranscriptWire!.read().records.filter(r => r.runtimeId === "local-wire").length,
+      ),
+    )
+    .toBe(3);
+  const capture = await page.evaluate(() => (window as WireWindow).sproutTranscriptWire!.read());
+  const rows = capture.records.filter(r => r.runtimeId === "local-wire");
+  expect(rows.map(r => r.disposition)).toEqual(["parser-transcript", "parser-discard", "unrecognized-transcript"]);
+  expect(rows[0]).toMatchObject({ atMs: 42, channelId: 1, visitId: 3, childTurnId: 2, journalOffset: before });
+  expect(rows[1].journalOffset).toBe(before + 1);
+  expect(await page.evaluate<number>("window.events.filter(e => e.type === 'transcript').length")).toBe(1);
+  expect(await page.evaluate<string>("window.events.find(e => e.type === 'transcript').delta")).toBe("PRIVATE_WORDS");
+  expect(JSON.stringify(capture)).not.toMatch(/PRIVATE_WORDS|PRIVATE_ID/);
+  await page.evaluate(() => (window as WireWindow).sproutTranscriptWire!.dispose());
+  await page.evaluate(
+    "window.channel.send(JSON.stringify({type: 'session.input_transcript.delta', delta: 'more', start_ms: 20, end_ms: 30}))",
+  );
+  await expect.poll(() => page.evaluate<number>("window.events.filter(e => e.type === 'transcript').length")).toBe(2);
+  expect(await page.evaluate(() => (window as WireWindow).sproutTranscriptWire!.read().frames)).toBe(capture.frames);
+  await microphone.dispose();
+});
+
+test("outbound counters bracket full fixture playback and keep closed/restarted peers separate", async ({
+  page,
+}, info) => {
+  const microphone = await fixture(page, true);
+  await page.evaluate("window.transport.openInput(() => {})");
+  await microphone.loadSpeech("hesitant-three");
+  const playback = await microphone.playSpeech("hesitant-three");
+  expect(await microphone.waitForPlayback(playback.id)).toBe("ended");
+  const capture = await page.evaluate(() => (window as AudioWindow).sproutOutboundAudio!.read());
+  const evidence = outboundPlaybackEvidence(capture);
+  expect(evidence[0]).toMatchObject({ fixture: "hesitant-three", result: "ended" });
+  expect(evidence[0].deltas.some(delta => delta.packetsSent! > 0 && delta.bytesSent! > 0)).toBe(true);
+  expect(capture.records[0].peers[0].tracks[0]).toMatchObject({ enabled: true, readyState: "live" });
+  expect(JSON.stringify(capture)).not.toMatch(/candidate|address|deviceId|ssrc|codec|transportId/i);
+  await page.evaluate("window.transport.close()");
+  const cancelled = await microphone.playSpeech("hesitant-three");
+  await microphone.cancel();
+  expect(await microphone.waitForPlayback(cancelled.id)).toBe("cancelled");
+  await page.getByRole("button", { name: "Start" }).click();
+  await expect.poll(() => page.evaluate("window.providers.length")).toBe(2);
+  await page.evaluate("window.transport.openInput(() => {})");
+  await microphone.loadSpeech("uh");
+  const restarted = await microphone.playSpeech("uh");
+  await microphone.waitForPlayback(restarted.id);
+  const final = await page.evaluate(() => (window as AudioWindow).sproutOutboundAudio!.read());
+  expect(final.records.at(-1)!.peers.map(peer => peer.peerId)).toEqual([1, 2]);
+  expect(final.records.at(-1)!.peers[0].connectionState).toBe("closed");
+  await info.attach("outbound-counters.json", {
+    body: JSON.stringify({ capture: final, evidence: outboundPlaybackEvidence(final) }),
+    contentType: "application/json",
+  });
 });

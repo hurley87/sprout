@@ -724,6 +724,150 @@
           "voice": "Samantha (built-in en_US)"
         }
       }
+    },
+    "hesitant-three": {
+      "file": "hesitant-three.wav",
+      "text": "Uh, I think, uh, there are three butterflies.",
+      "sha256": "e3f009524cefe2ed9dd7b16a2b19be1071e01a6d44f50bb55a39db51381f0144",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 3.0197083333333334,
+      "purpose": "Hesitant butterfly answer expressed as a full counting sentence for provider transcription; synthetic adult speech. Recognition remains subject to live validation.",
+      "provenance": {
+        "method": "Offline macOS say, Albert voice at 130 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "commands": [
+          [
+            "/usr/bin/say",
+            "-v",
+            "Albert",
+            "-r",
+            "130",
+            "-o",
+            "/tmp/sprout-hesitant-three.aiff",
+            "Uh, I think, uh, there are three butterflies."
+          ],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-hesitant-three.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/hesitant-three.wav"
+          ]
+        ],
+        "toolVersions": {
+          "macOS": "27.0.1",
+          "ffmpeg": "8.1.2",
+          "voice": "Albert (built-in en_US)"
+        }
+      }
+    },
+    "barge-in": {
+      "file": "barge-in.wav",
+      "text": "Wait! I want to say something.",
+      "sha256": "ba4aedc87ef6ff2b83f747852698fdb5995c7c7d3c189b93443391ac1ab49300",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 2.090875,
+      "purpose": "Butterfly cancellation regression; deterministic synthetic adult speech, not a child recording.",
+      "provenance": {
+        "method": "Offline macOS say, Albert voice at 150 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "commands": [
+          [
+            "/usr/bin/say",
+            "-v",
+            "Albert",
+            "-r",
+            "150",
+            "-o",
+            "/tmp/sprout-barge-in.aiff",
+            "Wait! I want to say something."
+          ],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-barge-in.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/barge-in.wav"
+          ]
+        ],
+        "toolVersions": {
+          "macOS": "27.0.1",
+          "ffmpeg": "8.1.2",
+          "voice": "Albert (built-in en_US)"
+        }
+      }
+    },
+    "hesitant-three-samantha": {
+      "file": "hesitant-three-samantha.wav",
+      "text": "Uh, I think, uh, there are three butterflies.",
+      "sha256": "a7be61d3b5f59507121f00bb5856cd24577703c7dbaf74772a1458e4923cca0b",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 3.7064583333333334,
+      "purpose": "Hesitant butterfly answer expressed as a full counting sentence for provider transcription; synthetic adult speech. Recognition remains subject to live validation.",
+      "provenance": {
+        "method": "Offline macOS say, Samantha voice at 130 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "commands": [
+          [
+            "/usr/bin/say",
+            "-v",
+            "Samantha",
+            "-r",
+            "130",
+            "-o",
+            "/tmp/sprout-hesitant-three-samantha.aiff",
+            "Uh, I think, uh, there are three butterflies."
+          ],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-hesitant-three-samantha.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/hesitant-three-samantha.wav"
+          ]
+        ],
+        "toolVersions": {
+          "macOS": "27.0.1",
+          "ffmpeg": "8.1.2",
+          "voice": "Samantha (built-in en_US)"
+        }
+      }
     }
   }
 }

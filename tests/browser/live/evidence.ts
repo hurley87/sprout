@@ -70,7 +70,11 @@ const childText = (transcript: string) =>
 
 /** Visit transcripts retain older turns. Remove their child prefix, then keep all
  * current-turn fragments even when tutor backchannels separate them. */
-export function currentChildText(events: readonly LessonDiagnostic[], request: LessonDiagnostic) {
+export function currentChildText(
+  events: readonly LessonDiagnostic[],
+  request: LessonDiagnostic,
+  answerTurnId = request.childTurnId!,
+) {
   const child = childText(detail<{ transcript: string }>(request).transcript);
   const older = events
     .slice(0, events.indexOf(request))
@@ -80,7 +84,7 @@ export function currentChildText(events: readonly LessonDiagnostic[], request: L
         event.runtimeId === request.runtimeId &&
         event.visitId === request.visitId &&
         event.nodeId === request.nodeId &&
-        event.childTurnId! < request.childTurnId!,
+        event.childTurnId! < answerTurnId,
     );
   const prefix = older ? childText(detail<{ transcript: string }>(older).transcript) : "";
   assert(child.startsWith(prefix), "older child transcript prefix differs from request");
@@ -159,7 +163,83 @@ export function assertHoldDecision(events: readonly LessonDiagnostic[], event: L
   return { request, diagnostic };
 }
 
-export function assertCompletedLesson(report: Report, correction = false) {
+type DiscardedCandidateAnswer = { visitId: number; answerTurnId: number; afterMs: number };
+
+/** A discarded candidate can preserve learner transcript/audio eligibility, but never old
+ * semantic authority. Validate this exact reducer path before using the earlier confirmed
+ * answer's speech/output evidence with a NEW current-turn classifier request. */
+function discardedCandidateAnswerTurn(
+  events: readonly LessonDiagnostic[],
+  request: LessonDiagnostic,
+  allowance: DiscardedCandidateAnswer,
+) {
+  const prior = events.slice(0, events.indexOf(request));
+  const changes = prior.filter(
+    e => e.type === "runtime.changed" && e.visitId === allowance.visitId && e.atMs >= allowance.afterMs,
+  );
+  const started = changes.find(e => detail<Change>(e).trigger === "child.candidate.started");
+  const discarded = changes.find(e => detail<Change>(e).trigger === "child.candidate.discarded");
+  assert(
+    started && discarded && prior.indexOf(discarded) > prior.indexOf(started),
+    "discarded candidate answer lineage lacks ordered candidate/discard",
+  );
+  const begin = detail<Change>(started);
+  const end = detail<Change>(discarded);
+  assert.equal(begin.before.childTurnId, allowance.answerTurnId);
+  assert.equal(begin.after.childTurnId, allowance.answerTurnId + 1);
+  assert.equal(request.childTurnId, begin.after.childTurnId);
+  assert.equal(
+    begin.after.childCandidate?.hasChildTranscript,
+    true,
+    "candidate did not preserve a confirmed answer transcript",
+  );
+  assert.equal(
+    begin.after.childCandidate?.tutorOutputObserved,
+    true,
+    "candidate did not preserve relevant tutor output",
+  );
+  assert.equal(end.after.hasChildTranscript, true);
+  assert.equal(end.after.childSpeaking, false);
+  assert.equal(end.after.childCandidate, null);
+  assert.equal(end.after.answerAccepted, false, "discard restored old semantic authority");
+  assert.equal(end.after.acknowledgmentObserved, false, "discard restored old acknowledgment authority");
+  for (const change of [started, discarded]) {
+    const { before, after, trigger } = detail<Change>(change);
+    const event = prior.slice(0, prior.indexOf(change)).findLast(e => e.type === `runtime.event.${trigger}`);
+    assert(event);
+    assert.deepEqual(
+      reduceLessonRuntime(before, detail<{ event: LessonRuntimeEvent }>(event).event).state,
+      after,
+      "candidate lineage differs from production reducer",
+    );
+  }
+  const afterOnset = prior.slice(prior.indexOf(started));
+  assert(
+    !afterOnset.some(
+      e =>
+        e.visitId === allowance.visitId &&
+        ([
+          "runtime.event.child.turn.confirmed",
+          "runtime.event.child.turn.started",
+          "runtime.event.child.turn.ended",
+        ].includes(e.type) ||
+          (e.type === "transcript.snapshot" && e.transcriptSpeaker === "child")),
+    ),
+    "confirmed speech or a new child transcript invalidated discarded candidate answer lineage",
+  );
+  assert.equal(
+    changes.filter(e => detail<Change>(e).trigger === "child.candidate.started").length,
+    1,
+    "multiple candidate lineage unsupported",
+  );
+  return allowance.answerTurnId;
+}
+
+export function assertCompletedLesson(
+  report: Report,
+  correction = false,
+  discardedCandidate?: DiscardedCandidateAnswer,
+) {
   assert.equal(report.classifierVersion, CLASSIFIER_VERSION);
   assert.equal(report.status, "ended");
   assert.equal(report.error, null);
@@ -190,7 +270,11 @@ export function assertCompletedLesson(report: Report, correction = false) {
     assert.equal(diagnostic.outputs?.tutorState.choice, "confirmed_completion");
     assert.equal(result.transcriptSpeaker, "tutor");
     const transcript = detail<{ transcript: string }>(request).transcript;
-    const heardChild = currentChildText(events, request);
+    const answerTurnId =
+      discardedCandidate?.visitId === visitId && request.childTurnId !== discardedCandidate.answerTurnId
+        ? discardedCandidateAnswerTurn(events, request, discardedCandidate)
+        : origin.childTurnId;
+    const heardChild = currentChildText(events, request, answerTurnId);
     const quantity = COUNTING_LESSON_GRAPH[nodeId].quantity;
     const expected = ["one", "two", "three"][quantity - 1];
     assert(
@@ -230,14 +314,12 @@ export function assertCompletedLesson(report: Report, correction = false) {
       event =>
         event.type === "runtime.event.child.turn.ended" &&
         event.visitId === visitId &&
-        event.childTurnId === origin.childTurnId,
+        event.childTurnId === answerTurnId,
     );
     assert(turn, "confirmed child turn never ended");
     for (const type of ["microphone.speech_started", "microphone.speech_stopped"]) {
       assert(
-        prior.some(
-          event => event.type === type && event.visitId === visitId && event.childTurnId === origin.childTurnId,
-        ),
+        prior.some(event => event.type === type && event.visitId === visitId && event.childTurnId === answerTurnId),
         `missing app-owned VAD ${type}`,
       );
     }
@@ -247,7 +329,7 @@ export function assertCompletedLesson(report: Report, correction = false) {
         event =>
           event.type === "output.activity" &&
           event.visitId === visitId &&
-          event.childTurnId === origin.childTurnId &&
+          event.childTurnId === answerTurnId &&
           event.atMs > turn.atMs &&
           detail<{ state: string }>(event).state === "active",
       ),

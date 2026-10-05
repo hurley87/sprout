@@ -252,7 +252,8 @@ it("logs only normalized mapping diagnostics with the captured source and cannot
     transcriptSpeaker: "child",
     detail: diagnostic,
   });
-  expect(JSON.stringify(mapping)).not.toMatch(/raw provider marker|rawBody|count-3-butterflies|999/);
+  // Inspect normalized classifier data; generated runtime UUIDs may contain the marker digits.
+  expect(JSON.stringify(mapping?.detail)).not.toMatch(/raw provider marker|rawBody|count-3-butterflies|999/);
   expect(lesson.snapshot().runtime?.answerAccepted).toBe(false);
   expect(lesson.snapshot().runtime?.nodeId).toBe("count-1-duck");
   expect(lesson.report().events).toContainEqual(expect.objectContaining({ type: "classifier.held" }));
@@ -864,3 +865,58 @@ function choiceDiagnostic() {
     elapsedMs: 200,
   };
 }
+
+it("correlates real parser-to-runtime snapshots, rejection and pending-steering gaps without inventing disposition", async () => {
+  const { describeTranscriptWire, transcriptDeliveryEvidence } = await import("./helpers/transcript-wire");
+  const { parseProviderEvent } = await import("../lib/events");
+  const records: import("./helpers/transcript-wire").WireRecord[] = [];
+  lesson = new LessonRuntime({} as HTMLAudioElement, () => {});
+  lesson.confirmRendered(lesson.snapshot().display);
+  const deliver = (delta: unknown, start_ms: unknown, end_ms: unknown) => {
+    const raw = { type: "session.input_transcript.delta", delta, start_ms, end_ms };
+    const observation = lesson.observe();
+    const state = observation.snapshot.runtime!;
+    const row: import("./helpers/transcript-wire").WireRecord = {
+      ...describeTranscriptWire(JSON.stringify(raw)),
+      sequence: records.length,
+      channelId: 1,
+      channelRuntimeId: state.runtimeId,
+      runtimeId: state.runtimeId,
+      visitId: state.visitId,
+      childTurnId: state.childTurnId,
+      nodeId: state.nodeId,
+      transcriptRevision: state.transcriptRevision,
+      journalOffset: observation.cursor.offset,
+      atMs: observation.nowMs,
+      awaitingSteering: observation.snapshot.awaitingSteering,
+    };
+    records.push(row);
+    const parsed = parseProviderEvent(raw);
+    if (parsed) emit(parsed);
+    row.afterDispatchOffset = lesson.observe().cursor.offset;
+  };
+  emit({ type: "microphone.activity_started" });
+  deliver("One", 100, 200); // Real runtime queues while awaiting steering; bridge cannot prove queue membership.
+  const capture = { version: 1 as const, channels: 1, frames: 1, dropped: 0, observationErrors: 0, records };
+  const evidence = () => transcriptDeliveryEvidence(capture, lesson.report().events, lesson.report().runtimeId);
+  expect(evidence().fragments[0]).toMatchObject({
+    disposition: "unknown",
+    awaitingSteeringAtArrival: true,
+    queuedPendingSteering: "unknown",
+  });
+  const command = transport.send.mock.calls[0][0];
+  emit({
+    type: "context.appended",
+    name: "session.instructions.appended",
+    clientEventId: command.event_id,
+    startMs: 0,
+  });
+  expect(evidence().fragments[0]).toMatchObject({ disposition: "snapshot" });
+  deliver("invalid", 300, 250);
+  expect(evidence().fragments[1]).toMatchObject({ disposition: "runtime-rejected", reason: "invalid_interval" });
+  deliver("", 400, 450);
+  expect(evidence().fragments[2]).toMatchObject({ disposition: "unknown", deduplicated: "unknown" });
+  deliver(null, 500, 550);
+  expect(evidence().parserDiscardedLearnerEvents).toBe(1);
+  expect(evidence().learnerSnapshots).toHaveLength(1);
+});

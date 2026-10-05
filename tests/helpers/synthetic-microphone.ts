@@ -1,3 +1,4 @@
+import type { AudioWindow } from "./outbound-audio";
 import type { Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
@@ -9,7 +10,7 @@ export type Playback = { id: number; durationSeconds: number; startedAt: number 
 export type PlaybackResult = "ended" | "cancelled";
 export type NoiseOptions = { seed: number; durationMs?: number; amplitude?: number };
 
-type MicrophoneControl = {
+export type MicrophoneControl = {
   resume(): Promise<void>;
   load(name: string, bytes: number[]): Promise<number>;
   speech(name: string): Playback;
@@ -37,7 +38,9 @@ export async function installSyntheticMicrophone(page: Page) {
     let disposed = false;
     let requests = 0;
     let nextId = 0;
-    let active: { source: AudioBufferSourceNode; finish: (result: PlaybackResult) => void } | undefined;
+    let active:
+      | { source: AudioBufferSourceNode; finish: (result: PlaybackResult) => void; id: number; fixture: string }
+      | undefined;
     const tracks = new Set<MediaStreamTrack>();
     const buffers = new Map<string, AudioBuffer>();
     const completions = new Map<number, Promise<PlaybackResult>>();
@@ -64,9 +67,10 @@ export async function installSyntheticMicrophone(page: Page) {
       playback.source.onended = null;
       playback.source.stop();
       playback.source.disconnect();
+      (window as AudioWindow).sproutOutboundAudio?.boundary(playback.id, playback.fixture, "cancelled");
       playback.finish("cancelled");
     };
-    const start = (buffer: AudioBuffer): Playback => {
+    const start = (buffer: AudioBuffer, fixture: string): Playback => {
       const audio = ensureContext();
       if (audio.state !== "running") throw new Error("Click the lesson start button to resume browser audio first");
       cancel();
@@ -76,13 +80,15 @@ export async function installSyntheticMicrophone(page: Page) {
       const id = ++nextId;
       let finish!: (result: PlaybackResult) => void;
       completions.set(id, new Promise(resolve => (finish = resolve)));
-      active = { source, finish };
+      active = { source, finish, id, fixture };
       source.onended = () => {
         source.disconnect();
         if (active?.source === source) active = undefined;
+        (window as AudioWindow).sproutOutboundAudio?.boundary(id, fixture, "ended");
         finish("ended");
       };
       const startedAt = audio.currentTime;
+      (window as AudioWindow).sproutOutboundAudio?.boundary(id, fixture, "start");
       source.start(startedAt);
       return { id, durationSeconds: buffer.duration, startedAt };
     };
@@ -116,7 +122,7 @@ export async function installSyntheticMicrophone(page: Page) {
       speech(name) {
         const buffer = buffers.get(name);
         if (!buffer) throw new Error(`Load speech fixture first: ${name}`);
-        return start(buffer);
+        return start(buffer, name);
       },
       noise({ seed, durationMs = 40, amplitude = 0.2 }) {
         if (
@@ -143,7 +149,7 @@ export async function installSyntheticMicrophone(page: Page) {
           state = (Math.imul(1664525, state) + 1013904223) >>> 0;
           samples[i] = ((state / 0x100000000) * 2 - 1) * amplitude;
         }
-        return start(buffer);
+        return start(buffer, "seeded-noise");
       },
       cancel,
       finished(id) {

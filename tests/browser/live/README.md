@@ -1,248 +1,183 @@
-# Deliberate provider-backed lesson scenarios
+# Reactive live lesson harness
 
-These nine tests use `/`, the real synthetic-microphone `MediaStream`, app-owned
-VAD, GPT-Live transcript transport, canonical `conversation-state-v2`, production
-reducer and React scene. There are no route mocks, supplied transcripts, injected
-classifier results, test-time TTS, or additional AI models in the live suite.
-Only the explicit `lesson-live` config selects them. One worker, zero retries,
-120 seconds per test and 600 seconds overall keep the baseline bounded.
-Observation waits fail before the outer timeout with 20 seconds reserved for
-artifact collection and cleanup. Browser termination can still leave incomplete
-evidence, which the existing companion artifact explicitly records.
+Fourteen opt-in tests use `/`, the synthetic microphone `MediaStream`, app-owned
+VAD, GPT-Live transcription, canonical `conversation-state-v2`, reducer and React
+scene. Live cases contain no route mocks, transcript injection, test-time TTS,
+child recordings or additional models. Normal `npm run test:browser` excludes the
+entire directory and starts its server with empty provider credential overrides.
 
-| Tag | Child behavior | Scope |
-| --- | --- | --- |
-| `@happy-path` | “I see one duck.”; “I see two ducks.”; “I see three butterflies.” | All three nodes and final completion |
-| `@incorrect-then-correct` | One-duck sentence; three-duck sentence on two ducks; two-duck sentence; three-butterfly sentence | Wrong answer on two ducks, three-second hold after a non-completion decision, recovery, final completion |
-| `@self-correction` | One-duck sentence; “Three. Uh, I mean two.”; three-butterfly sentence | Single continuous correction fixture on two ducks, final completion |
+| Selection                           | Behavior and assertion                                                                                                                                                                                         |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@baseline @happy-path`             | All three authored answers; exactly one completion per scene and terminal lesson completion.                                                                                                                   |
+| `@baseline @incorrect-then-correct` | Three ducks on the two-duck node; non-completion decision and three-second hold; fresh two-duck answer recovers.                                                                                               |
+| `@baseline @self-correction`        | Continuous “Three. Uh, I mean two.”; authority must include the settled correction.                                                                                                                            |
+| `@support @help`                    | Help request, classified tutor scaffold, three-second hold, fresh learner answer and full completion.                                                                                                          |
+| `@support @incomplete`              | Partial count, tutor response and hold, then fresh learner total.                                                                                                                                              |
+| `@support @ambiguous`               | Explicit undecided two-or-three response holds; fresh total recovers.                                                                                                                                          |
+| `@support @off-topic`               | Toy response holds; fresh authored answer recovers.                                                                                                                                                            |
+| `@support @silence`                 | Five seconds of connected silence without child authority; fresh answer recovers.                                                                                                                              |
+| `@support @stop`                    | Parent Stop authority ends the session and prevents progression for three seconds. Spoken `requestStop()` alone grants no authority.                                                                           |
+| `@butterfly @barge-in-output`       | Hesitant correct three; genuine “Wait! I want to say something.” during post-answer tutor output. Requires VAD confirmation, invalidated earlier authority, current heard words and fresh semantic held state. |
+| `@butterfly @noise-output`          | Same answer; 40 ms seeded noise during post-answer output.                                                                                                                                                     |
+| `@butterfly @noise-confirmation`    | Noise after heard confirmation, while current tutor stabilization is scheduled and output is quiet.                                                                                                            |
+| `@butterfly @filler-confirmation`   | Short voiced “Uh.” in that confirmation/stabilization window.                                                                                                                                                  |
+| `@butterfly @filler-classifier`     | “Uh.” after heard confirmation, with a current tutor classifier request still in flight.                                                                                                                       |
 
-All have `@baseline`; each test runs one attempt. Use the existing secure setup
-to supply server-only `OPENAI_API_KEY` and `TYPESAFE_API_KEY` in the invoking
-environment. The config checks names without loading credential files. These
-commands can make **billed GPT-Live and Jev calls**; no such runs were made while
-preparing this slice:
+Butterfly cases first complete the one- and two-duck visits using existing ready
+and completion gates. They then play “Uh, I think, uh, there are three butterflies.” on
+`count-3-butterflies`. Tags `@noise`, `@filler`, `@barge-in`, `@during-output`,
+`@confirmation-quiet` and `@classifier-in-flight` select compact subsets. There is
+one attempt per case, rather than a cross-product of timings.
+
+## Commands and cost
+
+Supply `OPENAI_API_KEY` and `TYPESAFE_API_KEY` through your secure invoking
+environment. The config checks names without loading credential files. Every
+execution command below can incur **GPT-Live and Jev charges**. Each case opens
+one session and can issue multiple classifier requests; failure still costs
+money. One worker, zero retries, 120 seconds per test and 600 seconds overall
+bound execution. Prefer one case. The overall limit can interrupt a full suite.
+Port 3100 must be available; the config refuses to reuse a running server.
 
 ```bash
 npm run test:browser:live -- scenarios.spec.ts --grep '@happy-path'
-npm run test:browser:live -- scenarios.spec.ts --grep '@incorrect-then-correct'
-npm run test:browser:live -- scenarios.spec.ts --grep '@self-correction'
 npm run test:browser:live -- --grep '@baseline'
+npm run test:browser:live -- support.spec.ts --grep '@help'
+npm run test:browser:live -- support.spec.ts --grep '@incomplete|@ambiguous'
+
+# Strict product regression: noise/filler must complete safely.
+npm run test:browser:live -- butterfly.spec.ts --grep '@filler-classifier'
+npm run test:browser:live -- butterfly.spec.ts --grep '@noise-confirmation'
+npm run test:browser:live -- butterfly.spec.ts --grep '@barge-in-output'
+npm run test:browser:live -- butterfly.spec.ts --grep '@noise|@filler'
+
+# Reproduction/evidence only; a passing probe never proves starvation recovered.
+SPROUT_BUTTERFLY_OBSERVE_ONLY=1 npm run test:browser:live -- butterfly.spec.ts --grep '@filler-classifier'
 ```
 
-Pricing, transcript fragmentation and classifier latency vary; there is no
-fixed dollar estimate. Each scenario opens one GPT-Live session and may issue
-multiple Jev requests per node as transcripts settle. Failures still cost money;
-there are no automatic retries. A local server must be able to start on port 3100.
-
-For discovery **only**, synthetic nonempty configuration strings are safe:
+Discovery alone needs nonempty strings, never valid credentials:
 
 ```bash
 OPENAI_API_KEY=discovery-only TYPESAFE_API_KEY=discovery-only npm run test:browser:live -- --list
+OPENAI_API_KEY=discovery-only TYPESAFE_API_KEY=discovery-only npm run test:browser:live -- butterfly.spec.ts --grep '@filler-classifier' --list
 npm run test:browser -- --list
-npm run test:browser -- tests/browser/live/scenarios.spec.ts --list
+npm run test:browser -- tests/browser/live/butterfly.spec.ts --list
 ```
 
-The first command must list exactly nine live tests; the last must report no
-tests (exit 1). Never remove `--list` from a command with synthetic credentials.
-Offline assertions run with `npm test` and include adversarial report mutations.
-They validate scenario logic, **not** live provider behavior.
+The first lists 14 tests; the second lists one. The final command must find no
+tests and exit 1. **Never remove `--list` when using synthetic credentials.**
 
-## Observation and assertions
+## Timing and evidence
 
-Child actions wait for exact observed render identity, matching steering
-acknowledgment and visit boundary, tutor transcript settlement and sustained
-output quiet using production timing constants. These are physical/readiness
-signals; PCM quiet is never called semantic turn completion. No exact tutor
-wording is required. Fresh cursors are captured before speech so events arriving
-during playback remain observable. The wrong-answer hold monitors state and the
-full journal, not just a final screenshot. It starts at the pre-speech checkpoint
-and continues at least three seconds after a canonical hold or semantic abstention.
-Only then, after the tutor response settles, is the correct fixture sent.
+Butterfly setup allows one fresh repetition of the authored correct answer per
+duck prerequisite when a current, uncancelled canonical classifier abstains on
+semantic scores despite choosing completed and confirmed completion. It requires
+the correct total in current learner speech and a settled tutor response. The
+abstention and scores are recorded in the harness journal; the repetition must
+earn new classifier authority and normal rendering. Provider errors, incorrect
+answers and semantic holds cannot trigger it. A second abstention fails setup.
+This can add up to two learner utterances and their provider requests per case;
+baseline scenarios retain their original assertions. Summaries distinguish a
+prerequisite failure from an injection failure, retaining the last scores and
+transcript when no target audio played.
 
-`evidence.ts` requires exactly three success transitions in authored visit order.
-Each must have a fresh request/result/mapping identity matching the runtime's
-node, visit, child turn and revision, canonical normalized scores, an accepted
-production proposal, child/tutor transcript evidence, confirmed VAD start/end,
-a post-answer tutor output onset, and the production quiet drain. It replays the
-recorded transition trigger through the unchanged production reducer. Every
-requested render must be confirmed with its exact token/node/scene before the
-next steering append; completion requires the final null scene, completion
-effect and `lesson_completed` end reason. Self-correction additionally forbids
-any success authority on the two-duck visit unless the request already includes
-the heard three → “I mean” → two correction. This text check establishes what was
-heard; production classification still supplies all semantic authority.
+`ready()` requires exact rendered identity, matching steering acknowledgment and
+visit boundary, a stable tutor transcript and sustained output quiet. PCM quiet
+alone is not semantic completion. Butterfly speech is checksum-verified and
+predecoded before the answer. A browser polling check reads the current journal
+and runtime, checks visit/turn/revision/output plus current work, then starts
+preloaded audio synchronously in the same browser task. It rejects old active
+output, expired/cancelled stabilization and completed/cancelled classifier calls.
+No lesson-wide delay determines injection. Checks also reject overlapping audio.
 
-The browser resource inventory subclasses native constructors to retain local
-references without changing their behavior. Completion checks stopped app capture,
-closed peer connections and app audio contexts, and detached audio. The synthetic
-destination remains alive until reports are collected, then is disposed too.
-Every attempt retains the existing production `report.json`, companion
-`harness.json` and chronological `timeline.txt` before cleanup; resource teardown
-is attached separately. Failures within the scenario are recorded by `run()`.
+`injectionLanded` records the actual attempt-clock interval surrounding
+`AudioBufferSourceNode.start()`, playback duration, current and after-start state,
+trigger, cursor, answer transcript and output/confirmation evidence. Assertions
+reconstruct the window from the full journal and require timely app-owned VAD
+onset; during-output onset must still have active output. This proves browser
+scheduling and app detection, not sample-exact remote recognition timing.
 
-## Startup silence regression
+Window checks require three in current learner speech; ASR need not retain the
+authored hesitation words. Late windows additionally require tutor affirmation
+followed by three. Speaker fragments are joined across interleaved transcript
+lines, excluding speech before the answer checkpoint and from older turns. This
+wording-specific check selects the regression window; canonical classifier
+scores alone grant semantic authority. Providers
+may phrase confirmation differently or return too quickly to hit an in-flight
+window. Such cases fail as missed-window evidence, never as successful injections.
 
-The first user-run happy path connected to GPT-Live but ended on the production
-steering-acknowledgment timeout before any child speech. A provider-free local
-WebRTC reproduction confirmed that the idle synthetic destination exposed a live
-track while sending zero audio packets. The helper now keeps a zero-valued
-`ConstantSourceNode` connected so real silent frames advance the audio clock
-before speech and after cancellation. Disposal stops this source too. The new
-local-peer regression failed before the fix and passes afterward; existing VAD
-and teardown tests still apply. This is a microphone harness fix; production
-gates, event parsing and timeouts remain unchanged.
+Both probes and strict regressions enforce safety. Cancelled/stale classifier
+identity cannot supply authority; completion requires the unchanged existing
+full lesson replay, exact render tokens/order, relevant tutor acknowledgment and
+output, current learner turn/revision and one final completion. Genuine barge-in
+must invalidate prior answer and acknowledgment at confirmation and cannot reuse
+that answer for recovery. It ends in an explicit fresh semantic held state.
+A discarded noise/filler candidate may preserve the earlier confirmed answer's
+transcript and output eligibility. The completion assertion accepts that path
+only after replaying the exact candidate-start/discard reducer states, proving
+no intervening confirmed speech/child transcript, and requiring a new classifier
+request/result with the current turn/revision. Old semantic authority is never
+restored. Confirmed speech cannot use this candidate allowance; genuine barge-in
+cannot use it at all. Noise/filler strict regressions additionally demand terminal completion within
+eight seconds after injection start. Probes can retain a live held or bounded
+starvation outcome; `recoveryVerified` is true only after full safe completion.
+Eight seconds without a decision is reported as **bounded starvation or pending**,
+not proof of permanent starvation. Provider errors/missing diagnostics fail safety.
 
-GPT-Live's [session guidance](https://developers.openai.com/api/docs/guides/live-conversations)
-requires continuous audio during startup, including silence, and explains that
-append acknowledgments can remain pending if the timeline stops. The connection
-between the reproduced stall and the user's timeout is strongly supported by
-that contract; the patched live run still needs validation.
+Every attempt writes the existing `attempt-…-report.json`, `…-harness.json` and
+`…-timeline.txt` under `test-results/playwright-live/<test-output>/`, before cleanup
+Stop and microphone disposal. Playwright attaches these plus `butterfly-summary.json`
+and readable `butterfly-summary.txt`. The summary identifies injected bytes/noise,
+what VAD/transcription heard, normalized objective/tutor scores and confidences,
+mapped outcome/reasons/latency and node/revision identities, cancelled/blocked/
+rescheduled/reevaluated work and the final state. Full production records remain
+unchanged. A missed trigger or assertion retains failure evidence; outer browser
+termination can still leave incomplete artifacts.
 
-The next user-run happy path received a matching append acknowledgment and
-visit boundary, confirming the silence fix unblocked the timeline. It then
-remained live with quiet output and no tutor transcript. The initial session
-requires an application start instruction; initial steering now explicitly
-identifies the parent's Start action and asks GPT-Live to speak first immediately.
-This is a production startup-prompt candidate, requested during diagnosis after
-the original scenario slice. It is sent only for the initial render; later node
-steering remains unchanged. Offline tests verify that it is sent once after
-render and that acknowledgment alone cannot satisfy tutor readiness or authorize
-progression. The subsequent user run received the first counting question, confirming initial
-speech now occurs. It still failed to advance: local VAD confirmed the 0.384-second
-Albert “One” clip, but no child transcript arrived and the classifier recorded
-`missing_current_turn_child_transcript`. The requested second render never occurred.
+## Fixtures, validation and limitations
 
-A provider-free local peer now verifies decoded incoming speech energy for each
-answer fixture after the production input fence opens, and silence before it.
-An active receiver playback sink is necessary for Chromium's decoded audio energy
-statistics; zero energy from an unconsumed receiver is not evidence of missing RTP.
-The live scenarios now use longer natural-voice counting sentences as a recognition
-candidate, keeping the original short primitives for transport coverage. A separate
-wait for the observed current-turn child transcript reports this failure directly
-before waiting for the next render. This does not supply a transcript or loosen any
-production gate. Recognition and full-lesson completion still need live validation.
+`tests/fixtures/speech/manifest.json` records exact text, SHA-256, format, duration
+and per-fixture offline commands. `hesitant-three.wav` uses a full hesitant counting sentence at 130 words/minute;
+`barge-in.wav` uses 150 words/minute. Both use macOS Albert, FFmpeg loudness
+normalization and mono 24 kHz signed 16-bit PCM. Existing answer/correction/support fixtures retain their individual
+provenance. Tests use committed bytes, never invoke synthesis. Noise uses seed
+30, amplitude 0.2 and duration 40 ms through the same microphone destination;
+seed/options/sample-rate determine samples. Synthetic adult TTS does not represent
+preschool speech or acoustic room/device conditions. Samples are deterministic;
+provider wording, transcript fragmentation and browser timing are not.
 
-## Fixtures and limits
+The historical real butterfly failure included a correct tentative answer,
+tutor confirmation, child “uh”, cancellation with `child_turn_started` and no
+completion before parent Stop. No VAD/cancellation fix is included here. These
+new reproduction and strict recovery cases have **not been provider-validated**;
+a starved run stays a failing strict regression outside `@baseline`.
 
-`answer-one`, `answer-two`, and `answer-three` contain “I see one duck.”,
-“I see two ducks.”, and “I see three butterflies.” in the offline Samantha voice at
-130 words/minute (about 1.3–1.8 seconds each). `self-correction.wav` uses that
-same voice for “Three. Uh, I mean two.” (about 2.3 seconds). The original short
-Albert primitives remain unchanged. `tests/fixtures/speech/manifest.json`
-records exact text, command arguments, tool versions, duration and SHA-256.
-Committed bytes are verified before browser decoding. Execution needs neither
-macOS speech synthesis nor FFmpeg. No child recordings or remote speech
-generation are used.
+The commit-6 handoff reports saved help and self-correction completion, with help
+completion evidence replay passing. Those prior live runs were not rerun in this
+slice. Clean revised happy-path, incorrect-then-correct and remaining support
+cases remain unconfirmed. No provider calls were authorized or made by the agent for commit 7. A subsequent
+user-run filler-confirmation attempt confirmed VAD and tutor confirmation but
+supplied no child transcript, so classification was blocked and no filler was
+injected. The revised full-sentence hesitant fixture and specific timeout diagnosis
+are offline-validated; provider recognition and window entry remain pending.
+Offline tests validate the harness and assertions, not provider success. See
+[issue 30 acceptance mapping](../../../docs/issue-30-harness-acceptance.md) for the
+implementation boundary and remaining validation. The issue stays open.
 
-Synthetic adult speech is not preschool speech, acoustic/device coverage or a
-promise of recognition reliability. A provider may fragment the correction into
-multiple VAD turns or omit words; the test then fails with evidence rather than
-supplying the expected transcript or relaxing gates. A stalled tutor, ambiguous
-classifier, lost steering acknowledgment or starvation may fail current product
-behavior. VAD/cancellation, thresholds, reducer and classifier-switching
-policy remain unchanged. The explicit initial start directive is the only
-production prompting change in the follow-up diagnosis. The support scenarios below add help, hesitation, off-topic, silence and parent Stop coverage. Noise, barge-in and broad curriculum remain outside this slice.
+## Learner wire diagnostics and voice comparison
 
-Clean revised happy-path and incorrect-then-correct live runs remain pending. The saved self-correction live evidence completed successfully, as recorded in the commit-6 handoff; this preparation does not rerun or independently revalidate that live attempt. Review
-these changes and choose one command above first; offline green checks cannot
-establish that a provider-backed complete lesson passes.
-
-The next user run advanced through the first two scenes but waited indefinitely
-on the final scene. Its heard answer was “I see three ducks” while the scene
-showed butterflies; the tutor requested clarification. This was a fixture mapping
-error introduced in the sentence update. The final fixture now says “I see three
-butterflies.” A separate three-duck fixture remains for the deliberately wrong
-answer on two ducks. An offline regression checks the exact scene-to-fixture
-texts and distinct fixture hashes. Full completion remains unverified.
-
-The following user run completed all three production transitions and ended with
-`lesson_completed`. Its final evidence assertion falsely failed because it inspected
-only the last child transcript line. Provider backchannels split the two-duck
-answer into “I see two” / tutor “Yes,” / child “ducks” (and similarly for butterflies).
-The assertion now reads all current-turn child fragments, excludes tutor text,
-and removes the earlier child-turn prefix from the cumulative visit transcript.
-Regressions accept the observed fragmentation and reject answers present only in
-tutor speech or an older child turn. Replaying this saved completed live report
-passes the repaired production-evidence assertions without another provider call.
-The full Playwright happy path still needs a clean run of the repaired assertions;
-the incorrect-answer and self-correction scenarios remain unverified live.
-
-The first incorrect-then-correct user run heard “I see three ducks” on two ducks
-and safely remained on the scene while the tutor offered counting help. The
-classifier abstained with valid scores (`objectiveState_no_winner`,
-`unresolved_help` probability 0.75), rather than emitting the test's expected
-`classifier.held` / incorrect verdict. The scenario now accepts a canonical hold
-or semantic score-based abstention with no completion eligibility and a
-non-completed objective choice. Provider errors, absent scores, missing heard
-wrong-answer evidence and success authority still fail. The three-second full
-journal hold and later correct-answer completion requirements remain intact.
-Saved-report replay validates the observed abstention and hold; live recovery
-with the updated scenario remains pending.
+All attempt artifacts now include bounded pre-parser WebRTC wire metadata in
+`harness.json` and `timeline.txt`, with independent parser, runtime rejection and
+learner snapshot counts. Albert remains the default hesitant answer;
+`SPROUT_BUTTERFLY_ANSWER_VOICE=Samantha` selects a matched-text offline fixture.
+See [transcript diagnostics and controlled comparison](../../../docs/transcript-wire-comparison.md)
+for limits, checksums, interpretation, discovery commands and separate-output
+single-case execution commands. Live comparison remains pending explicit authorization.
 
 
-## Support, hesitation, silence and stop (commit 6)
-
-`support.spec.ts` adds six independently selectable `@support` tests. Each first
-answers the one-duck node, then observes the real two-duck prompt. Recovery uses
-a new “I see two ducks.” microphone utterance and finishes the butterfly node;
-full production completion evidence and fresh recovery authority are required.
-The stop case ends on two ducks instead. None joins `@baseline` or default CI.
-
-| Tag | Exact unresolved fixture / action | Invariant and observation window |
-| --- | --- | --- |
-| `@help` | “Please help me count the ducks.” | Canonical non-completion decision with latest tutor `helping` state plus post-request tutor transcript/audio evidence. No success authority or scene change from pre-speech through at least three seconds after that decision and until fresh learner recovery. |
-| `@incomplete` | “One duck, and then...” | Unfinished count on **two** ducks leaves the objective unresolved. Same bounded hold, then a fresh settled learner total continues the task. |
-| `@ambiguous` | “Maybe two ducks, or maybe three. I have not decided.” | Explicit unresolved alternatives cannot borrow tutor settlement. Same bounded hold, then a clear fresh learner response. Opening “I think two” alone is deliberately not used. |
-| `@off-topic` | “My favorite toy is a red truck.” | Unrelated speech gives no counting authority. Same bounded hold, then fresh learner recovery. |
-| `@silence` | Five seconds of connected zero-valued microphone frames after settled prompt | No confirmed child activity, success authority or scene change during that window and until fresh learner recovery; no classifier decision is fabricated or required for missing child speech. Any observed hold/abstention must still have valid canonical scores. |
-| `@stop` | Parent **Stop** UI click | End reason must be `parent_stop`, runtime stopped on the same visit, app capture ended, and no classifier success, render, steering or transient visit advancement from the pre-click checkpoint through three seconds after the click. |
-
-The help, incomplete, ambiguous and off-topic gates require a fresh request/result
-identity and the intended current-turn child words in the actual provider
-transcript. Text checks establish receipt only; canonical production scores
-supply the semantics. Accepted holds and score-based semantic abstentions are
-both safe; no one objective label is mandated. Completion eligibility, completed
-objective choices, missing scores/mappings and provider failures fail the hold.
-Help additionally needs classifier tutor-state `helping`; a harness keyword
-match on tutor prose cannot establish scaffolding. Physical transcript settlement
-and sustained output quiet release the next action, as in the baseline.
-
-The journal is examined from before the unresolved utterance until immediately
-before recovery, including intermediate decisions and transient transitions.
-Recovery cannot use earlier child turns, tutor-supplied totals or pre-answer
-classifier authority. Failures preserve the report, actions, final state and
-chronological timeline through the shared attempt collector before disposal;
-readiness timeouts include the latest missing-evidence reason.
-
-The current product treats `requestStop()` / “Stop please.” as ordinary microphone
-speech. It has no dedicated spoken-stop runtime command. This slice tests the
-actual parent control and makes no new guarantee about tutor interpretation or
-spoken-stop policy. No production code, prompting, VAD or cancellation gates change.
-
-Targeted commands below are **billed live runs** when explicitly authorized and
-real credentials are supplied securely in the invoking environment:
-
-```bash
-npm run test:browser:live -- support.spec.ts --grep '@help'
-npm run test:browser:live -- support.spec.ts --grep '@incomplete'
-npm run test:browser:live -- support.spec.ts --grep '@ambiguous'
-npm run test:browser:live -- support.spec.ts --grep '@off-topic'
-npm run test:browser:live -- support.spec.ts --grep '@silence'
-npm run test:browser:live -- support.spec.ts --grep '@stop'
-npm run test:browser:live -- --grep '@support'
-npm run test:browser:live -- support.spec.ts --grep '@help|@silence|@stop'
-```
-
-The existing single worker, zero retries, 120-second test and 600-second total
-limits are unchanged. All nine together may exhaust the total budget; select a
-scenario or subset deliberately. `@baseline` still selects exactly three tests.
-Discovery with synthetic strings must always include `--list`; it makes no
-provider calls. All six new scenarios remain **unvalidated live** in this task.
-Offline assertion tests reject stale identities, missing support evidence,
-provider errors, tutor-only/old-turn answers, transient advancement and post-Stop
-authority. Green offline checks do not establish live reliability.
-
-The four new fixtures use Samantha at 130 words/minute, generated offline with
-macOS `say` and FFmpeg. Their manifest entries preserve exact text, generation
-arguments, tool versions, duration and SHA-256. Bytes are authoritative and
-verified before decoding; tests never synthesize speech or use child recordings.
+Attempt artifacts also retain fragment-to-journal correlation, real fixture
+playback boundaries and bounded outgoing audio RTP counters. Unique attempt/runtime
+copies are indexed under `.sprout-evidence/`, outside Playwright output cleanup.
+Admission is bounded to 100 attempts / 8 MiB each, with no automatic pruning.
+See [retention and interpretation limits](../../../docs/transcript-wire-comparison.md)
+before comparing live runs; transmission does not establish provider recognition.
