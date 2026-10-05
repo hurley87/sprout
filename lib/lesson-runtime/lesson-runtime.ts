@@ -55,6 +55,8 @@ export type LessonDiagnostic = {
 };
 export type LessonEventCursor = { runtimeId: string; offset: number };
 export type LessonObservation = {
+  /** Sample of the report clock, taken in the same browser read as the journal. */
+  nowMs: number;
   cursor: LessonEventCursor;
   snapshot: LessonSnapshot;
   events: readonly LessonDiagnostic[];
@@ -206,6 +208,7 @@ export class LessonRuntime {
     )
       throw new Error("Lesson observation cursor does not belong to this runtime journal");
     return structuredClone({
+      nowMs: this.now(),
       cursor: { runtimeId: this.runtimeId, offset: this.events.length },
       snapshot: this.snapshot(),
       events: this.events.slice(after?.offset ?? 0),

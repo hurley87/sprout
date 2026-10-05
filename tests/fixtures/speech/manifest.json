@@ -20,6 +20,278 @@
       "format": "mono 24 kHz signed 16-bit PCM WAV",
       "durationSeconds": 1.347833,
       "purpose": "Initial speech plumbing validation only; not a lesson scenario corpus."
+    },
+    "one": {
+      "file": "one.wav",
+      "text": "One.",
+      "sha256": "f39ff4f42cb188c235b14116552015bd6f02109ae6712079365a7da8fbb1dd9b",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 0.384208,
+      "purpose": "Deterministic child primitive; synthetic adult voice, not preschool speech.",
+      "provenance": {
+        "method": "Offline macOS say, Albert voice at 150 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "commands": [
+          ["/usr/bin/say", "-v", "Albert", "-r", "150", "-o", "/tmp/sprout-one.aiff", "One."],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-one.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/one.wav"
+          ]
+        ]
+      }
+    },
+    "two": {
+      "file": "two.wav",
+      "text": "Two.",
+      "sha256": "14d5b39c9db386dd08312aafeba7a55dd77167a9374e5aca20bd3f5ed89cc42a",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 0.321292,
+      "purpose": "Deterministic child primitive; synthetic adult voice, not preschool speech.",
+      "provenance": {
+        "method": "Offline macOS say, Albert voice at 150 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "commands": [
+          ["/usr/bin/say", "-v", "Albert", "-r", "150", "-o", "/tmp/sprout-two.aiff", "Two."],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-two.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/two.wav"
+          ]
+        ]
+      }
+    },
+    "three": {
+      "file": "three.wav",
+      "text": "Three.",
+      "sha256": "609140aa8eb6017ded8df1a8ac8043ea37584f873cc5480bbf43ddf2c90b31eb",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 0.378083,
+      "purpose": "Deterministic child primitive; synthetic adult voice, not preschool speech.",
+      "provenance": {
+        "method": "Offline macOS say, Albert voice at 150 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "commands": [
+          ["/usr/bin/say", "-v", "Albert", "-r", "150", "-o", "/tmp/sprout-three.aiff", "Three."],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-three.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/three.wav"
+          ]
+        ]
+      }
+    },
+    "dont-know": {
+      "file": "dont-know.wav",
+      "text": "I don't know.",
+      "sha256": "769edc871eee053ba6f903fe46d77d666c04e735ecfb376147a3e182fe2b5af2",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 0.639667,
+      "purpose": "Deterministic child primitive; synthetic adult voice, not preschool speech.",
+      "provenance": {
+        "method": "Offline macOS say, Albert voice at 150 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "commands": [
+          ["/usr/bin/say", "-v", "Albert", "-r", "150", "-o", "/tmp/sprout-dont-know.aiff", "I don't know."],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-dont-know.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/dont-know.wav"
+          ]
+        ]
+      }
+    },
+    "help": {
+      "file": "help.wav",
+      "text": "Help me please.",
+      "sha256": "cc7176f56ce0138d779501588ac602cda0a9718604580fb061933a9efdbd28be",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 0.854083,
+      "purpose": "Deterministic child primitive; synthetic adult voice, not preschool speech.",
+      "provenance": {
+        "method": "Offline macOS say, Albert voice at 150 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "commands": [
+          ["/usr/bin/say", "-v", "Albert", "-r", "150", "-o", "/tmp/sprout-help.aiff", "Help me please."],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-help.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/help.wav"
+          ]
+        ]
+      }
+    },
+    "stop": {
+      "file": "stop.wav",
+      "text": "Stop please.",
+      "sha256": "8e0e7614e402adb23ef5b1f69de4b5f1452d68146959771c0071162b7ebf1ae7",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 0.830875,
+      "purpose": "Deterministic child primitive; synthetic adult voice, not preschool speech.",
+      "provenance": {
+        "method": "Offline macOS say, Albert voice at 150 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "commands": [
+          ["/usr/bin/say", "-v", "Albert", "-r", "150", "-o", "/tmp/sprout-stop.aiff", "Stop please."],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-stop.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/stop.wav"
+          ]
+        ]
+      }
+    },
+    "wait": {
+      "file": "wait.wav",
+      "text": "Wait!",
+      "sha256": "13f8554b0bfd997fe3f0dd089f0b75980da55800cc62d6796569949421e30ac9",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 0.442167,
+      "purpose": "Deterministic child primitive; synthetic adult voice, not preschool speech.",
+      "provenance": {
+        "method": "Offline macOS say, Albert voice at 150 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "commands": [
+          ["/usr/bin/say", "-v", "Albert", "-r", "150", "-o", "/tmp/sprout-wait.aiff", "Wait!"],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-wait.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/wait.wav"
+          ]
+        ]
+      }
+    },
+    "uh": {
+      "file": "uh.wav",
+      "text": "Uh.",
+      "sha256": "9bccf75414401feb0d88af6a2e326fc5772f9dd0ddd960979f42c23e6978a4c4",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 0.244917,
+      "purpose": "Deterministic child primitive; synthetic adult voice, not preschool speech.",
+      "provenance": {
+        "method": "Offline macOS say, Albert voice at 150 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "commands": [
+          ["/usr/bin/say", "-v", "Albert", "-r", "150", "-o", "/tmp/sprout-uh.aiff", "Uh."],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-uh.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/uh.wav"
+          ]
+        ]
+      }
     }
   }
 }

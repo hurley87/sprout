@@ -218,3 +218,17 @@ it("cannot reuse an earlier quiet output event for a new tutor-output wait", asy
   expect(unavailable.cursor.offset).toBeGreaterThan(quiet.cursor.offset);
   expect(lesson.observe().snapshot.runtime?.outputActivity).toBe("unavailable");
 });
+
+it("samples the attempt performance clock without changing the production report", () => {
+  let browserNow = 100_000;
+  vi.spyOn(performance, "now").mockImplementation(() => browserNow);
+  const lesson = runtime();
+  expect(lesson.report().events[0].atMs).toBe(0);
+  browserNow += 25;
+  lesson.confirmRendered(lesson.snapshot().display);
+  const report = structuredClone(lesson.report());
+  browserNow += 10;
+  expect(lesson.observe().nowMs).toBe(35);
+  expect(lesson.report()).toEqual(report);
+  expect(report.events.find(event => event.type === "render.confirmed")?.atMs).toBe(25);
+});

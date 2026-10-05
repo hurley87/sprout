@@ -60,13 +60,16 @@ export class LessonObserver {
       scope: LessonEventScope;
       timeoutMs?: number;
       detail?: Record<string, unknown>;
+      signal?: AbortSignal;
     },
   ): Promise<{ event: LessonDiagnostic; cursor: LessonEventCursor }> {
     if (options.after.runtimeId !== options.scope.runtimeId) throw new Error("Cursor and scope runtime differ");
     const deadline = Date.now() + (options.timeoutMs ?? 10_000);
     let cursor = options.after;
     do {
+      options.signal?.throwIfAborted();
       const observation = await this.read(cursor);
+      options.signal?.throwIfAborted();
       if (!observation) throw new Error("Lesson runtime detached during wait");
       const index = observation.events.findIndex(
         event =>
