@@ -27,6 +27,13 @@ import { COUNTING_NODE_IDS } from "../lib/lesson-runtime/counting-lesson";
 import type { LessonDiagnostic } from "../lib/lesson-runtime/lesson-runtime";
 import { LIVE_CORRECT_ANSWERS } from "./browser/live/answers";
 import manifest from "./fixtures/speech/manifest.json";
+import {
+  assertFreshRecovery,
+  assertHoldWindow,
+  assertStoppedWindow,
+  assertUnresolvedSpeech,
+} from "./browser/live/support-evidence";
+import { UNRESOLVED } from "./browser/live/behaviors";
 
 it("live baseline answers match each scene, including butterflies on the final node", () => {
   expect(
@@ -398,4 +405,203 @@ it("next child action requires steering acknowledgment, visit boundary, stable t
       events: [...events, { ...event, type: "output.activity", atMs: 999, detail: { state: "active" } }],
     }),
   ).toBe(false);
+});
+
+/** These fabricated journals exercise assertions only; live scenarios never import this builder. */
+function supportReport(text = "Please help me count the ducks.") {
+  const report = completedReport();
+  const request = report.events.find(e => e.type === "classifier.started" && e.visitId === 2)!;
+  const result = report.events.find(e => e.type === "classifier.result" && e.visitId === 2)!;
+  const mapping = report.events.find(e => e.type === "classifier.mapping" && e.visitId === 2)!;
+  report.runtime = detail<Change>(transitions(report.events)[1]).before;
+  report.status = "live";
+  report.events = report.events.slice(0, report.events.indexOf(result) + 1);
+  result.type = "classifier.held";
+  detail<{ proposal: unknown }>(result).proposal = null;
+  detail<{ transcript: string }>(request).transcript = `Child: ${text}\nTutor: Point to each duck.`;
+  const outputs = detail<{ outputs: ConversationStateOutputs }>(mapping).outputs;
+  outputs.objectiveState = {
+    choice: "unresolved_help",
+    confidence: 1,
+    probabilities: { completed: 0, incorrect: 0, unclear_or_incomplete: 0, unresolved_help: 1, no_attempt: 0 },
+  };
+  outputs.tutorState = {
+    choice: "helping",
+    confidence: 1,
+    probabilities: { confirmed_completion: 0, clarifying: 0, helping: 1, asking: 0, other: 0 },
+  };
+  Object.assign(detail<Record<string, unknown>>(mapping), {
+    decision: "accepted",
+    outcome: "hold_scene",
+    labelCompletionEligible: false,
+  });
+  report.events.splice(report.events.indexOf(request), 0, {
+    ...request,
+    type: "transcript.snapshot",
+    transcriptSpeaker: "tutor",
+    detail: { transcript: detail<{ transcript: string }>(request).transcript },
+  });
+  const offset = report.events.findIndex(e => e.type === "gpt_live.steering_append" && e.visitId === 2) + 1;
+  const from = {
+    after: { runtimeId: report.runtimeId, offset },
+    scope: { runtimeId: report.runtimeId, visitId: 2, nodeId: "count-2-ducks", childTurnId: 0, transcriptRevision: 0 },
+  };
+  return { report, result, request, mapping, from };
+}
+
+it.each(Object.entries(UNRESOLVED))(
+  "%s fixture is unresolved speech with heard current-turn evidence",
+  (mode, fixture) => {
+    const text = manifest.fixtures[fixture.fixture].text;
+    const { report, result, from } = supportReport(text);
+    assertUnresolvedSpeech(report.events, result, from, fixture.heard, mode === "help");
+    assertHoldWindow(report, from, 0, 3000);
+    expect(() =>
+      assertUnresolvedSpeech(
+        report.events,
+        result,
+        { ...from, scope: { ...from.scope, childTurnId: result.childTurnId } },
+        fixture.heard,
+      ),
+    ).toThrow(/earlier child turn/);
+    expect(() => assertUnresolvedSpeech(report.events, result, from, /absent words/)).toThrow(/intended utterance/);
+  },
+);
+
+it.each([
+  "scores",
+  "provider failure",
+  "mapping",
+  "identity",
+  "scaffold state",
+  "tutor transcript",
+  "tutor audio",
+  "tutor supplied",
+  "older answer",
+  "missing VAD",
+  "unfinished turn",
+  "earlier tutor audio",
+])("rejects invalid support evidence: %s", fault => {
+  const { report, result, request, mapping, from } = supportReport();
+  const diagnostic = detail<Record<string, unknown>>(mapping);
+  if (fault === "scores") diagnostic.outputs = null;
+  if (fault === "provider failure") {
+    result.type = "classifier.abstained";
+    Object.assign(diagnostic, { decision: "abstained", outcome: "unresolved", reason: "provider_unreachable" });
+  }
+  if (fault === "mapping") report.events = report.events.filter(e => e !== mapping);
+  if (fault === "identity") result.transcriptRevision++;
+  if (fault === "scaffold state")
+    detail<{ outputs: ConversationStateOutputs }>(mapping).outputs.tutorState.choice = "asking";
+  if (fault === "tutor transcript") report.events = report.events.filter(e => e.type !== "transcript.snapshot");
+  if (fault === "tutor audio") report.events = report.events.filter(e => e.type !== "output.activity");
+  if (fault === "tutor supplied")
+    detail<{ transcript: string }>(request).transcript = "Child: Um.\nTutor: Please help me count the ducks.";
+  if (fault === "older answer")
+    report.events.splice(report.events.indexOf(request), 0, {
+      ...request,
+      type: "transcript.snapshot",
+      childTurnId: 0,
+      detail: { transcript: "Child: Please help me count the ducks." },
+    });
+  if (fault === "missing VAD") report.events = report.events.filter(e => e.type !== "microphone.speech_stopped");
+  if (fault === "unfinished turn")
+    report.events = report.events.filter(e => e.type !== "runtime.event.child.turn.ended");
+  if (fault === "earlier tutor audio")
+    for (const event of report.events.filter(e => e.type === "output.activity" && e.visitId === 2)) event.atMs = 0;
+  expect(() => assertUnresolvedSpeech(report.events, result, from, UNRESOLVED.help.heard, true)).toThrow();
+});
+
+it("accepts semantic score abstention and rejects a provider error elsewhere in the hold journal", () => {
+  const { report, result, mapping, from } = supportReport();
+  result.type = "classifier.abstained";
+  Object.assign(detail<Record<string, unknown>>(mapping), {
+    decision: "abstained",
+    outcome: "unresolved",
+    reason: "tutorState_competing_options",
+  });
+  assertUnresolvedSpeech(report.events, result, from, UNRESOLVED.help.heard, true);
+  assertHoldWindow(report, from, 0, 3000);
+  report.events.push({ ...result, type: "classifier.error" });
+  expect(() => assertHoldWindow(report, from, 0, 3000)).toThrow(/provider failure/);
+});
+
+it("silence holds without invented classifier evidence, but transient authority, end, or short windows fail", () => {
+  const { report, from } = supportReport();
+  report.events = report.events.slice(0, from.after.offset);
+  assertHoldWindow(report, from, 0, 5000);
+  expect(() => assertHoldWindow(report, from, 0, 2999)).toThrow(/shorter/);
+  const complete = completedReport();
+  report.events.push(transitions(complete.events)[1]);
+  expect(() => assertHoldWindow(report, from, 0, 5000)).toThrow(/advanced/);
+  report.events.pop();
+  report.events.push(complete.events.find(e => e.type === "classifier.result" && e.visitId === 2)!);
+  expect(() => assertHoldWindow(report, from, 0, 5000)).toThrow(/success authority/);
+  report.events.pop();
+  report.events.push({ ...complete.events.at(-1)!, atMs: 2000 });
+  expect(() => assertHoldWindow(report, from, 0, 5000)).toThrow(/ended/);
+});
+
+it("recovery requires a fresh learner total, rejecting prior authority and tutor totals", () => {
+  const report = completedReport();
+  const { from } = supportReport();
+  assertFreshRecovery(report, from);
+  expect(() =>
+    assertFreshRecovery(report, {
+      ...from,
+      scope: {
+        ...from.scope,
+        childTurnId: report.events.find(e => e.type === "classifier.result" && e.visitId === 2)!.childTurnId,
+      },
+    }),
+  ).toThrow(/pre-answer authority/);
+  const request = report.events.find(e => e.type === "classifier.started" && e.visitId === 2)!;
+  detail<{ transcript: string }>(request).transcript = "Child: Okay\nTutor: Two ducks.";
+  expect(() => assertFreshRecovery(report, from)).toThrow(/learner recovery total missing/);
+});
+
+it.each(["valid", "short", "spoken stop", "render", "authority", "steering", "transient visit"])(
+  "parent stop window: %s",
+  fault => {
+    const { report, from } = supportReport();
+    report.events = report.events.slice(0, from.after.offset);
+    const base = report.events.at(-1)!;
+    report.status = "ended";
+    report.runtime = { ...report.runtime!, phase: "stopped" };
+    report.events.push({
+      ...base,
+      type: "lesson.ended",
+      atMs: 100,
+      detail: { reason: fault === "spoken stop" ? "session_closed" : "parent_stop" },
+    });
+    if (fault === "render") report.events.push({ ...base, type: "render.requested", atMs: 200 });
+    if (fault === "authority") report.events.push({ ...base, type: "classifier.result", atMs: 200 });
+    if (fault === "steering") report.events.push({ ...base, type: "gpt_live.steering_append", atMs: 200 });
+    if (fault === "transient visit")
+      report.events.push({ ...base, type: "runtime.changed", atMs: 200, detail: { after: { visitId: 3 } } });
+    const check = () => assertStoppedWindow(report, from, 0, fault === "short" ? 2999 : 3000);
+    if (fault === "valid") check();
+    else expect(check).toThrow();
+  },
+);
+
+it.each(["incorrect", "unclear_or_incomplete", "unresolved_help", "no_attempt"] as const)(
+  "hold accepts safe objective %s without mandating one label",
+  choice => {
+    const { report, result, mapping, from } = supportReport();
+    const objective = detail<{ outputs: ConversationStateOutputs }>(mapping).outputs.objectiveState;
+    objective.choice = choice;
+    for (const key of Object.keys(objective.probabilities) as (keyof typeof objective.probabilities)[])
+      objective.probabilities[key] = key === choice ? 1 : 0;
+    assertUnresolvedSpeech(report.events, result, from, UNRESOLVED.help.heard);
+  },
+);
+
+it("hold rejects orphan render activity and missing normalized diagnostics across the whole window", () => {
+  const { report, result, from } = supportReport();
+  report.events.push({ ...result, type: "render.requested" });
+  expect(() => assertHoldWindow(report, from, 0, 3000)).toThrow(/render or steering/);
+  report.events.pop();
+  report.events.push({ ...result, type: "classifier.mapping_unavailable" });
+  expect(() => assertHoldWindow(report, from, 0, 3000)).toThrow(/missing diagnostics/);
 });

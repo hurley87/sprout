@@ -70,7 +70,7 @@ const childText = (transcript: string) =>
 
 /** Visit transcripts retain older turns. Remove their child prefix, then keep all
  * current-turn fragments even when tutor backchannels separate them. */
-function currentChildText(events: readonly LessonDiagnostic[], request: LessonDiagnostic) {
+export function currentChildText(events: readonly LessonDiagnostic[], request: LessonDiagnostic) {
   const child = childText(detail<{ transcript: string }>(request).transcript);
   const older = events
     .slice(0, events.indexOf(request))
@@ -106,8 +106,9 @@ export function assertWrongWindow(
   visitId: number,
   fromMs: number,
   untilMs: number,
+  minimumMs = 3000,
 ) {
-  assert(untilMs - fromMs >= 3000, "wrong-answer observation window shorter than 3 seconds");
+  assert(untilMs - fromMs >= minimumMs, "wrong-answer observation window shorter than 3 seconds");
   const window = events.filter(event => event.atMs >= fromMs && event.atMs <= untilMs);
   assert.equal(
     transitions(window).filter(event => detail<Change>(event).before.visitId === visitId).length,
@@ -122,11 +123,21 @@ export function assertWrongWindow(
 }
 
 export function assertWrongDecision(events: readonly LessonDiagnostic[], event: LessonDiagnostic) {
-  assert(["classifier.held", "classifier.abstained"].includes(event.type), "wrong answer received success authority");
+  return assertHoldDecision(events, event, /\b(?:three|3)\b/i);
+}
+
+export function assertHoldDecision(events: readonly LessonDiagnostic[], event: LessonDiagnostic, heard: RegExp) {
+  assert(
+    ["classifier.held", "classifier.abstained"].includes(event.type),
+    "unresolved response received success authority",
+  );
   assert.equal(detail<{ proposal: unknown }>(event).proposal, null);
   const { request, diagnostic } = classifierEvidence(events, event);
-  assert(/\b(?:three|3)\b/i.test(currentChildText(events, request)), "wrong answer absent from current child turn");
-  assert(diagnostic.outputs, "wrong-answer decision lacks valid classifier scores");
+  assert(
+    heard.test(currentChildText(events, request).replaceAll("\n", " ")),
+    "intended utterance absent from current child turn",
+  );
+  assert(diagnostic.outputs, "hold decision lacks valid classifier scores");
   assert.equal(diagnostic.labelCompletionEligible, false);
   assert.notEqual(diagnostic.outputs.objectiveState.choice, "completed");
   if (event.type === "classifier.held") {

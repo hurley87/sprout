@@ -1,6 +1,6 @@
 # Deliberate provider-backed lesson scenarios
 
-These three tests use `/`, the real synthetic-microphone `MediaStream`, app-owned
+These nine tests use `/`, the real synthetic-microphone `MediaStream`, app-owned
 VAD, GPT-Live transcript transport, canonical `conversation-state-v2`, production
 reducer and React scene. There are no route mocks, supplied transcripts, injected
 classifier results, test-time TTS, or additional AI models in the live suite.
@@ -42,7 +42,7 @@ npm run test:browser -- --list
 npm run test:browser -- tests/browser/live/scenarios.spec.ts --list
 ```
 
-The first command must list exactly three live tests; the last must report no
+The first command must list exactly nine live tests; the last must report no
 tests (exit 1). Never remove `--list` from a command with synthetic credentials.
 Offline assertions run with `npm test` and include adversarial report mutations.
 They validate scenario logic, **not** live provider behavior.
@@ -141,10 +141,9 @@ supplying the expected transcript or relaxing gates. A stalled tutor, ambiguous
 classifier, lost steering acknowledgment or starvation may fail current product
 behavior. VAD/cancellation, thresholds, reducer and classifier-switching
 policy remain unchanged. The explicit initial start directive is the only
-production prompting change in the follow-up diagnosis. Help, silence, noise, barge-in and broad curriculum
-scenarios remain outside this slice.
+production prompting change in the follow-up diagnosis. The support scenarios below add help, hesitation, off-topic, silence and parent Stop coverage. Noise, barge-in and broad curriculum remain outside this slice.
 
-Authorized targeted live runs of **all three scenarios remain pending**. Review
+Clean revised happy-path and incorrect-then-correct live runs remain pending. The saved self-correction live evidence completed successfully, as recorded in the commit-6 handoff; this preparation does not rerun or independently revalidate that live attempt. Review
 these changes and choose one command above first; offline green checks cannot
 establish that a provider-backed complete lesson passes.
 
@@ -179,3 +178,71 @@ wrong-answer evidence and success authority still fail. The three-second full
 journal hold and later correct-answer completion requirements remain intact.
 Saved-report replay validates the observed abstention and hold; live recovery
 with the updated scenario remains pending.
+
+
+## Support, hesitation, silence and stop (commit 6)
+
+`support.spec.ts` adds six independently selectable `@support` tests. Each first
+answers the one-duck node, then observes the real two-duck prompt. Recovery uses
+a new “I see two ducks.” microphone utterance and finishes the butterfly node;
+full production completion evidence and fresh recovery authority are required.
+The stop case ends on two ducks instead. None joins `@baseline` or default CI.
+
+| Tag | Exact unresolved fixture / action | Invariant and observation window |
+| --- | --- | --- |
+| `@help` | “Please help me count the ducks.” | Canonical non-completion decision with latest tutor `helping` state plus post-request tutor transcript/audio evidence. No success authority or scene change from pre-speech through at least three seconds after that decision and until fresh learner recovery. |
+| `@incomplete` | “One duck, and then...” | Unfinished count on **two** ducks leaves the objective unresolved. Same bounded hold, then a fresh settled learner total continues the task. |
+| `@ambiguous` | “Maybe two ducks, or maybe three. I have not decided.” | Explicit unresolved alternatives cannot borrow tutor settlement. Same bounded hold, then a clear fresh learner response. Opening “I think two” alone is deliberately not used. |
+| `@off-topic` | “My favorite toy is a red truck.” | Unrelated speech gives no counting authority. Same bounded hold, then fresh learner recovery. |
+| `@silence` | Five seconds of connected zero-valued microphone frames after settled prompt | No confirmed child activity, success authority or scene change during that window and until fresh learner recovery; no classifier decision is fabricated or required for missing child speech. Any observed hold/abstention must still have valid canonical scores. |
+| `@stop` | Parent **Stop** UI click | End reason must be `parent_stop`, runtime stopped on the same visit, app capture ended, and no classifier success, render, steering or transient visit advancement from the pre-click checkpoint through three seconds after the click. |
+
+The help, incomplete, ambiguous and off-topic gates require a fresh request/result
+identity and the intended current-turn child words in the actual provider
+transcript. Text checks establish receipt only; canonical production scores
+supply the semantics. Accepted holds and score-based semantic abstentions are
+both safe; no one objective label is mandated. Completion eligibility, completed
+objective choices, missing scores/mappings and provider failures fail the hold.
+Help additionally needs classifier tutor-state `helping`; a harness keyword
+match on tutor prose cannot establish scaffolding. Physical transcript settlement
+and sustained output quiet release the next action, as in the baseline.
+
+The journal is examined from before the unresolved utterance until immediately
+before recovery, including intermediate decisions and transient transitions.
+Recovery cannot use earlier child turns, tutor-supplied totals or pre-answer
+classifier authority. Failures preserve the report, actions, final state and
+chronological timeline through the shared attempt collector before disposal;
+readiness timeouts include the latest missing-evidence reason.
+
+The current product treats `requestStop()` / “Stop please.” as ordinary microphone
+speech. It has no dedicated spoken-stop runtime command. This slice tests the
+actual parent control and makes no new guarantee about tutor interpretation or
+spoken-stop policy. No production code, prompting, VAD or cancellation gates change.
+
+Targeted commands below are **billed live runs** when explicitly authorized and
+real credentials are supplied securely in the invoking environment:
+
+```bash
+npm run test:browser:live -- support.spec.ts --grep '@help'
+npm run test:browser:live -- support.spec.ts --grep '@incomplete'
+npm run test:browser:live -- support.spec.ts --grep '@ambiguous'
+npm run test:browser:live -- support.spec.ts --grep '@off-topic'
+npm run test:browser:live -- support.spec.ts --grep '@silence'
+npm run test:browser:live -- support.spec.ts --grep '@stop'
+npm run test:browser:live -- --grep '@support'
+npm run test:browser:live -- support.spec.ts --grep '@help|@silence|@stop'
+```
+
+The existing single worker, zero retries, 120-second test and 600-second total
+limits are unchanged. All nine together may exhaust the total budget; select a
+scenario or subset deliberately. `@baseline` still selects exactly three tests.
+Discovery with synthetic strings must always include `--list`; it makes no
+provider calls. All six new scenarios remain **unvalidated live** in this task.
+Offline assertion tests reject stale identities, missing support evidence,
+provider errors, tutor-only/old-turn answers, transient advancement and post-Stop
+authority. Green offline checks do not establish live reliability.
+
+The four new fixtures use Samantha at 130 words/minute, generated offline with
+macOS `say` and FFmpeg. Their manifest entries preserve exact text, generation
+arguments, tool versions, duration and SHA-256. Bytes are authoritative and
+verified before decoding; tests never synthesize speech or use child recordings.

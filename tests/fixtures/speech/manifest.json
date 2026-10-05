@@ -532,6 +532,198 @@
           ]
         ]
       }
+    },
+    "support-help": {
+      "file": "support-help.wav",
+      "text": "Please help me count the ducks.",
+      "sha256": "f2d91823455c42c5dde1979dd90c907daad871cf163c158b5b067867e57c18b8",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 2.015375,
+      "purpose": "Unresolved two-duck objective live scenario; synthetic adult speech.",
+      "provenance": {
+        "method": "Offline macOS say, Samantha voice at 130 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "commands": [
+          [
+            "/usr/bin/say",
+            "-v",
+            "Samantha",
+            "-r",
+            "130",
+            "-o",
+            "/tmp/sprout-support-help.aiff",
+            "Please help me count the ducks."
+          ],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-support-help.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/support-help.wav"
+          ]
+        ],
+        "toolVersions": {
+          "macOS": "27.0.1",
+          "ffmpeg": "8.1.2",
+          "voice": "Samantha (built-in en_US)"
+        }
+      }
+    },
+    "partial-count": {
+      "file": "partial-count.wav",
+      "text": "One duck, and then...",
+      "sha256": "6d0e19b7f52df6596307148ec99f12b49721daa09083203b75b5ea1ef11a493b",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 1.683458,
+      "purpose": "Unresolved two-duck objective live scenario; synthetic adult speech.",
+      "provenance": {
+        "method": "Offline macOS say, Samantha voice at 130 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "commands": [
+          [
+            "/usr/bin/say",
+            "-v",
+            "Samantha",
+            "-r",
+            "130",
+            "-o",
+            "/tmp/sprout-partial-count.aiff",
+            "One duck, and then..."
+          ],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-partial-count.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/partial-count.wav"
+          ]
+        ],
+        "toolVersions": {
+          "macOS": "27.0.1",
+          "ffmpeg": "8.1.2",
+          "voice": "Samantha (built-in en_US)"
+        }
+      }
+    },
+    "unsettled-answer": {
+      "file": "unsettled-answer.wav",
+      "text": "Maybe two ducks, or maybe three. I have not decided.",
+      "sha256": "660546af0580de1abf55222f853bc84156a8796b1a20e95cb8e86c619f340252",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 4.146708,
+      "purpose": "Unresolved two-duck objective live scenario; synthetic adult speech.",
+      "provenance": {
+        "method": "Offline macOS say, Samantha voice at 130 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "commands": [
+          [
+            "/usr/bin/say",
+            "-v",
+            "Samantha",
+            "-r",
+            "130",
+            "-o",
+            "/tmp/sprout-unsettled-answer.aiff",
+            "Maybe two ducks, or maybe three. I have not decided."
+          ],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-unsettled-answer.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/unsettled-answer.wav"
+          ]
+        ],
+        "toolVersions": {
+          "macOS": "27.0.1",
+          "ffmpeg": "8.1.2",
+          "voice": "Samantha (built-in en_US)"
+        }
+      }
+    },
+    "off-topic": {
+      "file": "off-topic.wav",
+      "text": "My favorite toy is a red truck.",
+      "sha256": "573194b5b1661628ece81b8be5fd75b2e0b334e38d9fd2ef0e49ca6ff7f8ea50",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 2.1615,
+      "purpose": "Unresolved two-duck objective live scenario; synthetic adult speech.",
+      "provenance": {
+        "method": "Offline macOS say, Samantha voice at 130 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "commands": [
+          [
+            "/usr/bin/say",
+            "-v",
+            "Samantha",
+            "-r",
+            "130",
+            "-o",
+            "/tmp/sprout-off-topic.aiff",
+            "My favorite toy is a red truck."
+          ],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-off-topic.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/off-topic.wav"
+          ]
+        ],
+        "toolVersions": {
+          "macOS": "27.0.1",
+          "ffmpeg": "8.1.2",
+          "voice": "Samantha (built-in en_US)"
+        }
+      }
     }
   }
 }
