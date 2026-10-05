@@ -10,9 +10,9 @@ route mocks remain provider-free.
 The separate `lesson-live` project is enabled only by deliberately selecting
 `playwright.live.config.ts`, normally through `npm run test:browser:live`. It
 discovers only `tests/browser/live/**/*.spec.ts` and cannot select normal browser
-tests. **No live scenarios exist yet**; a configured invocation currently reports
-“No tests found”. This is suite isolation for future work in
-[#30](https://github.com/hurley87/sprout/issues/30), not reactive lesson coverage.
+tests. It now contains three complete-lesson scenarios: happy path, incorrect
+then correct, and self-correction. See [live scenario scope and assertions](../tests/browser/live/README.md)
+for their evidence contracts, fixture limitations and pending live validation.
 
 ## Live configuration and cost
 
@@ -23,7 +23,7 @@ reports only missing variable names. It does not load `.env.local`; credentials
 configured only in that file do not satisfy this check. Never put secrets in
 commands, test fixtures, documentation, or `NEXT_PUBLIC_*` variables.
 
-Future live scenarios may make **billed GPT-Live and Jev calls**. Select a small
+Live scenarios may make **billed GPT-Live and Jev calls**. Select a small
 scenario or tagged subset first; the full live suite is an explicit opt-in. It
 runs with one worker, no automatic retries, a two-minute timeout per test,
 15-second assertion waits, and a ten-minute total run limit. Server startup is
@@ -35,8 +35,7 @@ sequentially.
 
 ## Selection commands
 
-These live selection examples apply once matching scenarios are implemented.
-Use descriptive test titles and Playwright tags such as `@baseline` for subsets.
+The three scenarios have individual tags and the shared `@baseline` tag.
 
 ```bash
 # Normal provider-free browser tests
@@ -47,7 +46,7 @@ npm run test:browser
 npm run test:browser:live -- --list
 
 # One scenario by file and distinctive test title
-npm run test:browser:live -- happy-path.spec.ts --grep 'happy path'
+npm run test:browser:live -- scenarios.spec.ts --grep '@happy-path'
 
 # A named subset by Playwright tag
 npm run test:browser:live -- --grep '@baseline'
@@ -67,8 +66,11 @@ coverage.
 `getUserMedia` replacement. Install it **before navigation and before starting a
 lesson**. Each document gets an audio-only replacement returning a fresh clone of
 a `MediaStreamAudioDestinationNode` stream. The original destination stays alive
-when the application stops a capture track. The destination is silent until a
-source plays; silence does not end the microphone track.
+when the application stops a capture track. A continuous zero-valued
+`ConstantSourceNode` supplies real silent audio frames between speech/noise
+playback. An unconnected destination can expose a live track while sending no
+WebRTC audio packets; that stalls the provider timeline and can leave steering
+acknowledgments pending. Silence keeps the audio clock and microphone track alive.
 
 ```ts
 const microphone = await installSyntheticMicrophone(page);
@@ -101,8 +103,8 @@ stops/disconnects it and resolves its completion as `cancelled`. Noise uses a
 seeded uint32 LCG at the context sample rate (same seed/options/sample rate yields
 identical samples), with duration limited to 1,000 ms and amplitude in [0, 1].
 `state()` reports context, source, capture track, and disposal state. `dispose()`
-is idempotent: it cancels playback, stops original/capture tracks, disconnects the
-destination, closes the context, clears decoded buffers, removes the click
+is idempotent: it cancels playback, stops original/capture tracks and the silent
+source, disconnects the destination, closes the context, clears decoded buffers, removes the click
 listener, and restores `getUserMedia`. Close the application's transport too:
 it owns additional track clones, detector contexts, and peer connections.
 Completion results remain available until document destruction. Navigation
@@ -119,10 +121,13 @@ bytes define reproducibility, not a future voice installation.
 The transport tests verify real initial silence, speech energy reaching the
 production `MicrophoneTurnDetector`, confirmed onset and quiet completion, short
 noise activity/discard, repeatable noise samples, cancellation followed by quiet,
-and track/context teardown. They retain real local WebRTC tutor output and do
+and track/context teardown. A local-peer regression also verifies advancing
+WebRTC sample duration and outgoing packet counts during idle silence before
+speech and after cancellation. They retain real local WebRTC tutor output and do
 not inject transcripts or VAD events. Detector scheduling and stream resampling
 are browser-dependent: audio samples are deterministic, event timestamps are
 not. These tests validate audio plumbing and current energy-based detection,
 not recognition accuracy, GPT-Live/Jev behavior, child voice realism, acoustic
-room noise, device processing, or lesson progression. The full child scenario
-corpus and observation bridge remain later work.
+room noise, device processing, or lesson progression. The three live scenarios
+reuse the read-only observation bridge and child helper; wider child behavior
+coverage remains later work.

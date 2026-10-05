@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ClientCommand, ProviderEvent } from "../lib/events";
 import { LessonRuntime } from "../lib/lesson-runtime/lesson-runtime";
+import { LESSON_START_INSTRUCTION } from "../lib/lesson-runtime/live-context";
 
 const transport = vi.hoisted(() => ({
   receive: undefined as ((event: ProviderEvent) => void) | undefined,
@@ -56,6 +57,39 @@ function start(childAnswer = "One.") {
 function tutor(delta: string, startMs = 300) {
   emit({ type: "transcript", speaker: "sprout", delta, startMs, endMs: startMs + 100 });
 }
+
+it("sends an explicit parent start after initial render, once, without treating its acknowledgment as a tutor prompt", () => {
+  const fetch = vi.fn();
+  vi.stubGlobal("fetch", fetch);
+  lesson = new LessonRuntime({} as HTMLAudioElement, () => {});
+  expect(transport.send).not.toHaveBeenCalled();
+  const identity = lesson.snapshot().display;
+  lesson.confirmRendered(identity);
+  expect(transport.send).toHaveBeenCalledOnce();
+  const command = transport.send.mock.calls[0][0];
+  expect(command.type).toBe("session.instructions.append");
+  if (command.type !== "session.instructions.append") throw new Error("Expected steering append");
+  expect(command.content).toContain(LESSON_START_INSTRUCTION);
+  expect(command.content).toContain('"nodeId":"count-1-duck"');
+  expect(command.content).not.toContain("count-2-ducks");
+  const events = lesson.report().events;
+  expect(events.findIndex(event => event.type === "render.confirmed")).toBeLessThan(
+    events.findIndex(event => event.type === "gpt_live.steering_append"),
+  );
+  lesson.confirmRendered(identity);
+  expect(transport.send).toHaveBeenCalledOnce();
+  emit({
+    type: "context.appended",
+    name: "session.instructions.appended",
+    clientEventId: command.event_id,
+    startMs: 600,
+    endMs: 1200,
+  });
+  expect(lesson.snapshot().awaitingSteering).toBe(false);
+  expect(lesson.snapshot().transcript).toBe("");
+  expect(lesson.snapshot().runtime).toMatchObject({ phase: "active", hasChildTurn: false, answerAccepted: false });
+  expect(fetch).not.toHaveBeenCalled();
+});
 
 it("keeps the child answer's 300 ms debounce independent of active tutor audio", async () => {
   const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json({ proposal: null }));
@@ -143,6 +177,15 @@ it("attributes an advancing proposal diagnostic to its source visit rather than 
       after: { nodeId: "count-2-ducks", visitId: 2 },
     },
   });
+  const pendingIdentity = lesson.snapshot().display;
+  expect(transport.send).toHaveBeenCalledOnce(); // next-node instructions wait for render confirmation
+  lesson.confirmRendered(pendingIdentity);
+  expect(transport.send).toHaveBeenCalledTimes(2);
+  const nextCommand = transport.send.mock.calls[1][0];
+  expect(nextCommand.type).toBe("session.instructions.append");
+  if (nextCommand.type !== "session.instructions.append") throw new Error("Expected next-node steering");
+  expect(nextCommand.content).not.toContain(LESSON_START_INSTRUCTION);
+  expect(nextCommand.content).toContain('"nodeId":"count-2-ducks"');
 });
 
 it("aborts an in-flight older revision and waits for the new tutor boundary before capturing its snapshot", async () => {

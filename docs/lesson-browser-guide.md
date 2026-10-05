@@ -22,8 +22,11 @@ are unchanged.
    with microphone support. Keep this tab visible. Headphones can help separate
    microphone activity from tutor playback in the first attempt.
 3. Click **Start lesson** and allow microphone access. One duck is rendered
-   before the runtime is created and before the live connection starts. Wait for
-   GPT-Live to ask how many ducks you see.
+   before the runtime is created and before the live connection starts. Once the
+   session starts, the first steering append explicitly identifies the parent
+   Start action and instructs GPT-Live to speak first immediately, then listen.
+   Later node appends do not repeat this startup instruction. Wait for GPT-Live
+   to ask how many ducks you see.
 4. Say **"One"** once, then pause. Expect a natural acknowledgment. Inspect the
    current-visit transcript: the tutor's acknowledgment snapshot must still
    include `Child: One`, preceded by the tutor's question.

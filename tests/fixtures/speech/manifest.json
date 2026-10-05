@@ -292,6 +292,246 @@
           ]
         ]
       }
+    },
+    "self-correction": {
+      "file": "self-correction.wav",
+      "text": "Three. Uh, I mean two.",
+      "sha256": "29ea5e1a5bf45eae5d639dcc1b863cc1c19023198f8ac01a6badc28370f8fb3c",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 2.297042,
+      "purpose": "Live counting scenario; synthetic adult speech, not preschool speech.",
+      "provenance": {
+        "method": "Offline macOS say, Samantha voice at 130 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "toolVersions": {
+          "macOS": "27.0.1",
+          "ffmpeg": "8.1.2",
+          "voice": "Samantha (English (US))"
+        },
+        "commands": [
+          [
+            "/usr/bin/say",
+            "-v",
+            "Samantha (English (US))",
+            "-r",
+            "130",
+            "-o",
+            "/tmp/sprout-self-correction-samantha.aiff",
+            "Three. Uh, I mean two."
+          ],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-self-correction-samantha.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/self-correction.wav"
+          ]
+        ]
+      }
+    },
+    "answer-one": {
+      "file": "answer-one.wav",
+      "text": "I see one duck.",
+      "sha256": "d21c98e59987603f19e0ef10c76df82225f835535cc516fa4f7557ea1ef651b6",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 1.341167,
+      "purpose": "Live counting scenario; synthetic adult speech, not preschool speech.",
+      "provenance": {
+        "method": "Offline macOS say, Samantha voice at 130 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "toolVersions": {
+          "macOS": "27.0.1",
+          "ffmpeg": "8.1.2",
+          "voice": "Samantha (English (US))"
+        },
+        "commands": [
+          [
+            "/usr/bin/say",
+            "-v",
+            "Samantha (English (US))",
+            "-r",
+            "130",
+            "-o",
+            "/tmp/sprout-answer-one-samantha.aiff",
+            "I see one duck."
+          ],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-answer-one-samantha.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/answer-one.wav"
+          ]
+        ]
+      }
+    },
+    "answer-two": {
+      "file": "answer-two.wav",
+      "text": "I see two ducks.",
+      "sha256": "ba3630f8e20ea731eb2877733012a2deaf10c541a46e04c2f326fd2fe731216b",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 1.480458,
+      "purpose": "Live counting scenario; synthetic adult speech, not preschool speech.",
+      "provenance": {
+        "method": "Offline macOS say, Samantha voice at 130 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "toolVersions": {
+          "macOS": "27.0.1",
+          "ffmpeg": "8.1.2",
+          "voice": "Samantha (English (US))"
+        },
+        "commands": [
+          [
+            "/usr/bin/say",
+            "-v",
+            "Samantha (English (US))",
+            "-r",
+            "130",
+            "-o",
+            "/tmp/sprout-answer-two-samantha.aiff",
+            "I see two ducks."
+          ],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-answer-two-samantha.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/answer-two.wav"
+          ]
+        ]
+      }
+    },
+    "answer-three": {
+      "file": "answer-three.wav",
+      "text": "I see three butterflies.",
+      "sha256": "45609faeafbb720f03c429c983391d1d18cf005b7c4971282d1b0c2e20067fa2",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 1.793708,
+      "purpose": "Live counting scenario; synthetic adult speech, not preschool speech.",
+      "provenance": {
+        "method": "Offline macOS say, Samantha voice at 130 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "toolVersions": {
+          "macOS": "27.0.1",
+          "ffmpeg": "8.1.2",
+          "voice": "Samantha (English (US))"
+        },
+        "commands": [
+          [
+            "/usr/bin/say",
+            "-v",
+            "Samantha (English (US))",
+            "-r",
+            "130",
+            "-o",
+            "/tmp/sprout-answer-three-butterflies-samantha.aiff",
+            "I see three butterflies."
+          ],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-answer-three-butterflies-samantha.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/answer-three.wav"
+          ]
+        ]
+      }
+    },
+    "answer-three-ducks": {
+      "file": "answer-three-ducks.wav",
+      "text": "I see three ducks.",
+      "sha256": "9cca8fccef03876d9c5aa6c9e3873d8d8827a4020f9f01575536ebcbb82eec6c",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 1.503708,
+      "purpose": "Deliberately wrong count on the two-duck scene; synthetic adult speech, not preschool speech.",
+      "provenance": {
+        "method": "Offline macOS say, Samantha voice at 130 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "toolVersions": {
+          "macOS": "27.0.1",
+          "ffmpeg": "8.1.2",
+          "voice": "Samantha (English (US))"
+        },
+        "commands": [
+          [
+            "/usr/bin/say",
+            "-v",
+            "Samantha (English (US))",
+            "-r",
+            "130",
+            "-o",
+            "/tmp/sprout-answer-three-samantha.aiff",
+            "I see three ducks."
+          ],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-answer-three-samantha.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/answer-three-ducks.wav"
+          ]
+        ]
+      }
     }
   }
 }

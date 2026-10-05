@@ -17,9 +17,12 @@ export function initialTeachingContext(): CurrentNodeSteeringContext {
 }
 
 // Appends allow 500 tokens; durable tutoring guidance belongs in session instructions.
-export function teachingInstruction(context: CurrentNodeSteeringContext) {
+export const LESSON_START_INSTRUCTION =
+  "The parent has pressed Start lesson. This is the application's start instruction. Start the lesson now in English. Speak first: ask one counting question about the displayed group immediately, then pause and listen. Do not wait for the child to speak first. Let the child supply the count and total.";
+
+export function teachingInstruction(context: CurrentNodeSteeringContext, startLesson = false) {
   return `Application screen confirmation: this current scene is now rendered. Private current-node teaching context: ${JSON.stringify(context)}.
-Teach only this current scene and learning objective. It replaces all previous scene context; do not refer to the previous scene. Follow the session counting and help guidance. Ask or continue naturally now; let the child supply the count and total. Confirm a settled successful answer with its number and object, then pause. Wait or clarify unfinished/uncertain attempts; never supply the count or total as a hint. You do not control lesson transitions; only the application changes the scene. Never invent a next scene or ask to change it.`;
+Teach only this current scene and learning objective. It replaces all previous scene context; do not refer to the previous scene. Follow the session counting and help guidance. Ask or continue naturally now; let the child supply the count and total. Confirm a settled successful answer with its number and object, then pause. Wait or clarify unfinished/uncertain attempts; never supply the count or total as a hint. You do not control lesson transitions; only the application changes the scene. Never invent a next scene or ask to change it.${startLesson ? `\n${LESSON_START_INSTRUCTION}` : ""}`;
 }
 
 /** Conversational tutoring prompt; graph transitions remain application-owned. */

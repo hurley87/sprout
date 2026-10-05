@@ -33,6 +33,7 @@ export async function installSyntheticMicrophone(page: Page) {
   await page.addInitScript(() => {
     let context: AudioContext | undefined;
     let destination: MediaStreamAudioDestinationNode | undefined;
+    let silenceSource: ConstantSourceNode | undefined;
     let disposed = false;
     let requests = 0;
     let nextId = 0;
@@ -46,6 +47,12 @@ export async function installSyntheticMicrophone(page: Page) {
       if (!context) {
         context = new AudioContext();
         destination = context.createMediaStreamDestination();
+        // An unconnected destination has a live track but produces no frames in Chromium.
+        // Keep real zero-valued audio flowing while idle so the WebRTC/provider clock advances.
+        silenceSource = context.createConstantSource();
+        silenceSource.offset.value = 0;
+        silenceSource.connect(destination);
+        silenceSource.start();
         destination.stream.getTracks().forEach(track => tracks.add(track));
       }
       return context;
@@ -159,6 +166,8 @@ export async function installSyntheticMicrophone(page: Page) {
         document.removeEventListener("click", unlock, true);
         cancel();
         tracks.forEach(track => track.stop());
+        silenceSource?.stop();
+        silenceSource?.disconnect();
         destination?.disconnect();
         buffers.clear();
         if (navigator.mediaDevices.getUserMedia === replacement) navigator.mediaDevices.getUserMedia = original;

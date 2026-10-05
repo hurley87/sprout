@@ -317,7 +317,7 @@ export class LessonRuntime {
         clearTimeout(this.startupTimer);
         this.status = "live";
         this.log("session.started", { sourceId: event.sourceId });
-        if (!this.appendSteering(initialTeachingContext(), this.display.token)) return;
+        if (!this.appendSteering(initialTeachingContext(), this.display.token, true)) return;
         if (!this.transport.openInput(() => this.log("microphone.input_opened")))
           this.fail("Could not open GPT-Live microphone input.");
         this.publish();
@@ -640,10 +640,10 @@ export class LessonRuntime {
     this.classification = undefined;
   }
 
-  private appendSteering(context: CurrentNodeSteeringContext, renderToken: string) {
+  private appendSteering(context: CurrentNodeSteeringContext, renderToken: string, startLesson = false) {
     if (!this.state || this.status !== "live") return false;
     const eventId = `${this.runtimeId}:steer:${this.state.visitId}`;
-    const content = teachingInstruction(context);
+    const content = teachingInstruction(context, startLesson);
     const source = runtimeSource(this.state);
     this.steering = {
       eventId,

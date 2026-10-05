@@ -78,6 +78,7 @@ async function fixture(page: Page) {
 test.afterEach(async ({ page }) => {
   await page.evaluate(`(async () => {
     window.transport?.close();
+    if (window.remoteElement) { window.remoteElement.pause(); window.remoteElement.srcObject = null; }
     window.providers?.forEach(source => {
       source.peer.close(); source.tone.stop();
       source.destination.stream.getTracks().forEach(track => track.stop());
@@ -116,6 +117,61 @@ const microphoneEvents = (page: Page) =>
   page.evaluate<string[]>(
     "window.events.filter(event => event.type.startsWith('microphone.')).map(event => event.type)",
   );
+
+test("answer fixtures reach the remote WebRTC peer after the production input fence opens", async ({ page }, info) => {
+  test.setTimeout(45_000); // Eight real-time clips plus production VAD quiet windows.
+  const microphone = await fixture(page);
+  await page.evaluate(`(async () => {
+    window.remoteElement = new Audio();
+    window.remoteElement.srcObject = new MediaStream(window.provider.getReceivers().map(r => r.track));
+    await window.remoteElement.play();
+  })()`);
+  const received = () =>
+    page.evaluate<{ energy: number; duration: number }>(`(async () => {
+    const stats = [...(await window.provider.getStats()).values()];
+    const audio = stats.find(stat => stat.type === 'inbound-rtp' && stat.kind === 'audio');
+    return { energy: audio?.totalAudioEnergy ?? 0, duration: audio?.totalSamplesDuration ?? 0 };
+  })()`);
+  await microphone.loadSpeech("one");
+  const mutedBefore = await received();
+  await microphone.waitForPlayback((await microphone.playSpeech("one")).id);
+  await expect.poll(() => microphoneEvents(page)).toContain("microphone.speech_stopped");
+  const mutedAfter = await received();
+  expect(mutedAfter.energy - mutedBefore.energy).toBeLessThan(0.00001);
+  await page.evaluate("window.transport.openInput(() => {})");
+  const measurements = [];
+  for (const name of [
+    "one",
+    "two",
+    "three",
+    "answer-one",
+    "answer-two",
+    "answer-three",
+    "answer-three-ducks",
+    "self-correction",
+  ] as const) {
+    await microphone.loadSpeech(name);
+    const eventOffset = (await microphoneEvents(page)).length;
+    const before = await received();
+    const playback = await microphone.playSpeech(name);
+    await microphone.waitForPlayback(playback.id);
+    await expect.poll(async () => (await received()).energy - before.energy).toBeGreaterThan(0.0001);
+    await expect
+      .poll(async () => (await microphoneEvents(page)).slice(eventOffset))
+      .toContain("microphone.speech_stopped");
+    const turns = (await microphoneEvents(page)).slice(eventOffset);
+    expect(turns.filter(type => type === "microphone.speech_started")).toHaveLength(1);
+    expect(turns.filter(type => type === "microphone.speech_stopped")).toHaveLength(1);
+    const after = await received();
+    measurements.push({ name, before, after });
+    expect(after.duration - before.duration).toBeGreaterThan(playback.durationSeconds * 0.7);
+    expect(after.energy - before.energy).toBeGreaterThan(0.0001);
+  }
+  await info.attach("remote-answer-audio.json", {
+    body: JSON.stringify(measurements),
+    contentType: "application/json",
+  });
+});
 
 test("synthetic speech reaches the production microphone detector and silence settles it", async ({ page }) => {
   const microphone = await fixture(page);
@@ -193,4 +249,39 @@ test("seeded noise, cancellation, and teardown use real browser audio", async ({
   await page.waitForTimeout(300);
   expect(await microphoneEvents(page)).toHaveLength(count);
   expect(await page.evaluate("window.failures")).toEqual([]);
+});
+
+test("idle synthetic microphone advances the outgoing WebRTC audio clock before speech and after cancellation", async ({
+  page,
+}, info) => {
+  const microphone = await fixture(page);
+  await page.evaluate("window.transport.openInput(() => {})");
+  const samples = () =>
+    page.evaluate<{ duration: number; packets: number }>(`(async () => {
+    const stats = [...(await window.transport.current.peer.getStats()).values()];
+    return {
+      duration: stats.find(stat => stat.type === 'media-source' && stat.kind === 'audio')?.totalSamplesDuration ?? 0,
+      packets: stats.find(stat => stat.type === 'outbound-rtp' && stat.kind === 'audio')?.packetsSent ?? 0,
+    };
+  })()`);
+  const before = await samples();
+  await page.waitForTimeout(1000);
+  const idle = await samples();
+  await info.attach("idle-audio-clock.json", {
+    body: JSON.stringify({ before, idle }),
+    contentType: "application/json",
+  });
+  expect(idle.duration - before.duration).toBeGreaterThan(0.5);
+  expect(idle.packets - before.packets).toBeGreaterThan(10);
+  expect(await microphoneEvents(page)).toEqual([]);
+  await microphone.loadSpeech("counting");
+  const playback = await microphone.playSpeech("counting");
+  await page.waitForTimeout(100);
+  await microphone.cancel();
+  expect(await microphone.waitForPlayback(playback.id)).toBe("cancelled");
+  const cancelled = await samples();
+  await page.waitForTimeout(1000);
+  const after = await samples();
+  expect(after.duration - cancelled.duration).toBeGreaterThan(0.5);
+  expect(after.packets - cancelled.packets).toBeGreaterThan(10);
 });
