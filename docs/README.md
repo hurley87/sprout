@@ -10,6 +10,7 @@ The production prototype is the realtime counting lesson at `/`, backed by
 | [Classifier contract](lesson-classifier.md) | Jev input projection, probabilities and deterministic mapping |
 | [Reducer contract](lesson-runtime-reducer.md) | Identity, completion gate, render and steering handoff |
 | [Browser evaluation guide](lesson-browser-guide.md) | Reproduction steps, timing, diagnostic interpretation and limitations |
+| [Browser test suites](browser-tests.md) | Provider-free versus live selection, configuration and costs |
 
 Sprout separates pedagogical intent from conversational realization: the authored
 lesson specifies the objective and success edge; GPT-Live realizes the conversation

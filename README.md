@@ -43,4 +43,7 @@ cover the root lesson, removed route boundaries and local WebRTC output without
 billed providers. Real conversational accuracy remains behavioral-evaluation work in
 [#57](https://github.com/hurley87/sprout/issues/57).
 
+Future provider-backed scenarios have a separate, deliberately selected live
+project. See [browser test selection, configuration and costs](docs/browser-tests.md).
+
 See [the documentation index](docs/README.md) for architecture and evaluation guidance.
