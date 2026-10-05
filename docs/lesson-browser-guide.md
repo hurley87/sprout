@@ -320,3 +320,45 @@ Generalized segmentation remains separate work. The root and removed entry point
 See [the help-case evidence and correction](issue-57-help-recovery.md) for the
 `support_ambiguous` finding, learner-led hint guidance, offline checks and required
 live rerun. The help case remains unverified.
+
+## Structured browser test observation (issue #30)
+
+Observation is disabled by default. Before navigation, Playwright's
+`installLessonObserver(page)` in `tests/helpers/lesson-observer.ts` sets
+`window.__SPROUT_OBSERVE_LESSON__ = true` using an init script. The lesson checks
+that exact flag at mount and exposes a frozen `window.sproutLessonObservation`
+facade with only `read(after?)` and `report()`. There are no runtime controls.
+The flag does not enable providers or alter lesson policy.
+
+`read()` returns `null` before an attempt starts; otherwise it returns a detached
+`LessonSnapshot`, the complete diagnostic journal, and a cursor
+`{ runtimeId, offset }`. `read(cursor)` returns only events strictly after that
+cursor, including detector measurements logged without a React publication.
+The snapshot's diagnostic preview still has the UI's 100-event limit; the separate
+`events` array has no such limit. Offsets count journal entries, not timestamps.
+Reads are synchronous and atomic within the browser task. Polling uses the
+existing journal and introduces no subscriptions, log changes, or React updates.
+All nested payloads, including reports, are cloned before crossing the bridge.
+
+Capture a cursor **before** the action to observe, then call `waitForEvent` with
+the exact production event name and runtime scope. Add visit, node, child-turn,
+and transcript-revision scope where relevant. For output, use `output.activity`
+with `detail: { state: "active" }`, `"quiet"`, or `"unavailable"`; quiet is an
+observed PCM state, not an inferred semantic turn end. A returned cursor points
+just past the matched event, allowing an ordered follow-up wait without skipping
+later events in the same batch. Render identities/tokens and classifier proposal
+fields are preserved verbatim in event details. The optional `detail` filter
+recursively matches a subset, for example `{ identity: { token } }` for an exact
+render confirmation or `{ proposal: { answerOutcome: "correct" } }` for a proposal. `read()`
+also exposes the current display identity and runtime state. No semantic outcome
+is inferred by the helper. All production microphone, transcript, classifier,
+scene/render/steering and end diagnostics are available through the same journal.
+
+Stop retains the final snapshot and report until restart. Restart replaces the
+current attempt, and cursors from the old runtime fail explicitly. Collect the
+old report before restarting. Unmount deletes the bridge and invalidates any
+retained facade; reattach gets a new facade. Navigation clears in-page data.
+There is no scenario timeline or artifact writer in this slice. Provider-free
+browser coverage verifies mount, committed render, failure/end, and restart;
+mocked runtime tests verify unpublished measurements, ordering, scoping, cleanup,
+and reference isolation. Live provider behavior remains a separate tier.

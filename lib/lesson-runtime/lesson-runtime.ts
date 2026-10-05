@@ -53,6 +53,13 @@ export type LessonDiagnostic = {
   classifierVersion?: typeof CLASSIFIER_VERSION;
   detail: unknown;
 };
+export type LessonEventCursor = { runtimeId: string; offset: number };
+export type LessonObservation = {
+  cursor: LessonEventCursor;
+  snapshot: LessonSnapshot;
+  events: readonly LessonDiagnostic[];
+};
+
 export type LessonSnapshot = {
   status: "prepared" | "connecting" | "live" | "ended";
   runtime: LessonRuntimeState | null;
@@ -186,6 +193,23 @@ export class LessonRuntime {
       awaitingSteering: Boolean(this.steering),
       diagnostics: this.events.slice(-100),
     };
+  }
+
+  /** Read the complete journal independently of React publication; never return runtime references. */
+  observe(after?: LessonEventCursor): LessonObservation {
+    if (
+      after &&
+      (after.runtimeId !== this.runtimeId ||
+        !Number.isSafeInteger(after.offset) ||
+        after.offset < 0 ||
+        after.offset > this.events.length)
+    )
+      throw new Error("Lesson observation cursor does not belong to this runtime journal");
+    return structuredClone({
+      cursor: { runtimeId: this.runtimeId, offset: this.events.length },
+      snapshot: this.snapshot(),
+      events: this.events.slice(after?.offset ?? 0),
+    });
   }
 
   /** Called from React's committed scene, never from render.requested handling. */
