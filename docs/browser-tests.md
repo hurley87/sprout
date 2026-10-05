@@ -60,3 +60,69 @@ npm run test:browser:live
 during import. Missing credentials, an unknown project, or an unmatched file/title
 filter should fail visibly; do not use `--pass-with-no-tests` to disguise absent
 coverage.
+
+## Controllable synthetic microphone
+
+`tests/helpers/synthetic-microphone.ts` extends the existing transport fixture's
+`getUserMedia` replacement. Install it **before navigation and before starting a
+lesson**. Each document gets an audio-only replacement returning a fresh clone of
+a `MediaStreamAudioDestinationNode` stream. The original destination stays alive
+when the application stops a capture track. The destination is silent until a
+source plays; silence does not end the microphone track.
+
+```ts
+const microphone = await installSyntheticMicrophone(page);
+await page.goto("/");
+await microphone.loadSpeech("counting"); // Decode committed PCM in the browser.
+await page.getByRole("button", { name: "Start lesson", exact: true }).click();
+const speech = await microphone.playSpeech("counting");
+await microphone.waitForPlayback(speech.id); // "ended" or "cancelled"
+const burst = await microphone.noise({ seed: 30, durationMs: 40, amplitude: 0.2 });
+await microphone.waitForPlayback(burst.id);
+await microphone.silence(); // Cancel any active source; keep delivering silence.
+// In finally/afterEach: close the app transport, then await microphone.dispose().
+```
+
+This usage illustrates the low-level API, not a provider-free lesson scenario.
+Starting an actual lesson requires the explicit live configuration described
+above. The provider-free tests instead reuse the local transport fixture.
+
+A capture-phase click listener creates/resumes the helper's AudioContext during
+the trusted Start gesture, before the application's handler. Playback fails
+visibly if the context is still suspended. For a custom start control, the
+browser-side `window.syntheticMicrophone.resume()` can also be called from its
+trusted gesture handler. Do not resume from an arbitrary evaluation and assume
+that autoplay permissions are available. Fixture decoding can happen before the
+click; playback cannot.
+
+Speech/noise uses native `AudioBufferSourceNode.start()` and `onended`, at browser
+audio-clock speed. Starting another source cancels the previous one; `cancel()`
+stops/disconnects it and resolves its completion as `cancelled`. Noise uses a
+seeded uint32 LCG at the context sample rate (same seed/options/sample rate yields
+identical samples), with duration limited to 1,000 ms and amplitude in [0, 1].
+`state()` reports context, source, capture track, and disposal state. `dispose()`
+is idempotent: it cancels playback, stops original/capture tracks, disconnects the
+destination, closes the context, clears decoded buffers, removes the click
+listener, and restores `getUserMedia`. Close the application's transport too:
+it owns additional track clones, detector contexts, and peer connections.
+Completion results remain available until document destruction. Navigation
+creates a fresh controller; playback IDs apply only to their document.
+
+The small initial speech set is in `tests/fixtures/speech/manifest.json`, which
+records exact text, SHA-256, format, and offline generation commands. The WAV was
+generated with the locally installed macOS Albert synthesizer and FFmpeg; no
+child recording or provider service was used. Tests check its checksum, read the
+committed file, and decode it in Chromium. Neither macOS TTS nor FFmpeg is needed
+to run tests. Regeneration can differ across tool/voice versions; the committed
+bytes define reproducibility, not a future voice installation.
+
+The transport tests verify real initial silence, speech energy reaching the
+production `MicrophoneTurnDetector`, confirmed onset and quiet completion, short
+noise activity/discard, repeatable noise samples, cancellation followed by quiet,
+and track/context teardown. They retain real local WebRTC tutor output and do
+not inject transcripts or VAD events. Detector scheduling and stream resampling
+are browser-dependent: audio samples are deterministic, event timestamps are
+not. These tests validate audio plumbing and current energy-based detection,
+not recognition accuracy, GPT-Live/Jev behavior, child voice realism, acoustic
+room noise, device processing, or lesson progression. The full child scenario
+corpus and observation bridge remain later work.

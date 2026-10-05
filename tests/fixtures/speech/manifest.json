@@ -1,0 +1,25 @@
+{
+  "generation": {
+    "method": "Offline macOS say, Albert voice at 150 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+    "commands": [
+      "/usr/bin/say -v Albert -r 150 -o /tmp/sprout-counting.aiff 'One, two, three.'",
+      "ffmpeg -hide_banner -loglevel error -y -i /tmp/sprout-counting.aiff -af loudnorm=I=-16:TP=-1.5:LRA=11 -ar 24000 -ac 1 -c:a pcm_s16le -map_metadata -1 tests/fixtures/speech/counting.wav"
+    ],
+    "reproducibility": "Committed bytes and SHA-256 are authoritative. Regeneration is optional and may differ with OS voice/FFmpeg versions; browser tests never invoke TTS.",
+    "toolVersions": {
+      "macOS": "27.0.1",
+      "ffmpeg": "8.1.2",
+      "voice": "Albert (built-in en_US)"
+    }
+  },
+  "fixtures": {
+    "counting": {
+      "file": "counting.wav",
+      "text": "One, two, three.",
+      "sha256": "113b7430d6d3c4daf3d1d97c68448bdd5de689ecf68fd4f15d2ed4ed2d60f677",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 1.347833,
+      "purpose": "Initial speech plumbing validation only; not a lesson scenario corpus."
+    }
+  }
+}
