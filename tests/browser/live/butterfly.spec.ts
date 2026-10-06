@@ -4,7 +4,9 @@ import { writeFile } from "node:fs/promises";
 import { installChildScenarios, type Checkpoint } from "../../helpers/child-scenario";
 import type { InjectionTiming, WindowEvidence } from "../../helpers/injection-window";
 import type { SpeechFixture } from "../../helpers/synthetic-microphone";
-import { ready } from "./flow";
+import { ready, observeUntil } from "./flow";
+import { settledTutorResponse } from "./signals";
+import { detail } from "./evidence";
 import { completeButterflyPrerequisite } from "./setup";
 import {
   assertButterflySafety,
@@ -27,6 +29,7 @@ if (answerVoice !== "Albert" && answerVoice !== "Samantha")
   throw new Error("SPROUT_BUTTERFLY_ANSWER_VOICE must be Albert or Samantha");
 const answerFixture: SpeechFixture = answerVoice === "Albert" ? "hesitant-three" : "hesitant-three-samantha";
 const observeOnly = process.env.SPROUT_BUTTERFLY_OBSERVE_ONLY === "1";
+const replyToRecovery = process.env.SPROUT_BUTTERFLY_REPLY_TO_RECOVERY === "1";
 
 for (const scenario of cases) {
   test(
@@ -42,6 +45,11 @@ for (const scenario of cases) {
     },
     async ({ page }, info) => {
       info.annotations.push({ type: "answer-voice", description: `${answerVoice}: ${answerFixture}` });
+      if (replyToRecovery)
+        info.annotations.push({
+          type: "recovery-mode",
+          description: "one fresh learner answer after a heard production recovery prompt; not automatic completion",
+        });
       const deadline = Date.now() + info.timeout - 20_000;
       const budget = () => {
         const left = deadline - Date.now();
@@ -53,12 +61,14 @@ for (const scenario of cases) {
       try {
         await harness.run(`butterfly-${scenario.name}`, async child => {
           let landed: WindowEvidence | null = null;
+          let freshAnswerRecovery = false;
           let bodyFailed = false;
           try {
             await page.goto("/");
             await child.parentStart();
             // All decoding and checksum validation happen before the answer/confirmation race.
             await child.preload(answerFixture);
+            if (replyToRecovery && scenario.kind === "filler") await child.preload("answer-three");
             if ("fixture" in scenario) await child.preload(scenario.fixture);
             const initial = await child.checkpoint();
             let from: Checkpoint = {
@@ -98,13 +108,71 @@ for (const scenario of cases) {
                 await delay(25);
               } while (true);
             });
+            if (replyToRecovery && !observeOnly && scenario.kind === "filler") {
+              const observed = (await harness.observer.read())!;
+              const recovery = observed.events.findLast(
+                event =>
+                  event.type === "answer_recovery.requested" &&
+                  event.runtimeId === landed!.state.runtimeId &&
+                  event.visitId === landed!.state.visitId &&
+                  event.childTurnId! > landed!.state.childTurnId &&
+                  event.atMs >= landed!.afterStartMs,
+              );
+              if (recovery && observed.snapshot.status === "live") {
+                const offset = observed.events.indexOf(recovery) + 1;
+                await observeUntil(
+                  child,
+                  harness.observer,
+                  "fresh heard recovery clarification",
+                  value => {
+                    const state = value.snapshot.runtime;
+                    const tutor = value.events
+                      .slice(offset)
+                      .findLast(
+                        event =>
+                          event.type === "transcript.snapshot" &&
+                          event.transcriptSpeaker === "tutor" &&
+                          event.runtimeId === recovery.runtimeId &&
+                          event.visitId === recovery.visitId &&
+                          event.childTurnId === recovery.childTurnId,
+                      );
+                    if (
+                      !tutor ||
+                      !state ||
+                      state.runtimeId !== recovery.runtimeId ||
+                      state.visitId !== recovery.visitId ||
+                      state.nodeId !== recovery.nodeId ||
+                      state.childTurnId !== recovery.childTurnId ||
+                      value.snapshot.awaitingSteering
+                    )
+                      return false;
+                    const text = detail<{ transcript: string }>(tutor).transcript.split("\n").at(-1) ?? "";
+                    return (
+                      /^Tutor:/i.test(text) &&
+                      /repeat|say.*again|one more time/i.test(text) &&
+                      settledTutorResponse(value, offset)
+                    );
+                  },
+                  budget(),
+                );
+                expect(await child.sayFixture("answer-three")).toBe("ended");
+                freshAnswerRecovery = true;
+                await observeUntil(
+                  child,
+                  harness.observer,
+                  "fresh learner recovery completes lesson",
+                  value => value.snapshot.status === "ended",
+                  budget(),
+                );
+              }
+            }
             const report = (await child.evidence())!;
             await child.assert("landed window and cancellation/identity/ordering safety", async () => {
-              assertButterflySafety(report, landed!, scenario.kind === "barge-in");
+              assertButterflySafety(report, landed!, scenario.kind === "barge-in", freshAnswerRecovery);
             });
             if (!observeOnly && scenario.kind !== "barge-in") {
               await child.assert("noise/filler must recover with exactly one legitimate final completion", async () => {
-                assertButterflyCompletion(report, landed!); // Known starvation stays a failing regression, outside @baseline.
+                assertButterflyCompletion(report, landed!, freshAnswerRecovery); // Known starvation stays a failing regression, outside @baseline.
               });
             }
           } catch (error) {
@@ -115,7 +183,13 @@ for (const scenario of cases) {
               const report = await harness.observer.report();
               if (report) {
                 const now = (await harness.observer.read())!.nowMs;
-                const summary = butterflySummary(report, landed, now, scenario.kind === "barge-in");
+                const summary = butterflySummary(
+                  report,
+                  landed,
+                  now,
+                  scenario.kind === "barge-in",
+                  freshAnswerRecovery,
+                );
                 info.annotations.push({
                   type: observeOnly ? "evidence-only" : "regression-outcome",
                   description: summary.outcome,

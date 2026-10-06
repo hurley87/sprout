@@ -69,6 +69,23 @@ tests and exit 1. **Never remove `--list` when using synthetic credentials.**
 
 ## Timing and evidence
 
+For conversational recovery after confirmed filler has no transcript or the
+current canonical classification holds, opt in to
+one fresh learner response after the production runtime requests repetition:
+
+```bash
+SPROUT_BUTTERFLY_REPLY_TO_RECOVERY=1 node --env-file=.env.local node_modules/@playwright/test/cli.js test --config=playwright.live.config.ts --project=lesson-live butterfly.spec.ts --grep '@filler-confirmation' --output=test-results/filler-conversational-recovery-1
+```
+
+This is a billed live run. The harness waits for a fresh, heard tutor repetition
+request and settled audio before playing `answer-three` once. It does not retry
+the initial answer when no confirmation window opens. A canonical semantic hold
+can elicit the same production recovery prompt as missing text. Completion must use the fresh answer's current turn and fresh tutor
+confirmation. The summary labels this `fresh-learner-response`; it is separate
+from automatic recovery. Without the flag, the existing strict test still
+requires completion without a second learner answer. No new provider run has
+validated this recovery yet.
+
 Butterfly setup allows one fresh repetition of the authored correct answer per
 duck prerequisite when a current, uncancelled canonical classifier abstains on
 semantic scores despite choosing completed and confirmed completion. It requires

@@ -61,10 +61,29 @@ transcript revision. Raw provider bodies and secrets are excluded. HTTP errors
 retain safe category/status/allowlisted-code diagnostics.
 
 The full-context live path did not use the legacy Noul-only clarification
-trigger. Promotion preserves that behavior: it does not introduce clarification
-requests for Choice abstentions. The existing clarification scheduler and
-instruction are unchanged; obsolete integration tests for the retired legacy
-trigger have been removed. Recovery-policy changes belong in a separate task.
+trigger. The canonical mapper still holds on uncertain Choice evidence. The
+runtime now uses a separate bounded conversational recovery policy for canonical
+semantic holds as well as confirmed turns with missing text.
+
+Confirmed microphone turns that end without a usable current child transcript,
+or a canonical held/abstained classification for the exact current snapshot,
+arm the recovery path. After four seconds of sustained local
+tutor-audio quiet, the runtime appends one request per visit asking the child to
+repeat their answer. Late child text, new speech, scene changes, Stop or disconnect
+cancel the wait; active or unavailable output pauses it until quiet returns.
+For semantic holds, any newer transcript revision cancels the wait so only a new
+current classification can arm it again. For missing text, tutor transcript
+fragments do not supply the missing child evidence. Both causes share a single
+request budget per visit. Network failures and stale classifications cannot arm
+semantic recovery. The request
+and its acknowledgment grant neither transcript eligibility nor completion:
+fresh learner evidence, canonical classification, current tutor confirmation,
+relevant audio/drain and render confirmation are still required. Failed sends
+spend the visit budget and leave the scene held. Diagnostics use the
+`answer_recovery.*` and `gpt_live.answer_recovery_append`
+events. This recovery does not automatically restore an interrupted correct
+answer, and the strict butterfly auto-completion test still distinguishes that
+outcome from conversational recovery requiring a fresh child response.
 
 ## Offline evidence
 

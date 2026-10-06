@@ -108,7 +108,12 @@ export function assertInjectionWindow(report: Report, landed: WindowEvidence) {
 }
 
 /** Applies to probes and strict tests. No cancelled/stale identity may supply authority. */
-export function assertButterflySafety(report: Report, landed: WindowEvidence, bargeIn: boolean) {
+export function assertButterflySafety(
+  report: Report,
+  landed: WindowEvidence,
+  bargeIn: boolean,
+  freshAnswerRecovery = false,
+) {
   assertInjectionWindow(report, landed);
   assert.equal(report.error, null, "provider/runtime error is not a cancellation outcome");
   assert(
@@ -164,7 +169,7 @@ export function assertButterflySafety(report: Report, landed: WindowEvidence, ba
         );
       }
     }
-  if (advances.length) assertButterflyCompletion(report, landed);
+  if (advances.length) assertButterflyCompletion(report, landed, freshAnswerRecovery);
   else {
     assert.equal(report.status, "live", "unexpected terminal state");
     assert.equal(report.runtime?.phase, "active");
@@ -227,11 +232,18 @@ export function assertButterflySafety(report: Report, landed: WindowEvidence, ba
 }
 
 /** Observed categories are descriptive. Bounded starvation is never successful recovery. */
-export function butterflySummary(report: Report, landed: WindowEvidence | null, untilMs: number, bargeIn: boolean) {
+export function butterflySummary(
+  report: Report,
+  landed: WindowEvidence | null,
+  untilMs: number,
+  bargeIn: boolean,
+  freshAnswerRecovery = false,
+) {
   if (!landed)
     return {
       outcome: report.runtime?.nodeId === "count-3-butterflies" ? "incomplete-trigger" : "prerequisite-not-reached",
       recoveryVerified: false,
+      recoveryMode: freshAnswerRecovery ? "fresh-learner-response" : "automatic",
       prerequisiteDiagnostic: report.events.findLast(e => e.type === "classifier.mapping") ?? null,
       latestTranscript: report.events.findLast(e => e.type === "transcript.snapshot") ?? null,
       finalState: { status: report.status, runtime: report.runtime, error: report.error },
@@ -257,7 +269,7 @@ export function butterflySummary(report: Report, landed: WindowEvidence | null, 
   let safe = false;
   let safetyFailure: string | null = null;
   try {
-    assertButterflySafety(report, landed, bargeIn);
+    assertButterflySafety(report, landed, bargeIn, freshAnswerRecovery);
     safe = true;
   } catch (error) {
     safetyFailure = error instanceof Error ? error.message : String(error);
@@ -272,6 +284,7 @@ export function butterflySummary(report: Report, landed: WindowEvidence | null, 
   return {
     outcome,
     recoveryVerified: safe && advanced,
+    recoveryMode: freshAnswerRecovery ? "fresh-learner-response" : "automatic",
     safetyFailure,
     observationMs: untilMs - landed.atMs,
     requiredObservationMs: BUTTERFLY_OBSERVATION_MS,
@@ -302,6 +315,7 @@ export function formatButterflySummary(
     `Mode: ${observeOnly ? "evidence only; no recovery claim" : "strict product regression"}`,
     `Outcome: ${summary.outcome}`,
     `Safe completion verified: ${summary.recoveryVerified}`,
+    `Recovery mode: ${summary.recoveryMode}`,
   ];
   if (!summary.injection)
     return (
@@ -346,11 +360,11 @@ export function formatButterflySummary(
   return lines.join("\n") + "\n";
 }
 
-export function assertButterflyCompletion(report: Report, landed: WindowEvidence) {
+export function assertButterflyCompletion(report: Report, landed: WindowEvidence, freshAnswerRecovery = false) {
   assertCompletedLesson(
     report,
     false,
-    "noise" in landed.request.audio || landed.request.audio.fixture === "uh"
+    !freshAnswerRecovery && ("noise" in landed.request.audio || landed.request.audio.fixture === "uh")
       ? {
           visitId: landed.state.visitId,
           answerTurnId: landed.state.childTurnId,

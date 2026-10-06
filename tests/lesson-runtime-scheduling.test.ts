@@ -2,6 +2,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ClientCommand, ProviderEvent } from "../lib/events";
 import { LessonRuntime } from "../lib/lesson-runtime/lesson-runtime";
 import { LESSON_START_INSTRUCTION } from "../lib/lesson-runtime/live-context";
+import { ANSWER_RECOVERY_INSTRUCTION } from "../lib/lesson-runtime/answer-recovery";
+import fillerTrace from "./fixtures/butterfly-filler-confirmation.json";
 
 const transport = vi.hoisted(() => ({
   receive: undefined as ((event: ProviderEvent) => void) | undefined,
@@ -57,6 +59,200 @@ function start(childAnswer = "One.") {
 function tutor(delta: string, startMs = 300) {
   emit({ type: "transcript", speaker: "sprout", delta, startMs, endMs: startMs + 100 });
 }
+
+function interruptWithoutTranscript() {
+  start();
+  tutor("Yes, one duck!");
+  emit({ type: "output.activity", state: "active" });
+  emit({ type: "output.activity", state: "quiet" });
+  emit({ type: "microphone.activity_started" });
+  emit({ type: "microphone.speech_started" });
+  emit({ type: "microphone.speech_stopped", quietMs: 900 });
+}
+
+it.each(["provider_unreachable", "invalid_outputs"])(
+  "does not request semantic recovery for %s diagnostics",
+  async reason => {
+    const mapping = fillerTrace.steps.find(step => "mapping" in step)!.mapping!;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        const input = JSON.parse(init.body as string);
+        return Response.json({
+          proposal: null,
+          diagnostic: {
+            ...mapping,
+            outputs: null,
+            labelCompletionEligible: false,
+            reason,
+            nodeId: input.nodeId,
+            transcriptRevision: input.transcriptRevision,
+          },
+        });
+      }),
+    );
+    start();
+    await vi.advanceTimersByTimeAsync(9000);
+    expect(transport.send).toHaveBeenCalledOnce();
+    expect(lesson.report().events.some(event => event.type === "answer_recovery.requested")).toBe(false);
+  },
+);
+
+it("asks once after canonical abstention with a current filler transcript and requires fresh success", async () => {
+  const diagnostic = {
+    ...fillerTrace.steps.find(step => "mapping" in step)!.mapping!,
+    // Fourth live attempt: both labels suggest success, but neither probability
+    // reaches 0.9. Clarification must not convert those scores into authority.
+    labelCompletionEligible: true,
+    outputs: {
+      objectiveState: {
+        choice: "completed",
+        confidence: 0.82,
+        probabilities: {
+          completed: 0.87,
+          incorrect: 0,
+          unclear_or_incomplete: 0.1,
+          unresolved_help: 0.03,
+          no_attempt: 0,
+        },
+      },
+      tutorState: {
+        choice: "confirmed_completion",
+        confidence: 0.73,
+        probabilities: { confirmed_completion: 0.78, clarifying: 0, helping: 0.05, asking: 0.01, other: 0.16 },
+      },
+    },
+  };
+  const fetch = vi.fn((_url: string, init: RequestInit) => {
+    const input = JSON.parse(init.body as string);
+    return Promise.resolve(
+      Response.json({
+        proposal: null,
+        diagnostic: { ...diagnostic, nodeId: input.nodeId, transcriptRevision: input.transcriptRevision },
+      }),
+    );
+  });
+  vi.stubGlobal("fetch", fetch);
+  interruptWithoutTranscript();
+  emit({ type: "transcript", speaker: "child", delta: "Ah", startMs: 500, endMs: 600 });
+  await vi.advanceTimersByTimeAsync(300);
+  expect(fetch).toHaveBeenCalledOnce();
+  await vi.advanceTimersByTimeAsync(4000);
+  expect(transport.send).toHaveBeenCalledTimes(2);
+  expect(lesson.report().events).toContainEqual(
+    expect.objectContaining({ type: "answer_recovery.requested", detail: { waitMs: 4000, reason: "semantic_hold" } }),
+  );
+  expect(lesson.snapshot().runtime).toMatchObject({
+    phase: "active",
+    answerAccepted: false,
+    acknowledgmentObserved: false,
+  });
+  fetch.mockImplementation((_url, init) => Promise.resolve(correctResponse(init)));
+  tutor("Could you repeat your answer?", 700);
+  emit({ type: "output.activity", state: "active" });
+  emit({ type: "output.activity", state: "quiet" });
+  emit({ type: "microphone.activity_started" });
+  emit({ type: "microphone.speech_started" });
+  emit({ type: "transcript", speaker: "child", delta: "One duck.", startMs: 900, endMs: 1000 });
+  emit({ type: "microphone.speech_stopped", quietMs: 900 });
+  await vi.advanceTimersByTimeAsync(300);
+  expect(lesson.snapshot().runtime?.phase).toBe("active");
+  tutor("Yes, one duck!", 1100);
+  emit({ type: "output.activity", state: "active" });
+  emit({ type: "output.activity", state: "quiet" });
+  await vi.advanceTimersByTimeAsync(600);
+  expect(lesson.snapshot().runtime?.phase).toBe("rendering");
+});
+
+it("recovers confirmed speech without transcript by asking once, then needs a fresh answer and acknowledgment", async () => {
+  const fetch = vi.fn((_url: string, init: RequestInit) => Promise.resolve(correctResponse(init)));
+  vi.stubGlobal("fetch", fetch);
+  interruptWithoutTranscript();
+  // Late tutor fragments must not cancel the missing-child recovery or restore authority.
+  await vi.advanceTimersByTimeAsync(500);
+  tutor(" One duck.", 400);
+  await vi.advanceTimersByTimeAsync(3499);
+  expect(transport.send).toHaveBeenCalledOnce();
+  expect(fetch).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(1);
+  expect(transport.send).toHaveBeenCalledTimes(2);
+  const recovery = transport.send.mock.calls.at(-1)![0];
+  expect(recovery).toMatchObject({
+    type: "session.instructions.append",
+    content: ANSWER_RECOVERY_INSTRUCTION,
+  });
+  emit({
+    type: "context.appended",
+    name: "session.instructions.appended",
+    clientEventId: recovery.event_id,
+    startMs: 500,
+  });
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(lesson.snapshot().runtime).toMatchObject({
+    hasChildTranscript: false,
+    answerAccepted: false,
+    acknowledgmentObserved: false,
+    phase: "active",
+  });
+  expect(transport.send).toHaveBeenCalledTimes(2);
+  expect(fetch).not.toHaveBeenCalled();
+  // A conversational prompt and its append acknowledgment never advance the lesson.
+  tutor("Could you repeat your answer?", 600);
+  emit({ type: "output.activity", state: "active" });
+  emit({ type: "output.activity", state: "quiet" });
+  emit({ type: "microphone.activity_started" });
+  emit({ type: "microphone.speech_started" });
+  emit({ type: "transcript", speaker: "child", delta: "One duck.", startMs: 800, endMs: 900 });
+  emit({ type: "microphone.speech_stopped", quietMs: 900 });
+  await vi.advanceTimersByTimeAsync(300);
+  expect(lesson.snapshot().runtime?.phase).toBe("active");
+  tutor("Yes, one duck!", 1000);
+  emit({ type: "output.activity", state: "active" });
+  emit({ type: "output.activity", state: "quiet" });
+  await vi.advanceTimersByTimeAsync(600);
+  expect(lesson.snapshot().runtime?.phase).toBe("rendering");
+  expect(lesson.snapshot().display.nodeId).toBe("count-2-ducks");
+});
+
+it.each(["late-transcript", "new-speech", "parent-stop", "disconnect"])(
+  "cancels missing-transcript recovery on %s",
+  async reason => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ proposal: null })),
+    );
+    interruptWithoutTranscript();
+    await vi.advanceTimersByTimeAsync(3999);
+    if (reason === "late-transcript")
+      emit({ type: "transcript", speaker: "child", delta: "Uh", startMs: 500, endMs: 600 });
+    if (reason === "new-speech") emit({ type: "microphone.activity_started" });
+    if (reason === "parent-stop") lesson.stop();
+    if (reason === "disconnect") emit({ type: "session.closed" });
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(
+      transport.send.mock.calls.some(
+        ([command]) =>
+          command.type === "session.instructions.append" && command.content === ANSWER_RECOVERY_INSTRUCTION,
+      ),
+    ).toBe(false);
+  },
+);
+
+it("holds and spends the missing-transcript request budget when transport send fails", async () => {
+  vi.stubGlobal("fetch", vi.fn());
+  interruptWithoutTranscript();
+  transport.send.mockImplementationOnce(() => {
+    throw new Error("offline");
+  });
+  await vi.advanceTimersByTimeAsync(4000);
+  expect(lesson.report().events.some(event => event.type === "answer_recovery.send_failed")).toBe(true);
+  emit({ type: "microphone.activity_started" });
+  emit({ type: "microphone.speech_started" });
+  emit({ type: "microphone.speech_stopped", quietMs: 900 });
+  await vi.advanceTimersByTimeAsync(8000);
+  expect(transport.send).toHaveBeenCalledTimes(2);
+  expect(lesson.snapshot().runtime?.phase).toBe("active");
+});
 
 it("sends an explicit parent start after initial render, once, without treating its acknowledgment as a tutor prompt", () => {
   const fetch = vi.fn();

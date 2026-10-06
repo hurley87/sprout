@@ -5,6 +5,7 @@ import { parseConversationStateProposal } from "./conversation-state-classifier"
 import { COUNTING_LESSON_GRAPH, INITIAL_COUNTING_NODE_ID } from "./counting-lesson";
 import { initialTeachingContext, teachingInstruction } from "./live-context";
 import { SupportClarification, SUPPORT_CLARIFICATION_INSTRUCTION } from "./support-clarification";
+import { AnswerRecovery, ANSWER_RECOVERY_INSTRUCTION } from "./answer-recovery";
 import { TutorStabilizationGate } from "./tutor-stabilization";
 import { parseClassifierEndpointCode } from "./classifier-failure";
 import { CLASSIFIER_VERSION } from "./conversation-observer-contract";
@@ -106,6 +107,7 @@ export class LessonRuntime {
   private lastClassifiedKey?: string;
   private readonly tutorStabilization: TutorStabilizationGate;
   private readonly supportClarification: SupportClarification;
+  private readonly answerRecovery: AnswerRecovery;
   private clarificationRequest?: { eventId: string; source: ClassificationSource };
   private stabilizationTimer?: ReturnType<typeof setTimeout>;
   private clockTimer?: ReturnType<typeof setTimeout>;
@@ -148,6 +150,24 @@ export class LessonRuntime {
         } catch {
           this.supportClarification.cancel("send_failed");
           this.log("clarification.send_failed", { message: "Scene held; request budget spent." }, source);
+        }
+        this.publish();
+      },
+      (type, source, detail) => this.log(type, detail, source),
+    );
+    this.answerRecovery = new AnswerRecovery(
+      source => {
+        const eventId = `${this.runtimeId}:answer-recovery:${source.visitId}:${source.childTurnId}`;
+        try {
+          this.transport.send({
+            type: "session.instructions.append",
+            event_id: eventId,
+            delegation_id: null,
+            content: ANSWER_RECOVERY_INSTRUCTION,
+          });
+          this.log("gpt_live.answer_recovery_append", { eventId, content: ANSWER_RECOVERY_INSTRUCTION }, source);
+        } catch {
+          this.log("answer_recovery.send_failed", { message: "Scene held; request budget spent." }, source);
         }
         this.publish();
       },
@@ -370,6 +390,7 @@ export class LessonRuntime {
                 ? { source: latestChild.source, startMs: latestChild.event.startMs, endMs: latestChild.event.endMs }
                 : null,
             });
+            this.answerRecovery.arm(this.state, !this.steering);
           }
           this.scheduleClassification(event.type);
         }
@@ -538,6 +559,7 @@ export class LessonRuntime {
   }
 
   private syncTutorStabilization(trigger: string) {
+    if (this.state) this.answerRecovery.observe(this.state, this.status === "live" && !this.steering);
     if (this.state) this.supportClarification.observe(this.state, this.status === "live" && !this.steering);
     if (this.state) this.tutorStabilization.observe(this.state, this.status === "live" && !this.steering, trigger);
   }
@@ -609,6 +631,22 @@ export class LessonRuntime {
       if (proposal) {
         this.supportClarification.cancel("proposal_received");
         this.dispatch({ type: "proposal.received", source, proposal, atMs: this.now() });
+      } else if (
+        diagnostic?.outputs &&
+        this.state &&
+        diagnostic.nodeId === source.nodeId &&
+        diagnostic.transcriptRevision === source.transcriptRevision &&
+        (diagnostic.outcome === "hold_scene" ||
+          (diagnostic.decision === "abstained" &&
+            [
+              "objectiveState_no_winner",
+              "tutorState_no_winner",
+              "objectiveState_competing_options",
+              "tutorState_competing_options",
+              "confirmation_without_completion",
+            ].includes(diagnostic.reason ?? "")))
+      ) {
+        this.answerRecovery.armSemanticHold(this.state, this.status === "live" && !this.steering, source);
       }
     } catch {
       if (!abort.signal.aborted && this.status === "live")
@@ -674,6 +712,7 @@ export class LessonRuntime {
   stop(reason = "parent_stop", disconnected = false) {
     if (this.status === "ended") return;
     this.cancelClassification(reason);
+    this.answerRecovery.cancel(reason);
     clearTimeout(this.clockTimer);
     clearTimeout(this.startupTimer);
     if (this.steering) clearTimeout(this.steering.timer);

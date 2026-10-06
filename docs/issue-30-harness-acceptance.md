@@ -66,7 +66,7 @@ coverage is validated. Synthetic credentials are only for `--list`.
 
 ## Slice 7 and follow-up diagnostics validation
 
-- `npm test`: 794 tests passed across 32 files.
+- Harness/diagnostics review: `npm test` passed 794 tests across 32 files. The subsequent recovery extension passed 816 tests across 34 files.
 - `npm run test:browser`: 18 provider-free Chromium tests passed in an isolated source copy, preserving the running development server.
 - Typecheck, lint, changed-file Prettier (including Markdown), diff whitespace check and production build passed.
 - Live discovery: 14 tests; each butterfly tag selects one, noise/filler subset selects four, evidence-only mode selects five. Default suite excludes all live cases, including an explicit live file filter.
@@ -104,3 +104,12 @@ parser uncertainty, metadata privacy, counter boundaries and retention across
 Playwright cleanup. See [the comparison guide](transcript-wire-comparison.md) for
 the authorized live procedure and interpretation limits. No provider recognition
 or receipt is inferred from local playback or outbound counters.
+
+The subsequent user-requested production recovery extension is separate from
+the original harness issue scope. It requests fresh learner evidence once per
+visit after confirmed speech with missing text or a current canonical semantic
+hold. Thresholds and completion authority remain unchanged. Its provider-free
+tests pass, but the latest extension has no successful live validation. The
+default strict butterfly regression still requires automatic completion; the
+opt-in conversational check supplies one fresh answer only after a heard recovery
+prompt. See [the saved-run investigation](issue-30-filler-confirmation-investigation.md).
