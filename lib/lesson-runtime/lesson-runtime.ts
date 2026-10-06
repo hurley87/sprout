@@ -5,6 +5,7 @@ import { parseConversationStateProposal } from "./conversation-state-classifier"
 import { COUNTING_LESSON_GRAPH, INITIAL_COUNTING_NODE_ID } from "./counting-lesson";
 import { initialTeachingContext, teachingInstruction } from "./live-context";
 import { SupportClarification, SUPPORT_CLARIFICATION_INSTRUCTION } from "./support-clarification";
+import { AnswerRecovery, ANSWER_RECOVERY_INSTRUCTION } from "./answer-recovery";
 import { TutorStabilizationGate } from "./tutor-stabilization";
 import { parseClassifierEndpointCode } from "./classifier-failure";
 import { CLASSIFIER_VERSION } from "./conversation-observer-contract";
@@ -53,6 +54,15 @@ export type LessonDiagnostic = {
   classifierVersion?: typeof CLASSIFIER_VERSION;
   detail: unknown;
 };
+export type LessonEventCursor = { runtimeId: string; offset: number };
+export type LessonObservation = {
+  /** Sample of the report clock, taken in the same browser read as the journal. */
+  nowMs: number;
+  cursor: LessonEventCursor;
+  snapshot: LessonSnapshot;
+  events: readonly LessonDiagnostic[];
+};
+
 export type LessonSnapshot = {
   status: "prepared" | "connecting" | "live" | "ended";
   runtime: LessonRuntimeState | null;
@@ -97,6 +107,7 @@ export class LessonRuntime {
   private lastClassifiedKey?: string;
   private readonly tutorStabilization: TutorStabilizationGate;
   private readonly supportClarification: SupportClarification;
+  private readonly answerRecovery: AnswerRecovery;
   private clarificationRequest?: { eventId: string; source: ClassificationSource };
   private stabilizationTimer?: ReturnType<typeof setTimeout>;
   private clockTimer?: ReturnType<typeof setTimeout>;
@@ -144,6 +155,24 @@ export class LessonRuntime {
       },
       (type, source, detail) => this.log(type, detail, source),
     );
+    this.answerRecovery = new AnswerRecovery(
+      source => {
+        const eventId = `${this.runtimeId}:answer-recovery:${source.visitId}:${source.childTurnId}`;
+        try {
+          this.transport.send({
+            type: "session.instructions.append",
+            event_id: eventId,
+            delegation_id: null,
+            content: ANSWER_RECOVERY_INSTRUCTION,
+          });
+          this.log("gpt_live.answer_recovery_append", { eventId, content: ANSWER_RECOVERY_INSTRUCTION }, source);
+        } catch {
+          this.log("answer_recovery.send_failed", { message: "Scene held; request budget spent." }, source);
+        }
+        this.publish();
+      },
+      (type, source, detail) => this.log(type, detail, source),
+    );
     this.transport = new BrowserTransport(audio, true);
     this.transport.setMicrophoneDiagnosticSink(event => {
       if (this.status === "ended") return;
@@ -186,6 +215,24 @@ export class LessonRuntime {
       awaitingSteering: Boolean(this.steering),
       diagnostics: this.events.slice(-100),
     };
+  }
+
+  /** Read the complete journal independently of React publication; never return runtime references. */
+  observe(after?: LessonEventCursor): LessonObservation {
+    if (
+      after &&
+      (after.runtimeId !== this.runtimeId ||
+        !Number.isSafeInteger(after.offset) ||
+        after.offset < 0 ||
+        after.offset > this.events.length)
+    )
+      throw new Error("Lesson observation cursor does not belong to this runtime journal");
+    return structuredClone({
+      nowMs: this.now(),
+      cursor: { runtimeId: this.runtimeId, offset: this.events.length },
+      snapshot: this.snapshot(),
+      events: this.events.slice(after?.offset ?? 0),
+    });
   }
 
   /** Called from React's committed scene, never from render.requested handling. */
@@ -290,7 +337,7 @@ export class LessonRuntime {
         clearTimeout(this.startupTimer);
         this.status = "live";
         this.log("session.started", { sourceId: event.sourceId });
-        if (!this.appendSteering(initialTeachingContext(), this.display.token)) return;
+        if (!this.appendSteering(initialTeachingContext(), this.display.token, true)) return;
         if (!this.transport.openInput(() => this.log("microphone.input_opened")))
           this.fail("Could not open GPT-Live microphone input.");
         this.publish();
@@ -343,6 +390,7 @@ export class LessonRuntime {
                 ? { source: latestChild.source, startMs: latestChild.event.startMs, endMs: latestChild.event.endMs }
                 : null,
             });
+            this.answerRecovery.arm(this.state, !this.steering);
           }
           this.scheduleClassification(event.type);
         }
@@ -511,6 +559,7 @@ export class LessonRuntime {
   }
 
   private syncTutorStabilization(trigger: string) {
+    if (this.state) this.answerRecovery.observe(this.state, this.status === "live" && !this.steering);
     if (this.state) this.supportClarification.observe(this.state, this.status === "live" && !this.steering);
     if (this.state) this.tutorStabilization.observe(this.state, this.status === "live" && !this.steering, trigger);
   }
@@ -582,6 +631,22 @@ export class LessonRuntime {
       if (proposal) {
         this.supportClarification.cancel("proposal_received");
         this.dispatch({ type: "proposal.received", source, proposal, atMs: this.now() });
+      } else if (
+        diagnostic?.outputs &&
+        this.state &&
+        diagnostic.nodeId === source.nodeId &&
+        diagnostic.transcriptRevision === source.transcriptRevision &&
+        (diagnostic.outcome === "hold_scene" ||
+          (diagnostic.decision === "abstained" &&
+            [
+              "objectiveState_no_winner",
+              "tutorState_no_winner",
+              "objectiveState_competing_options",
+              "tutorState_competing_options",
+              "confirmation_without_completion",
+            ].includes(diagnostic.reason ?? "")))
+      ) {
+        this.answerRecovery.armSemanticHold(this.state, this.status === "live" && !this.steering, source);
       }
     } catch {
       if (!abort.signal.aborted && this.status === "live")
@@ -613,10 +678,10 @@ export class LessonRuntime {
     this.classification = undefined;
   }
 
-  private appendSteering(context: CurrentNodeSteeringContext, renderToken: string) {
+  private appendSteering(context: CurrentNodeSteeringContext, renderToken: string, startLesson = false) {
     if (!this.state || this.status !== "live") return false;
     const eventId = `${this.runtimeId}:steer:${this.state.visitId}`;
-    const content = teachingInstruction(context);
+    const content = teachingInstruction(context, startLesson);
     const source = runtimeSource(this.state);
     this.steering = {
       eventId,
@@ -647,6 +712,7 @@ export class LessonRuntime {
   stop(reason = "parent_stop", disconnected = false) {
     if (this.status === "ended") return;
     this.cancelClassification(reason);
+    this.answerRecovery.cancel(reason);
     clearTimeout(this.clockTimer);
     clearTimeout(this.startupTimer);
     if (this.steering) clearTimeout(this.steering.timer);

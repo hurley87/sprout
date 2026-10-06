@@ -11,6 +11,7 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:browser": "playwright test",
+    "test:browser:live": "playwright test --config=playwright.live.config.ts --project=lesson-live",
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {

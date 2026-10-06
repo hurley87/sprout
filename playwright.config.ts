@@ -2,6 +2,8 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests/browser",
+  testIgnore: "**/live/**",
+  projects: [{ name: "browser" }],
   outputDir: "./test-results/playwright",
   use: {
     baseURL: "http://127.0.0.1:3100",
@@ -12,6 +14,8 @@ export default defineConfig({
   webServer: {
     command: "npm run dev -- --port 3100",
     url: "http://127.0.0.1:3100",
-    reuseExistingServer: !process.env.CI,
+    // Never reuse a developer's server with provider credentials enabled.
+    reuseExistingServer: false,
+    env: { OPENAI_API_KEY: "", TYPESAFE_API_KEY: "" },
   },
 });

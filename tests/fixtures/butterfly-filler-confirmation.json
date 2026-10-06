@@ -1,0 +1,636 @@
+{
+  "provenance": {
+    "reportSha256": "991b7f1b03edb7a8de4f69981e9ffa12522e7ff71fbff4a08011877655fa3c52",
+    "runtimeId": "969d045e-9dcb-454e-8b69-2382b607796b",
+    "note": "Reduced saved production evidence; clock ticks reconstructed from logged changed states. Provider fragments reconstructed from consecutive speaker text; no live calls."
+  },
+  "initialState": {
+    "runtimeId": "969d045e-9dcb-454e-8b69-2382b607796b",
+    "nodeId": "count-3-butterflies",
+    "visitId": 3,
+    "childTurnId": 3,
+    "hasChildTurn": false,
+    "hasChildTranscript": false,
+    "childSpeaking": false,
+    "childCandidate": null,
+    "transcriptRevision": 42,
+    "transcriptSource": "tutor",
+    "consumedRevision": null,
+    "acceptedAnswerRevision": null,
+    "answerAccepted": false,
+    "acknowledgmentObserved": false,
+    "tutorOutputObserved": false,
+    "tutorOutputDrained": false,
+    "quietSinceMs": null,
+    "outputActivity": "quiet",
+    "quietDrainMs": 250,
+    "nowMs": 29057.900000035763,
+    "phase": "active",
+    "lessonComplete": false,
+    "pendingRender": null
+  },
+  "steps": [
+    {
+      "event": {
+        "type": "child.candidate.started",
+        "source": {
+          "runtimeId": "969d045e-9dcb-454e-8b69-2382b607796b",
+          "visitId": 3,
+          "childTurnId": 3
+        },
+        "atMs": 29993.5
+      }
+    },
+    {
+      "event": {
+        "type": "child.turn.confirmed",
+        "source": {
+          "runtimeId": "969d045e-9dcb-454e-8b69-2382b607796b",
+          "visitId": 3,
+          "childTurnId": 4
+        },
+        "atMs": 30077.100000023842
+      }
+    },
+    {
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "969d045e-9dcb-454e-8b69-2382b607796b",
+          "visitId": 3,
+          "childTurnId": 4
+        },
+        "revision": 43,
+        "speaker": "child",
+        "atMs": 31152.700000047684
+      }
+    },
+    {
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "969d045e-9dcb-454e-8b69-2382b607796b",
+          "visitId": 3,
+          "childTurnId": 4
+        },
+        "revision": 44,
+        "speaker": "child",
+        "atMs": 31666.80000001192
+      }
+    },
+    {
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "969d045e-9dcb-454e-8b69-2382b607796b",
+          "visitId": 3,
+          "childTurnId": 4
+        },
+        "revision": 45,
+        "speaker": "child",
+        "atMs": 31719.200000047684
+      }
+    },
+    {
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "969d045e-9dcb-454e-8b69-2382b607796b",
+          "visitId": 3,
+          "childTurnId": 4
+        },
+        "revision": 46,
+        "speaker": "child",
+        "atMs": 32189.900000035763
+      }
+    },
+    {
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "969d045e-9dcb-454e-8b69-2382b607796b",
+          "visitId": 3,
+          "childTurnId": 4
+        },
+        "revision": 47,
+        "speaker": "child",
+        "atMs": 32714.30000001192
+      }
+    },
+    {
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "969d045e-9dcb-454e-8b69-2382b607796b",
+          "visitId": 3,
+          "childTurnId": 4
+        },
+        "revision": 48,
+        "speaker": "child",
+        "atMs": 33062.200000047684
+      }
+    },
+    {
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "969d045e-9dcb-454e-8b69-2382b607796b",
+          "visitId": 3,
+          "childTurnId": 4
+        },
+        "revision": 49,
+        "speaker": "tutor",
+        "atMs": 33787.700000047684
+      }
+    },
+    {
+      "event": {
+        "type": "child.turn.ended",
+        "source": {
+          "runtimeId": "969d045e-9dcb-454e-8b69-2382b607796b",
+          "visitId": 3,
+          "childTurnId": 4
+        },
+        "atMs": 33892.80000001192
+      }
+    },
+    {
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "969d045e-9dcb-454e-8b69-2382b607796b",
+          "visitId": 3,
+          "childTurnId": 4
+        },
+        "revision": 50,
+        "speaker": "child",
+        "atMs": 34066.10000002384
+      }
+    },
+    {
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "969d045e-9dcb-454e-8b69-2382b607796b",
+          "visitId": 3,
+          "childTurnId": 4
+        },
+        "revision": 51,
+        "speaker": "tutor",
+        "atMs": 34085.200000047684
+      }
+    },
+    {
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "969d045e-9dcb-454e-8b69-2382b607796b",
+          "visitId": 3,
+          "childTurnId": 4
+        },
+        "state": "active",
+        "atMs": 34157.30000001192
+      }
+    },
+    {
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "969d045e-9dcb-454e-8b69-2382b607796b",
+          "visitId": 3,
+          "childTurnId": 4
+        },
+        "revision": 52,
+        "speaker": "tutor",
+        "atMs": 34290.5
+      }
+    },
+    {
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "969d045e-9dcb-454e-8b69-2382b607796b",
+          "visitId": 3,
+          "childTurnId": 4
+        },
+        "revision": 53,
+        "speaker": "tutor",
+        "atMs": 34376.40000003576
+      }
+    },
+    {
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "969d045e-9dcb-454e-8b69-2382b607796b",
+          "visitId": 3,
+          "childTurnId": 4
+        },
+        "state": "quiet",
+        "atMs": 34506.200000047684
+      }
+    },
+    {
+      "event": {
+        "type": "child.candidate.started",
+        "source": {
+          "runtimeId": "969d045e-9dcb-454e-8b69-2382b607796b",
+          "visitId": 3,
+          "childTurnId": 4
+        },
+        "atMs": 34564.700000047684
+      }
+    },
+    {
+      "event": {
+        "type": "child.turn.confirmed",
+        "source": {
+          "runtimeId": "969d045e-9dcb-454e-8b69-2382b607796b",
+          "visitId": 3,
+          "childTurnId": 5
+        },
+        "atMs": 34643.5
+      }
+    },
+    {
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "969d045e-9dcb-454e-8b69-2382b607796b",
+          "visitId": 3,
+          "childTurnId": 5
+        },
+        "state": "active",
+        "atMs": 34708.60000002384
+      }
+    },
+    {
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "969d045e-9dcb-454e-8b69-2382b607796b",
+          "visitId": 3,
+          "childTurnId": 5
+        },
+        "revision": 54,
+        "speaker": "tutor",
+        "atMs": 35027.10000002384
+      }
+    },
+    {
+      "event": {
+        "type": "child.turn.ended",
+        "source": {
+          "runtimeId": "969d045e-9dcb-454e-8b69-2382b607796b",
+          "visitId": 3,
+          "childTurnId": 5
+        },
+        "atMs": 35714.5
+      }
+    },
+    {
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "969d045e-9dcb-454e-8b69-2382b607796b",
+          "visitId": 3,
+          "childTurnId": 5
+        },
+        "revision": 55,
+        "speaker": "child",
+        "atMs": 35724.30000001192
+      }
+    },
+    {
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "969d045e-9dcb-454e-8b69-2382b607796b",
+          "visitId": 3,
+          "childTurnId": 5
+        },
+        "state": "quiet",
+        "atMs": 35956.10000002384
+      }
+    },
+    {
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "969d045e-9dcb-454e-8b69-2382b607796b",
+          "visitId": 3,
+          "childTurnId": 5
+        },
+        "state": "active",
+        "atMs": 36008.5
+      }
+    },
+    {
+      "mapping": {
+        "classifierVersion": "conversation-state-v2",
+        "decision": "abstained",
+        "outcome": "unresolved",
+        "reason": "objectiveState_no_winner",
+        "outputs": {
+          "objectiveState": {
+            "choice": "completed",
+            "confidence": 0.28,
+            "probabilities": {
+              "completed": 0.43,
+              "incorrect": 0.03,
+              "unclear_or_incomplete": 0.34,
+              "unresolved_help": 0.2,
+              "no_attempt": 0
+            }
+          },
+          "tutorState": {
+            "choice": "helping",
+            "confidence": 0.26,
+            "probabilities": {
+              "confirmed_completion": 0.37,
+              "clarifying": 0.01,
+              "helping": 0.41,
+              "asking": 0.01,
+              "other": 0.2
+            }
+          }
+        },
+        "labelCompletionEligible": false,
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        },
+        "nodeId": "count-3-butterflies",
+        "transcriptRevision": 55,
+        "elapsedMs": 207.112000000001
+      }
+    },
+    {
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "969d045e-9dcb-454e-8b69-2382b607796b",
+          "visitId": 3,
+          "childTurnId": 5
+        },
+        "state": "quiet",
+        "atMs": 36357.10000002384
+      }
+    },
+    {
+      "event": {
+        "type": "clock.tick",
+        "source": {
+          "runtimeId": "969d045e-9dcb-454e-8b69-2382b607796b",
+          "visitId": 3,
+          "childTurnId": 5
+        },
+        "atMs": 36620.10000002384
+      }
+    }
+  ],
+  "incoming": [
+    {
+      "atMs": 29993.5,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 30077.100000023842,
+      "event": {
+        "type": "microphone.speech_started"
+      }
+    },
+    {
+      "atMs": 31152.700000047684,
+      "event": {
+        "type": "transcript",
+        "speaker": "child",
+        "delta": "Oh",
+        "startMs": 30000,
+        "endMs": 30200
+      }
+    },
+    {
+      "atMs": 31666.80000001192,
+      "event": {
+        "type": "transcript",
+        "speaker": "child",
+        "delta": ", I",
+        "startMs": 30400,
+        "endMs": 30600
+      }
+    },
+    {
+      "atMs": 31719.200000047684,
+      "event": {
+        "type": "transcript",
+        "speaker": "child",
+        "delta": " see",
+        "startMs": 30600,
+        "endMs": 30800
+      }
+    },
+    {
+      "atMs": 32189.900000035763,
+      "event": {
+        "type": "transcript",
+        "speaker": "child",
+        "delta": " two",
+        "startMs": 31000,
+        "endMs": 31200
+      }
+    },
+    {
+      "atMs": 32714.30000001192,
+      "event": {
+        "type": "transcript",
+        "speaker": "child",
+        "delta": ". There are",
+        "startMs": 31600,
+        "endMs": 31800
+      }
+    },
+    {
+      "atMs": 33062.200000047684,
+      "event": {
+        "type": "transcript",
+        "speaker": "child",
+        "delta": " three",
+        "startMs": 32000,
+        "endMs": 32200
+      }
+    },
+    {
+      "atMs": 33787.700000047684,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " Yes,",
+        "startMs": 32600,
+        "endMs": 32800
+      }
+    },
+    {
+      "atMs": 33892.80000001192,
+      "event": {
+        "type": "microphone.speech_stopped",
+        "quietMs": 900
+      }
+    },
+    {
+      "atMs": 34066.10000002384,
+      "event": {
+        "type": "transcript",
+        "speaker": "child",
+        "delta": " butterflies.",
+        "startMs": 32800,
+        "endMs": 33000
+      }
+    },
+    {
+      "atMs": 34085.200000047684,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " there",
+        "startMs": 32800,
+        "endMs": 33000
+      }
+    },
+    {
+      "atMs": 34157.30000001192,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 34290.5,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " are",
+        "startMs": 33000,
+        "endMs": 33200
+      }
+    },
+    {
+      "atMs": 34376.40000003576,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " three",
+        "startMs": 33200,
+        "endMs": 33400
+      }
+    },
+    {
+      "atMs": 34506.200000047684,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    },
+    {
+      "atMs": 34564.700000047684,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 34643.5,
+      "event": {
+        "type": "microphone.speech_started"
+      }
+    },
+    {
+      "atMs": 34708.60000002384,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 35027.10000002384,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " butterflies.",
+        "startMs": 33800,
+        "endMs": 34000
+      }
+    },
+    {
+      "atMs": 35714.5,
+      "event": {
+        "type": "microphone.speech_stopped",
+        "quietMs": 900
+      }
+    },
+    {
+      "atMs": 35724.30000001192,
+      "event": {
+        "type": "transcript",
+        "speaker": "child",
+        "delta": " Oh",
+        "startMs": 34600,
+        "endMs": 34800
+      }
+    },
+    {
+      "atMs": 35956.10000002384,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    },
+    {
+      "atMs": 36008.5,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 36357.10000002384,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    }
+  ],
+  "classifierInput": {
+    "nodeId": "count-3-butterflies",
+    "transcriptRevision": 55,
+    "transcript": "Tutor: How many butterflies do you see?\nChild: Oh, I see two. There are three\nTutor: Yes,\nChild: butterflies.\nTutor: there are three\nTutor: butterflies.\nChild: Oh"
+  },
+  "expectedState": {
+    "runtimeId": "969d045e-9dcb-454e-8b69-2382b607796b",
+    "nodeId": "count-3-butterflies",
+    "visitId": 3,
+    "childTurnId": 5,
+    "hasChildTurn": true,
+    "hasChildTranscript": true,
+    "childSpeaking": false,
+    "childCandidate": null,
+    "transcriptRevision": 55,
+    "transcriptSource": "child",
+    "consumedRevision": null,
+    "acceptedAnswerRevision": null,
+    "answerAccepted": false,
+    "acknowledgmentObserved": false,
+    "tutorOutputObserved": true,
+    "tutorOutputDrained": true,
+    "quietSinceMs": 36357.10000002384,
+    "outputActivity": "quiet",
+    "quietDrainMs": 250,
+    "nowMs": 36620.10000002384,
+    "phase": "active",
+    "lessonComplete": false,
+    "pendingRender": null
+  }
+}

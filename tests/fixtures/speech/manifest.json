@@ -1,0 +1,873 @@
+{
+  "generation": {
+    "method": "Offline macOS say, Albert voice at 150 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+    "commands": [
+      "/usr/bin/say -v Albert -r 150 -o /tmp/sprout-counting.aiff 'One, two, three.'",
+      "ffmpeg -hide_banner -loglevel error -y -i /tmp/sprout-counting.aiff -af loudnorm=I=-16:TP=-1.5:LRA=11 -ar 24000 -ac 1 -c:a pcm_s16le -map_metadata -1 tests/fixtures/speech/counting.wav"
+    ],
+    "reproducibility": "Committed bytes and SHA-256 are authoritative. Regeneration is optional and may differ with OS voice/FFmpeg versions; browser tests never invoke TTS.",
+    "toolVersions": {
+      "macOS": "27.0.1",
+      "ffmpeg": "8.1.2",
+      "voice": "Albert (built-in en_US)"
+    }
+  },
+  "fixtures": {
+    "counting": {
+      "file": "counting.wav",
+      "text": "One, two, three.",
+      "sha256": "113b7430d6d3c4daf3d1d97c68448bdd5de689ecf68fd4f15d2ed4ed2d60f677",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 1.347833,
+      "purpose": "Initial speech plumbing validation only; not a lesson scenario corpus."
+    },
+    "one": {
+      "file": "one.wav",
+      "text": "One.",
+      "sha256": "f39ff4f42cb188c235b14116552015bd6f02109ae6712079365a7da8fbb1dd9b",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 0.384208,
+      "purpose": "Deterministic child primitive; synthetic adult voice, not preschool speech.",
+      "provenance": {
+        "method": "Offline macOS say, Albert voice at 150 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "commands": [
+          ["/usr/bin/say", "-v", "Albert", "-r", "150", "-o", "/tmp/sprout-one.aiff", "One."],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-one.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/one.wav"
+          ]
+        ]
+      }
+    },
+    "two": {
+      "file": "two.wav",
+      "text": "Two.",
+      "sha256": "14d5b39c9db386dd08312aafeba7a55dd77167a9374e5aca20bd3f5ed89cc42a",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 0.321292,
+      "purpose": "Deterministic child primitive; synthetic adult voice, not preschool speech.",
+      "provenance": {
+        "method": "Offline macOS say, Albert voice at 150 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "commands": [
+          ["/usr/bin/say", "-v", "Albert", "-r", "150", "-o", "/tmp/sprout-two.aiff", "Two."],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-two.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/two.wav"
+          ]
+        ]
+      }
+    },
+    "three": {
+      "file": "three.wav",
+      "text": "Three.",
+      "sha256": "609140aa8eb6017ded8df1a8ac8043ea37584f873cc5480bbf43ddf2c90b31eb",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 0.378083,
+      "purpose": "Deterministic child primitive; synthetic adult voice, not preschool speech.",
+      "provenance": {
+        "method": "Offline macOS say, Albert voice at 150 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "commands": [
+          ["/usr/bin/say", "-v", "Albert", "-r", "150", "-o", "/tmp/sprout-three.aiff", "Three."],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-three.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/three.wav"
+          ]
+        ]
+      }
+    },
+    "dont-know": {
+      "file": "dont-know.wav",
+      "text": "I don't know.",
+      "sha256": "769edc871eee053ba6f903fe46d77d666c04e735ecfb376147a3e182fe2b5af2",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 0.639667,
+      "purpose": "Deterministic child primitive; synthetic adult voice, not preschool speech.",
+      "provenance": {
+        "method": "Offline macOS say, Albert voice at 150 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "commands": [
+          ["/usr/bin/say", "-v", "Albert", "-r", "150", "-o", "/tmp/sprout-dont-know.aiff", "I don't know."],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-dont-know.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/dont-know.wav"
+          ]
+        ]
+      }
+    },
+    "help": {
+      "file": "help.wav",
+      "text": "Help me please.",
+      "sha256": "cc7176f56ce0138d779501588ac602cda0a9718604580fb061933a9efdbd28be",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 0.854083,
+      "purpose": "Deterministic child primitive; synthetic adult voice, not preschool speech.",
+      "provenance": {
+        "method": "Offline macOS say, Albert voice at 150 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "commands": [
+          ["/usr/bin/say", "-v", "Albert", "-r", "150", "-o", "/tmp/sprout-help.aiff", "Help me please."],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-help.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/help.wav"
+          ]
+        ]
+      }
+    },
+    "stop": {
+      "file": "stop.wav",
+      "text": "Stop please.",
+      "sha256": "8e0e7614e402adb23ef5b1f69de4b5f1452d68146959771c0071162b7ebf1ae7",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 0.830875,
+      "purpose": "Deterministic child primitive; synthetic adult voice, not preschool speech.",
+      "provenance": {
+        "method": "Offline macOS say, Albert voice at 150 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "commands": [
+          ["/usr/bin/say", "-v", "Albert", "-r", "150", "-o", "/tmp/sprout-stop.aiff", "Stop please."],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-stop.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/stop.wav"
+          ]
+        ]
+      }
+    },
+    "wait": {
+      "file": "wait.wav",
+      "text": "Wait!",
+      "sha256": "13f8554b0bfd997fe3f0dd089f0b75980da55800cc62d6796569949421e30ac9",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 0.442167,
+      "purpose": "Deterministic child primitive; synthetic adult voice, not preschool speech.",
+      "provenance": {
+        "method": "Offline macOS say, Albert voice at 150 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "commands": [
+          ["/usr/bin/say", "-v", "Albert", "-r", "150", "-o", "/tmp/sprout-wait.aiff", "Wait!"],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-wait.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/wait.wav"
+          ]
+        ]
+      }
+    },
+    "uh": {
+      "file": "uh.wav",
+      "text": "Uh.",
+      "sha256": "9bccf75414401feb0d88af6a2e326fc5772f9dd0ddd960979f42c23e6978a4c4",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 0.244917,
+      "purpose": "Deterministic child primitive; synthetic adult voice, not preschool speech.",
+      "provenance": {
+        "method": "Offline macOS say, Albert voice at 150 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "commands": [
+          ["/usr/bin/say", "-v", "Albert", "-r", "150", "-o", "/tmp/sprout-uh.aiff", "Uh."],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-uh.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/uh.wav"
+          ]
+        ]
+      }
+    },
+    "self-correction": {
+      "file": "self-correction.wav",
+      "text": "Three. Uh, I mean two.",
+      "sha256": "29ea5e1a5bf45eae5d639dcc1b863cc1c19023198f8ac01a6badc28370f8fb3c",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 2.297042,
+      "purpose": "Live counting scenario; synthetic adult speech, not preschool speech.",
+      "provenance": {
+        "method": "Offline macOS say, Samantha voice at 130 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "toolVersions": {
+          "macOS": "27.0.1",
+          "ffmpeg": "8.1.2",
+          "voice": "Samantha (English (US))"
+        },
+        "commands": [
+          [
+            "/usr/bin/say",
+            "-v",
+            "Samantha (English (US))",
+            "-r",
+            "130",
+            "-o",
+            "/tmp/sprout-self-correction-samantha.aiff",
+            "Three. Uh, I mean two."
+          ],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-self-correction-samantha.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/self-correction.wav"
+          ]
+        ]
+      }
+    },
+    "answer-one": {
+      "file": "answer-one.wav",
+      "text": "I see one duck.",
+      "sha256": "d21c98e59987603f19e0ef10c76df82225f835535cc516fa4f7557ea1ef651b6",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 1.341167,
+      "purpose": "Live counting scenario; synthetic adult speech, not preschool speech.",
+      "provenance": {
+        "method": "Offline macOS say, Samantha voice at 130 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "toolVersions": {
+          "macOS": "27.0.1",
+          "ffmpeg": "8.1.2",
+          "voice": "Samantha (English (US))"
+        },
+        "commands": [
+          [
+            "/usr/bin/say",
+            "-v",
+            "Samantha (English (US))",
+            "-r",
+            "130",
+            "-o",
+            "/tmp/sprout-answer-one-samantha.aiff",
+            "I see one duck."
+          ],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-answer-one-samantha.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/answer-one.wav"
+          ]
+        ]
+      }
+    },
+    "answer-two": {
+      "file": "answer-two.wav",
+      "text": "I see two ducks.",
+      "sha256": "ba3630f8e20ea731eb2877733012a2deaf10c541a46e04c2f326fd2fe731216b",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 1.480458,
+      "purpose": "Live counting scenario; synthetic adult speech, not preschool speech.",
+      "provenance": {
+        "method": "Offline macOS say, Samantha voice at 130 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "toolVersions": {
+          "macOS": "27.0.1",
+          "ffmpeg": "8.1.2",
+          "voice": "Samantha (English (US))"
+        },
+        "commands": [
+          [
+            "/usr/bin/say",
+            "-v",
+            "Samantha (English (US))",
+            "-r",
+            "130",
+            "-o",
+            "/tmp/sprout-answer-two-samantha.aiff",
+            "I see two ducks."
+          ],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-answer-two-samantha.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/answer-two.wav"
+          ]
+        ]
+      }
+    },
+    "answer-three": {
+      "file": "answer-three.wav",
+      "text": "I see three butterflies.",
+      "sha256": "45609faeafbb720f03c429c983391d1d18cf005b7c4971282d1b0c2e20067fa2",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 1.793708,
+      "purpose": "Live counting scenario; synthetic adult speech, not preschool speech.",
+      "provenance": {
+        "method": "Offline macOS say, Samantha voice at 130 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "toolVersions": {
+          "macOS": "27.0.1",
+          "ffmpeg": "8.1.2",
+          "voice": "Samantha (English (US))"
+        },
+        "commands": [
+          [
+            "/usr/bin/say",
+            "-v",
+            "Samantha (English (US))",
+            "-r",
+            "130",
+            "-o",
+            "/tmp/sprout-answer-three-butterflies-samantha.aiff",
+            "I see three butterflies."
+          ],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-answer-three-butterflies-samantha.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/answer-three.wav"
+          ]
+        ]
+      }
+    },
+    "answer-three-ducks": {
+      "file": "answer-three-ducks.wav",
+      "text": "I see three ducks.",
+      "sha256": "9cca8fccef03876d9c5aa6c9e3873d8d8827a4020f9f01575536ebcbb82eec6c",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 1.503708,
+      "purpose": "Deliberately wrong count on the two-duck scene; synthetic adult speech, not preschool speech.",
+      "provenance": {
+        "method": "Offline macOS say, Samantha voice at 130 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "toolVersions": {
+          "macOS": "27.0.1",
+          "ffmpeg": "8.1.2",
+          "voice": "Samantha (English (US))"
+        },
+        "commands": [
+          [
+            "/usr/bin/say",
+            "-v",
+            "Samantha (English (US))",
+            "-r",
+            "130",
+            "-o",
+            "/tmp/sprout-answer-three-samantha.aiff",
+            "I see three ducks."
+          ],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-answer-three-samantha.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/answer-three-ducks.wav"
+          ]
+        ]
+      }
+    },
+    "support-help": {
+      "file": "support-help.wav",
+      "text": "Please help me count the ducks.",
+      "sha256": "f2d91823455c42c5dde1979dd90c907daad871cf163c158b5b067867e57c18b8",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 2.015375,
+      "purpose": "Unresolved two-duck objective live scenario; synthetic adult speech.",
+      "provenance": {
+        "method": "Offline macOS say, Samantha voice at 130 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "commands": [
+          [
+            "/usr/bin/say",
+            "-v",
+            "Samantha",
+            "-r",
+            "130",
+            "-o",
+            "/tmp/sprout-support-help.aiff",
+            "Please help me count the ducks."
+          ],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-support-help.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/support-help.wav"
+          ]
+        ],
+        "toolVersions": {
+          "macOS": "27.0.1",
+          "ffmpeg": "8.1.2",
+          "voice": "Samantha (built-in en_US)"
+        }
+      }
+    },
+    "partial-count": {
+      "file": "partial-count.wav",
+      "text": "One duck, and then...",
+      "sha256": "6d0e19b7f52df6596307148ec99f12b49721daa09083203b75b5ea1ef11a493b",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 1.683458,
+      "purpose": "Unresolved two-duck objective live scenario; synthetic adult speech.",
+      "provenance": {
+        "method": "Offline macOS say, Samantha voice at 130 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "commands": [
+          [
+            "/usr/bin/say",
+            "-v",
+            "Samantha",
+            "-r",
+            "130",
+            "-o",
+            "/tmp/sprout-partial-count.aiff",
+            "One duck, and then..."
+          ],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-partial-count.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/partial-count.wav"
+          ]
+        ],
+        "toolVersions": {
+          "macOS": "27.0.1",
+          "ffmpeg": "8.1.2",
+          "voice": "Samantha (built-in en_US)"
+        }
+      }
+    },
+    "unsettled-answer": {
+      "file": "unsettled-answer.wav",
+      "text": "Maybe two ducks, or maybe three. I have not decided.",
+      "sha256": "660546af0580de1abf55222f853bc84156a8796b1a20e95cb8e86c619f340252",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 4.146708,
+      "purpose": "Unresolved two-duck objective live scenario; synthetic adult speech.",
+      "provenance": {
+        "method": "Offline macOS say, Samantha voice at 130 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "commands": [
+          [
+            "/usr/bin/say",
+            "-v",
+            "Samantha",
+            "-r",
+            "130",
+            "-o",
+            "/tmp/sprout-unsettled-answer.aiff",
+            "Maybe two ducks, or maybe three. I have not decided."
+          ],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-unsettled-answer.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/unsettled-answer.wav"
+          ]
+        ],
+        "toolVersions": {
+          "macOS": "27.0.1",
+          "ffmpeg": "8.1.2",
+          "voice": "Samantha (built-in en_US)"
+        }
+      }
+    },
+    "off-topic": {
+      "file": "off-topic.wav",
+      "text": "My favorite toy is a red truck.",
+      "sha256": "573194b5b1661628ece81b8be5fd75b2e0b334e38d9fd2ef0e49ca6ff7f8ea50",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 2.1615,
+      "purpose": "Unresolved two-duck objective live scenario; synthetic adult speech.",
+      "provenance": {
+        "method": "Offline macOS say, Samantha voice at 130 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "commands": [
+          [
+            "/usr/bin/say",
+            "-v",
+            "Samantha",
+            "-r",
+            "130",
+            "-o",
+            "/tmp/sprout-off-topic.aiff",
+            "My favorite toy is a red truck."
+          ],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-off-topic.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/off-topic.wav"
+          ]
+        ],
+        "toolVersions": {
+          "macOS": "27.0.1",
+          "ffmpeg": "8.1.2",
+          "voice": "Samantha (built-in en_US)"
+        }
+      }
+    },
+    "hesitant-three": {
+      "file": "hesitant-three.wav",
+      "text": "Uh, I think, uh, there are three butterflies.",
+      "sha256": "e3f009524cefe2ed9dd7b16a2b19be1071e01a6d44f50bb55a39db51381f0144",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 3.0197083333333334,
+      "purpose": "Hesitant butterfly answer expressed as a full counting sentence for provider transcription; synthetic adult speech. Recognition remains subject to live validation.",
+      "provenance": {
+        "method": "Offline macOS say, Albert voice at 130 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "commands": [
+          [
+            "/usr/bin/say",
+            "-v",
+            "Albert",
+            "-r",
+            "130",
+            "-o",
+            "/tmp/sprout-hesitant-three.aiff",
+            "Uh, I think, uh, there are three butterflies."
+          ],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-hesitant-three.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/hesitant-three.wav"
+          ]
+        ],
+        "toolVersions": {
+          "macOS": "27.0.1",
+          "ffmpeg": "8.1.2",
+          "voice": "Albert (built-in en_US)"
+        }
+      }
+    },
+    "barge-in": {
+      "file": "barge-in.wav",
+      "text": "Wait! I want to say something.",
+      "sha256": "ba4aedc87ef6ff2b83f747852698fdb5995c7c7d3c189b93443391ac1ab49300",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 2.090875,
+      "purpose": "Butterfly cancellation regression; deterministic synthetic adult speech, not a child recording.",
+      "provenance": {
+        "method": "Offline macOS say, Albert voice at 150 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "commands": [
+          [
+            "/usr/bin/say",
+            "-v",
+            "Albert",
+            "-r",
+            "150",
+            "-o",
+            "/tmp/sprout-barge-in.aiff",
+            "Wait! I want to say something."
+          ],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-barge-in.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/barge-in.wav"
+          ]
+        ],
+        "toolVersions": {
+          "macOS": "27.0.1",
+          "ffmpeg": "8.1.2",
+          "voice": "Albert (built-in en_US)"
+        }
+      }
+    },
+    "hesitant-three-samantha": {
+      "file": "hesitant-three-samantha.wav",
+      "text": "Uh, I think, uh, there are three butterflies.",
+      "sha256": "a7be61d3b5f59507121f00bb5856cd24577703c7dbaf74772a1458e4923cca0b",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 3.7064583333333334,
+      "purpose": "Hesitant butterfly answer expressed as a full counting sentence for provider transcription; synthetic adult speech. Recognition remains subject to live validation.",
+      "provenance": {
+        "method": "Offline macOS say, Samantha voice at 130 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "commands": [
+          [
+            "/usr/bin/say",
+            "-v",
+            "Samantha",
+            "-r",
+            "130",
+            "-o",
+            "/tmp/sprout-hesitant-three-samantha.aiff",
+            "Uh, I think, uh, there are three butterflies."
+          ],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-hesitant-three-samantha.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/hesitant-three-samantha.wav"
+          ]
+        ],
+        "toolVersions": {
+          "macOS": "27.0.1",
+          "ffmpeg": "8.1.2",
+          "voice": "Samantha (built-in en_US)"
+        }
+      }
+    }
+  }
+}
