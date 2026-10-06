@@ -64,9 +64,24 @@ Concept nodes require an authored `completionPolicy`:
 - `allow_unresolved` permits the authored success edge with unresolved criteria;
   it does not change their evidence status or count them as mastery.
 
-These policies are evaluated in addition to the existing correct-answer,
+An explicit learner scene skip uses the same authored edge without accepting an
+answer or emitting reveal effects. It preserves the evidence ledger, and only
+criteria explicitly carried by that edge with demonstrated evidence appear in
+the next node. A skip requires an explicit current `quiet` media observation
+that has remained quiet for the configured drain interval. `unavailable` media
+is not quiet evidence. The runtime also requires the current scene's steering
+append to be acknowledged and no child speech or pending child candidate.
+Rejected skip attempts leave runtime and timer/classification authority intact.
+An accepted skip invalidates old classification work, then still requires exact
+render confirmation before sending the next steering append; the next skip
+remains unavailable until that append is acknowledged. Stopping instead ends
+the runtime and preserves its evidence snapshot for a caller-owned recap; it
+does not reveal unresolved canonical answers.
+
+Normal answer progression retains the existing correct-answer,
 tutor-acknowledgment, relevant-output-drain, render-confirmation, and steering
-gates. An authored edge may list `carryForwardCriteria`; only demonstrated
+gates. Explicit skip uses quiet drain and acknowledged steering as its local
+eligibility gates without turning media quiet into answer evidence. An authored edge may list `carryForwardCriteria`; only demonstrated
 evidence for those IDs is copied into the target node. No carry-forward is
 implicit. Counting nodes do not opt into concept evidence and retain their
 existing completion path.
@@ -97,7 +112,9 @@ output starting during child speech, and PCM remaining active across that bounda
 cannot satisfy this gate. Candidate audio must then become `quiet` for the
 configured interval. Repeated quiet events preserve its start time; renewed
 activity resets it. `unavailable` clears candidate audio and is never silence;
-quiet alone after unavailable cannot restore it.
+quiet alone after unavailable cannot restore it. A fresh quiet observation
+also starts a quiet interval when no candidate tutor audio exists; only an
+explicit skip can use that interval, and it does not count as answer evidence.
 
 Both orderings work: acknowledgment followed by audio drain, and audio drain
 followed by acknowledgment. In the second ordering, the still-current quiet

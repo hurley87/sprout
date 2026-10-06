@@ -96,6 +96,7 @@ export type LessonRuntimeEvent = { readonly atMs: number } & (
   | { readonly type: "output.activity"; readonly source: RuntimeSource; readonly state: OutputActivityEvent["state"] }
   | { readonly type: "clock.tick"; readonly source: RuntimeSource }
   | { readonly type: "render.confirmed"; readonly runtimeId: string; readonly identity: RenderIdentity }
+  | { readonly type: "scene.skipped"; readonly source: RuntimeSource }
   | { readonly type: "stop"; readonly runtimeId: string }
   | { readonly type: "disconnect"; readonly runtimeId: string }
 );
@@ -204,8 +205,6 @@ function finish(state: LessonRuntimeState, lesson: LessonDefinition): LessonRunt
   if (!next.answerAccepted || !next.acknowledgmentObserved || !drained || next.childSpeaking) {
     return { state: next, effects: [] };
   }
-
-  // The only transition authority is this authored edge. No model-selected destination is read.
   const node = lesson.nodes[next.nodeId];
   if (
     node.concepts?.length &&
@@ -215,6 +214,14 @@ function finish(state: LessonRuntimeState, lesson: LessonDefinition): LessonRunt
       return evidence?.status !== "demonstrated" || (node.completionPolicy === "all_independent" && evidence.understanding !== "independent");
     })
   ) return { state: next, effects: [] };
+
+  return requestAuthoredTransition(next, lesson, classificationSource(next)!);
+}
+
+/** A learner-requested skip follows the authored edge without accepting or revealing an answer. */
+function requestAuthoredTransition(next: LessonRuntimeState, lesson: LessonDefinition, origin: ClassificationSource): LessonRuntimeResult {
+  // The only transition authority is this authored edge. No model-selected destination is read.
+  const node = lesson.nodes[next.nodeId];
   const edge = lesson.nodes[next.nodeId].onSuccess;
   const visitId = next.visitId + 1;
   const identity: RenderIdentity = {
@@ -241,7 +248,7 @@ function finish(state: LessonRuntimeState, lesson: LessonDefinition): LessonRunt
       consumedRevision: null,
       phase: "rendering",
       lessonComplete: edge.kind === "complete",
-      pendingRender: { identity, origin: classificationSource(next)! },
+      pendingRender: { identity, origin },
       conceptEvidence,
     },
     effects: [{ type: "render.requested", identity }],
@@ -369,6 +376,34 @@ export function reduceLessonRuntime(state: LessonRuntimeState, event: LessonRunt
         },
       ],
     };
+  }
+  if (event.type === "scene.skipped") {
+    if (
+      state.phase !== "active" ||
+      state.childSpeaking ||
+      state.childCandidate !== null ||
+      state.outputActivity !== "quiet" ||
+      state.quietSinceMs === null ||
+      event.atMs - state.quietSinceMs < state.quietDrainMs ||
+      !sameSource(state, event.source)
+    )
+      return ignored;
+    const origin: ClassificationSource = { ...event.source, nodeId: state.nodeId, transcriptRevision: state.transcriptRevision };
+    const skipped: LessonRuntimeState = {
+      ...state,
+      ...clearedEvidence,
+      nowMs: event.atMs,
+      hasChildTurn: false,
+      hasChildTranscript: false,
+      childSpeaking: false,
+      childCandidate: null,
+      consumedRevision: null,
+      outputActivity: "unavailable",
+      phase: "rendering",
+      lessonComplete: false,
+      pendingRender: null,
+    };
+    return requestAuthoredTransition(skipped, lesson, origin);
   }
   // Media/transcript work from the previous visit cannot mutate a newly committed target.
   // Speech or a newly revised child transcript during rendering cancels old completion authority.
@@ -525,7 +560,10 @@ export function reduceLessonRuntime(state: LessonRuntimeState, event: LessonRunt
             (state.outputActivity !== "active" && state.hasChildTranscript && !state.childSpeaking),
           quietSinceMs: null,
         };
-      } else if (state.tutorOutputObserved && state.quietSinceMs === null) {
+      } else if (state.quietSinceMs === null) {
+        // A quiet observation can authorize an explicit skip after sustained
+        // drain even when there was no accepted answer. Normal completion still
+        // separately requires relevant tutor output to have been observed.
         next = { ...next, quietSinceMs: event.atMs };
       }
       break;

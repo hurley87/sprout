@@ -731,6 +731,30 @@ export class LessonRuntime {
     this.stop("failure", true);
   }
 
+  /** Advance along the authored edge without turning a skip into understanding evidence. */
+  skipScene() {
+    if (
+      !this.state ||
+      this.status !== "live" ||
+      this.state.phase !== "active" ||
+      this.state.childSpeaking ||
+      this.state.childCandidate !== null ||
+      this.steering !== undefined
+    ) return;
+    // A skip is still an authored render/steering transition. Require the same
+    // locally observed sustained quiet used by the normal transition path;
+    // unavailable media cannot establish it.
+    if (
+      this.state.outputActivity !== "quiet" ||
+      this.state.quietSinceMs === null ||
+      this.now() - this.state.quietSinceMs < this.state.quietDrainMs
+    ) return;
+    const source = runtimeSource(this.state);
+    this.cancelClassification("scene_skipped");
+    this.answerRecovery.cancel("scene_skipped");
+    this.dispatch({ type: "scene.skipped", source, atMs: this.now() });
+  }
+
   stop(reason = "parent_stop", disconnected = false) {
     if (this.status === "ended") return;
     this.cancelClassification(reason);
