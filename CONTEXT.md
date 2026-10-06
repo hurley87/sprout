@@ -1,10 +1,15 @@
 # Sprout domain glossary
 
-**Lesson graph**: Authored counting nodes, scene facts, learning objectives, tutor
-briefs and success edges. This defines the available lesson progression.
+**Lesson definition**: Application-authored lesson identity, initial node, node
+presentation, learning objectives, tutor instructions, classifier criteria and
+success edges. The server resolves a submitted lesson ID through an explicit
+application allowlist; clients cannot submit prompts or graphs.
+
+**Lesson graph**: The authored nodes and success edges inside a lesson definition.
+The deterministic runtime follows only the selected graph.
 
 **Lesson node**: One bounded teaching objective and its displayed scene. The current
-lesson counts one duck, two ducks, then three butterflies.
+current counting lesson counts one duck, two ducks, then three butterflies.
 
 **Lesson runtime**: `LessonRuntime` orchestrates one in-memory lesson attempt.
 Its identifier scopes async work and render tokens; stopping or restarting invalidates its authority.
@@ -40,7 +45,8 @@ that bound when a tutor-authored snapshot can be classified.
 token, node and scene before new teaching context can be sent.
 
 **Current-node steering**: A bounded instruction containing only the confirmed
-node's scene facts, objective and tutor brief. It excludes future nodes and edges.
+node's presentation facts, objective and tutor brief. It excludes future nodes and
+edges. Classifier requests follow the same current-node boundary.
 
 **Lesson snapshot**: `LessonSnapshot` exposes current runtime state, display identity,
 transcript and recent diagnostics to the lesson UI.

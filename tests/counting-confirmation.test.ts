@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { ConversationStateProposal } from "../lib/lesson-runtime/conversation-state-classifier";
 import { COUNTING_LESSON_GRAPH, COUNTING_NODE_IDS } from "../lib/lesson-runtime/counting-lesson";
-import { initialTeachingContext, SPROUT_LIVE_CONFIG, teachingInstruction } from "../lib/lesson-runtime/live-context";
+import { initialTeachingContext, SPROUT_LIVE_CONFIG, teachingInstruction } from "./helpers/counting-live-context";
 import {
   classificationSource,
   createLessonRuntime,
   reduceLessonRuntime,
   runtimeSource,
   type LessonRuntimeEvent,
-} from "../lib/lesson-runtime/lesson-runtime-reducer";
+} from "./helpers/counting-runtime";
 
 describe("counting confirmation instruction construction (no model calls)", () => {
   const contexts = COUNTING_NODE_IDS.map(nodeId => {

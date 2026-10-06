@@ -5,7 +5,6 @@ import {
   type ConversationStateDecision,
   type ConversationStateOutputs,
 } from "./conversation-observer-contract";
-import { isCountingNodeId, type CountingNodeId } from "./counting-lesson";
 export type LiveClassificationDiagnostic = {
   classifierVersion: typeof CLASSIFIER_VERSION;
   decision: ConversationStateDecision["status"];
@@ -14,7 +13,7 @@ export type LiveClassificationDiagnostic = {
   outputs: ConversationStateOutputs | null;
   labelCompletionEligible: boolean;
   thresholds: typeof CONVERSATION_CLASSIFICATION_THRESHOLDS;
-  nodeId: CountingNodeId;
+  nodeId: string;
   transcriptRevision: number;
   elapsedMs: number;
 };
@@ -40,7 +39,7 @@ export function parseLiveClassificationDiagnostic(value: unknown): LiveClassific
   if (!record(value)) return null;
   if (
     value.classifierVersion !== CLASSIFIER_VERSION ||
-    !isCountingNodeId(value.nodeId) ||
+    typeof value.nodeId !== "string" ||
     !Number.isSafeInteger(value.transcriptRevision) ||
     (value.transcriptRevision as number) < 0 ||
     typeof value.elapsedMs !== "number" ||

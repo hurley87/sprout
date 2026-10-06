@@ -2,7 +2,7 @@
 
 ```text
 /
-  authored counting graph → deterministic lesson reducer → rendered scene
+  application-owned lesson definition → deterministic lesson reducer → rendered scene
   GPT-Live ↔ microphone / local VAD + decoded tutor output activity
   speaker-labelled current-visit transcript → Jev ConversationStateClassifier
   tutor utterance stabilization → exact-source proposals → reducer
@@ -16,18 +16,23 @@
 - The authored graph and deterministic reducer own lesson/UI authority.
 - Local media state supplies choreography evidence; transcript text cannot manufacture it.
 
-The graph defines the one-duck, two-duck and three-butterfly nodes and their success
-edges. Models cannot choose arbitrary scenes or see future graph edges through
-classification/steering input. The reducer requires exact runtime, visit, child
-turn, node and transcript revision identity. Exact render-token identity controls
-the handoff after a transition.
+`LessonDefinition` supplies validated authored node identities, the initial node,
+success edges, tutor instructions, recovery prompts, classifier criteria and presentation data. The
+current application registry is intentionally small and explicitly registers only
+counting. The reducer receives the selected definition for the whole attempt;
+runtime state records its lesson ID and mismatched definitions are ignored. Models
+cannot choose arbitrary scenes or see future graph edges through classification or
+steering input. The reducer requires exact runtime, visit, child turn, node and
+transcript revision identity. Exact render-token identity controls the handoff.
 
 ## Modules
 
 | Module | Current responsibility |
 | --- | --- |
 | `app/lesson.tsx` | Root lesson UI, render confirmation, diagnostic export |
-| `lib/lesson-runtime/counting-lesson.ts` | Authored graph |
+| `lib/lesson-runtime/lesson-definition.ts` | Shared definition contract, validation and current-node projection |
+| `lib/lesson-runtime/lesson-registry.ts` | Small server-side application allowlist |
+| `lib/lesson-runtime/counting-lesson.ts` | Counting content, criteria and recovery prompts |
 | `lib/lesson-runtime/lesson-runtime-reducer.ts` | Deterministic transitions and gates |
 | `lib/lesson-runtime/lesson-runtime.ts` | Runtime orchestration, transcript assembly, classification scheduling and steering |
 | `lib/lesson-runtime/tutor-stabilization.ts` | Independent transcript stability and output quiet clocks |
@@ -43,9 +48,13 @@ the handoff after a transition.
 | `app/api/live/route.ts` | Server-only GPT-Live session setup |
 | `app/api/classify/route.ts` | Server-only classification and normalized diagnostics |
 
-`/api/live` accepts only `{ sdp }` and always uses `SPROUT_LIVE_CONFIG`.
-`/api/classify` returns the current `{ proposal, diagnostic }` contract. Both
-routes retain loopback guards, bounded parsing, deadlines and safe provider errors.
+`/api/live` accepts `{ lessonId, sdp }`, resolves the ID through the application
+allowlist, and builds matching session instructions on the server. `/api/classify`
+accepts `{ lessonId, nodeId, transcriptRevision, transcript }`, rejects unknown
+lessons/nodes, and derives current-node context and classifier criteria from the
+resolved definition. It returns the `{ proposal, diagnostic }` contract. Neither
+route accepts client-authored prompts or graphs. Both retain loopback guards,
+bounded parsing, deadlines and safe provider errors.
 The transport retains its microphone input fence because the root opens provider
 input only after initial scene confirmation and session readiness. It retains
 app-owned source identity to reject unrelated provider events. Unused provider

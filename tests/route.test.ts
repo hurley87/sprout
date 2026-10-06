@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { POST } from "../app/api/live/route";
-import { SPROUT_LIVE_CONFIG } from "../lib/lesson-runtime/live-context";
+import { SPROUT_LIVE_CONFIG } from "./helpers/counting-live-context";
 
-const request = (body: unknown = { sdp: "v=0\r\n" }, origin = "http://localhost:3000", host = "localhost:3000") =>
+const request = (body: unknown = { sdp: "v=0\r\n", lessonId: "counting" }, origin = "http://localhost:3000", host = "localhost:3000") =>
   new Request("http://localhost:3000/api/live", {
     method: "POST",
     headers: { "Content-Type": "application/json", origin, host },
@@ -41,6 +41,13 @@ describe("local Live session endpoint", () => {
   });
   it.each([null, {}, { sdp: 2 }, { sdp: "junk" }])("rejects invalid input %j", async body => {
     expect((await POST(request(body))).status).toBe(400);
+  });
+  it("rejects an unregistered lesson before provider session creation", async () => {
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    for (const lessonId of ["test-patterns", "toString", "constructor", "__proto__"])
+      expect((await POST(request({ sdp: "v=0", lessonId }))).status).toBe(400);
+    expect(fetch).not.toHaveBeenCalled();
   });
   it("limits request size including bodies with no content-length", async () => {
     expect((await POST(request({ sdp: "v=0" + "x".repeat(70_000) }))).status).toBe(413);

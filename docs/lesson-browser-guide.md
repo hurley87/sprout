@@ -7,11 +7,12 @@ The production prototype serves the lesson only at `/`. It uses `BrowserTranspor
 the local microphone detector, PCM output observer, and supported
 `session.instructions.append` command. It does not record audio or persist sessions.
 
-`/api/live` accepts only `{ sdp }` and always uses the Sprout tutor configuration
-with the initial node's context. The local-only `/api/classify` endpoint uses the
-same Jev request and deterministic mapping as `jevConversationStateClassifier`,
-with an additional normalized mapping diagnostic. Its questions and thresholds
-are unchanged.
+`/api/live` accepts `{ lessonId, sdp }`, resolves the ID through the application
+allowlist, and builds matching tutor instructions with the initial node's context.
+The local-only `/api/classify` endpoint uses the selected definition for its
+current-node context and criteria, with the same Jev request and deterministic
+mapping as `jevConversationStateClassifier` and an additional normalized mapping
+diagnostic. Counting's labels and thresholds are unchanged.
 
 ## Run and collect
 

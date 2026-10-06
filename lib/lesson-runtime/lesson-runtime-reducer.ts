@@ -1,11 +1,6 @@
 import type { OutputActivityEvent } from "../events";
 import { parseConversationStateProposal } from "./conversation-state-classifier";
-import {
-  COUNTING_LESSON_GRAPH,
-  INITIAL_COUNTING_NODE_ID,
-  type CountingLessonNode,
-  type CountingNodeId,
-} from "./counting-lesson";
+import { currentNodeContext, isLessonNodeId, type LessonDefinition } from "./lesson-definition";
 
 /** App-owned identities, captured at the source/request boundary, never supplied by the classifier. */
 export type RuntimeSource = {
@@ -14,28 +9,25 @@ export type RuntimeSource = {
   readonly childTurnId: number;
 };
 export type ClassificationSource = RuntimeSource & {
-  readonly nodeId: CountingNodeId;
+  readonly nodeId: string;
   readonly transcriptRevision: number;
 };
 export type RenderIdentity = {
   readonly token: string;
-  readonly nodeId: CountingNodeId | null;
-  readonly sceneId: CountingLessonNode["sceneId"] | null;
+  readonly nodeId: string | null;
+  readonly sceneId: string | null;
 };
 export type CurrentNodeSteeringContext = {
-  readonly nodeId: CountingNodeId;
-  readonly scene: {
-    readonly id: CountingLessonNode["sceneId"];
-    readonly object: CountingLessonNode["object"];
-    readonly quantity: CountingLessonNode["quantity"];
-  };
+  readonly nodeId: string;
+  readonly scene: Readonly<Record<string, string | number | boolean>>;
   readonly learningObjective: string;
   readonly tutorBrief: string;
 };
 
 export type LessonRuntimeState = {
   readonly runtimeId: string;
-  readonly nodeId: CountingNodeId;
+  readonly lessonId: string;
+  readonly nodeId: string;
   readonly visitId: number;
   readonly childTurnId: number;
   readonly hasChildTurn: boolean;
@@ -114,14 +106,15 @@ const clearedEvidence = {
 /** The initial authored scene must already be rendered. Use a fresh runtimeId for every start/reconnect. */
 export function createLessonRuntime(
   runtimeId: string,
-  { quietDrainMs = 250, atMs = 0 }: { quietDrainMs?: number; atMs?: number } = {},
+  { quietDrainMs = 250, atMs = 0, lesson }: { quietDrainMs?: number; atMs?: number; lesson: LessonDefinition },
 ): LessonRuntimeState {
-  if (!runtimeId || !Number.isFinite(quietDrainMs) || quietDrainMs <= 0 || !validTime(atMs)) {
+  if (!runtimeId || !Number.isFinite(quietDrainMs) || quietDrainMs <= 0 || !validTime(atMs) || !isLessonNodeId(lesson, lesson.initialNodeId)) {
     throw new Error("A runtime identity, positive quiet threshold, and valid local time are required");
   }
   return {
     runtimeId,
-    nodeId: INITIAL_COUNTING_NODE_ID,
+    lessonId: lesson.id,
+    nodeId: lesson.initialNodeId,
     visitId: 1,
     childTurnId: 0,
     hasChildTurn: false,
@@ -180,7 +173,7 @@ function stopped(state: LessonRuntimeState): LessonRuntimeState {
   };
 }
 
-function finish(state: LessonRuntimeState): LessonRuntimeResult {
+function finish(state: LessonRuntimeState, lesson: LessonDefinition): LessonRuntimeResult {
   const drained =
     state.tutorOutputObserved &&
     state.outputActivity === "quiet" &&
@@ -192,12 +185,12 @@ function finish(state: LessonRuntimeState): LessonRuntimeResult {
   }
 
   // The only transition authority is this authored edge. No model-selected destination is read.
-  const edge = COUNTING_LESSON_GRAPH[next.nodeId].onSuccess;
+  const edge = lesson.nodes[next.nodeId].onSuccess;
   const visitId = next.visitId + 1;
   const identity: RenderIdentity = {
     token: JSON.stringify([next.runtimeId, visitId]),
     nodeId: edge.kind === "node" ? edge.nodeId : null,
-    sceneId: edge.kind === "node" ? COUNTING_LESSON_GRAPH[edge.nodeId].sceneId : null,
+    sceneId: edge.kind === "node" ? String(lesson.nodes[edge.nodeId].presentation.sceneId ?? edge.nodeId) : null,
   };
   return {
     state: {
@@ -216,8 +209,9 @@ function finish(state: LessonRuntimeState): LessonRuntimeResult {
   };
 }
 
-export function reduceLessonRuntime(state: LessonRuntimeState, event: LessonRuntimeEvent): LessonRuntimeResult {
+export function reduceLessonRuntime(state: LessonRuntimeState, event: LessonRuntimeEvent, lesson: LessonDefinition): LessonRuntimeResult {
   const ignored = { state, effects: [] };
+  if (state.lessonId && state.lessonId !== lesson.id) return ignored;
   if (state.phase === "stopped" || !validTime(event.atMs) || event.atMs < state.nowMs) return ignored;
   if (event.type === "stop" || event.type === "disconnect") {
     return event.runtimeId === state.runtimeId
@@ -241,7 +235,7 @@ export function reduceLessonRuntime(state: LessonRuntimeState, event: LessonRunt
     if (next.lessonComplete) {
       return { state: next, effects: [{ type: "lesson.completed", renderToken: event.identity.token }] };
     }
-    const node = COUNTING_LESSON_GRAPH[next.nodeId];
+    const context = currentNodeContext(lesson, next.nodeId);
     return {
       state: next,
       effects: [
@@ -249,12 +243,7 @@ export function reduceLessonRuntime(state: LessonRuntimeState, event: LessonRunt
           type: "steering.ready",
           renderToken: event.identity.token,
           // Explicit projection: never serialize the graph or future teaching context.
-          context: {
-            nodeId: node.id,
-            scene: { id: node.sceneId, object: node.object, quantity: node.quantity },
-            learningObjective: node.learningObjective,
-            tutorBrief: node.tutorBrief,
-          },
+          context,
         },
       ],
     };
@@ -342,6 +331,7 @@ export function reduceLessonRuntime(state: LessonRuntimeState, event: LessonRunt
         state.childSpeaking ||
         !state.hasChildTranscript ||
         !proposal ||
+        !isLessonNodeId(lesson, proposal.nodeId) ||
         event.source.nodeId !== state.nodeId ||
         event.source.transcriptRevision !== state.transcriptRevision ||
         proposal.nodeId !== state.nodeId ||
@@ -403,5 +393,5 @@ export function reduceLessonRuntime(state: LessonRuntimeState, event: LessonRunt
     case "clock.tick":
       break;
   }
-  return finish(next);
+  return finish(next, lesson);
 }

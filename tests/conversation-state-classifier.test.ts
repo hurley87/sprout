@@ -1,12 +1,13 @@
 import { afterEach, expect, it, vi } from "vitest";
 import {
   classifyConversationStateWithDiagnostics,
-  CONVERSATION_STATE_QUESTIONS,
   conversationObserverState,
   CLASSIFIER_VERSION,
   type ObjectiveState,
   type ObservedTutorState,
 } from "../lib/lesson-runtime/jev-conversation-state-classifier";
+import { CONVERSATION_STATE_QUESTIONS } from "../lib/experiments/issue-57/counting-classifier-contract";
+import { COUNTING_LESSON } from "../lib/lesson-runtime/counting-lesson";
 import { JEV_MODEL } from "../lib/jev";
 const distribution = (options: Record<string, string>, choice: string, p = 0.96) => ({
   type: "choice",
@@ -26,6 +27,7 @@ function body(objective: ObjectiveState = "completed", tutor: ObservedTutorState
   };
 }
 const input = {
+  lesson: COUNTING_LESSON,
   nodeId: "count-2-ducks" as const,
   transcriptRevision: 4,
   transcript: "Child: Two\nTutor: Yes, two ducks.",

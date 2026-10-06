@@ -2,10 +2,10 @@ import { BrowserTransport } from "../browser-transport";
 import type { ProviderEvent, TranscriptEvent } from "../events";
 import { MICROPHONE_ONSET_MS, MICROPHONE_ONSET_QUIET_MS, MICROPHONE_QUIET_MS } from "../microphone-turn";
 import { parseConversationStateProposal } from "./conversation-state-classifier";
-import { COUNTING_LESSON_GRAPH, INITIAL_COUNTING_NODE_ID } from "./counting-lesson";
+import { currentNodeContext, type LessonDefinition } from "./lesson-definition";
 import { initialTeachingContext, teachingInstruction } from "./live-context";
-import { SupportClarification, SUPPORT_CLARIFICATION_INSTRUCTION } from "./support-clarification";
-import { AnswerRecovery, ANSWER_RECOVERY_INSTRUCTION } from "./answer-recovery";
+import { SupportClarification } from "./support-clarification";
+import { AnswerRecovery } from "./answer-recovery";
 import { TutorStabilizationGate } from "./tutor-stabilization";
 import { parseClassifierEndpointCode } from "./classifier-failure";
 import { CLASSIFIER_VERSION } from "./conversation-observer-contract";
@@ -88,11 +88,7 @@ export class LessonRuntime {
   private readonly transport: BrowserTransport;
   private state: LessonRuntimeState | null = null;
   private status: LessonSnapshot["status"] = "prepared";
-  private display: RenderIdentity = {
-    token: `${this.runtimeId}:initial`,
-    nodeId: INITIAL_COUNTING_NODE_ID,
-    sceneId: COUNTING_LESSON_GRAPH[INITIAL_COUNTING_NODE_ID].sceneId,
-  };
+  private display: RenderIdentity;
   private error: string | null = null;
   private fragments: Fragment[] = [];
   private transcript = "";
@@ -122,7 +118,13 @@ export class LessonRuntime {
   constructor(
     audio: HTMLAudioElement,
     private readonly changed: (snapshot: LessonSnapshot) => void,
+    private readonly lessonDefinition: LessonDefinition,
   ) {
+    this.display = {
+      token: `${this.runtimeId}:initial`,
+      nodeId: this.lessonDefinition.initialNodeId,
+      sceneId: String(this.lessonDefinition.nodes[this.lessonDefinition.initialNodeId].presentation.sceneId ?? this.lessonDefinition.initialNodeId),
+    };
     this.tutorStabilization = new TutorStabilizationGate(
       {
         tutorTranscriptStableMs: LESSON_TIMING.tutorTranscriptStableMs,
@@ -144,9 +146,9 @@ export class LessonRuntime {
             type: "session.instructions.append",
             event_id: eventId,
             delegation_id: null,
-            content: SUPPORT_CLARIFICATION_INSTRUCTION,
+            content: this.lessonDefinition.recovery.supportClarificationInstruction,
           });
-          this.log("gpt_live.clarification_append", { eventId, content: SUPPORT_CLARIFICATION_INSTRUCTION }, source);
+          this.log("gpt_live.clarification_append", { eventId, content: this.lessonDefinition.recovery.supportClarificationInstruction }, source);
         } catch {
           this.supportClarification.cancel("send_failed");
           this.log("clarification.send_failed", { message: "Scene held; request budget spent." }, source);
@@ -163,9 +165,9 @@ export class LessonRuntime {
             type: "session.instructions.append",
             event_id: eventId,
             delegation_id: null,
-            content: ANSWER_RECOVERY_INSTRUCTION,
+            content: this.lessonDefinition.recovery.answerRecoveryInstruction,
           });
-          this.log("gpt_live.answer_recovery_append", { eventId, content: ANSWER_RECOVERY_INSTRUCTION }, source);
+          this.log("gpt_live.answer_recovery_append", { eventId, content: this.lessonDefinition.recovery.answerRecoveryInstruction }, source);
         } catch {
           this.log("answer_recovery.send_failed", { message: "Scene held; request budget spent." }, source);
         }
@@ -194,7 +196,7 @@ export class LessonRuntime {
       runtimeId: source?.runtimeId ?? this.runtimeId,
       visitId: source?.visitId ?? this.state?.visitId ?? null,
       childTurnId: source?.childTurnId ?? this.state?.childTurnId ?? null,
-      nodeId: source && "nodeId" in source ? source.nodeId : (this.state?.nodeId ?? INITIAL_COUNTING_NODE_ID),
+      nodeId: source && "nodeId" in source ? source.nodeId : (this.state?.nodeId ?? this.lessonDefinition.initialNodeId),
       transcriptRevision: source && "transcriptRevision" in source ? source.transcriptRevision : this.revision,
       transcriptSpeaker: speaker ?? this.state?.transcriptSource ?? "unknown",
       detail,
@@ -248,6 +250,7 @@ export class LessonRuntime {
       this.state = createLessonRuntime(this.runtimeId, {
         quietDrainMs: LESSON_TIMING.quietDrainMs,
         atMs: this.now(),
+        lesson: this.lessonDefinition,
       });
       this.status = "connecting";
       this.log("render.confirmed", { identity, initial: true });
@@ -255,7 +258,7 @@ export class LessonRuntime {
       this.publish();
       this.startupTimer = setTimeout(() => this.fail("GPT-Live startup timed out."), LESSON_TIMING.startupTimeoutMs);
       void this.transport
-        .start(this.receive, () => this.fail("The voice connection or microphone became unavailable."))
+        .start(this.receive, () => this.fail("The voice connection or microphone became unavailable."), this.lessonDefinition.id)
         .catch(() => this.fail("Could not start GPT-Live. Check microphone access and local server configuration."));
       return;
     }
@@ -267,7 +270,7 @@ export class LessonRuntime {
   private dispatch(event: LessonRuntimeEvent) {
     if (!this.state || this.status === "ended") return;
     const before = this.state;
-    const result = reduceLessonRuntime(before, event);
+    const result = reduceLessonRuntime(before, event, this.lessonDefinition);
     this.state = result.state;
     if (event.type !== "clock.tick")
       this.log(
@@ -337,7 +340,7 @@ export class LessonRuntime {
         clearTimeout(this.startupTimer);
         this.status = "live";
         this.log("session.started", { sourceId: event.sourceId });
-        if (!this.appendSteering(initialTeachingContext(), this.display.token, true)) return;
+        if (!this.appendSteering(initialTeachingContext(this.lessonDefinition), this.display.token, true)) return;
         if (!this.transport.openInput(() => this.log("microphone.input_opened")))
           this.fail("Could not open GPT-Live microphone input.");
         this.publish();
@@ -589,6 +592,7 @@ export class LessonRuntime {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          lessonId: this.lessonDefinition.id,
           nodeId: source.nodeId,
           transcriptRevision: source.transcriptRevision,
           transcript,
@@ -611,6 +615,7 @@ export class LessonRuntime {
       if (!body || typeof body !== "object" || !("proposal" in body)) throw new Error("Invalid classifier response");
       const proposal = body.proposal === null ? null : parseConversationStateProposal(body.proposal);
       if (body.proposal !== null && !proposal) throw new Error("Invalid classifier proposal");
+      if (proposal && !Object.hasOwn(this.lessonDefinition.nodes, proposal.nodeId)) throw new Error("Invalid classifier node");
       const diagnostic = parseLiveClassificationDiagnostic("diagnostic" in body ? body.diagnostic : undefined);
       this.log(
         diagnostic ? "classifier.mapping" : "classifier.mapping_unavailable",
@@ -681,7 +686,7 @@ export class LessonRuntime {
   private appendSteering(context: CurrentNodeSteeringContext, renderToken: string, startLesson = false) {
     if (!this.state || this.status !== "live") return false;
     const eventId = `${this.runtimeId}:steer:${this.state.visitId}`;
-    const content = teachingInstruction(context, startLesson);
+    const content = teachingInstruction(context, this.lessonDefinition, startLesson);
     const source = runtimeSource(this.state);
     this.steering = {
       eventId,
@@ -722,11 +727,11 @@ export class LessonRuntime {
         type: disconnected ? "disconnect" : "stop",
         runtimeId: this.runtimeId,
         atMs: this.now(),
-      }).state;
+      }, this.lessonDefinition).state;
       this.display = {
         token: `${this.runtimeId}:stopped`,
         nodeId: this.state.nodeId,
-        sceneId: COUNTING_LESSON_GRAPH[this.state.nodeId].sceneId,
+        sceneId: currentNodeContext(this.lessonDefinition, this.state.nodeId).scene.id,
       };
     }
     this.status = "ended";

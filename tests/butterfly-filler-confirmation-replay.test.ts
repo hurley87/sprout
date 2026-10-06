@@ -7,13 +7,14 @@ import {
   type ConversationStateOutputs,
 } from "../lib/lesson-runtime/conversation-observer-contract";
 import { LessonRuntime } from "../lib/lesson-runtime/lesson-runtime";
+import { COUNTING_LESSON } from "../lib/lesson-runtime/counting-lesson";
 import {
   classificationSource,
   reduceLessonRuntime,
   runtimeSource,
   type LessonRuntimeEvent,
   type LessonRuntimeState,
-} from "../lib/lesson-runtime/lesson-runtime-reducer";
+} from "./helpers/counting-runtime";
 
 const recordedMapping = trace.steps.find(step => "mapping" in step)!.mapping!;
 const outputs = recordedMapping.outputs as ConversationStateOutputs;
@@ -50,7 +51,7 @@ function replayReducer() {
         nodeId: trace.classifierInput.nodeId,
         transcriptRevision: 55,
       });
-      const mapped = mapConversationObservation(trace.classifierInput as ConversationStateClassifierInput, outputs);
+      const mapped = mapConversationObservation({ ...trace.classifierInput, lesson: COUNTING_LESSON } as ConversationStateClassifierInput, outputs);
       expect(mapped).toMatchObject({ status: "abstained", reason: "objectiveState_no_winner", proposal: null });
       // A null proposal does not enter the reducer or restore old authority.
     }
@@ -157,7 +158,7 @@ it("reschedules after late filler transcription, preserves the full input, and a
     });
   });
   vi.stubGlobal("fetch", fetch); // Every request stays in memory; transport is mocked too.
-  lesson = new LessonRuntime({} as HTMLAudioElement, () => {});
+  lesson = new LessonRuntime({} as HTMLAudioElement, () => {}, COUNTING_LESSON);
   lesson.confirmRendered(lesson.snapshot().display);
   acknowledgeSteering();
   // Authored render/steering transitions establish the butterfly visit normally.

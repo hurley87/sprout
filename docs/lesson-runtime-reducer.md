@@ -5,15 +5,18 @@ recovery design continue in [#56](https://github.com/hurley87/sprout/issues/56).
 
 The pure `lib/lesson-runtime/lesson-runtime-reducer.ts` is the
 authority layer. It consumes descriptive proposals and local runtime evidence,
-and reads destinations exclusively from `COUNTING_LESSON_GRAPH[nodeId].onSuccess`.
+and reads destinations exclusively from the selected lesson definition's authored
+`nodes[nodeId].onSuccess` edge.
 The root browser runtime supplies transcripts, local media evidence, and
 render confirmation and handles the reducer's effects. The reducer itself has
 no transcript accumulator, provider calls, steering sends, or persistence.
 
 ## Caller contract
 
-Create a runtime with a unique app-owned `runtimeId` for each lesson start or
-reconnect. The initial authored scene must already be rendered. The default
+Create a runtime with a unique app-owned `runtimeId` and one validated
+`LessonDefinition` for each lesson start or reconnect. The runtime stores the
+lesson ID and ignores reducer calls supplied with a different definition. The
+initial authored scene must already be rendered. The default
 sustained quiet interval is 250 ms; callers can configure a positive interval.
 All events use `atMs` from the same local monotonic clock. Tick events drive the
 gate; the reducer itself has no timers. Classifier results use their receipt time,
@@ -91,7 +94,7 @@ No next-node steering context is available before confirmation.
 
 `render.confirmed` must match the runtime, token, node, and scene exactly. It
 activates the rendered node and emits one `steering.ready` payload containing
-only that node, displayed scene facts, learning objective, and tutor brief.
+only that node's presentation facts, learning objective, and tutor brief.
 Graph edges and future nodes are explicitly excluded. Terminal confirmation
 instead emits `lesson.completed` once and enters the complete phase. Duplicate,
 mismatched, previous-visit, and previous-runtime confirmations do nothing.

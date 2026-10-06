@@ -7,14 +7,14 @@ import {
 } from "../lib/experiments/issue-57/legacy/jev-conversation-state-classifier";
 import { mapConversationClassification } from "../lib/experiments/issue-57/legacy/classification-decision";
 import { SUPPORT_CLARIFICATION_INSTRUCTION } from "../lib/lesson-runtime/support-clarification";
-import { SPROUT_LIVE_CONFIG } from "../lib/lesson-runtime/live-context";
+import { SPROUT_LIVE_CONFIG } from "./helpers/counting-live-context";
 import {
   classificationSource,
   createLessonRuntime,
   reduceLessonRuntime,
   runtimeSource,
   type LessonRuntimeEvent,
-} from "../lib/lesson-runtime/lesson-runtime-reducer";
+} from "./helpers/counting-runtime";
 import { isCountingNodeId } from "../lib/lesson-runtime/counting-lesson";
 import { conversationProviderBody } from "./fixtures/conversation-classification";
 

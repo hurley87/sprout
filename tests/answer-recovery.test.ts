@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { AnswerRecovery, ANSWER_RECOVERY_WAIT_MS } from "../lib/lesson-runtime/answer-recovery";
-import { createLessonRuntime, classificationSource } from "../lib/lesson-runtime/lesson-runtime-reducer";
+import { createLessonRuntime, classificationSource } from "./helpers/counting-runtime";
 
 const state = () => ({
   ...createLessonRuntime("runtime"),

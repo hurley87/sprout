@@ -8,16 +8,20 @@ The stable diagnostic identifier is `conversation-state-v2`.
 
 ## Request and semantic contract
 
-`/api/classify` accepts exactly `nodeId`, `transcriptRevision`, and `transcript`.
-It directly calls `classifyConversationStateWithDiagnostics`, with one Jev
-request per classification. There is no mode switch, fallback, or classifier
-configuration environment variable. `TYPESAFE_API_KEY` remains server-only.
+`/api/classify` accepts exactly `lessonId`, `nodeId`, `transcriptRevision`, and
+`transcript`. The server resolves the application-owned lesson ID and rejects
+unknown or cross-lesson nodes. It calls `classifyConversationStateWithDiagnostics`
+with the resolved definition and one Jev request per classification. There is no
+mode switch, fallback, or classifier configuration environment variable.
+`TYPESAFE_API_KEY` remains server-only.
 
-The model receives only authored current-node state:
+The model receives only authored current-node state. Presentation facts, objective
+and Choice criteria come from the selected definition; authored edges and future
+nodes are excluded:
 
 ```text
 nodeId
-scene: { object, quantity }
+scene: current-node presentation facts
 learningObjective
 transcript
 transcriptRevision

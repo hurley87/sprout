@@ -1,4 +1,4 @@
-import { isCountingNodeId, type CountingNodeId } from "./counting-lesson";
+import type { LessonDefinition } from "./lesson-definition";
 
 export const CHILD_ACTIVITIES = ["unknown", "waiting", "thinking", "answering"] as const;
 export type ChildActivity = (typeof CHILD_ACTIVITIES)[number];
@@ -22,7 +22,7 @@ export type TutorState = (typeof TUTOR_STATES)[number];
  */
 export type ConversationStateProposal = {
   /** Claimed authored node; the app must match it to the exact classification request. */
-  readonly nodeId: CountingNodeId;
+  readonly nodeId: string;
   /** Claimed snapshot revision; a nonnegative safe integer the app must match to the request. */
   readonly transcriptRevision: number;
   /** Requires runtime turn/audio signals; a transcript-only classifier emits "unknown". */
@@ -37,7 +37,8 @@ export type ConversationStateProposal = {
 
 /** A supplied transcript snapshot, not an accumulator or a persisted session record. */
 export type ConversationStateClassifierInput = {
-  readonly nodeId: CountingNodeId;
+  readonly lesson?: LessonDefinition;
+  readonly nodeId: string;
   readonly transcriptRevision: number;
   /** Recent current-node exchange in order, with Child:/Tutor: speaker labels. */
   readonly transcript: string;
@@ -73,7 +74,7 @@ export function parseConversationStateProposal(value: unknown): ConversationStat
     return null;
 
   if (
-    !isCountingNodeId(proposal.nodeId) ||
+    typeof proposal.nodeId !== "string" ||
     typeof proposal.transcriptRevision !== "number" ||
     !Number.isSafeInteger(proposal.transcriptRevision) ||
     proposal.transcriptRevision < 0 ||
@@ -89,7 +90,7 @@ export function parseConversationStateProposal(value: unknown): ConversationStat
     return null;
 
   return {
-    nodeId: proposal.nodeId,
+    nodeId: proposal.nodeId as string,
     transcriptRevision: proposal.transcriptRevision,
     childActivity: proposal.childActivity as ChildActivity,
     answerOutcome: proposal.answerOutcome as AnswerOutcome,

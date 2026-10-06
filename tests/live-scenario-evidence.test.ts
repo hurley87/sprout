@@ -22,8 +22,8 @@ import {
   reduceLessonRuntime,
   runtimeSource,
   type LessonRuntimeEvent,
-} from "../lib/lesson-runtime/lesson-runtime-reducer";
-import { COUNTING_NODE_IDS } from "../lib/lesson-runtime/counting-lesson";
+} from "./helpers/counting-runtime";
+import { COUNTING_LESSON, COUNTING_NODE_IDS } from "../lib/lesson-runtime/counting-lesson";
 import type { LessonDiagnostic } from "../lib/lesson-runtime/lesson-runtime";
 import { LIVE_CORRECT_ANSWERS } from "./browser/live/answers";
 import manifest from "./fixtures/speech/manifest.json";
@@ -133,7 +133,7 @@ function completedReport(correction = false, discardedNoise = false): Report {
       },
     };
     const decision = mapConversationObservation(
-      { nodeId: node, transcriptRevision: source.transcriptRevision, transcript: `Child: ${child}\nTutor: Yes.` },
+      { lesson: COUNTING_LESSON, nodeId: node, transcriptRevision: source.transcriptRevision, transcript: `Child: ${child}\nTutor: Yes.` },
       outputs,
     );
     log(

@@ -1,9 +1,9 @@
 import { runtimeSource, type ClassificationSource, type LessonRuntimeState } from "./lesson-runtime-reducer";
 
-export const ANSWER_RECOVERY_WAIT_MS = 4_000;
-export const ANSWER_RECOVERY_INSTRUCTION =
-  "One-time clarification for the still-rendered current scene: the application cannot yet establish a settled child answer. If the child is still waiting and has not spoken again, naturally ask them to repeat their answer. If they are speaking or have responded since this request, ignore it and follow their response. Ask at most once. Do not supply or repeat a count, total, answer, counting method, hint, or imply success. Wait for a fresh child answer; if it establishes settled correct current-scene success, explicitly confirm it with its number and object, then pause. For unfinished or uncertain answers, wait or clarify without giving the total. Never change scenes. This request grants no completion authority.";
+// Compatibility export for counting-specific callers; runtime prompt selection uses LessonDefinition.
+export { COUNTING_ANSWER_RECOVERY_INSTRUCTION as ANSWER_RECOVERY_INSTRUCTION } from "./counting-lesson";
 
+export const ANSWER_RECOVERY_WAIT_MS = 4_000;
 const turnKey = (source: ClassificationSource) =>
   JSON.stringify([source.runtimeId, source.nodeId, source.visitId, source.childTurnId]);
 const sourceFor = (state: LessonRuntimeState): ClassificationSource => ({

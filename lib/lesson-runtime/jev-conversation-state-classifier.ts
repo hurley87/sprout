@@ -2,7 +2,7 @@
 import { JEV_MODEL } from "../jev";
 import type { ConversationStateClassifierInput } from "./conversation-state-classifier";
 import {
-  CONVERSATION_STATE_QUESTIONS,
+  conversationStateQuestions,
   conversationObserverState,
   abstain,
   normalizeConversationOutputs,
@@ -16,10 +16,11 @@ export async function classifyConversationStateWithDiagnostics(
   input: ConversationStateClassifierInput,
   signal: AbortSignal,
 ): Promise<ConversationStateDecision> {
+  if (!input.lesson) return abstain("invalid_input");
   return executeConversationObserver(input, signal, {
     model: JEV_MODEL,
     state: conversationObserverState(input),
-    questions: CONVERSATION_STATE_QUESTIONS,
+    questions: conversationStateQuestions(input.lesson),
   });
 }
 
@@ -31,16 +32,16 @@ export async function executeConversationObserver(
     model: typeof JEV_MODEL;
     state: unknown;
     questions: {
-      [K in keyof typeof CONVERSATION_STATE_QUESTIONS]: {
+      [K in "objectiveState" | "tutorState"]: {
         type: "choice";
         instructions: string;
-        criteria: (typeof CONVERSATION_STATE_QUESTIONS)[K]["criteria"];
+        criteria: Readonly<Record<string, string>>;
       };
     };
   } | null,
 ): Promise<ConversationStateDecision> {
   // Capture before awaiting; provider and later caller mutations never choose identity.
-  const snapshot = { nodeId: input.nodeId, transcriptRevision: input.transcriptRevision, transcript: input.transcript };
+  const snapshot = { ...input, lesson: input.lesson, nodeId: input.nodeId, transcriptRevision: input.transcriptRevision, transcript: input.transcript };
   if (!request?.state || !conversationObserverState(snapshot)) return abstain("invalid_input");
   if (signal.aborted) return abstain("cancelled");
   const key = process.env.TYPESAFE_API_KEY;

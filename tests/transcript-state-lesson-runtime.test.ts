@@ -9,7 +9,7 @@ import {
   type ClassificationSource,
   type LessonRuntimeEvent,
   type LessonRuntimeResult,
-} from "../lib/lesson-runtime/lesson-runtime-reducer";
+} from "./helpers/counting-runtime";
 
 type WithoutTime<T> = T extends unknown ? Omit<T, "atMs"> : never;
 
@@ -714,7 +714,7 @@ describe("transcript-state lesson runtime authority", () => {
         renderToken: identity.token,
         context: {
           nodeId: node.id,
-          scene: { id: node.sceneId, object: node.object, quantity: node.quantity },
+            scene: { id: node.sceneId, object: node.object, quantity: node.quantity },
           learningObjective: node.learningObjective,
           tutorBrief: node.tutorBrief,
         },

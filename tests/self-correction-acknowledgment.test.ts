@@ -17,7 +17,7 @@ import {
   reduceLessonRuntime,
   runtimeSource,
   type LessonRuntimeEvent,
-} from "../lib/lesson-runtime/lesson-runtime-reducer";
+} from "./helpers/counting-runtime";
 import { conversationProbabilities, conversationProviderBody } from "./fixtures/conversation-classification";
 
 afterEach(() => {
