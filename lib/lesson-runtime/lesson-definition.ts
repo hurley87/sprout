@@ -20,6 +20,8 @@ export type ConceptCriterionDefinition = {
 export type LessonDefinition = {
   readonly id: string;
   readonly initialNodeId: string;
+  /** Hold accepted scene transitions until the application confirms the reveal was reviewed. */
+  readonly requirePresentationConfirmation?: boolean;
   readonly nodes: Readonly<Record<string, LessonNodeDefinition>>;
   readonly recovery: {
     readonly supportClarificationInstruction: string;
@@ -39,18 +41,28 @@ export type LessonDefinition = {
   };
 };
 
-export const OBJECTIVE_CRITERIA_IDS = ["completed", "incorrect", "unclear_or_incomplete", "unresolved_help", "no_attempt"] as const;
+export const OBJECTIVE_CRITERIA_IDS = [
+  "completed",
+  "incorrect",
+  "unclear_or_incomplete",
+  "unresolved_help",
+  "no_attempt",
+] as const;
 export const TUTOR_CRITERIA_IDS = ["confirmed_completion", "clarifying", "helping", "asking", "other"] as const;
 
 export function validateLessonDefinition(value: LessonDefinition): LessonDefinition {
-  if (!value.id || !Object.hasOwn(value.nodes, value.initialNodeId)) throw new Error("Lesson needs an authored initial node");
+  if (!value.id || !Object.hasOwn(value.nodes, value.initialNodeId))
+    throw new Error("Lesson needs an authored initial node");
   for (const [id, node] of Object.entries(value.nodes)) {
     if (id !== node.id) throw new Error(`Lesson node key does not match node identity: ${id}`);
     if (node.onSuccess.kind === "node" && !Object.hasOwn(value.nodes, node.onSuccess.nodeId))
       throw new Error(`Lesson edge from ${id} targets an unknown node`);
     if ((node.concepts?.length ?? 0) > 0 && !node.completionPolicy)
       throw new Error(`Lesson node ${id} needs an authored concept completion policy`);
-    if (node.completionPolicy && !["all_demonstrated", "all_independent", "allow_unresolved"].includes(node.completionPolicy))
+    if (
+      node.completionPolicy &&
+      !["all_demonstrated", "all_independent", "allow_unresolved"].includes(node.completionPolicy)
+    )
       throw new Error(`Lesson node ${id} has an unknown concept completion policy`);
     if (node.concepts && new Set(node.concepts.map(concept => concept.id)).size !== node.concepts.length)
       throw new Error(`Lesson node ${id} has duplicate concept criteria`);
@@ -61,7 +73,10 @@ export function validateLessonDefinition(value: LessonDefinition): LessonDefinit
     for (const criterionId of node.onSuccess.carryForwardCriteria ?? []) {
       if (!node.concepts?.some(concept => concept.id === criterionId))
         throw new Error(`Lesson edge from ${id} carries a concept not authored on its source node`);
-      if (node.onSuccess.kind === "node" && !value.nodes[node.onSuccess.nodeId].concepts?.some(concept => concept.id === criterionId))
+      if (
+        node.onSuccess.kind === "node" &&
+        !value.nodes[node.onSuccess.nodeId].concepts?.some(concept => concept.id === criterionId)
+      )
         throw new Error(`Lesson edge from ${id} carries a concept not authored on its target node`);
     }
   }

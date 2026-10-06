@@ -71,6 +71,8 @@ export type LessonRuntimeState = {
   readonly nowMs: number;
   readonly phase: "active" | "rendering" | "complete" | "stopped";
   readonly lessonComplete: boolean;
+  /** True when accepted evidence is ready to advance after an application-owned review action. */
+  readonly transitionReady: boolean;
   /** Session-local evidence; a new runtime always starts empty. */
   readonly conceptEvidence: Readonly<Record<string, ConceptEvidenceRecord>>;
   readonly pendingRender: {
@@ -92,11 +94,17 @@ export type LessonRuntimeEvent = { readonly atMs: number } & (
       readonly revision: number;
       readonly speaker: "child" | "tutor" | "unknown";
     }
-  | { readonly type: "proposal.received"; readonly source: ClassificationSource; readonly proposal: unknown; readonly transcriptSnapshot?: string }
+  | {
+      readonly type: "proposal.received";
+      readonly source: ClassificationSource;
+      readonly proposal: unknown;
+      readonly transcriptSnapshot?: string;
+    }
   | { readonly type: "output.activity"; readonly source: RuntimeSource; readonly state: OutputActivityEvent["state"] }
   | { readonly type: "clock.tick"; readonly source: RuntimeSource }
   | { readonly type: "render.confirmed"; readonly runtimeId: string; readonly identity: RenderIdentity }
   | { readonly type: "scene.skipped"; readonly source: RuntimeSource }
+  | { readonly type: "presentation.continued"; readonly source: ClassificationSource }
   | { readonly type: "stop"; readonly runtimeId: string }
   | { readonly type: "disconnect"; readonly runtimeId: string }
 );
@@ -122,6 +130,7 @@ const clearedEvidence = {
   tutorOutputObserved: false,
   tutorOutputDrained: false,
   quietSinceMs: null,
+  transitionReady: false,
 } as const;
 
 /** The initial authored scene must already be rendered. Use a fresh runtimeId for every start/reconnect. */
@@ -129,7 +138,13 @@ export function createLessonRuntime(
   runtimeId: string,
   { quietDrainMs = 250, atMs = 0, lesson }: { quietDrainMs?: number; atMs?: number; lesson: LessonDefinition },
 ): LessonRuntimeState {
-  if (!runtimeId || !Number.isFinite(quietDrainMs) || quietDrainMs <= 0 || !validTime(atMs) || !isLessonNodeId(lesson, lesson.initialNodeId)) {
+  if (
+    !runtimeId ||
+    !Number.isFinite(quietDrainMs) ||
+    quietDrainMs <= 0 ||
+    !validTime(atMs) ||
+    !isLessonNodeId(lesson, lesson.initialNodeId)
+  ) {
     throw new Error("A runtime identity, positive quiet threshold, and valid local time are required");
   }
   return {
@@ -176,6 +191,39 @@ function sameSource(state: RuntimeSource, source: RuntimeSource) {
   );
 }
 
+function sameClassificationSource(state: LessonRuntimeState, source: ClassificationSource) {
+  return (
+    sameSource(state, source) &&
+    source.nodeId === state.nodeId &&
+    source.transcriptRevision === state.transcriptRevision
+  );
+}
+
+function meetsAuthoredCompletionPolicy(state: LessonRuntimeState, lesson: LessonDefinition) {
+  const node = lesson.nodes[state.nodeId];
+  if (!node.concepts?.length || node.completionPolicy === "allow_unresolved") return true;
+  if (node.completionPolicy !== "all_demonstrated" && node.completionPolicy !== "all_independent") return false;
+  return node.concepts.every(concept => {
+    const evidence = state.conceptEvidence[conceptKey(node.id, concept.id)];
+    return (
+      evidence?.status === "demonstrated" &&
+      (node.completionPolicy !== "all_independent" || evidence.understanding === "independent")
+    );
+  });
+}
+
+function hasCurrentCompletionEvidence(state: LessonRuntimeState, lesson: LessonDefinition) {
+  return (
+    state.hasChildTranscript &&
+    state.transcriptSource === "tutor" &&
+    state.consumedRevision === state.transcriptRevision &&
+    state.acceptedAnswerRevision !== null &&
+    state.answerAccepted &&
+    state.acknowledgmentObserved &&
+    meetsAuthoredCompletionPolicy(state, lesson)
+  );
+}
+
 function sameRender(expected: RenderIdentity, actual: RenderIdentity) {
   return expected.token === actual.token && expected.nodeId === actual.nodeId && expected.sceneId === actual.sceneId;
 }
@@ -201,25 +249,20 @@ function finish(state: LessonRuntimeState, lesson: LessonDefinition): LessonRunt
     state.outputActivity === "quiet" &&
     state.quietSinceMs !== null &&
     state.nowMs - state.quietSinceMs >= state.quietDrainMs;
-  const next = { ...state, tutorOutputDrained: drained };
-  if (!next.answerAccepted || !next.acknowledgmentObserved || !drained || next.childSpeaking) {
+  const next = { ...state, tutorOutputDrained: drained, transitionReady: false };
+  if (!hasCurrentCompletionEvidence(next, lesson) || !drained || next.childSpeaking) {
     return { state: next, effects: [] };
   }
-  const node = lesson.nodes[next.nodeId];
-  if (
-    node.concepts?.length &&
-    (node.completionPolicy === "all_demonstrated" || node.completionPolicy === "all_independent") &&
-    node.concepts.some(concept => {
-      const evidence = next.conceptEvidence[conceptKey(node.id, concept.id)];
-      return evidence?.status !== "demonstrated" || (node.completionPolicy === "all_independent" && evidence.understanding !== "independent");
-    })
-  ) return { state: next, effects: [] };
-
+  if (lesson.requirePresentationConfirmation) return { state: { ...next, transitionReady: true }, effects: [] };
   return requestAuthoredTransition(next, lesson, classificationSource(next)!);
 }
 
 /** A learner-requested skip follows the authored edge without accepting or revealing an answer. */
-function requestAuthoredTransition(next: LessonRuntimeState, lesson: LessonDefinition, origin: ClassificationSource): LessonRuntimeResult {
+function requestAuthoredTransition(
+  next: LessonRuntimeState,
+  lesson: LessonDefinition,
+  origin: ClassificationSource,
+): LessonRuntimeResult {
   // The only transition authority is this authored edge. No model-selected destination is read.
   const node = lesson.nodes[next.nodeId];
   const edge = lesson.nodes[next.nodeId].onSuccess;
@@ -294,16 +337,27 @@ function applyConceptObservations(
   if (childMessageIndex < 0) return { state, effects: [] };
   const childTranscript = messages[childMessageIndex].text.trim();
   if (!childTranscript) return { state, effects: [] };
-  const tutorTexts = messages.slice(0, childMessageIndex).filter(message => message.speaker === "Tutor").map(message => message.text);
+  const tutorTexts = messages
+    .slice(0, childMessageIndex)
+    .filter(message => message.speaker === "Tutor")
+    .map(message => message.text);
   const echoed = echoedByTutor(childTranscript, tutorTexts);
   const evidence = { ...state.conceptEvidence };
   const effects: LessonRuntimeEffect[] = [];
   for (const observation of proposal.conceptObservations) {
     if (!node.concepts.some(concept => concept.id === observation.criterionId)) continue;
-    let status: ConceptEvidenceRecord["status"] = observation.observation === "not_yet" ? "not_yet"
-      : observation.observation === "partial" ? "partial" : "demonstrated";
-    let understanding: ConceptEvidenceRecord["understanding"] = observation.observation === "demonstrated_independent" ? "independent"
-      : observation.observation === "demonstrated_prompted" ? "prompted" : null;
+    let status: ConceptEvidenceRecord["status"] =
+      observation.observation === "not_yet"
+        ? "not_yet"
+        : observation.observation === "partial"
+          ? "partial"
+          : "demonstrated";
+    let understanding: ConceptEvidenceRecord["understanding"] =
+      observation.observation === "demonstrated_independent"
+        ? "independent"
+        : observation.observation === "demonstrated_prompted"
+          ? "prompted"
+          : null;
     if (echoed && understanding === "independent") {
       status = "partial";
       understanding = null;
@@ -325,7 +379,7 @@ function applyConceptObservations(
       criterionId: observation.criterionId,
       status,
       understanding,
-      source: status === "demonstrated" || status === "partial" ? evidenceReference : previous?.source ?? null,
+      source: status === "demonstrated" || status === "partial" ? evidenceReference : (previous?.source ?? null),
       promptingHistory: [
         ...(previous?.promptingHistory ?? []),
         { source: evidenceReference, prompted: observation.observation === "demonstrated_prompted" },
@@ -338,7 +392,11 @@ function applyConceptObservations(
   return { state: { ...state, conceptEvidence: evidence }, effects };
 }
 
-export function reduceLessonRuntime(state: LessonRuntimeState, event: LessonRuntimeEvent, lesson: LessonDefinition): LessonRuntimeResult {
+export function reduceLessonRuntime(
+  state: LessonRuntimeState,
+  event: LessonRuntimeEvent,
+  lesson: LessonDefinition,
+): LessonRuntimeResult {
   const ignored = { state, effects: [] };
   if (state.lessonId && state.lessonId !== lesson.id) return ignored;
   if (state.phase === "stopped" || !validTime(event.atMs) || event.atMs < state.nowMs) return ignored;
@@ -388,7 +446,11 @@ export function reduceLessonRuntime(state: LessonRuntimeState, event: LessonRunt
       !sameSource(state, event.source)
     )
       return ignored;
-    const origin: ClassificationSource = { ...event.source, nodeId: state.nodeId, transcriptRevision: state.transcriptRevision };
+    const origin: ClassificationSource = {
+      ...event.source,
+      nodeId: state.nodeId,
+      transcriptRevision: state.transcriptRevision,
+    };
     const skipped: LessonRuntimeState = {
       ...state,
       ...clearedEvidence,
@@ -404,6 +466,24 @@ export function reduceLessonRuntime(state: LessonRuntimeState, event: LessonRunt
       pendingRender: null,
     };
     return requestAuthoredTransition(skipped, lesson, origin);
+  }
+  if (event.type === "presentation.continued") {
+    const quietDrained =
+      state.tutorOutputObserved &&
+      state.outputActivity === "quiet" &&
+      state.quietSinceMs !== null &&
+      event.atMs - state.quietSinceMs >= state.quietDrainMs;
+    if (
+      state.phase !== "active" ||
+      !state.transitionReady ||
+      state.childSpeaking ||
+      state.childCandidate !== null ||
+      !quietDrained ||
+      !hasCurrentCompletionEvidence(state, lesson) ||
+      !sameClassificationSource(state, event.source)
+    )
+      return ignored;
+    return requestAuthoredTransition({ ...state, nowMs: event.atMs, tutorOutputDrained: true }, lesson, event.source);
   }
   // Media/transcript work from the previous visit cannot mutate a newly committed target.
   // Speech or a newly revised child transcript during rendering cancels old completion authority.
@@ -494,24 +574,21 @@ export function reduceLessonRuntime(state: LessonRuntimeState, event: LessonRunt
         event.source.nodeId !== state.nodeId ||
         event.source.transcriptRevision !== state.transcriptRevision ||
         proposal.nodeId !== state.nodeId ||
-        (currentNode.concepts?.length && (
-          !proposal.conceptObservations ||
-          proposal.conceptObservations.some(observation => !currentNode.concepts?.some(concept => concept.id === observation.criterionId)) ||
-          !event.transcriptSnapshot ||
-          !transcriptMessages(event.transcriptSnapshot)?.some(message => message.speaker === "Child" && message.text.trim())
-        )) ||
+        (currentNode.concepts?.length &&
+          (!proposal.conceptObservations ||
+            proposal.conceptObservations.some(
+              observation => !currentNode.concepts?.some(concept => concept.id === observation.criterionId),
+            ) ||
+            !event.transcriptSnapshot ||
+            !transcriptMessages(event.transcriptSnapshot)?.some(
+              message => message.speaker === "Child" && message.text.trim(),
+            ))) ||
         proposal.transcriptRevision !== state.transcriptRevision ||
         state.consumedRevision === state.transcriptRevision
       )
         return ignored;
       next = { ...next, consumedRevision: state.transcriptRevision };
-      const conceptResult = applyConceptObservations(
-        next,
-        lesson,
-        event.source,
-        proposal,
-        event.transcriptSnapshot,
-      );
+      const conceptResult = applyConceptObservations(next, lesson, event.source, proposal, event.transcriptSnapshot);
       next = conceptResult.state;
       additionalEffects = conceptResult.effects;
       if (

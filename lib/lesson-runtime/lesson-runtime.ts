@@ -123,7 +123,10 @@ export class LessonRuntime {
     this.display = {
       token: `${this.runtimeId}:initial`,
       nodeId: this.lessonDefinition.initialNodeId,
-      sceneId: String(this.lessonDefinition.nodes[this.lessonDefinition.initialNodeId].presentation.sceneId ?? this.lessonDefinition.initialNodeId),
+      sceneId: String(
+        this.lessonDefinition.nodes[this.lessonDefinition.initialNodeId].presentation.sceneId ??
+          this.lessonDefinition.initialNodeId,
+      ),
     };
     this.tutorStabilization = new TutorStabilizationGate(
       {
@@ -148,7 +151,11 @@ export class LessonRuntime {
             delegation_id: null,
             content: this.lessonDefinition.recovery.supportClarificationInstruction,
           });
-          this.log("gpt_live.clarification_append", { eventId, content: this.lessonDefinition.recovery.supportClarificationInstruction }, source);
+          this.log(
+            "gpt_live.clarification_append",
+            { eventId, content: this.lessonDefinition.recovery.supportClarificationInstruction },
+            source,
+          );
         } catch {
           this.supportClarification.cancel("send_failed");
           this.log("clarification.send_failed", { message: "Scene held; request budget spent." }, source);
@@ -167,7 +174,11 @@ export class LessonRuntime {
             delegation_id: null,
             content: this.lessonDefinition.recovery.answerRecoveryInstruction,
           });
-          this.log("gpt_live.answer_recovery_append", { eventId, content: this.lessonDefinition.recovery.answerRecoveryInstruction }, source);
+          this.log(
+            "gpt_live.answer_recovery_append",
+            { eventId, content: this.lessonDefinition.recovery.answerRecoveryInstruction },
+            source,
+          );
         } catch {
           this.log("answer_recovery.send_failed", { message: "Scene held; request budget spent." }, source);
         }
@@ -196,7 +207,8 @@ export class LessonRuntime {
       runtimeId: source?.runtimeId ?? this.runtimeId,
       visitId: source?.visitId ?? this.state?.visitId ?? null,
       childTurnId: source?.childTurnId ?? this.state?.childTurnId ?? null,
-      nodeId: source && "nodeId" in source ? source.nodeId : (this.state?.nodeId ?? this.lessonDefinition.initialNodeId),
+      nodeId:
+        source && "nodeId" in source ? source.nodeId : (this.state?.nodeId ?? this.lessonDefinition.initialNodeId),
       transcriptRevision: source && "transcriptRevision" in source ? source.transcriptRevision : this.revision,
       transcriptSpeaker: speaker ?? this.state?.transcriptSource ?? "unknown",
       detail,
@@ -258,7 +270,11 @@ export class LessonRuntime {
       this.publish();
       this.startupTimer = setTimeout(() => this.fail("GPT-Live startup timed out."), LESSON_TIMING.startupTimeoutMs);
       void this.transport
-        .start(this.receive, () => this.fail("The voice connection or microphone became unavailable."), this.lessonDefinition.id)
+        .start(
+          this.receive,
+          () => this.fail("The voice connection or microphone became unavailable."),
+          this.lessonDefinition.id,
+        )
         .catch(() => this.fail("Could not start GPT-Live. Check microphone access and local server configuration."));
       return;
     }
@@ -294,7 +310,10 @@ export class LessonRuntime {
         case "render.requested":
           this.cancelClassification("node_visit_changed");
           // Install the visit boundary synchronously, before React's render/confirmation.
-          this.providerFloorMs = Math.max(this.providerFloorMs, ...this.fragments.map(fragment => fragment.event.endMs));
+          this.providerFloorMs = Math.max(
+            this.providerFloorMs,
+            ...this.fragments.map(fragment => fragment.event.endMs),
+          );
           this.fragments = [];
           this.transcript = "";
           this.log("transcript.reset", { reason: "node_visit_committed", providerFloorMs: this.providerFloorMs });
@@ -627,7 +646,8 @@ export class LessonRuntime {
       if (!body || typeof body !== "object" || !("proposal" in body)) throw new Error("Invalid classifier response");
       const proposal = body.proposal === null ? null : parseConversationStateProposal(body.proposal);
       if (body.proposal !== null && !proposal) throw new Error("Invalid classifier proposal");
-      if (proposal && !Object.hasOwn(this.lessonDefinition.nodes, proposal.nodeId)) throw new Error("Invalid classifier node");
+      if (proposal && !Object.hasOwn(this.lessonDefinition.nodes, proposal.nodeId))
+        throw new Error("Invalid classifier node");
       const diagnostic = parseLiveClassificationDiagnostic(
         "diagnostic" in body ? body.diagnostic : undefined,
         this.lessonDefinition,
@@ -651,7 +671,13 @@ export class LessonRuntime {
       );
       if (proposal) {
         this.supportClarification.cancel("proposal_received");
-        this.dispatch({ type: "proposal.received", source, proposal, transcriptSnapshot: transcript, atMs: this.now() });
+        this.dispatch({
+          type: "proposal.received",
+          source,
+          proposal,
+          transcriptSnapshot: transcript,
+          atMs: this.now(),
+        });
       } else if (
         diagnostic?.outputs &&
         this.state &&
@@ -740,7 +766,8 @@ export class LessonRuntime {
       this.state.childSpeaking ||
       this.state.childCandidate !== null ||
       this.steering !== undefined
-    ) return;
+    )
+      return;
     // A skip is still an authored render/steering transition. Require the same
     // locally observed sustained quiet used by the normal transition path;
     // unavailable media cannot establish it.
@@ -748,11 +775,32 @@ export class LessonRuntime {
       this.state.outputActivity !== "quiet" ||
       this.state.quietSinceMs === null ||
       this.now() - this.state.quietSinceMs < this.state.quietDrainMs
-    ) return;
+    )
+      return;
     const source = runtimeSource(this.state);
     this.cancelClassification("scene_skipped");
     this.answerRecovery.cancel("scene_skipped");
     this.dispatch({ type: "scene.skipped", source, atMs: this.now() });
+  }
+
+  /** Continue after an accepted reveal has been committed to the application presentation. */
+  continueAfterPresentation() {
+    const source = this.state ? classificationSource(this.state) : null;
+    if (
+      !this.state ||
+      this.status !== "live" ||
+      this.steering !== undefined ||
+      !this.state.transitionReady ||
+      source === null ||
+      this.state.childSpeaking ||
+      this.state.childCandidate !== null ||
+      this.state.outputActivity !== "quiet" ||
+      !this.state.tutorOutputDrained ||
+      this.state.quietSinceMs === null ||
+      this.now() - this.state.quietSinceMs < this.state.quietDrainMs
+    )
+      return;
+    this.dispatch({ type: "presentation.continued", source, atMs: this.now() });
   }
 
   stop(reason = "parent_stop", disconnected = false) {
@@ -764,11 +812,15 @@ export class LessonRuntime {
     if (this.steering) clearTimeout(this.steering.timer);
     this.steering = undefined;
     if (this.state && this.state.phase !== "complete") {
-      this.state = reduceLessonRuntime(this.state, {
-        type: disconnected ? "disconnect" : "stop",
-        runtimeId: this.runtimeId,
-        atMs: this.now(),
-      }, this.lessonDefinition).state;
+      this.state = reduceLessonRuntime(
+        this.state,
+        {
+          type: disconnected ? "disconnect" : "stop",
+          runtimeId: this.runtimeId,
+          atMs: this.now(),
+        },
+        this.lessonDefinition,
+      ).state;
       this.display = {
         token: `${this.runtimeId}:stopped`,
         nodeId: this.state.nodeId,

@@ -120,7 +120,11 @@ describe("Catching Unicorns normal completion policy", () => {
     "allows normal advance after all criteria are %s",
     observation => {
       const harness = reducerHarness();
-      const final = settleScene(harness, allCriteria("engram", observation));
+      const ready = settleScene(harness, allCriteria("engram", observation));
+      expect(ready.phase).toBe("active");
+      expect(ready.transitionReady).toBe(true);
+      expect(ready.nodeId).toBe("engram");
+      const final = harness.send({ type: "presentation.continued", source: classificationSource(ready)! }).state;
       expect(final.phase).toBe("rendering");
       expect(final.nodeId).toBe("exogram");
       expect(final.conceptEvidence["exogram:engram-biological"]).toMatchObject({
@@ -157,7 +161,8 @@ describe("Catching Unicorns normal completion policy", () => {
 
   it("uses demonstrated carry-forward evidence to complete the next scene", () => {
     const harness = reducerHarness();
-    const first = settleScene(harness, allCriteria("engram", "demonstrated_independent"));
+    const ready = settleScene(harness, allCriteria("engram", "demonstrated_independent"));
+    const first = harness.send({ type: "presentation.continued", source: classificationSource(ready)! }).state;
     const confirmed = harness.send({
       type: "render.confirmed",
       runtimeId: first.runtimeId,
@@ -168,9 +173,96 @@ describe("Catching Unicorns normal completion policy", () => {
       understanding: "independent",
     });
 
-    const final = settleScene(harness, { "exogram-non-biological": "demonstrated_prompted" });
+    const nextReady = settleScene(harness, { "exogram-non-biological": "demonstrated_prompted" });
+    const final = harness.send({ type: "presentation.continued", source: classificationSource(nextReady)! }).state;
     expect(final.phase).toBe("rendering");
     expect(final.nodeId).toBe("compare");
     expect(final.conceptEvidence["exogram:exogram-non-biological"].status).toBe("demonstrated");
+  });
+
+  it("does not advance from a reveal while tutor audio is active again", () => {
+    const harness = reducerHarness();
+    const ready = settleScene(harness, allCriteria("engram", "demonstrated_independent"));
+    expect(ready.transitionReady).toBe(true);
+
+    const resumed = harness.send({ type: "output.activity", source: runtimeSource(ready), state: "active" });
+    expect(resumed.state.transitionReady).toBe(false);
+    expect(resumed.state.tutorOutputDrained).toBe(false);
+    const blocked = harness.send({
+      type: "presentation.continued",
+      source: classificationSource(resumed.state)!,
+    });
+    expect(blocked.state.phase).toBe("active");
+    expect(blocked.effects).toEqual([]);
+
+    harness.send({ type: "output.activity", source: runtimeSource(blocked.state), state: "quiet" });
+    const drained = harness.send({
+      type: "clock.tick",
+      source: runtimeSource(harness.state),
+      atMs: harness.state.nowMs + 100,
+    });
+    const advanced = harness.send({
+      type: "presentation.continued",
+      source: classificationSource(drained.state)!,
+    });
+    expect(advanced.state.phase).toBe("rendering");
+    expect(advanced.state.nodeId).toBe("exogram");
+  });
+
+  it("revokes a ready continuation when a newer tutor transcript revision needs reclassification", () => {
+    const harness = reducerHarness();
+    const ready = settleScene(harness, allCriteria("engram", "demonstrated_independent"));
+    expect(ready.transitionReady).toBe(true);
+
+    const revised = harness.send({
+      type: "transcript.updated",
+      source: runtimeSource(ready),
+      revision: ready.transcriptRevision + 1,
+      speaker: "tutor",
+    }).state;
+    expect(revised).toMatchObject({
+      phase: "active",
+      nodeId: "engram",
+      transitionReady: false,
+      answerAccepted: false,
+      acknowledgmentObserved: false,
+      tutorOutputDrained: true,
+    });
+
+    const staleContinuation = harness.send({
+      type: "presentation.continued",
+      source: classificationSource(ready)!,
+    });
+    expect(staleContinuation.state).toBe(revised);
+    expect(staleContinuation.effects).toEqual([]);
+
+    const freshSource = classificationSource(revised)!;
+    harness.send({
+      type: "proposal.received",
+      source: freshSource,
+      transcriptSnapshot: "Child: I can explain the idea in my own words.\nTutor: Yes, and another detail.",
+      proposal: {
+        nodeId: freshSource.nodeId,
+        transcriptRevision: freshSource.transcriptRevision,
+        childActivity: "unknown",
+        answerOutcome: "correct",
+        supportState: "none",
+        tutorState: "acknowledging",
+        conceptObservations: [],
+      },
+    });
+    const revalidated = harness.state;
+    expect(revalidated.transitionReady).toBe(true);
+    const staleAfterRevalidation = harness.send({
+      type: "presentation.continued",
+      source: classificationSource(ready)!,
+    });
+    expect(staleAfterRevalidation.state).toBe(revalidated);
+    expect(staleAfterRevalidation.effects).toEqual([]);
+    const continued = harness.send({
+      type: "presentation.continued",
+      source: classificationSource(revalidated)!,
+    });
+    expect(continued.state).toMatchObject({ phase: "rendering", nodeId: "exogram" });
   });
 });

@@ -53,6 +53,7 @@ const exogram = criterion(
 const lesson: LessonDefinition = {
   id: "catching-unicorns",
   initialNodeId: "engram",
+  requirePresentationConfirmation: true,
   nodes: {
     engram: scene({
       id: "engram",
@@ -103,8 +104,9 @@ const lesson: LessonDefinition = {
     }),
     exographics: scene({
       id: "exographics",
-      title: "Exographics",
-      prompt: "What does exographics mean, and how is it broader than one exogram?",
+      title: "A broader visual practice",
+      prompt:
+        "What broader practice might be at work when people represent ideas visually? How might it differ from one stored record?",
       objective: "Explain the named practice and how its scope differs from a single stored representation.",
       tutorBrief:
         "Listen for meaningful symbols on a visual medium, culturally agreed meanings, examples beyond prose, and abstraction. Clarify by asking whether an equation, map, graph, or diagram can count without being prose. Do not supply the definition or collapse exographics into external storage.",
@@ -154,8 +156,8 @@ const lesson: LessonDefinition = {
     }),
     "techno-literate-culture": scene({
       id: "techno-literate-culture",
-      title: "Techno-literate culture",
-      prompt: "What characteristics make a culture techno-literate in the book's account?",
+      title: "Culture and literacy",
+      prompt: "What makes a culture able to develop and share knowledge across many people?",
       objective: "Explain each of the four characteristics presented in the Introduction.",
       tutorBrief:
         "Resolve the four characteristics independently. Accept paraphrases, not a vague claim that a culture merely uses a lot of technology. Ask the learner to clarify or expand their own explanation; do not enumerate the characteristics or supply an answer for one.",
@@ -183,7 +185,7 @@ const lesson: LessonDefinition = {
       id: "caf-application",
       title: "Apply the framework",
       prompt:
-        "Is the Canadian Armed Forces a techno-literate culture? Explain your conclusion using the four characteristics.",
+        "Using the framework you have demonstrated, how would you assess the Canadian Armed Forces? Explain your conclusion with evidence.",
       objective:
         "Apply each source characteristic to evidence about an institution and explain a defensible conclusion.",
       tutorBrief:
@@ -215,8 +217,7 @@ const lesson: LessonDefinition = {
     synthesis: scene({
       id: "synthesis",
       title: "Connect the ideas",
-      prompt:
-        "How do the memory distinction, exographics, its purposes, discovery, and techno-literate culture connect?",
+      prompt: "How do the ideas we have discussed fit together? Choose a connection and explain why it follows.",
       objective: "Explain multiple relationships among ideas addressed in the earlier scenes.",
       tutorBrief:
         "Invite the learner to choose a connection and explain why it follows. Look for multiple relationships in the learner's own explanation. Extended cognition is not a required source term. Do not name or supply missing links before evidence.",
@@ -247,7 +248,7 @@ const lesson: LessonDefinition = {
         "Review what you explained independently, what became clear after a prompt, what is still partial, and what remains to revisit.",
       objective: "Close with an evidence-based recap, without converting unresolved or skipped ideas into mastery.",
       tutorBrief:
-        "Use the authored recap groups and recorded evidence. Distinguish independent and prompted demonstrations from partial and missing/unresolved ideas. Label the Canadian Armed Forces conclusion as transfer reasoning, not a source-canonical fact. Do not fill gaps with hidden canonical answers merely because the lesson is ending or a scene was skipped.",
+        "The app presents the session's evidence-based recap. Invite the learner to review that visible recap; do not infer or invent a summary from conversation memory. Keep independent, prompted, partial, and unresolved evidence distinct. Treat Canadian Armed Forces reasoning as transfer, not a source-canonical fact. Do not fill gaps with hidden answers when the lesson ends or a scene was skipped.",
       next: null,
     }),
   },
