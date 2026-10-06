@@ -40,6 +40,37 @@ the exact current node, visit, child turn, runtime, and revision. The reducer
 parses the closed proposal schema again and consumes at most one valid proposal
 per revision. Abstentions and malformed/stale proposals have no effects.
 
+## Session-local concept evidence
+
+Nodes may optionally author `concepts` with stable criterion IDs and descriptions.
+The current-node classifier receives only those current-node criteria and proposes
+`not_yet`, `partial`, `demonstrated_independent`, or `demonstrated_prompted` for
+each. These are interpretations, not accepted evidence. The reducer checks the
+closed proposal, exact runtime/visit/turn/revision, authored criterion IDs, and
+the application-captured transcript snapshot. It records a source reference to
+the exact child message and preserves prompted/independent status and prompting
+history in the current runtime. New runtimes start with an empty evidence map.
+
+Only a demonstrated observation emits `concept.revealed`; partial and not-yet
+states remain hidden. A child response that simply repeats or substantially
+copies prior tutor wording cannot be accepted as independent evidence and is
+retained as partial. This deterministic text overlap check is a guardrail, not a
+semantic classifier. Classifier accuracy still needs reviewed live evaluation.
+
+Concept nodes require an authored `completionPolicy`:
+
+- `all_demonstrated` requires every current criterion to be demonstrated.
+- `all_independent` also requires independent rather than prompted understanding.
+- `allow_unresolved` permits the authored success edge with unresolved criteria;
+  it does not change their evidence status or count them as mastery.
+
+These policies are evaluated in addition to the existing correct-answer,
+tutor-acknowledgment, relevant-output-drain, render-confirmation, and steering
+gates. An authored edge may list `carryForwardCriteria`; only demonstrated
+evidence for those IDs is copied into the target node. No carry-forward is
+implicit. Counting nodes do not opt into concept evidence and retain their
+existing completion path.
+
 ## Completion gate
 
 A correct proposal with no unresolved need for help accepts an answer.

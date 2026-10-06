@@ -11,6 +11,9 @@ export type SupportState = (typeof SUPPORT_STATES)[number];
 
 export const TUTOR_STATES = ["unknown", "asking", "listening", "clarifying", "helping", "acknowledging"] as const;
 export type TutorState = (typeof TUTOR_STATES)[number];
+export const CONCEPT_OBSERVATIONS = ["not_yet", "partial", "demonstrated_independent", "demonstrated_prompted"] as const;
+export type ConceptObservation = (typeof CONCEPT_OBSERVATIONS)[number];
+export type ProposedConceptObservation = { readonly criterionId: string; readonly observation: ConceptObservation };
 
 /**
  * The ConversationStateClassifier's ephemeral runtime interpretation for one node and revision.
@@ -33,6 +36,8 @@ export type ConversationStateProposal = {
   readonly supportState: SupportState;
   /** Transcript classification describes the latest tutor message, not live speech activity. */
   readonly tutorState: TutorState;
+  /** Optional classifier interpretations; the reducer validates authorship and owns accepted evidence. */
+  readonly conceptObservations?: readonly ProposedConceptObservation[];
 };
 
 /** A supplied transcript snapshot, not an accumulator or a persisted session record. */
@@ -60,6 +65,7 @@ const PROPOSAL_KEYS = [
   "answerOutcome",
   "supportState",
   "tutorState",
+  "conceptObservations",
 ] as const;
 
 /** Closed runtime payload: reject commands, future-node context, and evidence/review metadata. */
@@ -68,8 +74,9 @@ export function parseConversationStateProposal(value: unknown): ConversationStat
   const proposal = value as Record<string, unknown>;
   const keys = Object.keys(proposal);
   if (
-    keys.length !== PROPOSAL_KEYS.length ||
-    keys.some(key => !PROPOSAL_KEYS.includes(key as (typeof PROPOSAL_KEYS)[number]))
+    (keys.length !== PROPOSAL_KEYS.length && keys.length !== PROPOSAL_KEYS.length - 1) ||
+    keys.some(key => !PROPOSAL_KEYS.includes(key as (typeof PROPOSAL_KEYS)[number])) ||
+    (keys.length === PROPOSAL_KEYS.length) !== ("conceptObservations" in proposal)
   )
     return null;
 
@@ -89,6 +96,21 @@ export function parseConversationStateProposal(value: unknown): ConversationStat
   )
     return null;
 
+  let conceptObservations: ProposedConceptObservation[] | undefined;
+  if ("conceptObservations" in proposal) {
+    if (!Array.isArray(proposal.conceptObservations)) return null;
+    conceptObservations = [];
+    for (const item of proposal.conceptObservations) {
+      if (
+        !item || typeof item !== "object" || Array.isArray(item) ||
+        Object.keys(item).length !== 2 ||
+        typeof item.criterionId !== "string" || !item.criterionId ||
+        typeof item.observation !== "string" || !CONCEPT_OBSERVATIONS.includes(item.observation as ConceptObservation) ||
+        conceptObservations.some(existing => existing.criterionId === item.criterionId)
+      ) return null;
+      conceptObservations.push({ criterionId: item.criterionId, observation: item.observation as ConceptObservation });
+    }
+  }
   return {
     nodeId: proposal.nodeId as string,
     transcriptRevision: proposal.transcriptRevision,
@@ -96,5 +118,6 @@ export function parseConversationStateProposal(value: unknown): ConversationStat
     answerOutcome: proposal.answerOutcome as AnswerOutcome,
     supportState: proposal.supportState as SupportState,
     tutorState: proposal.tutorState as TutorState,
+    ...(conceptObservations === undefined ? {} : { conceptObservations }),
   };
 }

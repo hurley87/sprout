@@ -40,6 +40,15 @@ Two Choice questions classify:
   unresolved_help, no_attempt.
 - `tutorState`: confirmed_completion, clarifying, helping, asking, other.
 
+When the active node authors concept criteria, the same request adds one current
+node Choice question per criterion. Its outputs distinguish not yet, partial,
+independent demonstration, and prompted demonstration. Future-node criteria are
+not projected. The server maps these outputs to tentative observations only;
+the reducer binds them to the exact transcript source and owns accepted evidence,
+reveals, and completion. Provider-free fixtures cover paraphrases, incomplete
+explanations, self-correction, prompting, tutor answer leakage, and multiple
+criteria. They verify wiring and reducer rules, not model semantic accuracy.
+
 Response validation checks the pinned model, closed option sets, finite scores,
 normalized distributions, and a selected maximum. The deterministic mapper
 retains the live path's existing confidence bands: HIGH 0.9,

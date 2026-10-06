@@ -290,19 +290,31 @@ export class LessonRuntime {
     }
     for (const effect of result.effects) {
       this.log(effect.type, effect);
-      if (effect.type === "render.requested") {
-        this.cancelClassification("node_visit_changed");
-        // Install the visit boundary synchronously, before React's render/confirmation.
-        this.providerFloorMs = Math.max(this.providerFloorMs, ...this.fragments.map(fragment => fragment.event.endMs));
-        this.fragments = [];
-        this.transcript = "";
-        this.log("transcript.reset", { reason: "node_visit_committed", providerFloorMs: this.providerFloorMs });
-        this.display = effect.identity;
-      } else if (effect.type === "steering.ready") {
-        this.log("transcript.reset", { reason: "node_render_confirmed" });
-        this.appendSteering(effect.context, effect.renderToken);
-      } else {
-        this.stop("lesson_completed");
+      switch (effect.type) {
+        case "render.requested":
+          this.cancelClassification("node_visit_changed");
+          // Install the visit boundary synchronously, before React's render/confirmation.
+          this.providerFloorMs = Math.max(this.providerFloorMs, ...this.fragments.map(fragment => fragment.event.endMs));
+          this.fragments = [];
+          this.transcript = "";
+          this.log("transcript.reset", { reason: "node_visit_committed", providerFloorMs: this.providerFloorMs });
+          this.display = effect.identity;
+          break;
+        case "steering.ready":
+          this.log("transcript.reset", { reason: "node_render_confirmed" });
+          this.appendSteering(effect.context, effect.renderToken);
+          break;
+        case "concept.revealed":
+          // The reducer has already accepted this evidence into the current visit.
+          // Reveal effects publish that state but do not authorize a scene transition.
+          break;
+        case "lesson.completed":
+          this.stop("lesson_completed");
+          break;
+        default: {
+          const exhaustive: never = effect;
+          throw new Error(`Unhandled lesson runtime effect: ${JSON.stringify(exhaustive)}`);
+        }
       }
     }
     this.syncTutorStabilization(event.type);
@@ -616,7 +628,11 @@ export class LessonRuntime {
       const proposal = body.proposal === null ? null : parseConversationStateProposal(body.proposal);
       if (body.proposal !== null && !proposal) throw new Error("Invalid classifier proposal");
       if (proposal && !Object.hasOwn(this.lessonDefinition.nodes, proposal.nodeId)) throw new Error("Invalid classifier node");
-      const diagnostic = parseLiveClassificationDiagnostic("diagnostic" in body ? body.diagnostic : undefined);
+      const diagnostic = parseLiveClassificationDiagnostic(
+        "diagnostic" in body ? body.diagnostic : undefined,
+        this.lessonDefinition,
+        source.nodeId,
+      );
       this.log(
         diagnostic ? "classifier.mapping" : "classifier.mapping_unavailable",
         diagnostic ?? { reason: "diagnostic_missing_or_invalid" },
@@ -635,7 +651,7 @@ export class LessonRuntime {
       );
       if (proposal) {
         this.supportClarification.cancel("proposal_received");
-        this.dispatch({ type: "proposal.received", source, proposal, atMs: this.now() });
+        this.dispatch({ type: "proposal.received", source, proposal, transcriptSnapshot: transcript, atMs: this.now() });
       } else if (
         diagnostic?.outputs &&
         this.state &&
@@ -649,6 +665,7 @@ export class LessonRuntime {
               "objectiveState_competing_options",
               "tutorState_competing_options",
               "confirmation_without_completion",
+              "no_confident_concept_observation",
             ].includes(diagnostic.reason ?? "")))
       ) {
         this.answerRecovery.armSemanticHold(this.state, this.status === "live" && !this.steering, source);

@@ -20,7 +20,7 @@ export async function classifyConversationStateWithDiagnostics(
   return executeConversationObserver(input, signal, {
     model: JEV_MODEL,
     state: conversationObserverState(input),
-    questions: conversationStateQuestions(input.lesson),
+    questions: conversationStateQuestions(input.lesson, input.nodeId),
   });
 }
 
@@ -32,7 +32,7 @@ export async function executeConversationObserver(
     model: typeof JEV_MODEL;
     state: unknown;
     questions: {
-      [K in "objectiveState" | "tutorState"]: {
+      [key: string]: {
         type: "choice";
         instructions: string;
         criteria: Readonly<Record<string, string>>;
@@ -60,7 +60,7 @@ export async function executeConversationObserver(
     // Never accept a silently substituted model.
     if (!body || typeof body !== "object" || !("model" in body) || body.model !== JEV_MODEL)
       return abstain("provider_model_mismatch");
-    const outputs = normalizeConversationOutputs(body);
+    const outputs = normalizeConversationOutputs(body, snapshot.lesson, snapshot.nodeId);
     return outputs ? mapConversationObservation(snapshot, outputs) : abstain("provider_unreadable");
   } catch {
     return abstain(signal.aborted ? "cancelled" : "provider_unreachable");

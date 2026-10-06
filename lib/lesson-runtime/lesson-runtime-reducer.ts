@@ -1,6 +1,7 @@
 import type { OutputActivityEvent } from "../events";
 import { parseConversationStateProposal } from "./conversation-state-classifier";
 import { currentNodeContext, isLessonNodeId, type LessonDefinition } from "./lesson-definition";
+import { transcriptMessages } from "./tutor-observation";
 
 /** App-owned identities, captured at the source/request boundary, never supplied by the classifier. */
 export type RuntimeSource = {
@@ -22,6 +23,22 @@ export type CurrentNodeSteeringContext = {
   readonly scene: Readonly<Record<string, string | number | boolean>>;
   readonly learningObjective: string;
   readonly tutorBrief: string;
+};
+export type ConceptEvidenceReference = {
+  readonly runtimeId: string;
+  readonly nodeId: string;
+  readonly visitId: number;
+  readonly childTurnId: number;
+  readonly transcriptRevision: number;
+  readonly childMessageIndex: number;
+  readonly childTranscript: string;
+};
+export type ConceptEvidenceRecord = {
+  readonly criterionId: string;
+  readonly status: "not_yet" | "partial" | "demonstrated";
+  readonly understanding: "independent" | "prompted" | null;
+  readonly source: ConceptEvidenceReference | null;
+  readonly promptingHistory: readonly { readonly source: ConceptEvidenceReference; readonly prompted: boolean }[];
 };
 
 export type LessonRuntimeState = {
@@ -54,6 +71,8 @@ export type LessonRuntimeState = {
   readonly nowMs: number;
   readonly phase: "active" | "rendering" | "complete" | "stopped";
   readonly lessonComplete: boolean;
+  /** Session-local evidence; a new runtime always starts empty. */
+  readonly conceptEvidence: Readonly<Record<string, ConceptEvidenceRecord>>;
   readonly pendingRender: {
     readonly identity: RenderIdentity;
     readonly origin: ClassificationSource;
@@ -73,7 +92,7 @@ export type LessonRuntimeEvent = { readonly atMs: number } & (
       readonly revision: number;
       readonly speaker: "child" | "tutor" | "unknown";
     }
-  | { readonly type: "proposal.received"; readonly source: ClassificationSource; readonly proposal: unknown }
+  | { readonly type: "proposal.received"; readonly source: ClassificationSource; readonly proposal: unknown; readonly transcriptSnapshot?: string }
   | { readonly type: "output.activity"; readonly source: RuntimeSource; readonly state: OutputActivityEvent["state"] }
   | { readonly type: "clock.tick"; readonly source: RuntimeSource }
   | { readonly type: "render.confirmed"; readonly runtimeId: string; readonly identity: RenderIdentity }
@@ -88,7 +107,8 @@ export type LessonRuntimeEffect =
       readonly renderToken: string;
       readonly context: CurrentNodeSteeringContext;
     }
-  | { readonly type: "lesson.completed"; readonly renderToken: string };
+  | { readonly type: "lesson.completed"; readonly renderToken: string }
+  | { readonly type: "concept.revealed"; readonly nodeId: string; readonly criterionId: string };
 export type LessonRuntimeResult = {
   readonly state: LessonRuntimeState;
   readonly effects: readonly LessonRuntimeEffect[];
@@ -130,6 +150,7 @@ export function createLessonRuntime(
     nowMs: atMs,
     phase: "active",
     lessonComplete: false,
+    conceptEvidence: {},
     pendingRender: null,
   };
 }
@@ -185,6 +206,15 @@ function finish(state: LessonRuntimeState, lesson: LessonDefinition): LessonRunt
   }
 
   // The only transition authority is this authored edge. No model-selected destination is read.
+  const node = lesson.nodes[next.nodeId];
+  if (
+    node.concepts?.length &&
+    (node.completionPolicy === "all_demonstrated" || node.completionPolicy === "all_independent") &&
+    node.concepts.some(concept => {
+      const evidence = next.conceptEvidence[conceptKey(node.id, concept.id)];
+      return evidence?.status !== "demonstrated" || (node.completionPolicy === "all_independent" && evidence.understanding !== "independent");
+    })
+  ) return { state: next, effects: [] };
   const edge = lesson.nodes[next.nodeId].onSuccess;
   const visitId = next.visitId + 1;
   const identity: RenderIdentity = {
@@ -192,6 +222,14 @@ function finish(state: LessonRuntimeState, lesson: LessonDefinition): LessonRunt
     nodeId: edge.kind === "node" ? edge.nodeId : null,
     sceneId: edge.kind === "node" ? String(lesson.nodes[edge.nodeId].presentation.sceneId ?? edge.nodeId) : null,
   };
+  const conceptEvidence = { ...next.conceptEvidence };
+  if (edge.kind === "node") {
+    for (const criterionId of edge.carryForwardCriteria ?? []) {
+      const sourceRecord = conceptEvidence[conceptKey(node.id, criterionId)];
+      if (sourceRecord?.status !== "demonstrated") continue;
+      conceptEvidence[conceptKey(edge.nodeId, criterionId)] = { ...sourceRecord, criterionId };
+    }
+  }
   return {
     state: {
       ...next,
@@ -204,9 +242,93 @@ function finish(state: LessonRuntimeState, lesson: LessonDefinition): LessonRunt
       phase: "rendering",
       lessonComplete: edge.kind === "complete",
       pendingRender: { identity, origin: classificationSource(next)! },
+      conceptEvidence,
     },
     effects: [{ type: "render.requested", identity }],
   };
+}
+
+const conceptKey = (nodeId: string, criterionId: string) => `${nodeId}:${criterionId}`;
+
+function echoedByTutor(childText: string, tutorTexts: readonly string[]) {
+  const tokens = (value: string): string[] => value.toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+  const child = tokens(childText);
+  if (!child.length) return false;
+  const childPhrase = child.join(" ");
+  return tutorTexts.some(text => {
+    // Tutor questions commonly contain the answer choices or the concept vocabulary.
+    // Compare against declarative utterances only, and require copied words in order.
+    const statements = text.split(/(?<=[.!?])\s+/u).filter(statement => !statement.trimEnd().endsWith("?"));
+    return statements.some(statement => {
+      const tutor = tokens(statement);
+      if (!tutor.length) return false;
+      if (childPhrase === tutor.join(" ")) return true;
+      // A single shared word is too common to establish copying unless it was the
+      // tutor's complete utterance. Multiword answer phrases must occur contiguously.
+      if (child.length < 2 || child.length > tutor.length) return false;
+      return tutor.some((_, index) => tutor.slice(index, index + child.length).join(" ") === childPhrase);
+    });
+  });
+}
+
+function applyConceptObservations(
+  state: LessonRuntimeState,
+  lesson: LessonDefinition,
+  source: ClassificationSource,
+  proposal: NonNullable<ReturnType<typeof parseConversationStateProposal>>,
+  transcriptSnapshot: string | undefined,
+): { state: LessonRuntimeState; effects: LessonRuntimeEffect[] } {
+  const node = lesson.nodes[state.nodeId];
+  if (!node.concepts?.length || !proposal.conceptObservations?.length || !transcriptSnapshot)
+    return { state, effects: [] };
+  const messages = transcriptMessages(transcriptSnapshot);
+  if (!messages) return { state, effects: [] };
+  const childMessageIndex = messages.findLastIndex(message => message.speaker === "Child");
+  if (childMessageIndex < 0) return { state, effects: [] };
+  const childTranscript = messages[childMessageIndex].text.trim();
+  if (!childTranscript) return { state, effects: [] };
+  const tutorTexts = messages.slice(0, childMessageIndex).filter(message => message.speaker === "Tutor").map(message => message.text);
+  const echoed = echoedByTutor(childTranscript, tutorTexts);
+  const evidence = { ...state.conceptEvidence };
+  const effects: LessonRuntimeEffect[] = [];
+  for (const observation of proposal.conceptObservations) {
+    if (!node.concepts.some(concept => concept.id === observation.criterionId)) continue;
+    let status: ConceptEvidenceRecord["status"] = observation.observation === "not_yet" ? "not_yet"
+      : observation.observation === "partial" ? "partial" : "demonstrated";
+    let understanding: ConceptEvidenceRecord["understanding"] = observation.observation === "demonstrated_independent" ? "independent"
+      : observation.observation === "demonstrated_prompted" ? "prompted" : null;
+    if (echoed && understanding === "independent") {
+      status = "partial";
+      understanding = null;
+    }
+    const key = conceptKey(node.id, observation.criterionId);
+    const previous = evidence[key];
+    // An empty/no-attempt observation cannot erase accepted session evidence.
+    if (status === "not_yet" && previous?.status === "demonstrated") continue;
+    const evidenceReference: ConceptEvidenceReference = {
+      runtimeId: source.runtimeId,
+      nodeId: source.nodeId,
+      visitId: source.visitId,
+      childTurnId: source.childTurnId,
+      transcriptRevision: source.transcriptRevision,
+      childMessageIndex,
+      childTranscript,
+    };
+    const record: ConceptEvidenceRecord = {
+      criterionId: observation.criterionId,
+      status,
+      understanding,
+      source: status === "demonstrated" || status === "partial" ? evidenceReference : previous?.source ?? null,
+      promptingHistory: [
+        ...(previous?.promptingHistory ?? []),
+        { source: evidenceReference, prompted: observation.observation === "demonstrated_prompted" },
+      ],
+    };
+    evidence[key] = record;
+    if (status === "demonstrated" && previous?.status !== "demonstrated")
+      effects.push({ type: "concept.revealed", nodeId: node.id, criterionId: observation.criterionId });
+  }
+  return { state: { ...state, conceptEvidence: evidence }, effects };
 }
 
 export function reduceLessonRuntime(state: LessonRuntimeState, event: LessonRuntimeEvent, lesson: LessonDefinition): LessonRuntimeResult {
@@ -266,6 +388,7 @@ export function reduceLessonRuntime(state: LessonRuntimeState, event: LessonRunt
   if (state.phase !== "active" || !sameSource(state, event.source)) return ignored;
 
   let next: LessonRuntimeState = { ...state, nowMs: event.atMs };
+  let additionalEffects: LessonRuntimeEffect[] = [];
   switch (event.type) {
     case "child.candidate.started":
     case "child.turn.started":
@@ -327,6 +450,7 @@ export function reduceLessonRuntime(state: LessonRuntimeState, event: LessonRunt
       break;
     case "proposal.received": {
       const proposal = parseConversationStateProposal(event.proposal);
+      const currentNode = lesson.nodes[state.nodeId];
       if (
         state.childSpeaking ||
         !state.hasChildTranscript ||
@@ -335,11 +459,26 @@ export function reduceLessonRuntime(state: LessonRuntimeState, event: LessonRunt
         event.source.nodeId !== state.nodeId ||
         event.source.transcriptRevision !== state.transcriptRevision ||
         proposal.nodeId !== state.nodeId ||
+        (currentNode.concepts?.length && (
+          !proposal.conceptObservations ||
+          proposal.conceptObservations.some(observation => !currentNode.concepts?.some(concept => concept.id === observation.criterionId)) ||
+          !event.transcriptSnapshot ||
+          !transcriptMessages(event.transcriptSnapshot)?.some(message => message.speaker === "Child" && message.text.trim())
+        )) ||
         proposal.transcriptRevision !== state.transcriptRevision ||
         state.consumedRevision === state.transcriptRevision
       )
         return ignored;
       next = { ...next, consumedRevision: state.transcriptRevision };
+      const conceptResult = applyConceptObservations(
+        next,
+        lesson,
+        event.source,
+        proposal,
+        event.transcriptSnapshot,
+      );
+      next = conceptResult.state;
+      additionalEffects = conceptResult.effects;
       if (
         proposal.answerOutcome !== "correct" ||
         proposal.supportState !== "none" ||
@@ -393,5 +532,6 @@ export function reduceLessonRuntime(state: LessonRuntimeState, event: LessonRunt
     case "clock.tick":
       break;
   }
-  return finish(next, lesson);
+  const result = finish(next, lesson);
+  return { ...result, effects: [...additionalEffects, ...result.effects] };
 }

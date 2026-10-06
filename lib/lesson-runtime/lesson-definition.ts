@@ -4,7 +4,17 @@ export type LessonNodeDefinition = {
   readonly presentation: Readonly<Record<string, string | number | boolean>>;
   readonly learningObjective: string;
   readonly tutorBrief: string;
-  readonly onSuccess: { readonly kind: "node"; readonly nodeId: string } | { readonly kind: "complete" };
+  readonly concepts?: readonly ConceptCriterionDefinition[];
+  /** `allow_unresolved` is an explicit early-exit policy; unresolved concepts stay unresolved. */
+  readonly completionPolicy?: "all_demonstrated" | "all_independent" | "allow_unresolved";
+  readonly onSuccess:
+    | { readonly kind: "node"; readonly nodeId: string; readonly carryForwardCriteria?: readonly string[] }
+    | { readonly kind: "complete"; readonly carryForwardCriteria?: readonly string[] };
+};
+
+export type ConceptCriterionDefinition = {
+  readonly id: string;
+  readonly description: string;
 };
 
 export type LessonDefinition = {
@@ -38,6 +48,22 @@ export function validateLessonDefinition(value: LessonDefinition): LessonDefinit
     if (id !== node.id) throw new Error(`Lesson node key does not match node identity: ${id}`);
     if (node.onSuccess.kind === "node" && !Object.hasOwn(value.nodes, node.onSuccess.nodeId))
       throw new Error(`Lesson edge from ${id} targets an unknown node`);
+    if ((node.concepts?.length ?? 0) > 0 && !node.completionPolicy)
+      throw new Error(`Lesson node ${id} needs an authored concept completion policy`);
+    if (node.completionPolicy && !["all_demonstrated", "all_independent", "allow_unresolved"].includes(node.completionPolicy))
+      throw new Error(`Lesson node ${id} has an unknown concept completion policy`);
+    if (node.concepts && new Set(node.concepts.map(concept => concept.id)).size !== node.concepts.length)
+      throw new Error(`Lesson node ${id} has duplicate concept criteria`);
+    if (node.concepts?.some(concept => !/^[a-z0-9][a-z0-9_-]*$/i.test(concept.id) || !concept.description.trim()))
+      throw new Error(`Lesson node ${id} has an invalid concept criterion`);
+    if (new Set(node.onSuccess.carryForwardCriteria ?? []).size !== (node.onSuccess.carryForwardCriteria ?? []).length)
+      throw new Error(`Lesson edge from ${id} repeats a carried concept criterion`);
+    for (const criterionId of node.onSuccess.carryForwardCriteria ?? []) {
+      if (!node.concepts?.some(concept => concept.id === criterionId))
+        throw new Error(`Lesson edge from ${id} carries a concept not authored on its source node`);
+      if (node.onSuccess.kind === "node" && !value.nodes[node.onSuccess.nodeId].concepts?.some(concept => concept.id === criterionId))
+        throw new Error(`Lesson edge from ${id} carries a concept not authored on its target node`);
+    }
   }
   if (!Object.keys(value.classifier.objectiveCriteria).length || !Object.keys(value.classifier.tutorCriteria).length)
     throw new Error("Lesson classifier criteria must be authored");
