@@ -128,7 +128,7 @@ export const CATCHING_UNICORNS_TRANSCRIPT_FIXTURES = {
       },
     },
     partial: {
-      transcript: "Tutor: What is exographics?\nChild: Writing things down.",
+      transcript: "Tutor: What is exographics?\nChild: It is just an exogram, just writing things down.",
       observations: { "visual-symbols": "partial" },
     },
     misconception: {

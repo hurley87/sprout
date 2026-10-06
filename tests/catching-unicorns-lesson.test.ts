@@ -80,6 +80,58 @@ describe("isolated Catching Unicorns lesson content", () => {
     }
   });
 
+  it("keeps manuscript-backed paraphrases distinct from partial and transfer evidence", () => {
+    const biologicalMemory = observeFixture("engram", "sufficient");
+    expect(biologicalMemory.state.conceptEvidence["engram:engram-biological"]?.status).toBe("demonstrated");
+    expect(observeFixture("engram", "misconception").state.conceptEvidence["engram:engram-biological"]?.status).toBe(
+      "not_yet",
+    );
+
+    expect(
+      observeFixture("exogram", "sufficient").state.conceptEvidence["exogram:exogram-non-biological"]?.status,
+    ).toBe("demonstrated");
+    const properties = observeFixture("compare", "sufficient").state.conceptEvidence;
+    for (const criterionId of ["exogram-durability", "exogram-shareability", "exogram-revisability"]) {
+      expect(properties[`compare:${criterionId}`]?.status, criterionId).toBe("demonstrated");
+    }
+
+    const proseOnly = observeFixture("exographics", "partial").state.conceptEvidence;
+    expect(proseOnly["exographics:visual-symbols"]?.status).toBe("partial");
+    expect(proseOnly["exographics:beyond-prose"]?.status).toBe("not_yet");
+    expect(CATCHING_UNICORNS_TRANSCRIPT_FIXTURES.exographics.partial.transcript).toMatch(
+      /just an exogram, just writing things down/i,
+    );
+
+    const paperReasoning = observeFixture("why-exographics", "sufficient");
+    expect(paperReasoning.fixture.transcript).toContain("84 + 1,045 + 693 + 719");
+    for (const criterionId of ["reification", "memory-extension", "discovery"]) {
+      expect(paperReasoning.state.conceptEvidence[`why-exographics:${criterionId}`]?.status, criterionId).toBe(
+        "demonstrated",
+      );
+    }
+    expect(CATCHING_UNICORNS_PRESENTATION["why-exographics"].promptVisual.note).toMatch(/not a mastery criterion/);
+
+    const technologyOnly = observeFixture("techno-literate-culture", "partial").state.conceptEvidence;
+    expect(Object.values(technologyOnly).every(item => item.status !== "demonstrated")).toBe(true);
+    expect(CATCHING_UNICORNS_LESSON.nodes["techno-literate-culture"].concepts ?? []).toHaveLength(4);
+
+    for (const fixtureName of ["defensibleYes", "defensibleNo"] as const) {
+      expect(
+        observeFixture("caf-application", fixtureName).state.conceptEvidence[
+          "caf-application:caf-defensible-conclusion"
+        ]?.status,
+        fixtureName,
+      ).toBe("demonstrated");
+    }
+    expect(CATCHING_UNICORNS_LESSON.nodes.synthesis.tutorBrief).toMatch(/not a required source term/);
+    expect(CATCHING_UNICORNS_PRESENTATION.recap.groups.map(group => group.title)).toEqual([
+      "Demonstrated independently",
+      "Demonstrated after a prompt",
+      "Partly explained",
+      "Still unresolved or skipped",
+    ]);
+  });
+
   it("projects only current-scene prompt data to tutor context, keeping reveal payloads client-side", () => {
     for (const nodeId of CATCHING_UNICORNS_SCENE_IDS) {
       const context = currentNodeContext(CATCHING_UNICORNS_LESSON, nodeId);

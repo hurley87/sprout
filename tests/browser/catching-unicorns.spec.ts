@@ -575,6 +575,7 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
   await expect(recapGroup("Partly explained").locator("li")).toHaveCount(1);
   await expect(recapGroup("Still unresolved or skipped")).toContainText("partial evidence");
   await expect(recapGroup("Still unresolved or skipped")).toContainText("one unresolved item");
+  await expect(page.locator('[data-scene="recap"]')).not.toContainText(/extended cognition/i);
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export session", exact: true }).click();
   const download = await downloadPromise;

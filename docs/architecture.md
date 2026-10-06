@@ -18,8 +18,8 @@
 
 `LessonDefinition` supplies validated authored node identities, the initial node,
 success edges, tutor instructions, recovery prompts, classifier criteria and presentation data. The
-current application registry is intentionally small and explicitly registers only
-counting. The reducer receives the selected definition for the whole attempt;
+current application registry is intentionally small and explicitly registers
+counting and the Catching Unicorns demonstration. The reducer receives the selected definition for the whole attempt;
 runtime state records its lesson ID and mismatched definitions are ignored. Models
 cannot choose arbitrary scenes or see future graph edges through classification or
 steering input. The reducer requires exact runtime, visit, child turn, node and
@@ -33,6 +33,7 @@ transcript revision identity. Exact render-token identity controls the handoff.
 | `lib/lesson-runtime/lesson-definition.ts` | Shared definition contract, validation and current-node projection |
 | `lib/lesson-runtime/lesson-registry.ts` | Small server-side application allowlist |
 | `lib/lesson-runtime/counting-lesson.ts` | Counting content, criteria and recovery prompts |
+| `lib/lesson-runtime/catching-unicorns-lesson.ts` | Removable Catching Unicorns content, source-linked criteria and client presentation data |
 | `lib/lesson-runtime/lesson-runtime-reducer.ts` | Deterministic transitions and gates |
 | `lib/lesson-runtime/lesson-runtime.ts` | Runtime orchestration, transcript assembly, classification scheduling and steering |
 | `lib/lesson-runtime/tutor-stabilization.ts` | Independent transcript stability and output quiet clocks |
