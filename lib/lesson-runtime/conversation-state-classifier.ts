@@ -13,7 +13,16 @@ export const TUTOR_STATES = ["unknown", "asking", "listening", "clarifying", "he
 export type TutorState = (typeof TUTOR_STATES)[number];
 export const CONCEPT_OBSERVATIONS = ["not_yet", "partial", "demonstrated_independent", "demonstrated_prompted"] as const;
 export type ConceptObservation = (typeof CONCEPT_OBSERVATIONS)[number];
-export type ProposedConceptObservation = { readonly criterionId: string; readonly observation: ConceptObservation };
+// The provider still returns four labels. The mapper may settle demonstration
+// without asserting which prompting label was responsible for that confidence.
+export const PROPOSED_CONCEPT_OBSERVATIONS = [...CONCEPT_OBSERVATIONS, "demonstrated_unattributed", "partial_uncertain"] as const;
+export type ProposedConceptObservation = {
+  readonly criterionId: string;
+  readonly observation: (typeof PROPOSED_CONCEPT_OBSERVATIONS)[number];
+  /** Index in transcriptMessages, validated against the exact request snapshot.
+   * null means no confident supporting utterance; omitted supports legacy single-attempt snapshots. */
+  readonly childMessageIndex?: number | null;
+};
 
 /**
  * The ConversationStateClassifier's ephemeral runtime interpretation for one node and revision.
@@ -103,12 +112,16 @@ export function parseConversationStateProposal(value: unknown): ConversationStat
     for (const item of proposal.conceptObservations) {
       if (
         !item || typeof item !== "object" || Array.isArray(item) ||
-        Object.keys(item).length !== 2 ||
+        Object.keys(item).some(key => !["criterionId", "observation", "childMessageIndex"].includes(key)) ||
+        ("childMessageIndex" in item && item.childMessageIndex !== null &&
+          (!Number.isSafeInteger(item.childMessageIndex) || (item.childMessageIndex as number) < 0)) ||
         typeof item.criterionId !== "string" || !item.criterionId ||
-        typeof item.observation !== "string" || !CONCEPT_OBSERVATIONS.includes(item.observation as ConceptObservation) ||
+        typeof item.observation !== "string" || !PROPOSED_CONCEPT_OBSERVATIONS.includes(item.observation as ProposedConceptObservation["observation"]) ||
         conceptObservations.some(existing => existing.criterionId === item.criterionId)
       ) return null;
-      conceptObservations.push({ criterionId: item.criterionId, observation: item.observation as ConceptObservation });
+      conceptObservations.push({ criterionId: item.criterionId, observation: item.observation as ProposedConceptObservation["observation"],
+        ...("childMessageIndex" in item ? { childMessageIndex: item.childMessageIndex as number | null } : {}),
+      });
     }
   }
   return {

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { transcriptMessages, substantiveLearnerText } from "../../lib/lesson-runtime/tutor-observation";
 import { readFile } from "node:fs/promises";
 import { installSyntheticMicrophone } from "../helpers/synthetic-microphone";
 import type { LessonObservationWindow } from "../../lib/lesson-runtime/browser-observation";
@@ -230,7 +231,7 @@ test("session startup failure ends and releases the microphone so a fresh attemp
 
 test("Catching Unicorns reveals accepted evidence through the real lesson runtime and exports safe recap context", async ({
   page,
-}) => {
+}, testInfo) => {
   test.setTimeout(90_000);
   const microphone = await installSyntheticMicrophone(page);
   await installLocalSession(page);
@@ -243,11 +244,6 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
   const secondResponseGate = new Promise<void>(resolve => (holdSecondResponse = resolve));
   let secondRequestSeen!: () => void;
   const secondRequest = new Promise<void>(resolve => (secondRequestSeen = resolve));
-  let holdReadyRevision = false;
-  let releaseReadyRevision!: () => void;
-  const readyRevisionGate = new Promise<void>(resolve => (releaseReadyRevision = resolve));
-  let readyRevisionSeen!: () => void;
-  const readyRevisionRequest = new Promise<void>(resolve => (readyRevisionSeen = resolve));
   let requestCount = 0;
   await page.route("**/api/classify", async route => {
     const body = route.request().postDataJSON() as { nodeId: string; transcriptRevision: number; transcript: string };
@@ -258,10 +254,6 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
     } else if (requestIndex === 1) {
       secondRequestSeen();
       await secondResponseGate;
-    }
-    if (holdReadyRevision) {
-      readyRevisionSeen();
-      await readyRevisionGate;
     }
     const concepts = CATCHING_UNICORNS_LESSON.nodes[body.nodeId]?.concepts ?? [];
     const observations = concepts.map(({ id }) => {
@@ -276,12 +268,22 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
               ? "demonstrated_prompted"
               : body.nodeId === "exographics" && id === "visual-symbols"
                 ? "demonstrated_prompted"
-                : body.nodeId === "why-exographics" && id === "reification"
+                : body.nodeId === "why-exographics" &&
+                    id === "reification" &&
+                    !body.transcript.includes("inspect, remember, and discover")
                   ? "partial"
-                  : body.nodeId === "why-exographics" && id === "memory-extension"
+                  : body.nodeId === "why-exographics" &&
+                      id === "memory-extension" &&
+                      !body.transcript.includes("inspect, remember, and discover")
                     ? "not_yet"
                     : "demonstrated_independent";
-      return { criterionId: id, observation };
+      return {
+        criterionId: id,
+        observation,
+        childMessageIndex: transcriptMessages(body.transcript)!.findLastIndex(
+          message => message.speaker === "Child" && substantiveLearnerText(message.text),
+        ),
+      };
     });
     await route.fulfill({
       json: {
@@ -354,7 +356,6 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
       )
       .toBe("quiet");
   };
-  const waitForContinue = async () => expect(page.getByRole("button", { name: "Continue", exact: true })).toBeEnabled();
   const expectEvidence = async (key: string, expected: { status: string; understanding: string | null }) => {
     await expect
       .poll(() =>
@@ -366,8 +367,7 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
       )
       .toEqual(expected);
   };
-  const continueTo = async (sceneId: string) => {
-    await page.getByRole("button", { name: "Continue", exact: true }).click();
+  const waitForScene = async (sceneId: string) => {
     await expect(page.locator(`[data-scene="${sceneId}"]`)).toBeVisible();
     await expect
       .poll(() =>
@@ -379,7 +379,7 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
   };
 
   // Hold the child-only classifier response, then add a newer tutor revision.
-  // The old response cannot reveal or enable Continue; only fresh validation can.
+  // The old response cannot reveal or advance; only fresh validation can.
   await speakThenTutor(
     "Memory exists in a biological mind, unlike an external note.",
     "Tell me a little more about where that memory exists.",
@@ -429,31 +429,13 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
   await expect(page.getByText("Biological memory: memory held within a biological mind.", { exact: true })).toHaveCount(
     0,
   );
-  await expect(page.getByRole("button", { name: "Continue", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Continue", exact: true })).toHaveCount(0);
   holdSecondResponse();
-  await expect(page.locator('[data-scene="engram"]')).toContainText(
-    "Biological memory: memory held within a biological mind.",
-  );
-  await expect(page.getByRole("button", { name: "Continue", exact: true })).toBeEnabled();
-
-  // Keep the revealed definition visible until the learner explicitly continues.
-  await expect(page.locator('[data-scene="engram"]')).toContainText(
-    "Biological memory: memory held within a biological mind.",
-  );
-  holdReadyRevision = true;
-  await sendWire("session.output_transcript.delta", "Can you add anything else about that distinction?");
-  await readyRevisionRequest;
-  await expect(page.getByRole("button", { name: "Continue", exact: true })).toBeDisabled();
-  await expect(page.locator('[data-scene="engram"]')).toContainText(
-    "Biological memory: memory held within a biological mind.",
-  );
-  holdReadyRevision = false;
-  releaseReadyRevision();
-  await waitForContinue();
-  await continueTo("exogram");
-  await expect(page.getByRole("region", { name: "Previously demonstrated concept" })).toContainText(
-    "Biological memory: memory held within a biological mind.",
-  );
+  await waitForScene("exogram");
+  await page.screenshot({ path: testInfo.outputPath("exogram-question.png") });
+  await expectEvidence("engram:engram-biological", { status: "demonstrated", understanding: "independent" });
+  await expect(page.locator('[data-scene="exogram"]')).toContainText("What is an exogram?");
+  await expect(page.getByRole("button", { name: "Continue", exact: true })).toHaveCount(0);
   await expect(
     page.getByText("Non-biological memory: a representation kept outside biological memory.", { exact: true }),
   ).toHaveCount(0);
@@ -462,50 +444,59 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
     "That is an external record.",
   );
   await expectEvidence("exogram:exogram-non-biological", { status: "demonstrated", understanding: "prompted" });
-  await waitForContinue();
-  await continueTo("compare");
+  await waitForScene("compare");
+  await page.screenshot({ path: testInfo.outputPath("comparison-desktop.png") });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeInViewport();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath("comparison-mobile.png") });
+  await page.setViewportSize({ width: 1440, height: 1000 });
 
   await speakThenTutor(
     "An external record can persist beyond the moment of thinking.",
     "That explains one difference.",
   );
   await expect(page.locator('[data-scene="compare"]')).toContainText("Durable");
+  await page.screenshot({ path: testInfo.outputPath("comparison-explained.png") });
   await expect(page.locator('[data-scene="compare"]').getByText("Shareable", { exact: true })).toHaveCount(0);
   await expect(page.locator('[data-scene="compare"]').getByText("Revisable", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Continue", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Continue", exact: true })).toHaveCount(0);
   await speakThenTutor(
     "The first is internal; the external record can last, be shared, and be revised.",
     "Those are the stated differences.",
   );
-  await expect(page.locator('[data-scene="compare"]')).toContainText("Durable");
-  await expect(page.locator('[data-scene="compare"]')).toContainText("Shareable");
-  await expect(page.locator('[data-scene="compare"]')).toContainText("Revisable");
-  await waitForContinue();
-  await continueTo("exographics");
+  await waitForScene("exographics");
+  await page.screenshot({ path: testInfo.outputPath("exographics-question.png") });
 
   await speakThenTutor(
     "Meaningful shared symbols can show abstract ideas in maps and equations.",
     "A map can do that too.",
   );
   await expectEvidence("exographics:visual-symbols", { status: "demonstrated", understanding: "prompted" });
-  await waitForContinue();
-  await continueTo("why-exographics");
+  await waitForScene("why-exographics");
+  await page.screenshot({ path: testInfo.outputPath("addition-question-desktop.png") });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath("addition-question-mobile.png") });
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await speakThenTutor(
     "Paper helps me inspect the marks and keep a longer chain in mind.",
     "What else can that make possible?",
   );
   await expect(page.locator('[data-scene="why-exographics"]')).toContainText("Partly explained");
   await expect(page.locator('[data-scene="why-exographics"]')).toContainText("Not yet demonstrated");
-  await expect(page.getByRole("button", { name: "Continue", exact: true })).toBeDisabled();
-  await page.getByRole("button", { name: "Skip scene", exact: true }).click();
-  await expect(page.locator('[data-scene="techno-literate-culture"]')).toBeVisible();
+  await expect(page.getByRole("button", { name: "Continue", exact: true })).toHaveCount(0);
+  await speakThenTutor(
+    "External symbols help us inspect, remember, and discover ideas.",
+    "That explains all three purposes.",
+  );
+  await waitForScene("techno-literate-culture");
 
   await speakThenTutor(
     "Most people need basic literacy, a few discover ideas, institutions coordinate strangers, and education develops knowledge.",
     "That covers the framework.",
   );
-  await waitForContinue();
-  await continueTo("caf-application");
+  await waitForScene("caf-application");
   await speakThenTutor(
     "My conclusion: yes, with qualifications, because training and coordination support several framework characteristics.",
     "That is a defensible case when tied to evidence.",
@@ -514,53 +505,12 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
     status: "demonstrated",
     understanding: "independent",
   });
-  await waitForContinue();
+  await waitForScene("synthesis");
   await speakThenTutor(
-    "I would say no: the framework suggests training and coordination, but we need broader literacy evidence.",
-    "That is a qualified conclusion tied to evidence.",
+    "External representations support reasoning, discovery, and shared knowledge.",
+    "Those connections bring the ideas together.",
   );
-  await expectEvidence("caf-application:caf-defensible-conclusion", {
-    status: "demonstrated",
-    understanding: "independent",
-  });
-  await waitForContinue();
-  await continueTo("synthesis");
-  await page.evaluate(() => {
-    (window as unknown as LocalSessionWindow).currentPeer.level.gain.value = 0.15;
-  });
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () => (window as LessonObservationWindow).sproutLessonObservation?.read()?.snapshot.runtime?.outputActivity,
-      ),
-    )
-    .toBe("active");
-  await page.evaluate(() => {
-    (window as unknown as LocalSessionWindow).currentPeer.level.gain.value = 0;
-  });
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () => (window as LessonObservationWindow).sproutLessonObservation?.read()?.snapshot.runtime?.outputActivity,
-      ),
-    )
-    .toBe("quiet");
-  await expect
-    .poll(() =>
-      page.evaluate(() => {
-        const observation = (window as LessonObservationWindow).sproutLessonObservation?.read();
-        const state = observation?.snapshot.runtime;
-        return Boolean(
-          observation &&
-          state &&
-          state.quietSinceMs !== null &&
-          observation.nowMs - state.quietSinceMs >= state.quietDrainMs,
-        );
-      }),
-    )
-    .toBe(true);
-  await page.getByRole("button", { name: "Skip scene", exact: true }).click();
-  await expect(page.locator('[data-scene="recap"]')).toBeVisible();
+  await waitForScene("recap");
 
   await expect(page.locator('[data-scene="recap"]')).toContainText("Demonstrated independently");
   await expect(page.locator('[data-scene="recap"]')).toContainText("Demonstrated after a prompt");
@@ -572,9 +522,10 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
       .filter({ has: page.getByRole("heading", { name: heading, exact: true }) });
   await expect(recapGroup("Demonstrated independently").getByText("Engram", { exact: true })).toBeVisible();
   await expect(recapGroup("Demonstrated after a prompt").getByText("Exogram", { exact: true })).toBeVisible();
-  await expect(recapGroup("Partly explained").locator("li")).toHaveCount(1);
-  await expect(recapGroup("Still unresolved or skipped")).toContainText("partial evidence");
-  await expect(recapGroup("Still unresolved or skipped")).toContainText("one unresolved item");
+  await expect(recapGroup("Partly explained").locator("li")).toHaveCount(0);
+  await expect(recapGroup("Still unresolved or skipped")).toContainText(
+    "Every authored criterion has accepted evidence.",
+  );
   await expect(page.locator('[data-scene="recap"]')).not.toContainText(/extended cognition/i);
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export session", exact: true }).click();
@@ -588,6 +539,6 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
   expect(exported.lesson).toEqual({ id: "catching-unicorns", sceneId: "recap" });
   expect(exported.acceptedEvidence).toHaveProperty("engram:engram-biological");
   expect(exported.revealContext.engram).toContain("engram-biological");
-  expect(exported.revealContext["why-exographics"]).toEqual(["discovery"]);
+  expect(exported.revealContext["why-exographics"]).toEqual(["reification", "memory-extension", "discovery"]);
   expect(exportText).not.toMatch(/OPENAI_API_KEY|TYPESAFE_API_KEY|authorization|access_token|"sdp"/i);
 });

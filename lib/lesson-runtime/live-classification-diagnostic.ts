@@ -2,7 +2,7 @@ import {
   CLASSIFIER_VERSION,
   CONVERSATION_CLASSIFICATION_THRESHOLDS,
   normalizeConversationOutputs,
-  type ChoiceOutput,
+  interpretConversationOutputs,
   type ConversationStateDecision,
   type ConversationStateOutputs,
 } from "./conversation-observer-contract";
@@ -36,14 +36,6 @@ const reasons = [
   "confirmation_without_completion",
   "no_confident_concept_observation",
 ];
-
-function confidentlyClassified(answer: ChoiceOutput<string>) {
-  const { HIGH, COMPETITOR_CEILING, MIN_MARGIN } = CONVERSATION_CLASSIFICATION_THRESHOLDS;
-  const selected = answer.probabilities[answer.choice];
-  return selected >= HIGH && Object.entries(answer.probabilities).every(([option, value]) =>
-    option === answer.choice || (value <= COMPETITOR_CEILING && selected - value >= MIN_MARGIN),
-  );
-}
 
 /** Closed diagnostic projection only; never provider text, commands, or identity authority. */
 export function parseLiveClassificationDiagnostic(
@@ -80,7 +72,7 @@ export function parseLiveClassificationDiagnostic(
   let outputs: ConversationStateOutputs | null = null;
   if (record(value.outputs)) {
     if (
-      Object.keys(value.outputs).some(key => !["objectiveState", "tutorState", "concepts"].includes(key)) ||
+      Object.keys(value.outputs).some(key => !["objectiveState", "tutorState", "concepts", "sources"].includes(key)) ||
       (!lesson && value.outputs.concepts !== undefined)
     )
       return null;
@@ -97,19 +89,23 @@ export function parseLiveClassificationDiagnostic(
     if (concepts)
       for (const [id, output] of Object.entries(concepts))
         answers[id] = record(output) ? { ...output, type: "choice" } : output;
+    if (value.outputs.sources !== undefined) {
+      if (!record(value.outputs.sources)) return null;
+      for (const [id, output] of Object.entries(value.outputs.sources))
+        answers[id] = record(output) ? { ...output, type: "choice" } : output;
+    }
     outputs = normalizeConversationOutputs({ answers }, lesson, lesson ? value.nodeId as string : undefined);
   }
   else if (value.outputs !== null) return null;
   if (value.outputs !== null && !outputs) return null;
   if (value.decision === "accepted" && (!outputs || value.outcome === "unresolved")) return null;
   if (value.decision === "abstained" && value.outcome !== "unresolved") return null;
-  const labelCompletionEligible =
-    outputs?.objectiveState.choice === "completed" && outputs?.tutorState.choice === "confirmed_completion";
-  const completionEligible =
-    !!outputs && labelCompletionEligible && confidentlyClassified(outputs.objectiveState) && confidentlyClassified(outputs.tutorState);
-  const genericConfident = !!outputs && confidentlyClassified(outputs.objectiveState) && confidentlyClassified(outputs.tutorState);
-  const hasConceptQuestions = outputs?.concepts !== undefined;
-  const confidentConcepts = Object.values(outputs?.concepts ?? {}).some(confidentlyClassified);
+  const interpretation = outputs ? interpretConversationOutputs(outputs, lesson, value.nodeId) : null;
+  const labelCompletionEligible = interpretation?.labelCompletionEligible ?? false;
+  const completionEligible = interpretation?.completionEligible ?? false;
+  const genericConfident = interpretation?.genericConfident ?? false;
+  const hasConceptQuestions = interpretation?.hasConceptQuestions ?? false;
+  const confidentConcepts = !!interpretation?.conceptObservations.length;
   if (
     value.labelCompletionEligible !== labelCompletionEligible ||
     (value.decision === "accepted" &&

@@ -6,9 +6,21 @@ import {
   reduceLessonRuntime,
   runtimeSource,
 } from "../lib/lesson-runtime/lesson-runtime-reducer";
+import {
+  mapConversationObservation,
+  type ConversationStateOutputs,
+} from "../lib/lesson-runtime/conversation-observer-contract";
+import exogramReplay from "./fixtures/catching-unicorns-exogram-replay.json";
+import laterReplay from "./fixtures/catching-unicorns-compare-exographics-replay.json";
+import confirmationReplay from "./fixtures/catching-unicorns-exogram-confirmation-replay.json";
+import acceptanceReplay from "./fixtures/catching-unicorns-engram-acceptance-replay.json";
+import type { LessonRuntimeEvent } from "../lib/lesson-runtime/lesson-runtime-reducer";
 import type { LessonDefinition } from "../lib/lesson-runtime/lesson-definition";
 
-function reducerHarness(lesson: LessonDefinition = CATCHING_UNICORNS_LESSON) {
+// Explicit manual variant exercises the shared optional continuation contract.
+const MANUAL_LESSON = { ...CATCHING_UNICORNS_LESSON, requirePresentationConfirmation: true };
+
+function reducerHarness(lesson: LessonDefinition = MANUAL_LESSON) {
   let state = createLessonRuntime("catching-unicorns-completion", { lesson, quietDrainMs: 50 });
   const send = (event: Record<string, unknown>) => {
     const result = reduceLessonRuntime(state, { ...event, atMs: event.atMs ?? state.nowMs + 1 } as never, lesson);
@@ -90,6 +102,160 @@ function allCriteria(nodeId: string, observation: "demonstrated_independent" | "
 }
 
 describe("Catching Unicorns normal completion policy", () => {
+  it("replays the recorded Engram media and microphone activity and advances at the first accepted confirmation", () => {
+    const lesson = CATCHING_UNICORNS_LESSON;
+    let state = createLessonRuntime(acceptanceReplay.runtimeId, { lesson });
+    for (const recorded of acceptanceReplay.reducerEvents) {
+      // Clock ticks are not retained in the journal; replay them before each
+      // recorded event without moving past that event's timestamp.
+      while (state.nowMs + 50 < recorded.atMs)
+        state = reduceLessonRuntime(state, { type: "clock.tick", source: runtimeSource(state), atMs: state.nowMs + 50 }, lesson).state;
+      state = reduceLessonRuntime(state, recorded as unknown as LessonRuntimeEvent, lesson).state;
+    }
+    expect(acceptanceReplay.reducerEvents.some(event => event.type === "child.candidate.discarded")).toBe(true);
+    expect(state).toMatchObject({ nodeId: "exogram", phase: "rendering" });
+    expect(state.nowMs).toBe(acceptanceReplay.reducerEvents.at(-1)!.atMs);
+    expect(state.conceptEvidence["engram:engram-biological"]).toMatchObject({ status: "demonstrated", understanding: "independent" });
+  });
+
+  it("advances the recorded third question using carried definitions and the learner's three differences", () => {
+    const lesson = CATCHING_UNICORNS_LESSON;
+    const harness = reducerHarness(lesson);
+    for (const nodeId of ["engram", "exogram"]) {
+      const previous = settleScene(harness, allCriteria(nodeId, "demonstrated_independent"));
+      harness.send({ type: "render.confirmed", runtimeId: previous.runtimeId, identity: previous.pendingRender!.identity });
+    }
+    harness.send({ type: "child.turn.started", source: runtimeSource(harness.state) });
+    harness.send({ type: "transcript.updated", source: runtimeSource(harness.state), revision: harness.state.transcriptRevision + 1, speaker: "child" });
+    harness.send({ type: "child.turn.ended", source: runtimeSource(harness.state) });
+    harness.send({ type: "transcript.updated", source: runtimeSource(harness.state), revision: harness.state.transcriptRevision + 1, speaker: "tutor" });
+    const source = classificationSource(harness.state)!;
+    const recorded = laterReplay.scenes.compare;
+    const decision = mapConversationObservation({ lesson, ...source, transcript: recorded.transcript }, recorded.outputs as ConversationStateOutputs);
+    expect(decision.outcome).toBe("allow_semantic_completion_evidence");
+    harness.send({ type: "proposal.received", source, proposal: decision.proposal, transcriptSnapshot: recorded.transcript });
+    harness.send({ type: "output.activity", source: runtimeSource(harness.state), state: "active" });
+    harness.send({ type: "output.activity", source: runtimeSource(harness.state), state: "quiet" });
+    harness.send({ type: "clock.tick", source: runtimeSource(harness.state), atMs: harness.state.nowMs + 100 });
+    expect(harness.state).toMatchObject({ phase: "rendering", nodeId: "exographics" });
+  });
+
+  it.each(["demonstrated_independent", "demonstrated_prompted"] as const)(
+    "automatically advances the demo with %s evidence after confirmation and quiet media",
+    observation => {
+      const harness = reducerHarness(CATCHING_UNICORNS_LESSON);
+      const advanced = settleScene(harness, allCriteria("engram", observation));
+      expect(CATCHING_UNICORNS_LESSON.requirePresentationConfirmation).not.toBe(true);
+      expect(advanced).toMatchObject({ phase: "rendering", nodeId: "exogram" });
+      harness.send({
+        type: "render.confirmed",
+        runtimeId: advanced.runtimeId,
+        identity: advanced.pendingRender!.identity,
+      });
+      const next = settleScene(harness, { "exogram-non-biological": observation });
+      expect(next).toMatchObject({ phase: "rendering", nodeId: "compare" });
+    },
+  );
+
+  it.each(["accepted", "missing_carried_evidence", "negative_summary", "uncertain_confirmation"] as const)(
+    "replays the recorded exogram answer through mapping and automatic completion: %s",
+    scenario => {
+      const lesson =
+        scenario === "missing_carried_evidence"
+          ? { ...CATCHING_UNICORNS_LESSON, initialNodeId: "exogram" }
+          : CATCHING_UNICORNS_LESSON;
+      const harness = reducerHarness(lesson);
+      if (scenario !== "missing_carried_evidence") {
+        const previous = settleScene(harness, allCriteria("engram", "demonstrated_independent"));
+        harness.send({
+          type: "render.confirmed",
+          runtimeId: previous.runtimeId,
+          identity: previous.pendingRender!.identity,
+        });
+      }
+      harness.send({ type: "child.turn.started", source: runtimeSource(harness.state) });
+      harness.send({
+        type: "transcript.updated",
+        source: runtimeSource(harness.state),
+        revision: harness.state.transcriptRevision + 1,
+        speaker: "child",
+      });
+      harness.send({ type: "child.turn.ended", source: runtimeSource(harness.state) });
+      harness.send({
+        type: "transcript.updated",
+        source: runtimeSource(harness.state),
+        revision: harness.state.transcriptRevision + 1,
+        speaker: "tutor",
+      });
+      const source = classificationSource(harness.state)!;
+      const outputs = structuredClone(exogramReplay.outputs) as ConversationStateOutputs;
+      if (scenario === "negative_summary")
+        outputs.objectiveState = {
+          choice: "incorrect",
+          confidence: 0.97,
+          probabilities: {
+            completed: 0.01,
+            incorrect: 0.97,
+            unclear_or_incomplete: 0.01,
+            unresolved_help: 0.01,
+            no_attempt: 0,
+          },
+        };
+      if (scenario === "uncertain_confirmation")
+        outputs.tutorState = {
+          choice: "confirmed_completion",
+          confidence: 0.75,
+          probabilities: { confirmed_completion: 0.75, clarifying: 0, helping: 0.23, asking: 0.01, other: 0.01 },
+        };
+      const decision = mapConversationObservation({ lesson, ...source, transcript: exogramReplay.transcript }, outputs);
+      expect(decision.proposal?.conceptObservations).toEqual([
+        { criterionId: "exogram-non-biological", observation: "demonstrated_independent" },
+      ]);
+      harness.send({
+        type: "proposal.received",
+        source,
+        proposal: decision.proposal,
+        transcriptSnapshot: exogramReplay.transcript,
+      });
+      harness.send({ type: "output.activity", source: runtimeSource(harness.state), state: "active" });
+      expect(harness.state.nodeId).toBe("exogram");
+      harness.send({ type: "output.activity", source: runtimeSource(harness.state), state: "quiet" });
+      harness.send({ type: "clock.tick", source: runtimeSource(harness.state), atMs: harness.state.nowMs + 100 });
+      expect(harness.state.nodeId).toBe(scenario === "accepted" ? "compare" : "exogram");
+    },
+  );
+
+  it.each([true, false])("replays the latest exogram confirmation with carried evidence present: %s", carried => {
+    const lesson = carried ? CATCHING_UNICORNS_LESSON : { ...CATCHING_UNICORNS_LESSON, initialNodeId: "exogram" };
+    const harness = reducerHarness(lesson);
+    if (carried) {
+      const previous = settleScene(harness, allCriteria("engram", "demonstrated_independent"));
+      harness.send({ type: "render.confirmed", runtimeId: previous.runtimeId, identity: previous.pendingRender!.identity });
+    }
+    harness.send({ type: "child.turn.started", source: runtimeSource(harness.state) });
+    harness.send({ type: "transcript.updated", source: runtimeSource(harness.state), revision: harness.state.transcriptRevision + 1, speaker: "child" });
+    harness.send({ type: "child.turn.ended", source: runtimeSource(harness.state) });
+    harness.send({ type: "transcript.updated", source: runtimeSource(harness.state), revision: harness.state.transcriptRevision + 1, speaker: "tutor" });
+    const source = classificationSource(harness.state)!;
+    const decision = mapConversationObservation({ lesson, ...source, transcript: confirmationReplay.transcript }, confirmationReplay.outputs as ConversationStateOutputs);
+    expect(decision.outcome).toBe("allow_semantic_completion_evidence");
+    harness.send({ type: "proposal.received", source, proposal: decision.proposal, transcriptSnapshot: confirmationReplay.transcript });
+    harness.send({ type: "output.activity", source: runtimeSource(harness.state), state: "active" });
+    expect(harness.state.nodeId).toBe("exogram");
+    harness.send({ type: "output.activity", source: runtimeSource(harness.state), state: "quiet" });
+    harness.send({ type: "clock.tick", source: runtimeSource(harness.state), atMs: harness.state.nowMs + 100 });
+    expect(harness.state.nodeId).toBe(carried ? "compare" : "exogram");
+  });
+
+  it("treats confident tutor affirmation as an observation, not proof of learner mastery", () => {
+    const outputs = structuredClone(confirmationReplay.outputs) as ConversationStateOutputs;
+    outputs.concepts = { ...outputs.concepts, "concept_exogram-non-biological": { choice: "partial", confidence: 0.99,
+      probabilities: { not_yet: 0, partial: 0.99, demonstrated_independent: 0.01, demonstrated_prompted: 0 } } };
+    const decision = mapConversationObservation({ lesson: CATCHING_UNICORNS_LESSON, nodeId: "exogram", transcriptRevision: 1, transcript: confirmationReplay.transcript }, outputs);
+    expect(decision.outcome).toBe("hold_scene");
+    expect(decision.proposal?.answerOutcome).not.toBe("correct");
+  });
+
   it("requires all authored scene criteria and uses the prompted-permitted policy", () => {
     for (const nodeId of CATCHING_UNICORNS_SCENE_IDS.slice(0, -1)) {
       expect(CATCHING_UNICORNS_LESSON.nodes[nodeId].completionPolicy).toBe("all_demonstrated");

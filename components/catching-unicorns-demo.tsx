@@ -91,6 +91,11 @@ export function ScenePresentation({ state }: { state: LessonRuntimeState | null 
         title: "Demonstrated after a prompt",
         filter: (item: ConceptEvidenceRecord) => item.status === "demonstrated" && item.understanding === "prompted",
       },
+      {
+        id: "unattributed",
+        title: "Demonstrated · prompting unclear",
+        filter: (item: ConceptEvidenceRecord) => item.status === "demonstrated" && item.understanding === null,
+      },
       { id: "partial", title: "Partly explained", filter: (item: ConceptEvidenceRecord) => item.status === "partial" },
     ];
     const all = sceneIds.flatMap(id =>
@@ -532,17 +537,6 @@ export default function CatchingUnicornsDemo() {
   const state = snapshot?.runtime;
   const nodeId = state?.nodeId ?? CATCHING_UNICORNS_LESSON.initialNodeId;
   const sceneId = String(CATCHING_UNICORNS_LESSON.nodes[nodeId]?.presentation.sceneId ?? nodeId);
-  const canContinue = Boolean(
-    live &&
-    !snapshot?.awaitingSteering &&
-    state?.transitionReady &&
-    state.outputActivity === "quiet" &&
-    state.tutorOutputDrained &&
-    state.quietSinceMs !== null &&
-    state.nowMs - state.quietSinceMs >= state.quietDrainMs &&
-    !state.childSpeaking &&
-    state.childCandidate === null,
-  );
   const identity: RenderIdentity | undefined = display ?? { token: "initial", nodeId, sceneId };
 
   return (
@@ -617,9 +611,8 @@ export default function CatchingUnicornsDemo() {
         </div>
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-emerald-100 pt-5">
           <p className="max-w-2xl text-sm text-slate-600">
-            {state?.transitionReady
-              ? "Current evidence is validated. Continue when you are ready."
-              : "You can stop or skip at any time; skipped ideas remain unresolved."}
+            Accepted explanations advance automatically after confirmation and quiet audio. You can stop or skip;
+            skipped ideas remain unresolved.
           </p>
           <div className="flex gap-2">
             <button
@@ -628,13 +621,6 @@ export default function CatchingUnicornsDemo() {
               onClick={() => runtime.current?.skipScene()}
             >
               Skip scene
-            </button>
-            <button
-              className="rounded-full bg-emerald-800 px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
-              disabled={!canContinue}
-              onClick={() => runtime.current?.continueAfterPresentation()}
-            >
-              {nodeId === "recap" ? "Finish recap" : "Continue"}
             </button>
           </div>
         </div>
@@ -690,7 +676,7 @@ export default function CatchingUnicornsDemo() {
         </div>
       </details>
       <p className="text-xs text-slate-500">
-        Scene transitions wait for quiet audio, acknowledged steering, accepted evidence, and your confirmation. Timing
+        Scene transitions wait for quiet audio, acknowledged steering, accepted evidence, and tutor confirmation. Timing
         thresholds are shared runtime safeguards, not mastery timers ({LESSON_TIMING.quietDrainMs} ms audio drain).
       </p>
     </main>

@@ -7,7 +7,7 @@ import { ScenePresentation } from "../components/catching-unicorns-demo";
 
 function evidence(
   criterionId: string,
-  understanding: "independent" | "prompted" = "independent",
+  understanding: "independent" | "prompted" | null = "independent",
   transcript = "I explained it in my own words.",
 ): ConceptEvidenceRecord {
   const source = {
@@ -24,7 +24,7 @@ function evidence(
     status: "demonstrated",
     understanding,
     source,
-    promptingHistory: [{ source, prompted: understanding === "prompted" }],
+    promptingHistory: [{ source, prompted: understanding === null ? null : understanding === "prompted" }],
   };
 }
 
@@ -38,6 +38,12 @@ function renderScene(nodeId: string, conceptEvidence: Readonly<Record<string, Co
 }
 
 describe("Catching Unicorns scene presentation", () => {
+  it("keeps demonstrated evidence with uncertain prompting visible in the recap", () => {
+    const recap = renderScene("recap", { "engram:engram-biological": evidence("engram-biological", null, "A memory inside my brain, unlike an external note.") });
+    expect(recap).toContain("Demonstrated · prompting unclear");
+    expect(recap).toContain("A memory inside my brain, unlike an external note.");
+  });
+
   it("keeps canonical engram and exogram definitions out of the initial DOM", () => {
     const html = renderScene("engram");
     expect(html).toContain("What is an engram?");
@@ -85,7 +91,7 @@ describe("Catching Unicorns scene presentation", () => {
   it("shows multiple visual forms only after exographics evidence and keeps CAF rows distinct", () => {
     const hiddenForms = renderScene("exographics");
     expect(hiddenForms).not.toContain("Exographics</h2>");
-    expect(hiddenForms).not.toContain("What does exographics mean");
+    expect(hiddenForms).toContain("What does exographics mean?");
     expect(hiddenForms).not.toContain("Equation</p>");
     expect(hiddenForms).not.toContain("Graph</p>");
 

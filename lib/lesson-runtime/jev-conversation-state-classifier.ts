@@ -20,7 +20,7 @@ export async function classifyConversationStateWithDiagnostics(
   return executeConversationObserver(input, signal, {
     model: JEV_MODEL,
     state: conversationObserverState(input),
-    questions: conversationStateQuestions(input.lesson, input.nodeId),
+    questions: conversationStateQuestions(input.lesson, input.nodeId, input.transcript),
   });
 }
 
@@ -60,7 +60,7 @@ export async function executeConversationObserver(
     // Never accept a silently substituted model.
     if (!body || typeof body !== "object" || !("model" in body) || body.model !== JEV_MODEL)
       return abstain("provider_model_mismatch");
-    const outputs = normalizeConversationOutputs(body, snapshot.lesson, snapshot.nodeId);
+    const outputs = normalizeConversationOutputs(body, snapshot.lesson, snapshot.nodeId, snapshot.transcript);
     return outputs ? mapConversationObservation(snapshot, outputs) : abstain("provider_unreadable");
   } catch {
     return abstain(signal.aborted ? "cancelled" : "provider_unreachable");

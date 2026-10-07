@@ -48,6 +48,28 @@ function reducerHarness(lesson = TEST_CONCEPT_LESSON) {
 }
 
 describe("authored concept observation interpretation", () => {
+  it.each([0.89, 0.9, 0.99])("gates demonstrated understanding separately from attribution at %s", demonstrated => {
+    const outputs = baseOutputs("demonstrated_independent");
+    outputs.concepts = { concept_repetition: {
+      choice: "demonstrated_independent", confidence: 0.5,
+      probabilities: { not_yet: 0, partial: 1 - demonstrated, demonstrated_independent: demonstrated * 0.6, demonstrated_prompted: demonstrated * 0.4 },
+    } };
+    const decision = mapConversationObservation({ lesson: TEST_CONCEPT_LESSON, nodeId: "concept-a", transcriptRevision: 1, transcript: CONCEPT_TRANSCRIPT_FIXTURES.paraphrase }, outputs);
+    expect(decision.proposal?.conceptObservations).toEqual(demonstrated >= 0.9
+      ? [{ criterionId: "repetition", observation: "demonstrated_unattributed" }] : []);
+  });
+
+  it("preserves established independent attribution when later prompting attribution is uncertain", () => {
+    const runtime = reducerHarness();
+    const snapshot = runtime.childSnapshot(CONCEPT_TRANSCRIPT_FIXTURES.paraphrase);
+    runtime.proposal(snapshot, { conceptObservations: [{ criterionId: "repetition", observation: "demonstrated_independent" }] });
+    const previous = runtime.state.conceptEvidence["concept-a:repetition"];
+    const newer = runtime.childSnapshot(CONCEPT_TRANSCRIPT_FIXTURES.selfCorrection);
+    runtime.proposal(newer, { conceptObservations: [{ criterionId: "repetition", observation: "demonstrated_unattributed" }] });
+    expect(runtime.state.conceptEvidence["concept-a:repetition"]).toMatchObject({ status: "demonstrated", understanding: "independent", source: previous.source });
+    expect(runtime.state.conceptEvidence["concept-a:repetition"].promptingHistory.at(-1)?.prompted).toBeNull();
+  });
+
   it("asks only about the current node and separates paraphrase, incomplete, prompted, and independent labels", () => {
     const questions = conversationStateQuestions(TEST_CONCEPT_LESSON, "concept-a");
     expect(Object.keys(questions)).toContain("concept_repetition");
@@ -108,7 +130,7 @@ describe("authored concept observation interpretation", () => {
       transcript: CONCEPT_TRANSCRIPT_FIXTURES.multipleCriteria,
     }, outputs);
     expect(decision.status).toBe("accepted");
-    expect(decision.proposal).toMatchObject({ answerOutcome: "unclear", conceptObservations: [{ criterionId: "repetition", observation: "demonstrated_independent" }] });
+    expect(decision.proposal).toMatchObject({ answerOutcome: "unclear", conceptObservations: [{ criterionId: "repetition", observation: "demonstrated_independent" }, { criterionId: "change", observation: "partial_uncertain" }] });
   });
 });
 
@@ -290,7 +312,7 @@ describe("deterministic concept evidence and progression", () => {
     expect(runtime.state.conceptEvidence["concept-a:repetition"].status).toBe("partial");
   });
 
-  it("does not let prompted evidence satisfy an authored independent-completion policy", () => {
+  it.each(["demonstrated_prompted", "demonstrated_unattributed"] as const)("does not let %s evidence satisfy an authored independent-completion policy", observation => {
     const lesson = validateLessonDefinition({
       ...TEST_CONCEPT_LESSON,
       nodes: {
@@ -300,7 +322,7 @@ describe("deterministic concept evidence and progression", () => {
     });
     const runtime = reducerHarness(lesson);
     const snapshot = runtime.childSnapshot(CONCEPT_TRANSCRIPT_FIXTURES.prompted);
-    runtime.proposal(snapshot, { conceptObservations: [{ criterionId: "repetition", observation: "demonstrated_prompted" }] });
+    runtime.proposal(snapshot, { conceptObservations: [{ criterionId: "repetition", observation }] });
     runtime.send({ type: "transcript.updated", source: runtimeSource(runtime.state), revision: runtime.state.transcriptRevision + 1, speaker: "tutor" });
     const source = classificationSource(runtime.state)!;
     runtime.send({ type: "proposal.received", source, transcriptSnapshot: `${CONCEPT_TRANSCRIPT_FIXTURES.prompted}\nTutor: Yes, that describes the pattern.`, proposal: {
@@ -311,6 +333,6 @@ describe("deterministic concept evidence and progression", () => {
     runtime.send({ type: "output.activity", source: runtimeSource(runtime.state), state: "quiet" });
     runtime.send({ type: "clock.tick", source: runtimeSource(runtime.state), atMs: runtime.state.nowMs + 100 });
     expect(runtime.state.phase).toBe("active");
-    expect(runtime.state.conceptEvidence["concept-a:repetition"]).toMatchObject({ status: "demonstrated", understanding: "prompted" });
+    expect(runtime.state.conceptEvidence["concept-a:repetition"]).toMatchObject({ status: "demonstrated", understanding: observation === "demonstrated_prompted" ? "prompted" : null });
   });
 });

@@ -1,7 +1,7 @@
 import type { OutputActivityEvent } from "../events";
 import { parseConversationStateProposal } from "./conversation-state-classifier";
 import { currentNodeContext, isLessonNodeId, type LessonDefinition } from "./lesson-definition";
-import { transcriptMessages } from "./tutor-observation";
+import { transcriptMessages, substantiveLearnerText } from "./tutor-observation";
 
 /** App-owned identities, captured at the source/request boundary, never supplied by the classifier. */
 export type RuntimeSource = {
@@ -23,12 +23,16 @@ export type CurrentNodeSteeringContext = {
   readonly scene: Readonly<Record<string, string | number | boolean>>;
   readonly learningObjective: string;
   readonly tutorBrief: string;
+  readonly completionCriteria?: readonly { readonly id: string; readonly description: string }[];
+  readonly completionPolicy?: string;
 };
 export type ConceptEvidenceReference = {
   readonly runtimeId: string;
   readonly nodeId: string;
   readonly visitId: number;
-  readonly childTurnId: number;
+  /** null for a historical utterance first seen in a later turn's snapshot. */
+  readonly childTurnId: number | null;
+  /** Revision where this exact quote was recorded, not a fabricated utterance timestamp. */
   readonly transcriptRevision: number;
   readonly childMessageIndex: number;
   readonly childTranscript: string;
@@ -37,8 +41,10 @@ export type ConceptEvidenceRecord = {
   readonly criterionId: string;
   readonly status: "not_yet" | "partial" | "demonstrated";
   readonly understanding: "independent" | "prompted" | null;
+  /** Advisory progress, never accepted demonstration or reveal authority. */
+  readonly tentative?: boolean;
   readonly source: ConceptEvidenceReference | null;
-  readonly promptingHistory: readonly { readonly source: ConceptEvidenceReference; readonly prompted: boolean }[];
+  readonly promptingHistory: readonly { readonly source: ConceptEvidenceReference; readonly prompted: boolean | null }[];
 };
 
 export type LessonRuntimeState = {
@@ -199,7 +205,7 @@ function sameClassificationSource(state: LessonRuntimeState, source: Classificat
   );
 }
 
-function meetsAuthoredCompletionPolicy(state: LessonRuntimeState, lesson: LessonDefinition) {
+export function meetsAuthoredCompletionPolicy(state: LessonRuntimeState, lesson: LessonDefinition) {
   const node = lesson.nodes[state.nodeId];
   if (!node.concepts?.length || node.completionPolicy === "allow_unresolved") return true;
   if (node.completionPolicy !== "all_demonstrated" && node.completionPolicy !== "all_independent") return false;
@@ -212,7 +218,7 @@ function meetsAuthoredCompletionPolicy(state: LessonRuntimeState, lesson: Lesson
   });
 }
 
-function hasCurrentCompletionEvidence(state: LessonRuntimeState, lesson: LessonDefinition) {
+export function hasCurrentCompletionEvidence(state: LessonRuntimeState, lesson: LessonDefinition) {
   return (
     state.hasChildTranscript &&
     state.transcriptSource === "tutor" &&
@@ -333,59 +339,77 @@ function applyConceptObservations(
     return { state, effects: [] };
   const messages = transcriptMessages(transcriptSnapshot);
   if (!messages) return { state, effects: [] };
-  const childMessageIndex = messages.findLastIndex(message => message.speaker === "Child");
-  if (childMessageIndex < 0) return { state, effects: [] };
-  const childTranscript = messages[childMessageIndex].text.trim();
-  if (!childTranscript) return { state, effects: [] };
-  const tutorTexts = messages
-    .slice(0, childMessageIndex)
-    .filter(message => message.speaker === "Tutor")
-    .map(message => message.text);
-  const echoed = echoedByTutor(childTranscript, tutorTexts);
+  const candidates = messages.flatMap((message, index) =>
+    message.speaker === "Child" && substantiveLearnerText(message.text) ? [index] : [],
+  );
   const evidence = { ...state.conceptEvidence };
   const effects: LessonRuntimeEffect[] = [];
   for (const observation of proposal.conceptObservations) {
     if (!node.concepts.some(concept => concept.id === observation.criterionId)) continue;
+    const key = conceptKey(node.id, observation.criterionId);
+    const previous = evidence[key];
+    // Absence has no supporting utterance and is never an independent attempt.
+    if (observation.observation === "not_yet") {
+      evidence[key] = previous ?? {
+        criterionId: observation.criterionId, status: "not_yet", understanding: null,
+        source: null, promptingHistory: [],
+      };
+      continue;
+    }
+    // Legacy proposals may identify a source only when there is one substantive
+    // learner utterance. Never guess the latest answer in a cumulative snapshot.
+    const childMessageIndex = observation.childMessageIndex === undefined
+      ? candidates.length === 1 ? candidates[0] : null
+      : observation.childMessageIndex;
+    if (childMessageIndex === null || !candidates.includes(childMessageIndex)) continue;
+    const childTranscript = messages[childMessageIndex].text.trim();
+    const tutorTexts = messages.slice(0, childMessageIndex)
+      .filter(message => message.speaker === "Tutor").map(message => message.text);
+    const echoed = echoedByTutor(childTranscript, tutorTexts);
+    const tentative = observation.observation === "partial_uncertain";
     let status: ConceptEvidenceRecord["status"] =
-      observation.observation === "not_yet"
-        ? "not_yet"
-        : observation.observation === "partial"
-          ? "partial"
-          : "demonstrated";
+      observation.observation === "partial" || tentative ? "partial" : "demonstrated";
     let understanding: ConceptEvidenceRecord["understanding"] =
-      observation.observation === "demonstrated_independent"
-        ? "independent"
-        : observation.observation === "demonstrated_prompted"
-          ? "prompted"
-          : null;
+      observation.observation === "demonstrated_independent" ? "independent"
+        : observation.observation === "demonstrated_prompted" ? "prompted" : null;
     if (echoed && understanding === "independent") {
       status = "partial";
       understanding = null;
     }
-    const key = conceptKey(node.id, observation.criterionId);
-    const previous = evidence[key];
-    // An empty/no-attempt observation cannot erase accepted session evidence.
-    if (status === "not_yet" && previous?.status === "demonstrated") continue;
-    const evidenceReference: ConceptEvidenceReference = {
-      runtimeId: source.runtimeId,
-      nodeId: source.nodeId,
-      visitId: source.visitId,
-      childTurnId: source.childTurnId,
-      transcriptRevision: source.transcriptRevision,
-      childMessageIndex,
-      childTranscript,
+    // Uncertain progress must never erase accepted mastery. Prompting belongs
+    // to the selected utterance, so a later tutor paraphrase cannot change it.
+    if (tentative && previous?.status === "demonstrated") continue;
+    const sameUtterance = (reference: ConceptEvidenceReference) =>
+      reference.runtimeId === source.runtimeId && reference.nodeId === source.nodeId &&
+      reference.visitId === source.visitId && reference.childMessageIndex === childMessageIndex;
+    const existingAttempt = previous?.promptingHistory.find(entry => sameUtterance(entry.source));
+    const contentKey = (text: string) => (text.replace(/\[[^\]]*(?:\]|$)/gu, " ").toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [])
+      .filter(word => !["uh", "um", "hmm", "well", "ah", "oh"].includes(word)).join(" ");
+    const unchanged = existingAttempt && contentKey(existingAttempt.source.childTranscript) === contentKey(childTranscript);
+    const evidenceReference: ConceptEvidenceReference = unchanged ? existingAttempt.source : {
+      runtimeId: source.runtimeId, nodeId: source.nodeId, visitId: source.visitId,
+      childTurnId: childMessageIndex === messages.findLastIndex(message => message.speaker === "Child")
+        ? source.childTurnId : null,
+      transcriptRevision: source.transcriptRevision, childMessageIndex, childTranscript,
     };
-    const record: ConceptEvidenceRecord = {
-      criterionId: observation.criterionId,
-      status,
-      understanding,
-      source: status === "demonstrated" || status === "partial" ? evidenceReference : (previous?.source ?? null),
-      promptingHistory: [
-        ...(previous?.promptingHistory ?? []),
-        { source: evidenceReference, prompted: observation.observation === "demonstrated_prompted" },
-      ],
+    const unattributed = observation.observation === "demonstrated_unattributed";
+    if (unattributed && previous?.status === "demonstrated") understanding = previous.understanding;
+    // Reclassification of an unchanged utterance is not a fresh attempt. Once
+    // attribution is known, an ambiguous cumulative label cannot rewrite it.
+    if (unchanged && previous?.status === "demonstrated" &&
+      (status !== "demonstrated" || understanding === null || previous.understanding !== null)) continue;
+    const prompted = observation.observation === "demonstrated_independent" && !echoed ? false
+      : observation.observation === "demonstrated_prompted" ? true : null;
+    const promptingHistory = existingAttempt
+      ? previous!.promptingHistory.map(entry => entry === existingAttempt
+        ? { source: evidenceReference, prompted } : entry)
+      : [...(previous?.promptingHistory ?? []), { source: evidenceReference, prompted }];
+    evidence[key] = {
+      criterionId: observation.criterionId, status, understanding,
+      ...(tentative ? { tentative: true } : {}),
+      source: unattributed && previous?.status === "demonstrated" ? previous.source : evidenceReference,
+      promptingHistory,
     };
-    evidence[key] = record;
     if (status === "demonstrated" && previous?.status !== "demonstrated")
       effects.push({ type: "concept.revealed", nodeId: node.id, criterionId: observation.criterionId });
   }

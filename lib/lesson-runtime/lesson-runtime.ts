@@ -3,7 +3,7 @@ import type { ProviderEvent, TranscriptEvent } from "../events";
 import { MICROPHONE_ONSET_MS, MICROPHONE_ONSET_QUIET_MS, MICROPHONE_QUIET_MS } from "../microphone-turn";
 import { parseConversationStateProposal } from "./conversation-state-classifier";
 import { currentNodeContext, type LessonDefinition } from "./lesson-definition";
-import { initialTeachingContext, teachingInstruction } from "./live-context";
+import { answerRecoveryInstruction, initialTeachingContext, teachingInstruction } from "./live-context";
 import { SupportClarification } from "./support-clarification";
 import { AnswerRecovery } from "./answer-recovery";
 import { TutorStabilizationGate } from "./tutor-stabilization";
@@ -12,6 +12,8 @@ import { CLASSIFIER_VERSION } from "./conversation-observer-contract";
 import { parseLiveClassificationDiagnostic } from "./live-classification-diagnostic";
 import {
   classificationSource,
+  hasCurrentCompletionEvidence,
+  meetsAuthoredCompletionPolicy,
   createLessonRuntime,
   reduceLessonRuntime,
   runtimeSource,
@@ -166,17 +168,20 @@ export class LessonRuntime {
     );
     this.answerRecovery = new AnswerRecovery(
       source => {
-        const eventId = `${this.runtimeId}:answer-recovery:${source.visitId}:${source.childTurnId}`;
+        const eventId = `${this.runtimeId}:answer-recovery:${source.visitId}:${source.childTurnId}:${source.transcriptRevision}`;
+        const content = this.state
+          ? answerRecoveryInstruction(this.lessonDefinition, this.state)
+          : this.lessonDefinition.recovery.answerRecoveryInstruction;
         try {
           this.transport.send({
             type: "session.instructions.append",
             event_id: eventId,
             delegation_id: null,
-            content: this.lessonDefinition.recovery.answerRecoveryInstruction,
+            content,
           });
           this.log(
             "gpt_live.answer_recovery_append",
-            { eventId, content: this.lessonDefinition.recovery.answerRecoveryInstruction },
+            { eventId, content },
             source,
           );
         } catch {
@@ -185,6 +190,7 @@ export class LessonRuntime {
         this.publish();
       },
       (type, source, detail) => this.log(type, detail, source),
+      Object.values(this.lessonDefinition.nodes).some(node => node.concepts?.length),
     );
     this.transport = new BrowserTransport(audio, true);
     this.transport.setMicrophoneDiagnosticSink(event => {
@@ -678,12 +684,17 @@ export class LessonRuntime {
           transcriptSnapshot: transcript,
           atMs: this.now(),
         });
-      } else if (
+      }
+      // Usable evidence does not rule out a hold: a concept proposal may be
+      // partial, or learner speech may have interrupted tutor confirmation.
+      if (
         diagnostic?.outputs &&
         this.state &&
         diagnostic.nodeId === source.nodeId &&
         diagnostic.transcriptRevision === source.transcriptRevision &&
         (diagnostic.outcome === "hold_scene" ||
+          (diagnostic.outcome === "allow_semantic_completion_evidence" &&
+            this.state.phase === "active" && !hasCurrentCompletionEvidence(this.state, this.lessonDefinition)) ||
           (diagnostic.decision === "abstained" &&
             [
               "objectiveState_no_winner",
@@ -694,7 +705,14 @@ export class LessonRuntime {
               "no_confident_concept_observation",
             ].includes(diagnostic.reason ?? "")))
       ) {
-        this.answerRecovery.armSemanticHold(this.state, this.status === "live" && !this.steering, source);
+        this.answerRecovery.armSemanticHold(
+          this.state,
+          this.status === "live" && !this.steering,
+          source,
+          !!this.lessonDefinition.nodes[source.nodeId].concepts?.length &&
+            this.lessonDefinition.nodes[source.nodeId].completionPolicy !== "allow_unresolved" &&
+            meetsAuthoredCompletionPolicy(this.state, this.lessonDefinition),
+        );
       }
     } catch {
       if (!abort.signal.aborted && this.status === "live")

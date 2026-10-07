@@ -1,3 +1,4 @@
+import { transcriptMessages } from "../lib/lesson-runtime/tutor-observation";
 import { describe, expect, it } from "vitest";
 import { currentNodeContext, validateLessonDefinition } from "../lib/lesson-runtime/lesson-definition";
 import { conversationStateQuestions } from "../lib/lesson-runtime/conversation-observer-contract";
@@ -60,6 +61,7 @@ describe("isolated Catching Unicorns lesson content", () => {
     expect(CATCHING_UNICORNS_PRESENTATION.recap.groups.map(group => group.id)).toEqual([
       "independent",
       "prompted",
+      "unattributed",
       "partial",
       "missing",
     ]);
@@ -127,6 +129,7 @@ describe("isolated Catching Unicorns lesson content", () => {
     expect(CATCHING_UNICORNS_PRESENTATION.recap.groups.map(group => group.title)).toEqual([
       "Demonstrated independently",
       "Demonstrated after a prompt",
+      "Demonstrated · prompting unclear",
       "Partly explained",
       "Still unresolved or skipped",
     ]);
@@ -184,6 +187,8 @@ function observeFixture(nodeId: keyof typeof CATCHING_UNICORNS_TRANSCRIPT_FIXTUR
   const observations = concepts.map(concept => ({
     criterionId: concept.id,
     observation: fixture.observations[concept.id] ?? "not_yet",
+    // Controlled fixture expectations concern the final substantive answer.
+    childMessageIndex: transcriptMessages(fixture.transcript)!.findLastIndex(message => message.speaker === "Child"),
   }));
   // These reviewed synthetic expectations are controlled reducer inputs. They do not test live classifier accuracy.
   const result = send({

@@ -67,6 +67,24 @@ const input = {
 };
 
 describe("live concept classification diagnostics", () => {
+  it("round-trips demonstrated understanding with uncertain attribution and an uncertain global summary", () => {
+    const outputs = conceptOutputs({
+      choice: "unclear_or_incomplete", confidence: 0.55,
+      probabilities: { completed: 0.45, incorrect: 0, unclear_or_incomplete: 0.55, unresolved_help: 0, no_attempt: 0 },
+    }, {
+      choice: "confirmed_completion", confidence: 0.97,
+      probabilities: probabilities(tutorLabels, "confirmed_completion"),
+    });
+    outputs.concepts = { concept_repetition: {
+      choice: "demonstrated_independent", confidence: 0.68,
+      probabilities: { not_yet: 0, partial: 0.01, demonstrated_independent: 0.76, demonstrated_prompted: 0.23 },
+    } };
+    const decision = mapConversationObservation(input, outputs);
+    expect(decision).toMatchObject({ status: "accepted", outcome: "allow_semantic_completion_evidence", labelCompletionEligible: false });
+    expect(decision.proposal?.conceptObservations).toEqual([{ criterionId: "repetition", observation: "demonstrated_unattributed" }]);
+    expect(parseLiveClassificationDiagnostic(diagnostic(decision), TEST_CONCEPT_LESSON, "concept-a")).toEqual(diagnostic(decision));
+  });
+
   it("round-trips a concept-only independent reveal with an uncertain global summary", () => {
     const decision = mapConversationObservation(input, conceptOutputs());
     expect(decision).toMatchObject({ status: "accepted", outcome: "hold_scene", labelCompletionEligible: false });
@@ -94,9 +112,10 @@ describe("live concept classification diagnostics", () => {
     expect(parseLiveClassificationDiagnostic(diagnostic(decision), TEST_CONCEPT_LESSON, "concept-a")).toEqual(diagnostic(decision));
   });
 
-  it("round-trips all-concept abstention and its closed reason", () => {
+  it("round-trips tentative partial progress without completion", () => {
     const decision = mapConversationObservation(input, conceptOutputs(undefined, undefined, "partial"));
-    expect(decision).toMatchObject({ status: "abstained", outcome: "unresolved", reason: "no_confident_concept_observation" });
+    expect(decision).toMatchObject({ status: "accepted", outcome: "hold_scene" });
+    expect(decision.proposal?.conceptObservations).toEqual([{ criterionId: "repetition", observation: "partial_uncertain" }]);
     expect(parseLiveClassificationDiagnostic(diagnostic(decision), TEST_CONCEPT_LESSON, "concept-a")).toEqual(diagnostic(decision));
   });
 

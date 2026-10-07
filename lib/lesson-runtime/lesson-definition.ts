@@ -104,5 +104,10 @@ export function currentNodeContext(lesson: LessonDefinition, nodeId: string) {
     scene: { id: String(sceneId ?? node.id), ...sceneFacts },
     learningObjective: node.learningObjective,
     tutorBrief: node.tutorBrief,
+    ...(node.concepts?.length ? {
+      // Private assessment targets, not presentation/reveal payloads.
+      completionCriteria: node.concepts,
+      completionPolicy: node.completionPolicy,
+    } : {}),
   };
 }

@@ -1,0 +1,1026 @@
+{
+  "source": "Exact final transcript from d19098c9-9424-400c-888d-77303f6f9b2f with a bounded live classifier replay after the internal-location rubric change. Scores are new replay results, not original-session scores. Microphone turn eligibility is not established by these scores.",
+  "transcript": "Tutor: What is an en\nTutor: gram?\nChild: An engram is a biological memory. It's uh, it's an idea that we that we store inside our mind\nTutor: Yeah, that's\nTutor: right. An engram is that stored trace in your mind, not a notebook entry\nTutor: or a file on a drive. That distinction\nTutor: fits what we're looking for.",
+  "outputs": {
+    "objectiveState": {
+      "choice": "completed",
+      "confidence": 0.94,
+      "probabilities": {
+        "completed": 0.95,
+        "incorrect": 0,
+        "unclear_or_incomplete": 0.05,
+        "unresolved_help": 0,
+        "no_attempt": 0
+      }
+    },
+    "tutorState": {
+      "choice": "confirmed_completion",
+      "confidence": 1,
+      "probabilities": {
+        "confirmed_completion": 1,
+        "clarifying": 0,
+        "helping": 0,
+        "asking": 0,
+        "other": 0
+      }
+    },
+    "concepts": {
+      "concept_engram-biological": {
+        "choice": "demonstrated_independent",
+        "confidence": 0.87,
+        "probabilities": {
+          "not_yet": 0,
+          "partial": 0.01,
+          "demonstrated_independent": 0.9,
+          "demonstrated_prompted": 0.09
+        }
+      }
+    }
+  },
+  "originalEarlyOutputs": {
+    "objectiveState": {
+      "choice": "unclear_or_incomplete",
+      "confidence": 0.82,
+      "probabilities": {
+        "completed": 0.07,
+        "incorrect": 0.07,
+        "unclear_or_incomplete": 0.86,
+        "unresolved_help": 0,
+        "no_attempt": 0
+      }
+    },
+    "tutorState": {
+      "choice": "asking",
+      "confidence": 0.81,
+      "probabilities": {
+        "confirmed_completion": 0.01,
+        "clarifying": 0.01,
+        "helping": 0.01,
+        "asking": 0.85,
+        "other": 0.12
+      }
+    },
+    "concepts": {
+      "concept_engram-biological": {
+        "choice": "demonstrated_independent",
+        "confidence": 0.44,
+        "probabilities": {
+          "not_yet": 0.01,
+          "partial": 0.36,
+          "demonstrated_independent": 0.58,
+          "demonstrated_prompted": 0.05
+        }
+      }
+    }
+  },
+  "events": [
+    {
+      "atMs": 124.5,
+      "event": {
+        "type": "output.activity",
+        "state": "unavailable"
+      }
+    },
+    {
+      "atMs": 691.1000000238419,
+      "event": {
+        "type": "output.activity",
+        "state": "unavailable"
+      }
+    },
+    {
+      "atMs": 691.8999999761581,
+      "event": {
+        "type": "output.activity",
+        "state": "unavailable"
+      }
+    },
+    {
+      "atMs": 1592.800000011921,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    },
+    {
+      "atMs": 2945.5,
+      "event": {
+        "type": "microphone.speech_stopped",
+        "quietMs": 908.5
+      }
+    },
+    {
+      "atMs": 3014,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": "What is",
+        "startMs": 1400,
+        "endMs": 1600
+      }
+    },
+    {
+      "atMs": 3243.199999988079,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 3279.399999976158,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " an en",
+        "startMs": 1600,
+        "endMs": 1800
+      }
+    },
+    {
+      "atMs": 3345.399999976158,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 3389.600000023842,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": "gram?",
+        "startMs": 1800,
+        "endMs": 2000
+      }
+    },
+    {
+      "atMs": 3528.800000011921,
+      "event": {
+        "type": "microphone.activity_discarded"
+      }
+    },
+    {
+      "atMs": 3928.899999976158,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 4120.399999976158,
+      "event": {
+        "type": "microphone.activity_discarded"
+      }
+    },
+    {
+      "atMs": 4193,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    },
+    {
+      "atMs": 4546.399999976158,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 4628.800000011921,
+      "event": {
+        "type": "microphone.speech_started"
+      }
+    },
+    {
+      "atMs": 7171.199999988079,
+      "event": {
+        "type": "transcript",
+        "speaker": "child",
+        "delta": "An",
+        "startMs": 5800,
+        "endMs": 6000
+      }
+    },
+    {
+      "atMs": 7570,
+      "event": {
+        "type": "transcript",
+        "speaker": "child",
+        "delta": " engram is",
+        "startMs": 6200,
+        "endMs": 6400
+      }
+    },
+    {
+      "atMs": 7690,
+      "event": {
+        "type": "transcript",
+        "speaker": "child",
+        "delta": " a",
+        "startMs": 6400,
+        "endMs": 6600
+      }
+    },
+    {
+      "atMs": 8683.899999976158,
+      "event": {
+        "type": "transcript",
+        "speaker": "child",
+        "delta": " biological",
+        "startMs": 7400,
+        "endMs": 7600
+      }
+    },
+    {
+      "atMs": 9295.800000011921,
+      "event": {
+        "type": "transcript",
+        "speaker": "child",
+        "delta": " memory",
+        "startMs": 8000,
+        "endMs": 8200
+      }
+    },
+    {
+      "atMs": 10700.899999976158,
+      "event": {
+        "type": "transcript",
+        "speaker": "child",
+        "delta": ". It's",
+        "startMs": 9400,
+        "endMs": 9600
+      }
+    },
+    {
+      "atMs": 11719,
+      "event": {
+        "type": "transcript",
+        "speaker": "child",
+        "delta": " uh",
+        "startMs": 10200,
+        "endMs": 10400
+      }
+    },
+    {
+      "atMs": 11894.800000011921,
+      "event": {
+        "type": "transcript",
+        "speaker": "child",
+        "delta": ", it's",
+        "startMs": 10400,
+        "endMs": 10600
+      }
+    },
+    {
+      "atMs": 12072.300000011921,
+      "event": {
+        "type": "transcript",
+        "speaker": "child",
+        "delta": " an",
+        "startMs": 10600,
+        "endMs": 10800
+      }
+    },
+    {
+      "atMs": 12961.300000011921,
+      "event": {
+        "type": "transcript",
+        "speaker": "child",
+        "delta": " idea",
+        "startMs": 11600,
+        "endMs": 11800
+      }
+    },
+    {
+      "atMs": 13317,
+      "event": {
+        "type": "transcript",
+        "speaker": "child",
+        "delta": " that we",
+        "startMs": 12000,
+        "endMs": 12200
+      }
+    },
+    {
+      "atMs": 13894,
+      "event": {
+        "type": "transcript",
+        "speaker": "child",
+        "delta": " that",
+        "startMs": 12600,
+        "endMs": 12800
+      }
+    },
+    {
+      "atMs": 14048,
+      "event": {
+        "type": "transcript",
+        "speaker": "child",
+        "delta": " we",
+        "startMs": 12800,
+        "endMs": 13000
+      }
+    },
+    {
+      "atMs": 14329.699999988079,
+      "event": {
+        "type": "transcript",
+        "speaker": "child",
+        "delta": " store",
+        "startMs": 13200,
+        "endMs": 13400
+      }
+    },
+    {
+      "atMs": 14732.800000011921,
+      "event": {
+        "type": "transcript",
+        "speaker": "child",
+        "delta": " inside our",
+        "startMs": 13600,
+        "endMs": 13800
+      }
+    },
+    {
+      "atMs": 15375.800000011921,
+      "event": {
+        "type": "transcript",
+        "speaker": "child",
+        "delta": " mind",
+        "startMs": 14200,
+        "endMs": 14400
+      }
+    },
+    {
+      "atMs": 16128.699999988079,
+      "event": {
+        "type": "microphone.speech_stopped",
+        "quietMs": 900.7000000000007
+      }
+    },
+    {
+      "atMs": 16520.30000001192,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 16754.600000023842,
+      "event": {
+        "type": "microphone.activity_discarded"
+      }
+    },
+    {
+      "atMs": 18698.69999998808,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": "Yeah,",
+        "startMs": 17400,
+        "endMs": 17600
+      }
+    },
+    {
+      "atMs": 18892.69999998808,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " that's",
+        "startMs": 17600,
+        "endMs": 17800
+      }
+    },
+    {
+      "atMs": 18992.80000001192,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 19046.19999998808,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 19102.100000023842,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": "right.",
+        "startMs": 17800,
+        "endMs": 18000
+      }
+    },
+    {
+      "atMs": 19192.600000023842,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    },
+    {
+      "atMs": 19203.399999976158,
+      "event": {
+        "type": "microphone.activity_discarded"
+      }
+    },
+    {
+      "atMs": 19442.600000023842,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 19542.80000001192,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    },
+    {
+      "atMs": 19592.80000001192,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 19690,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " An",
+        "startMs": 18400,
+        "endMs": 18600
+      }
+    },
+    {
+      "atMs": 19868.100000023842,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " engram",
+        "startMs": 18600,
+        "endMs": 18800
+      }
+    },
+    {
+      "atMs": 19892.600000023842,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    },
+    {
+      "atMs": 20286,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " is",
+        "startMs": 19000,
+        "endMs": 19200
+      }
+    },
+    {
+      "atMs": 20392.600000023842,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 20701.30000001192,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " that",
+        "startMs": 19400,
+        "endMs": 19600
+      }
+    },
+    {
+      "atMs": 20880.399999976158,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " stored",
+        "startMs": 19600,
+        "endMs": 19800
+      }
+    },
+    {
+      "atMs": 21292.80000001192,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    },
+    {
+      "atMs": 21305.399999976158,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " trace",
+        "startMs": 20000,
+        "endMs": 20200
+      }
+    },
+    {
+      "atMs": 21342.30000001192,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 21496.100000023842,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " in",
+        "startMs": 20200,
+        "endMs": 20400
+      }
+    },
+    {
+      "atMs": 21592.600000023842,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    },
+    {
+      "atMs": 21642.399999976158,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 21714.80000001192,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " your mind",
+        "startMs": 20400,
+        "endMs": 20600
+      }
+    },
+    {
+      "atMs": 21893.30000001192,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": ",",
+        "startMs": 20600,
+        "endMs": 20800
+      }
+    },
+    {
+      "atMs": 22257.899999976158,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " not",
+        "startMs": 21000,
+        "endMs": 21200
+      }
+    },
+    {
+      "atMs": 22728.19999998808,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " a",
+        "startMs": 21400,
+        "endMs": 21600
+      }
+    },
+    {
+      "atMs": 22741.899999976158,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    },
+    {
+      "atMs": 22792.399999976158,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 22842.5,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    },
+    {
+      "atMs": 22877.30000001192,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " notebook",
+        "startMs": 21600,
+        "endMs": 21800
+      }
+    },
+    {
+      "atMs": 23063.5,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " entry",
+        "startMs": 21800,
+        "endMs": 22000
+      }
+    },
+    {
+      "atMs": 23092.399999976158,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 23153.5,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 23336.899999976158,
+      "event": {
+        "type": "microphone.activity_discarded"
+      }
+    },
+    {
+      "atMs": 23348.399999976158,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    },
+    {
+      "atMs": 23392.399999976158,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 23420,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 23446.30000001192,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": "or",
+        "startMs": 22200,
+        "endMs": 22400
+      }
+    },
+    {
+      "atMs": 23628.5,
+      "event": {
+        "type": "microphone.activity_discarded"
+      }
+    },
+    {
+      "atMs": 23641.899999976158,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    },
+    {
+      "atMs": 23692.399999976158,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 23742.600000023842,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    },
+    {
+      "atMs": 23792.600000023842,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 23865.899999976158,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " a",
+        "startMs": 22600,
+        "endMs": 22800
+      }
+    },
+    {
+      "atMs": 24082.5,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " file",
+        "startMs": 22800,
+        "endMs": 23000
+      }
+    },
+    {
+      "atMs": 24310.19999998808,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " on",
+        "startMs": 23000,
+        "endMs": 23200
+      }
+    },
+    {
+      "atMs": 24499.600000023842,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " a drive",
+        "startMs": 23200,
+        "endMs": 23400
+      }
+    },
+    {
+      "atMs": 24542.600000023842,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    },
+    {
+      "atMs": 24592.600000023842,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 24692.69999998808,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    },
+    {
+      "atMs": 24751.100000023842,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": ".",
+        "startMs": 23400,
+        "endMs": 23600
+      }
+    },
+    {
+      "atMs": 24792.399999976158,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 25267,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " That",
+        "startMs": 24000,
+        "endMs": 24200
+      }
+    },
+    {
+      "atMs": 25449.19999998808,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " distinction",
+        "startMs": 24200,
+        "endMs": 24400
+      }
+    },
+    {
+      "atMs": 25492,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    },
+    {
+      "atMs": 25787.69999998808,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 25870.19999998808,
+      "event": {
+        "type": "microphone.speech_started"
+      }
+    },
+    {
+      "atMs": 26062.399999976158,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": "fits",
+        "startMs": 24800,
+        "endMs": 25000
+      }
+    },
+    {
+      "atMs": 26092.5,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 26268.30000001192,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " what",
+        "startMs": 25000,
+        "endMs": 25200
+      }
+    },
+    {
+      "atMs": 26463.600000023842,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " we're looking",
+        "startMs": 25200,
+        "endMs": 25400
+      }
+    },
+    {
+      "atMs": 26692.399999976158,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    },
+    {
+      "atMs": 26742.5,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 26870.69999998808,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " for.",
+        "startMs": 25600,
+        "endMs": 25800
+      }
+    },
+    {
+      "atMs": 26892.30000001192,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    },
+    {
+      "atMs": 26942.600000023842,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 27292.600000023842,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    },
+    {
+      "atMs": 27342.399999976158,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 27542.5,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    },
+    {
+      "atMs": 27592.399999976158,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 27671.30000001192,
+      "event": {
+        "type": "microphone.speech_stopped",
+        "quietMs": 900
+      }
+    },
+    {
+      "atMs": 27742.600000023842,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    },
+    {
+      "atMs": 28853.600000023842,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 29028.399999976158,
+      "event": {
+        "type": "microphone.activity_discarded"
+      }
+    },
+    {
+      "atMs": 31428.399999976158,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 31603.5,
+      "event": {
+        "type": "microphone.activity_discarded"
+      }
+    },
+    {
+      "atMs": 35919.89999997616,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 36004.30000001192,
+      "event": {
+        "type": "microphone.speech_started"
+      }
+    },
+    {
+      "atMs": 37929,
+      "event": {
+        "type": "microphone.speech_stopped",
+        "quietMs": 900.2999999999956
+      }
+    },
+    {
+      "atMs": 38946.69999998808,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 39128.80000001192,
+      "event": {
+        "type": "microphone.activity_discarded"
+      }
+    },
+    {
+      "atMs": 39920.30000001192,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 40128.80000001192,
+      "event": {
+        "type": "microphone.activity_discarded"
+      }
+    }
+  ]
+}

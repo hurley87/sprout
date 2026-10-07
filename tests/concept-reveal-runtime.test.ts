@@ -115,7 +115,7 @@ const observation = (criterionId: string, value: "partial" | "demonstrated_indep
   observation: value,
 });
 
-it("retains concept abstention diagnostics and requests bounded answer recovery without revealing", async () => {
+it("retains tentative partial diagnostics and requests bounded answer recovery without revealing", async () => {
   fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
     if (url === "/api/live") return Response.json({ ok: true });
     const input = JSON.parse(init?.body as string);
@@ -147,7 +147,7 @@ it("retains concept abstention diagnostics and requests bounded answer recovery 
         },
       },
     );
-    expect(decision.reason).toBe("no_confident_concept_observation");
+    expect(decision.outcome).toBe("hold_scene");
     return Response.json({
       proposal: decision.proposal,
       diagnostic: {
@@ -171,19 +171,19 @@ it("retains concept abstention diagnostics and requests bounded answer recovery 
   expect(lesson.report().events).toContainEqual(
     expect.objectContaining({
       type: "classifier.mapping",
-      detail: expect.objectContaining({ reason: "no_confident_concept_observation" }),
+      detail: expect.objectContaining({ outcome: "hold_scene" }),
     }),
   );
   await vi.advanceTimersByTimeAsync(4_000);
   expect(transport.send.mock.calls.map(([command]) => command)).toContainEqual(
     expect.objectContaining({
       type: "session.instructions.append",
-      content: TEST_CONCEPT_LESSON.recovery.answerRecoveryInstruction,
+      content: expect.stringContaining("Ask one non-leading question"),
     }),
   );
   expect(lesson.snapshot()).toMatchObject({
     status: "live",
-    runtime: { phase: "active", nodeId: "concept-a", conceptEvidence: {} },
+    runtime: { phase: "active", nodeId: "concept-a", conceptEvidence: { "concept-a:repetition": { status: "partial", tentative: true } } },
   });
   expect(lesson.report().events).not.toContainEqual(expect.objectContaining({ type: "concept.revealed" }));
   await vi.advanceTimersByTimeAsync(4_000);
