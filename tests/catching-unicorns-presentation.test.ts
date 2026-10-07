@@ -51,7 +51,7 @@ describe("Catching Unicorns scene presentation", () => {
     expect(html).not.toContain("Non-biological memory: a representation kept outside biological memory.");
   });
 
-  it("reveals a demonstrated paraphrase and carries it only where the authored lesson permits", () => {
+  it("uses the same flashcard layout for engram and exogram without exposing an unresolved definition", () => {
     const carried = renderScene("exogram", {
       "exogram:engram-biological": evidence(
         "engram-biological",
@@ -59,10 +59,16 @@ describe("Catching Unicorns scene presentation", () => {
         "Memory inside a person is different from a record outside them.",
       ),
     });
-    expect(carried).toContain("Carried forward from your earlier explanation");
-    expect(carried).toContain("Biological memory: memory held within a biological mind.");
+    expect(carried).toContain("What is an exogram?");
+    expect(carried).not.toContain("Biological memory: memory held within a biological mind.");
     expect(carried).not.toContain("Non-biological memory: a representation kept outside biological memory.");
 
+    const exogram = renderScene("exogram", { "exogram:exogram-non-biological": evidence("exogram-non-biological") });
+    expect(exogram).toContain("Non-biological memory: a representation kept outside biological memory.");
+    expect(exogram).toContain("Explore the definition");
+    expect(exogram.match(/class="([^"]+)" data-scene/)?.[1]).toBe(
+      renderScene("engram").match(/class="([^"]+)" data-scene/)?.[1],
+    );
     const revealed = renderScene("engram", { "engram:engram-biological": evidence("engram-biological") });
     expect(revealed).toContain("Biological memory: memory held within a biological mind.");
   });
@@ -75,8 +81,10 @@ describe("Catching Unicorns scene presentation", () => {
     });
     expect(comparison).toContain("Durable");
     expect(comparison).toContain("The source describes exograms as durable");
-    expect(comparison).toContain("Comparison 2");
-    expect(comparison).not.toContain("Shareable</h3>");
+    expect(comparison).toContain("1 of 3 differences explored");
+    expect(comparison).not.toContain("Awaiting evidence");
+    expect(comparison).toContain("How are they different?");
+    expect(comparison).not.toContain("Shareable</h4>");
 
     const culture = renderScene("techno-literate-culture", {
       "techno-literate-culture:idea-discoverers": evidence("idea-discoverers"),
@@ -105,11 +113,15 @@ describe("Catching Unicorns scene presentation", () => {
     const namedPractice = renderScene("exographics", {
       "exographics:visual-symbols": evidence("visual-symbols"),
     });
-    expect(namedPractice).toContain("Exographics</h2>");
+    expect(namedPractice).toContain("What does exographics mean?");
+    expect(namedPractice).toContain("Explain it in your own words, using examples.");
+    expect(namedPractice.match(/class="([^"]+)" data-scene/)?.[1]).toBe(
+      renderScene("engram").match(/class="([^"]+)" data-scene/)?.[1],
+    );
 
     const culture = renderScene("techno-literate-culture");
-    expect(culture).toContain("Culture and literacy</h2>");
-    expect(culture).not.toContain("Techno-literate culture</h2>");
+    expect(culture).toMatch(/>Culture and literacy<\//);
+    expect(culture).not.toMatch(/>Techno-literate culture<\//);
 
     const application = renderScene("caf-application", {
       "techno-literate-culture:widespread-literacy": evidence("widespread-literacy"),

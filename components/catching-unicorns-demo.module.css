@@ -1,0 +1,498 @@
+.lesson {
+  --lesson-ink: #073b3b;
+  --lesson-muted: #5d8081;
+  width: 100%;
+  background: #fefefd;
+  color: var(--lesson-ink);
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+.stage {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  padding: clamp(32px, 7.5vh, 76px) clamp(24px, 3.2vw, 50px) 54px;
+}
+
+.progress {
+  width: min(100%, 1064px);
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+
+.segments {
+  display: flex;
+  flex: 1;
+  gap: 8px;
+}
+
+.segment {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: #cdd3db;
+}
+
+.activeSegment {
+  background: #096766;
+}
+
+.counter {
+  color: #a0afbd;
+  font-size: 20px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.scene {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  padding: 64px 0;
+}
+
+.presentation {
+  width: min(100%, 1064px);
+}
+
+.flashcard {
+  text-align: center;
+  padding-bottom: 32px;
+}
+
+.question {
+  font-size: clamp(36px, 4.7vw, 72px);
+  line-height: 1.14;
+  font-weight: 400;
+  letter-spacing: -0.045em;
+  text-wrap: balance;
+  margin: 0;
+}
+
+.answer {
+  margin-top: 18px;
+  font-size: clamp(22px, 2.8vw, 44px);
+  line-height: 1.3;
+  letter-spacing: -0.035em;
+  color: var(--lesson-muted);
+  text-wrap: balance;
+}
+
+.definition {
+  max-width: 680px;
+  margin: 28px auto 0;
+  color: var(--lesson-muted);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.definition summary {
+  cursor: pointer;
+  margin-bottom: 12px;
+}
+
+.sceneHeader {
+  text-align: center;
+  margin-bottom: 36px;
+}
+
+.sceneTitle {
+  color: var(--lesson-muted);
+  font-size: 16px;
+  margin-bottom: 16px;
+}
+
+.comparison {
+  max-width: 880px;
+  margin: 0 auto;
+}
+
+.reasoning {
+  width: min(100%, 880px);
+  margin: 0 auto;
+}
+
+.scene:has(.reasoning) {
+  padding: 32px 0;
+}
+
+.reasoningHeader {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.reasoningQuestion {
+  max-width: 22ch;
+  margin: 0 auto;
+  font-size: clamp(32px, 3.7vw, 52px);
+  line-height: 1.15;
+  font-weight: 400;
+  letter-spacing: -0.04em;
+  text-wrap: balance;
+}
+
+.reasoningHeader .comparisonIntro {
+  max-width: 52ch;
+  margin: 16px auto 0;
+}
+
+.reasoningExercise {
+  padding: clamp(20px, 3vw, 32px);
+  border: 1px solid #d9e6df;
+  border-radius: 20px;
+  background: #f1f6f2;
+  text-align: center;
+}
+
+.exerciseLabel {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: #376361;
+}
+
+.exerciseInstruction {
+  margin-top: 8px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--lesson-muted);
+}
+
+.arithmetic {
+  margin-top: 24px;
+  font-size: clamp(23px, 4vw, 44px);
+  line-height: 1.4;
+  font-weight: 500;
+  font-variant-numeric: lining-nums tabular-nums;
+  letter-spacing: -0.035em;
+  white-space: nowrap;
+}
+
+.reasoningReflection {
+  margin-top: 24px;
+  padding: 0 12px;
+  text-align: center;
+}
+
+.reasoningReflection p {
+  max-width: 48ch;
+  margin: 10px auto 0;
+  font-size: clamp(18px, 2vw, 22px);
+  line-height: 1.5;
+  text-wrap: balance;
+}
+
+.reasoning .comparisonEvidence {
+  padding-top: 24px;
+  border-top: 1px solid #e1e9e6;
+}
+
+.reasoningPending {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  margin-top: 20px;
+}
+
+.reasoningPendingItem {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--lesson-muted);
+}
+
+@media (max-width: 380px) {
+  .arithmetic {
+    font-size: 19px;
+    letter-spacing: -0.05em;
+  }
+}
+
+.comparisonHeader {
+  text-align: center;
+  margin-bottom: 44px;
+}
+
+.comparisonIntro {
+  margin-top: 18px;
+  color: var(--lesson-muted);
+  font-size: clamp(17px, 1.5vw, 21px);
+  line-height: 1.5;
+}
+
+.memoryPair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 36px;
+  padding: 28px 0;
+  border-top: 1px solid #e1e9e6;
+  border-bottom: 1px solid #e1e9e6;
+}
+
+.memoryReference h3 {
+  font-size: 21px;
+  font-weight: 500;
+  margin-bottom: 10px;
+}
+
+.memoryReference p {
+  max-width: 34ch;
+  color: var(--lesson-muted);
+  font-size: 17px;
+  line-height: 1.6;
+}
+
+.comparisonEvidence {
+  margin-top: 32px;
+}
+
+.comparisonEvidenceHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+}
+
+.comparisonEvidenceHeader h3 {
+  font-size: 17px;
+  font-weight: 500;
+}
+
+.comparisonCount {
+  color: var(--lesson-muted);
+  font-size: 13px;
+}
+
+.comparisonEmpty {
+  margin-top: 16px;
+  max-width: 56ch;
+  color: var(--lesson-muted);
+  font-size: 17px;
+  line-height: 1.6;
+}
+
+.differenceList {
+  display: grid;
+  gap: 20px;
+  margin-top: 24px;
+  list-style: none;
+}
+
+.difference {
+  display: flex;
+  gap: 14px;
+}
+
+.differenceCheck {
+  display: grid;
+  place-items: center;
+  flex: 0 0 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #e8f3ef;
+  color: #096766;
+  font-size: 14px;
+}
+
+.difference h4 {
+  font-size: 17px;
+  font-weight: 500;
+}
+
+.difference p {
+  margin-top: 5px;
+  color: var(--lesson-muted);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.comparisonSources {
+  margin-top: 28px;
+  color: var(--lesson-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.comparisonSources summary {
+  cursor: pointer;
+}
+
+.comparisonSources p {
+  margin-top: 10px;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.sessionStatus {
+  color: var(--lesson-muted);
+  font-size: 14px;
+  max-width: 600px;
+  display: grid;
+  gap: 8px;
+}
+
+.sessionStatus [role="alert"] {
+  color: #a33232;
+}
+
+.controls {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.button,
+.startButton {
+  min-height: 58px;
+  min-width: 100px;
+  border: 1px solid #ccd7dc;
+  border-radius: 999px;
+  padding: 12px 28px;
+  font-size: 20px;
+  background: #f9faf8;
+  color: var(--lesson-ink);
+  transition:
+    background 150ms,
+    border-color 150ms;
+}
+
+.startButton {
+  background: #096766;
+  color: white;
+  border-color: #096766;
+}
+
+.button:hover:not(:disabled) {
+  background: #edf3f1;
+  border-color: #8daaaa;
+}
+
+.startButton:hover {
+  background: #075251;
+}
+
+.button:disabled {
+  color: #94a8ae;
+  border-color: #dce3e7;
+  cursor: default;
+}
+
+.sessionDetails {
+  margin: 0 auto;
+  width: min(calc(100% - 48px), 1064px);
+  padding: 24px 0 40px;
+  border-top: 1px solid #e6ecea;
+  color: var(--lesson-muted);
+  font-size: 14px;
+}
+
+.sessionDetails > summary {
+  cursor: pointer;
+}
+
+.sessionDetails[open] > summary {
+  margin-bottom: 24px;
+}
+
+.detailsToolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.sessionDetails section,
+.sessionDetails details {
+  margin-bottom: 20px;
+}
+
+@media (max-width: 640px) {
+  .stage {
+    padding: 32px 24px 28px;
+  }
+
+  .progress {
+    gap: 14px;
+  }
+
+  .segments {
+    gap: 5px;
+  }
+
+  .segment {
+    height: 4px;
+  }
+
+  .counter {
+    font-size: 15px;
+  }
+
+  .scene {
+    padding: 32px 0;
+  }
+
+  .footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+
+  .controls {
+    gap: 8px;
+    flex-shrink: 1;
+  }
+
+  .button,
+  .startButton {
+    min-height: 48px;
+    min-width: 70px;
+    padding: 10px 18px;
+    font-size: 16px;
+  }
+
+  .comparisonHeader {
+    margin-bottom: 28px;
+  }
+
+  .memoryPair {
+    gap: 24px;
+  }
+
+  .memoryReference h3 {
+    font-size: 18px;
+  }
+
+  .memoryReference p {
+    font-size: 15px;
+  }
+
+  .comparisonEvidenceHeader {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .flashcard {
+    padding-bottom: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .button,
+  .startButton {
+    transition: none;
+  }
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import styles from "./catching-unicorns-demo.module.css";
 import { attachLessonObservation, type LessonObservationWindow } from "@/lib/lesson-runtime/browser-observation";
 import {
   CATCHING_UNICORNS_LESSON,
@@ -106,10 +107,12 @@ export function ScenePresentation({ state }: { state: LessonRuntimeState | null 
         reveal: revealText(id as keyof typeof CATCHING_UNICORNS_PRESENTATION, concept.id),
       })),
     );
-    const groups = evidenceGroups.map(group => ({
-      ...group,
-      entries: all.filter(item => item.evidence && group.filter(item.evidence)),
-    }));
+    const groups = evidenceGroups
+      .map(group => ({
+        ...group,
+        entries: all.filter(item => item.evidence && group.filter(item.evidence)),
+      }))
+      .filter(group => group.id !== "unattributed" || group.entries.length > 0);
     const unresolved = all.filter(item => item.evidence?.status !== "demonstrated");
     return (
       <div className="space-y-5" data-scene="recap">
@@ -180,69 +183,93 @@ export function ScenePresentation({ state }: { state: LessonRuntimeState | null 
     evidence: evidenceFor(state, nodeId, criterionId),
   }));
 
-  if (nodeId === "compare") {
-    const definitions = [
-      { from: "engram", id: "engram-biological" },
-      { from: "exogram", id: "exogram-non-biological" },
-    ];
+  if (nodeId === "engram" || nodeId === "exogram") {
+    const criterionId = nodeId === "engram" ? "engram-biological" : "exogram-non-biological";
+    const accepted = evidenceFor(state, nodeId, criterionId)?.status === "demonstrated";
+    const definition = revealText(nodeId, criterionId);
     return (
-      <div className="space-y-5" data-scene={nodeId}>
-        <SceneHeader node={node} nodeId={nodeId} state={state} />
-        <div className="grid gap-4 md:grid-cols-2">
-          {definitions.map(({ from, id }) => {
-            const prior = evidenceFor(state, nodeId, id);
-            const original = revealText(from as keyof typeof CATCHING_UNICORNS_PRESENTATION, id);
-            return prior?.status === "demonstrated" && original ? <Revealed key={id} item={original} /> : null;
-          })}
-        </div>
-        <div className="grid gap-3 sm:grid-cols-3">
-          {concepts
-            .filter(concept => concept.id.startsWith("exogram-") && concept.id !== "exogram-non-biological")
-            .map((concept, index) => {
-              const result = revealCards.find(item => item.criterionId === concept.id);
-              return (
-                <article className="rounded-xl border bg-white p-4" key={concept.id}>
-                  {result?.evidence?.status === "demonstrated" && result.item ? (
-                    <Revealed item={result.item} />
-                  ) : (
-                    <>
-                      <h3 className="font-medium">Comparison {index + 1}</h3>
-                      <p className="mt-2 text-sm text-slate-500">Awaiting evidence</p>
-                      <EvidenceState evidence={result?.evidence} />
-                    </>
-                  )}
-                </article>
-              );
-            })}
-        </div>
+      <div className={styles.flashcard} data-scene={nodeId}>
+        <h2 className={styles.question}>{String(node.presentation.prompt)}</h2>
+        <p className={styles.answer}>
+          {accepted
+            ? nodeId === "engram"
+              ? "Biological memory"
+              : "Non-biological memory"
+            : "Explain it in your own words."}
+        </p>
+        {accepted && definition && (
+          <details className={styles.definition}>
+            <summary>Explore the definition</summary>
+            <p>{definition.text}</p>
+            <p className="mt-2 text-xs">Source: {definition.source}</p>
+          </details>
+        )}
       </div>
     );
   }
 
-  if (nodeId === "exogram") {
-    const carried = evidenceFor(state, nodeId, "engram-biological");
-    const engramReveal = revealText("engram", "engram-biological");
+  if (nodeId === "compare") {
+    const definitions = [
+      { from: "engram", id: "engram-biological", title: "Engram" },
+      { from: "exogram", id: "exogram-non-biological", title: "Exogram" },
+    ] as const;
+    const differences = revealCards.filter(({ criterionId }) =>
+      ["exogram-durability", "exogram-shareability", "exogram-revisability"].includes(criterionId),
+    );
+    const explained = differences.filter(({ evidence }) => evidence?.status === "demonstrated");
+    const shownDefinitions = definitions.filter(({ id }) => evidenceFor(state, nodeId, id)?.status === "demonstrated");
     return (
-      <div className="space-y-5" data-scene={nodeId}>
-        <SceneHeader node={node} nodeId={nodeId} state={state} />
-        {carried?.status === "demonstrated" && engramReveal && (
-          <section aria-label="Previously demonstrated concept">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-emerald-800">
-              Carried forward from your earlier explanation
-            </p>
-            <Revealed item={engramReveal} />
-          </section>
+      <div className={styles.comparison} data-scene={nodeId}>
+        <header className={styles.comparisonHeader}>
+          <p className={styles.sceneTitle}>Engrams &amp; exograms</p>
+          <h2 className={styles.question}>How are they different?</h2>
+          <p className={styles.comparisonIntro}>Compare the two kinds of memory using the manuscript.</p>
+        </header>
+        {shownDefinitions.length > 0 && (
+          <div className={styles.memoryPair} aria-label="Concepts you have explained">
+            {shownDefinitions.map(({ from, id, title }) => {
+              const original = revealText(from, id)!;
+              return (
+                <section className={styles.memoryReference} key={id}>
+                  <h3>{title}</h3>
+                  <p>{original.text}</p>
+                </section>
+              );
+            })}
+          </div>
         )}
-        {revealCards.map(({ criterionId, item, evidence }) =>
-          evidence?.status === "demonstrated" ? (
-            <Revealed key={criterionId} item={item} />
+        <section className={styles.comparisonEvidence} aria-labelledby="comparison-evidence-title">
+          <div className={styles.comparisonEvidenceHeader}>
+            <h3 id="comparison-evidence-title">Your comparison</h3>
+            <span className={styles.comparisonCount}>
+              {explained.length} of {differences.length} differences explored
+            </span>
+          </div>
+          {explained.length ? (
+            <ul className={styles.differenceList}>
+              {explained.map(({ criterionId, item }) => (
+                <li className={styles.difference} key={criterionId}>
+                  <span className={styles.differenceCheck} aria-hidden="true">
+                    ✓
+                  </span>
+                  <div>
+                    <h4>{item.title}</h4>
+                    <p>{item.text}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
           ) : (
-            <article className="rounded-2xl border border-dashed bg-white p-5" key={criterionId}>
-              <p className="font-medium">Exogram</p>
-              <p className="mt-2 text-sm text-slate-500">Definition not yet revealed</p>
-              <EvidenceState evidence={evidence} />
-            </article>
-          ),
+            <p className={styles.comparisonEmpty}>
+              Describe the differences in your own words. The ideas you explain will appear here.
+            </p>
+          )}
+        </section>
+        {(shownDefinitions.length > 0 || explained.length > 0) && (
+          <details className={styles.comparisonSources}>
+            <summary>Source notes</summary>
+            <p>{CATCHING_UNICORNS_PRESENTATION.engram.reveals["engram-biological"].source}</p>
+          </details>
         )}
       </div>
     );
@@ -256,35 +283,35 @@ export function ScenePresentation({ state }: { state: LessonRuntimeState | null 
       { kind: "map", symbol: "◇ · · ◇", caption: "Map" },
     ];
     const beyond = evidenceFor(state, nodeId, "beyond-prose")?.status === "demonstrated";
+    const acceptedReveals = revealCards.filter(({ evidence }) => evidence?.status === "demonstrated");
     return (
-      <div className="space-y-5" data-scene={nodeId}>
-        <SceneHeader node={node} nodeId={nodeId} state={state} />
-        <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
-          {examples.map(example => (
-            <div
-              aria-label={beyond ? example.caption : "Unrevealed visual example"}
-              className="rounded-xl border bg-white p-4 text-center"
-              key={example.kind}
-            >
-              <div className="text-3xl font-semibold text-emerald-800" aria-hidden="true">
-                {beyond ? example.symbol : "◇"}
+      <div className={styles.flashcard} data-scene={nodeId}>
+        <h2 className={styles.question}>{String(node.presentation.prompt)}</h2>
+        <p className={styles.answer}>Explain it in your own words, using examples.</p>
+        {acceptedReveals.length > 0 && (
+          <details className={styles.definition}>
+            <summary>Explore the definition</summary>
+            {acceptedReveals.map(({ criterionId, item }) => (
+              <section key={criterionId}>
+                <h3 className="font-semibold">{item.title}</h3>
+                <p>{item.text}</p>
+                <p className="mt-2 text-xs">Source: {item.source}</p>
+              </section>
+            ))}
+          </details>
+        )}
+        {beyond && (
+          <div className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {examples.map(example => (
+              <div aria-label={example.caption} className="p-4 text-center" key={example.kind}>
+                <div className="text-3xl" aria-hidden="true">
+                  {example.symbol}
+                </div>
+                <p className="mt-2">{example.caption}</p>
               </div>
-              <p className="mt-2 font-medium">{beyond ? example.caption : "Visual form"}</p>
-            </div>
-          ))}
-        </div>
-        <div className="grid gap-3 md:grid-cols-2">
-          {revealCards.map(({ criterionId, item, evidence }) =>
-            evidence?.status === "demonstrated" ? (
-              <Revealed key={criterionId} item={item} />
-            ) : (
-              <article className="rounded-xl border bg-white p-4" key={criterionId}>
-                <h3 className="font-medium">Concept not yet revealed</h3>
-                <EvidenceState evidence={evidence} />
-              </article>
-            ),
-          )}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
@@ -387,17 +414,81 @@ export function ScenePresentation({ state }: { state: LessonRuntimeState | null 
     );
   }
 
+  if (nodeId === "why-exographics") {
+    const explained = revealCards.filter(({ evidence }) => evidence?.status === "demonstrated");
+    const unresolved = revealCards.filter(({ evidence }) => evidence?.status !== "demonstrated");
+    return (
+      <div className={styles.reasoning} data-scene={nodeId}>
+        <header className={styles.reasoningHeader}>
+          <p className={styles.sceneTitle}>A thought experiment</p>
+          <h2 className={styles.reasoningQuestion}>What changes when you put it on paper?</h2>
+          <p className={styles.comparisonIntro}>
+            Focus on how you think through the problem. You don’t need to give the total.
+          </p>
+        </header>
+        <section className={styles.reasoningExercise} aria-labelledby="mental-exercise-title">
+          <h3 id="mental-exercise-title" className={styles.exerciseLabel}>
+            01 · Try it in your head
+          </h3>
+          <p className={styles.exerciseInstruction}>Reason through this without writing anything down.</p>
+          <p className={styles.arithmetic} aria-label="Arithmetic example">
+            {CATCHING_UNICORNS_PRESENTATION["why-exographics"].promptVisual.arithmetic}
+          </p>
+        </section>
+        <section className={styles.reasoningReflection} aria-labelledby="paper-reflection-title">
+          <h3 id="paper-reflection-title" className={styles.exerciseLabel}>
+            02 · Now imagine paper and a pencil
+          </h3>
+          <p>What changes in how you reason through it? Talk it through in your own words.</p>
+        </section>
+        <section className={styles.comparisonEvidence} aria-labelledby="reasoning-evidence-title">
+          <div className={styles.comparisonEvidenceHeader}>
+            <h3 id="reasoning-evidence-title">Your explanation</h3>
+            <span className={styles.comparisonCount}>
+              {explained.length} of {revealCards.length} ideas explored
+            </span>
+          </div>
+          {explained.length > 0 ? (
+            <ul className={styles.differenceList}>
+              {explained.map(({ criterionId, item }) => (
+                <li className={styles.difference} key={criterionId}>
+                  <span className={styles.differenceCheck} aria-hidden="true">
+                    ✓
+                  </span>
+                  <div>
+                    <h4>{item.title}</h4>
+                    <p>{item.text}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className={styles.comparisonEmpty}>The ideas you explain will appear here as you talk.</p>
+          )}
+          {unresolved.length > 0 && (
+            <div className={styles.reasoningPending}>
+              {unresolved.map(({ criterionId, evidence }) => (
+                <div className={styles.reasoningPendingItem} key={criterionId}>
+                  <span>Idea {revealCards.findIndex(card => card.criterionId === criterionId) + 1}</span>
+                  <EvidenceState evidence={evidence} />
+                </div>
+              ))}
+            </div>
+          )}
+          {explained.length > 0 && (
+            <details className={styles.comparisonSources}>
+              <summary>Source notes</summary>
+              <p>{explained[0].item.source}</p>
+            </details>
+          )}
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5" data-scene={nodeId}>
       <SceneHeader node={node} nodeId={nodeId} state={state} />
-      {nodeId === "why-exographics" && (
-        <section
-          className="rounded-2xl bg-slate-950 p-6 text-center font-mono text-2xl tracking-wide text-white sm:text-4xl"
-          aria-label="Arithmetic example"
-        >
-          84 + 1,045 + 693 + 719
-        </section>
-      )}
       <div className="grid gap-3 md:grid-cols-2">
         {revealCards.map(({ criterionId, item, evidence }) =>
           evidence?.status === "demonstrated" ? (
@@ -424,20 +515,15 @@ function SceneHeader({
   state: LessonRuntimeState | null | undefined;
 }) {
   const title =
-    nodeId === "exographics"
-      ? evidenceFor(state, nodeId, "visual-symbols")?.status === "demonstrated"
-        ? "Exographics"
-        : "A broader visual practice"
-      : nodeId === "techno-literate-culture"
-        ? (node.concepts ?? []).every(concept => evidenceFor(state, nodeId, concept.id)?.status === "demonstrated")
-          ? "Techno-literate culture"
-          : "Culture and literacy"
-        : String(node.presentation.title);
+    nodeId === "techno-literate-culture"
+      ? (node.concepts ?? []).every(concept => evidenceFor(state, nodeId, concept.id)?.status === "demonstrated")
+        ? "Techno-literate culture"
+        : "Culture and literacy"
+      : String(node.presentation.title);
   return (
-    <header>
-      <p className="text-sm uppercase tracking-[0.2em] text-emerald-800">Catching Unicorns</p>
-      <h2 className="mt-2 text-3xl font-semibold">{title}</h2>
-      <p className="mt-4 max-w-3xl text-lg leading-relaxed text-slate-700">{String(node.presentation.prompt)}</p>
+    <header className={styles.sceneHeader}>
+      <p className={styles.sceneTitle}>{title}</p>
+      <h2 className={styles.question}>{String(node.presentation.prompt)}</h2>
     </header>
   );
 }
@@ -540,145 +626,124 @@ export default function CatchingUnicornsDemo() {
   const identity: RenderIdentity | undefined = display ?? { token: "initial", nodeId, sceneId };
 
   return (
-    <main className="mx-auto w-full max-w-6xl flex-1 space-y-5 px-4 py-6 sm:px-6 lg:py-10">
-      <div className="flex flex-wrap items-start justify-between gap-5">
-        <div className="max-w-3xl">
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-800">An interactive reading</p>
-          <h1 className="mt-2 text-3xl font-semibold sm:text-4xl">Catching Unicorns</h1>
-          <p className="mt-3 text-slate-600">
-            Talk through the ideas. Source-backed concepts appear as the conversation demonstrates them.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            className="rounded-full bg-emerald-800 px-4 py-2.5 font-medium text-white hover:bg-emerald-900 disabled:opacity-40"
-            disabled={live}
-            onClick={start}
-          >
-            Start discussion
-          </button>
-          <button
-            className="rounded-full border border-slate-300 px-4 py-2.5 font-medium disabled:opacity-40"
-            disabled={!live}
-            onClick={() => runtime.current?.stop()}
-          >
-            Stop
-          </button>
-          <button
-            className="rounded-full border border-slate-300 px-4 py-2.5 font-medium disabled:opacity-40"
-            disabled={!snapshot}
-            onClick={download}
-          >
-            Export session
-          </button>
-        </div>
-      </div>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-600">
-        <span role="status">
-          {snapshot?.status ?? "Ready"}
-          {snapshot?.awaitingSteering ? " · applying the next scene" : ""}
-        </span>
-        {snapshot?.error && (
-          <span role="alert" className="text-red-700">
-            {snapshot.error}
-          </span>
-        )}
-        <span>
-          Scene {sceneIds.indexOf(nodeId) + 1} of {sceneIds.length}
-        </span>
-      </div>
-      <nav aria-label="Lesson scenes" className="grid grid-cols-3 gap-2 sm:grid-cols-9">
-        {sceneIds.map((id, index) => (
-          <div
-            aria-current={id === nodeId ? "step" : undefined}
-            className={`h-1.5 rounded-full ${id === nodeId ? "bg-emerald-700" : index < sceneIds.indexOf(nodeId) ? "bg-emerald-200" : "bg-slate-200"}`}
-            key={id}
-          />
-        ))}
-      </nav>
-      <section
-        className="rounded-[1.75rem] border border-emerald-100 bg-[#f6faf7] p-5 shadow-sm sm:p-8"
-        aria-label="Lesson scene"
-      >
-        <div
-          ref={sceneRef}
-          className="min-h-[27rem]"
-          data-render-token={identity.token}
-          data-node-id={identity.nodeId ?? "complete"}
-          data-scene-id={identity.sceneId ?? "complete"}
-        >
-          <ScenePresentation state={state} />
-        </div>
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-emerald-100 pt-5">
-          <p className="max-w-2xl text-sm text-slate-600">
-            Accepted explanations advance automatically after confirmation and quiet audio. You can stop or skip;
-            skipped ideas remain unresolved.
-          </p>
-          <div className="flex gap-2">
-            <button
-              className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium disabled:opacity-40"
-              disabled={!live}
-              onClick={() => runtime.current?.skipScene()}
-            >
-              Skip scene
-            </button>
-          </div>
-        </div>
-      </section>
-      <audio ref={audio} />
-      <section className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-2xl border p-4">
-          <h2 className="font-semibold">Conversation so far</h2>
-          <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap text-sm text-slate-700">
-            {snapshot?.transcript || "Your transcript will appear here after the discussion starts."}
-          </pre>
-        </div>
-        <div className="rounded-2xl border p-4">
-          <h2 className="font-semibold">Current evidence</h2>
-          <div className="mt-3 space-y-2 text-sm">
-            {(CATCHING_UNICORNS_LESSON.nodes[nodeId].concepts ?? []).map(concept => (
-              <div className="flex justify-between gap-3" key={concept.id}>
-                <span>
-                  {evidenceFor(state, nodeId, concept.id)?.status === "demonstrated"
-                    ? (revealText(nodeId as keyof typeof CATCHING_UNICORNS_PRESENTATION, concept.id)?.title ??
-                      "Concept")
-                    : "Unresolved concept"}
-                </span>
-                <EvidenceState evidence={evidenceFor(state, nodeId, concept.id)} />
-              </div>
+    <main className={styles.lesson}>
+      <div className={styles.stage}>
+        <h1 className="sr-only">Catching Unicorns</h1>
+        <div className={styles.progress}>
+          <nav aria-label="Lesson scenes" className={styles.segments}>
+            {sceneIds.map((id, index) => (
+              <div
+                aria-current={id === nodeId ? "step" : undefined}
+                className={`${styles.segment} ${index <= sceneIds.indexOf(nodeId) ? styles.activeSegment : ""}`}
+                key={id}
+              />
             ))}
-            {!CATCHING_UNICORNS_LESSON.nodes[nodeId].concepts?.length && (
-              <p className="text-slate-600">This scene gathers evidence across the lesson.</p>
+          </nav>
+          <span className={styles.counter} aria-label={`Scene ${sceneIds.indexOf(nodeId) + 1} of ${sceneIds.length}`}>
+            {sceneIds.indexOf(nodeId) + 1} / {sceneIds.length}
+          </span>
+        </div>
+        <section className={styles.scene} aria-label="Lesson scene">
+          <div
+            ref={sceneRef}
+            className={styles.presentation}
+            data-render-token={identity.token}
+            data-node-id={identity.nodeId ?? "complete"}
+            data-scene-id={identity.sceneId ?? "complete"}
+          >
+            <ScenePresentation state={state} />
+          </div>
+        </section>
+        <footer className={styles.footer}>
+          <div className={styles.sessionStatus}>
+            <span role="status" className={live && !snapshot?.error ? "sr-only" : undefined}>
+              {snapshot?.status ?? "Ready"}
+              {snapshot?.awaitingSteering ? " · applying the next scene" : ""}
+            </span>
+            {snapshot?.error && <span role="alert">{snapshot.error}</span>}
+          </div>
+          <div className={styles.controls}>
+            {!live && (
+              <button className={styles.startButton} onClick={start}>
+                Start discussion
+              </button>
+            )}
+            {snapshot?.status === "ended" ? (
+              <button className={styles.button} onClick={download}>
+                Download diagnostics
+              </button>
+            ) : (
+              <button className={styles.button} disabled={!live} onClick={() => runtime.current?.stop()}>
+                Stop
+              </button>
             )}
           </div>
-          <p className="mt-4 text-xs text-slate-500">
-            A new start begins a separate attempt. Evidence belongs to this session only.
+        </footer>
+      </div>
+      <audio ref={audio} />
+      <details className={styles.sessionDetails}>
+        <summary>Session details</summary>
+        <div className={styles.detailsToolbar}>
+          <button className={styles.button} disabled={!snapshot} onClick={download}>
+            Export session
+          </button>
+          <p>Session transcript, accepted evidence, and diagnostics.</p>
+        </div>
+        <section className="grid gap-4 lg:grid-cols-2">
+          <div className="rounded-2xl border p-4">
+            <h2 className="font-semibold">Conversation so far</h2>
+            <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap text-sm text-slate-700">
+              {snapshot?.transcript || "Your transcript will appear here after the discussion starts."}
+            </pre>
+          </div>
+          <div className="rounded-2xl border p-4">
+            <h2 className="font-semibold">Current evidence</h2>
+            <div className="mt-3 space-y-2 text-sm">
+              {(CATCHING_UNICORNS_LESSON.nodes[nodeId].concepts ?? []).map(concept => (
+                <div className="flex justify-between gap-3" key={concept.id}>
+                  <span>
+                    {evidenceFor(state, nodeId, concept.id)?.status === "demonstrated"
+                      ? (revealText(nodeId as keyof typeof CATCHING_UNICORNS_PRESENTATION, concept.id)?.title ??
+                        "Concept")
+                      : "Unresolved concept"}
+                  </span>
+                  <EvidenceState evidence={evidenceFor(state, nodeId, concept.id)} />
+                </div>
+              ))}
+              {!CATCHING_UNICORNS_LESSON.nodes[nodeId].concepts?.length && (
+                <p className="text-slate-600">This scene gathers evidence across the lesson.</p>
+              )}
+            </div>
+            <p className="mt-4 text-xs text-slate-500">
+              A new start begins a separate attempt. Evidence belongs to this session only.
+            </p>
+          </div>
+        </section>
+        <details className="rounded-2xl border p-4">
+          <summary className="cursor-pointer font-semibold">Session diagnostics</summary>
+          <p className="mt-2 text-sm text-slate-600">
+            Export includes this lesson identity, scene, accepted evidence, reveal context, transcript, and scrubbed
+            diagnostics.
           </p>
-        </div>
-      </section>
-      <details className="rounded-2xl border p-4">
-        <summary className="cursor-pointer font-semibold">Session diagnostics</summary>
-        <p className="mt-2 text-sm text-slate-600">
-          Export includes this lesson identity, scene, accepted evidence, reveal context, transcript, and scrubbed
-          diagnostics.
+          <div className="mt-3 max-h-72 space-y-2 overflow-auto text-xs">
+            {snapshot?.diagnostics.map((event, index) => (
+              <details key={`${event.atMs}:${index}`}>
+                <summary className="cursor-pointer">
+                  {event.atMs.toFixed(0)} ms · {event.type} · {event.nodeId}
+                </summary>
+                <pre className="overflow-auto whitespace-pre-wrap p-2">
+                  {JSON.stringify(ScrubSecrets(event), null, 2)}
+                </pre>
+              </details>
+            ))}
+          </div>
+        </details>
+        <p className="text-xs text-slate-500">
+          Scene transitions wait for quiet audio, acknowledged steering, accepted evidence, and tutor confirmation.
+          Timing thresholds are shared runtime safeguards, not mastery timers ({LESSON_TIMING.quietDrainMs} ms audio
+          drain).
         </p>
-        <div className="mt-3 max-h-72 space-y-2 overflow-auto text-xs">
-          {snapshot?.diagnostics.map((event, index) => (
-            <details key={`${event.atMs}:${index}`}>
-              <summary className="cursor-pointer">
-                {event.atMs.toFixed(0)} ms · {event.type} · {event.nodeId}
-              </summary>
-              <pre className="overflow-auto whitespace-pre-wrap p-2">
-                {JSON.stringify(ScrubSecrets(event), null, 2)}
-              </pre>
-            </details>
-          ))}
-        </div>
       </details>
-      <p className="text-xs text-slate-500">
-        Scene transitions wait for quiet audio, acknowledged steering, accepted evidence, and tutor confirmation. Timing
-        thresholds are shared runtime safeguards, not mastery timers ({LESSON_TIMING.quietDrainMs} ms audio drain).
-      </p>
     </main>
   );
 }

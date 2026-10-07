@@ -64,7 +64,12 @@ async function installLocalSession(page: Page) {
         source.channel.onopen = () => source.channel!.send(JSON.stringify({ type: "session.started" }));
         source.channel.onmessage = message => {
           const command = JSON.parse(message.data);
-          if (command.type === "session.instructions.append")
+          if (command.type === "session.instructions.append") {
+            // Catch scene-context expansion before a live provider rejects it.
+            if (new TextEncoder().encode(command.content).length > 2000) {
+              source.channel!.send(JSON.stringify({ type: "error", error: { code: "invalid_value", client_event_id: command.event_id } }));
+              return;
+            }
             source.channel!.send(
               JSON.stringify({
                 type: "session.instructions.appended",
@@ -73,6 +78,7 @@ async function installLocalSession(page: Page) {
                 end_ms: 0,
               }),
             );
+          }
         };
       };
       await peer.setRemoteDescription({ type: "offer", sdp });
@@ -127,12 +133,15 @@ test("direct Catching Unicorns route renders hidden concepts and fits a narrow s
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/demos/catching-unicorns");
   await expect(page.getByRole("heading", { name: "Catching Unicorns", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Engram", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "What is an engram?", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Start discussion", exact: true })).toBeEnabled();
   await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeDisabled();
-  await expect(
-    page.getByRole("region", { name: "Lesson scene" }).getByText("Not yet demonstrated", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Download diagnostics", exact: true })).toHaveCount(0);
+  await expect(page.getByText("Explain it in your own words.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /skip/i })).toHaveCount(0);
+  await expect(page.getByRole("navigation", { name: "Lesson scenes" }).locator('[aria-current="step"]')).toHaveCount(1);
+  await expect(page.getByLabel("Scene 1 of 9", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Conversation so far" })).not.toBeVisible();
   const body = await page.locator("body").innerText();
   expect(body).not.toContain("Biological memory: memory held within a biological mind.");
   expect(body).not.toContain("Non-biological memory: a representation kept outside biological memory.");
@@ -140,7 +149,7 @@ test("direct Catching Unicorns route renders hidden concepts and fits a narrow s
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
-test("shared runtime starts, skips only after quiet drain, stops, restarts, and cleans up on navigation", async ({
+test("shared runtime starts, holds unresolved scenes, stops, restarts, and cleans up on navigation", async ({
   page,
 }) => {
   const microphone = await installSyntheticMicrophone(page);
@@ -176,18 +185,24 @@ test("shared runtime starts, skips only after quiet drain, stops, restarts, and 
       }),
     )
     .toBe(true);
-  await page.getByRole("button", { name: "Skip scene" }).click();
-  await expect(page.locator('[data-scene="exogram"]')).toBeVisible();
-  await expect(page.getByText("Definition not yet revealed", { exact: true })).toBeVisible();
-  await expect(page.getByText("Non-biological memory: a representation kept outside biological memory.")).toHaveCount(
-    0,
-  );
+  await expect(page.getByRole("button", { name: /skip/i })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Continue", exact: true })).toHaveCount(0);
+  await expect(page.locator('[data-scene="engram"]')).toBeVisible();
 
   const firstRuntimeId = await page.evaluate(
     () => (window as LessonObservationWindow).sproutLessonObservation?.read()?.cursor.runtimeId,
   );
   await page.getByRole("button", { name: "Stop" }).click();
   await expect(page.getByRole("status")).toHaveText("ended");
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download diagnostics", exact: true }).click();
+  const download = await downloadPromise;
+  const exportText = await readFile((await download.path())!, "utf8");
+  const diagnostics = JSON.parse(exportText);
+  expect(diagnostics.runtimeId).toBe(firstRuntimeId);
+  expect(diagnostics.status).toBe("ended");
+  expect(diagnostics.events).toEqual(expect.arrayContaining([expect.objectContaining({ type: "lesson.ended" })]));
+  expect(exportText).not.toMatch(/OPENAI_API_KEY|TYPESAFE_API_KEY|authorization|access_token|"sdp"/i);
   // The harness keeps its silent source track alive; the session's cloned capture tracks must end.
   await expect
     .poll(async () => (await microphone.state()).trackStates.filter(state => state === "live").length)
@@ -199,6 +214,7 @@ test("shared runtime starts, skips only after quiet drain, stops, restarts, and 
     () => (window as LessonObservationWindow).sproutLessonObservation?.read()?.cursor.runtimeId,
   );
   expect(secondRuntimeId).not.toBe(firstRuntimeId);
+  await expect(page.getByRole("button", { name: "Download diagnostics", exact: true })).toHaveCount(0);
   const closesBeforePagehide = await page.evaluate(() => (window as unknown as LocalSessionWindow).appPeerCloseCount);
   await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
   await expect(page.getByRole("status")).toHaveText("ended");
@@ -221,6 +237,7 @@ test("session startup failure ends and releases the microphone so a fresh attemp
   await page.getByRole("button", { name: "Start discussion" }).click();
   await expect(page.locator("span[role=alert]")).toContainText("Could not start GPT-Live");
   await expect(page.getByRole("status")).toHaveText("ended");
+  await expect(page.getByRole("button", { name: "Download diagnostics", exact: true })).toBeEnabled();
   await expect
     .poll(async () => (await microphone.state()).trackStates.filter(state => state === "live").length)
     .toBe(1);
@@ -367,6 +384,21 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
       )
       .toEqual(expected);
   };
+  const questionStyle = () =>
+    page
+      .locator("[data-scene] h2")
+      .first()
+      .evaluate(element => {
+        const style = getComputedStyle(element);
+        return {
+          fontSize: style.fontSize,
+          fontWeight: style.fontWeight,
+          color: style.color,
+          lineHeight: style.lineHeight,
+          letterSpacing: style.letterSpacing,
+        };
+      });
+  const initialQuestionStyle = await questionStyle();
   const waitForScene = async (sceneId: string) => {
     await expect(page.locator(`[data-scene="${sceneId}"]`)).toBeVisible();
     await expect
@@ -432,9 +464,10 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
   await expect(page.getByRole("button", { name: "Continue", exact: true })).toHaveCount(0);
   holdSecondResponse();
   await waitForScene("exogram");
+  expect(await questionStyle()).toEqual(initialQuestionStyle);
   await page.screenshot({ path: testInfo.outputPath("exogram-question.png") });
   await expectEvidence("engram:engram-biological", { status: "demonstrated", understanding: "independent" });
-  await expect(page.locator('[data-scene="exogram"]')).toContainText("What is an exogram?");
+  await expect(page.getByRole("heading", { name: "What is an exogram?", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Continue", exact: true })).toHaveCount(0);
   await expect(
     page.getByText("Non-biological memory: a representation kept outside biological memory.", { exact: true }),
@@ -466,6 +499,7 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
     "Those are the stated differences.",
   );
   await waitForScene("exographics");
+  expect(await questionStyle()).toEqual(initialQuestionStyle);
   await page.screenshot({ path: testInfo.outputPath("exographics-question.png") });
 
   await speakThenTutor(
@@ -476,6 +510,7 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
   await waitForScene("why-exographics");
   await page.screenshot({ path: testInfo.outputPath("addition-question-desktop.png") });
   await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('[aria-label="Arithmetic example"]')).toBeInViewport();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath("addition-question-mobile.png") });
   await page.setViewportSize({ width: 1440, height: 1000 });
@@ -527,6 +562,7 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
     "Every authored criterion has accepted evidence.",
   );
   await expect(page.locator('[data-scene="recap"]')).not.toContainText(/extended cognition/i);
+  await page.getByText("Session details", { exact: true }).click();
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export session", exact: true }).click();
   const download = await downloadPromise;
