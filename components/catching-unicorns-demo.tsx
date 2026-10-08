@@ -3,13 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import styles from "./catching-unicorns-demo.module.css";
 import { attachLessonObservation, type LessonObservationWindow } from "@/lib/lesson-runtime/browser-observation";
-import {
-  CATCHING_UNICORNS_LESSON,
-  CATCHING_UNICORNS_PRESENTATION,
-} from "@/lib/lesson-runtime/catching-unicorns-lesson";
+import { CATCHING_UNICORNS_LESSON } from "@/lib/lesson-runtime/catching-unicorns-lesson";
 import { LESSON_TIMING, LessonRuntime, type LessonSnapshot } from "@/lib/lesson-runtime/lesson-runtime";
 import type { RenderIdentity } from "@/lib/lesson-runtime/lesson-runtime-reducer";
-import { evidenceFor, EvidenceState, keyFor, revealText, sceneIds } from "./catching-unicorns/presentation-helpers";
+import { sceneConcepts, EvidenceState, sceneIds } from "./catching-unicorns/presentation-helpers";
 import { ScenePresentation } from "./catching-unicorns/scene-presentation";
 
 export { ScenePresentation } from "./catching-unicorns/scene-presentation";
@@ -40,9 +37,9 @@ function safeExport(runtime: LessonRuntime) {
     revealContext: Object.fromEntries(
       sceneIds.map(nodeId => [
         nodeId,
-        (CATCHING_UNICORNS_LESSON.nodes[nodeId].concepts ?? [])
-          .filter(concept => current.runtime?.conceptEvidence[keyFor(nodeId, concept.id)]?.status === "demonstrated")
-          .map(concept => concept.id),
+        sceneConcepts(current.runtime, nodeId)
+          .filter(concept => concept.demonstrated)
+          .map(concept => concept.criterionId),
       ]),
     ),
     transcript: current.transcript,
@@ -211,15 +208,12 @@ export default function CatchingUnicornsDemo() {
           <div className="rounded-2xl border p-4">
             <h2 className="font-semibold">Current evidence</h2>
             <div className="mt-3 space-y-2 text-sm">
-              {(CATCHING_UNICORNS_LESSON.nodes[nodeId].concepts ?? []).map(concept => (
-                <div className="flex justify-between gap-3" key={concept.id}>
+              {sceneConcepts(state, nodeId).map(concept => (
+                <div className="flex justify-between gap-3" key={concept.criterionId}>
                   <span>
-                    {evidenceFor(state, nodeId, concept.id)?.status === "demonstrated"
-                      ? (revealText(nodeId as keyof typeof CATCHING_UNICORNS_PRESENTATION, concept.id)?.title ??
-                        "Concept")
-                      : "Unresolved concept"}
+                    {concept.demonstrated ? (concept.item?.title ?? "Concept") : "Unresolved concept"}
                   </span>
-                  <EvidenceState evidence={evidenceFor(state, nodeId, concept.id)} />
+                  <EvidenceState evidence={concept.evidence} />
                 </div>
               ))}
               {!CATCHING_UNICORNS_LESSON.nodes[nodeId].concepts?.length && (

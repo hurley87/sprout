@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import styles from "../catching-unicorns-demo.module.css";
 import {
   CATCHING_UNICORNS_LESSON,
@@ -7,24 +8,100 @@ import type { ConceptEvidenceRecord, LessonRuntimeState } from "@/lib/lesson-run
 
 export const sceneIds = Object.keys(CATCHING_UNICORNS_LESSON.nodes);
 export type RevealItem = { readonly title: string; readonly text: string; readonly source: string };
-export const keyFor = (nodeId: string, criterionId: string) => `${nodeId}:${criterionId}`;
-export const evidenceFor = (state: LessonRuntimeState | null | undefined, nodeId: string, criterionId: string) =>
-  state?.conceptEvidence[keyFor(nodeId, criterionId)];
+export type ConceptPresentation = {
+  nodeId: string;
+  criterionId: string;
+  evidence: ConceptEvidenceRecord | undefined;
+  item: RevealItem | undefined;
+  demonstrated: boolean;
+};
+export type RevealPresentation = ConceptPresentation & { item: RevealItem };
 
-export function revealText(
-  nodeId: keyof typeof CATCHING_UNICORNS_PRESENTATION,
+/** Join accepted evidence to authored content without changing evidence or attribution. */
+export function conceptPresentation(
+  state: LessonRuntimeState | null | undefined,
+  nodeId: string,
   criterionId: string,
-): RevealItem | undefined {
-  const item = CATCHING_UNICORNS_PRESENTATION[nodeId] as { readonly reveals?: Readonly<Record<string, RevealItem>> };
-  return item.reveals?.[criterionId];
+  revealNodeId = nodeId,
+): ConceptPresentation {
+  const evidence = state?.conceptEvidence[`${nodeId}:${criterionId}`];
+  const scene = CATCHING_UNICORNS_PRESENTATION[revealNodeId as keyof typeof CATCHING_UNICORNS_PRESENTATION];
+  const reveals = (scene as { readonly reveals?: Readonly<Record<string, RevealItem>> } | undefined)?.reveals;
+  return {
+    nodeId,
+    criterionId,
+    evidence,
+    item: reveals?.[criterionId],
+    demonstrated: evidence?.status === "demonstrated",
+  };
+}
+
+export function sceneConcepts(state: LessonRuntimeState | null | undefined, nodeId: string) {
+  return (CATCHING_UNICORNS_LESSON.nodes[nodeId].concepts ?? []).map(concept =>
+    conceptPresentation(state, nodeId, concept.id),
+  );
+}
+
+export function hasReveal(concept: ConceptPresentation): concept is RevealPresentation {
+  return concept.item !== undefined;
 }
 
 export type SceneProps = {
   state: LessonRuntimeState | null | undefined;
   nodeId: string;
   node: (typeof CATCHING_UNICORNS_LESSON.nodes)[string];
-  revealCards: { criterionId: string; item: RevealItem; evidence: ConceptEvidenceRecord | undefined }[];
+  revealCards: RevealPresentation[];
 };
+
+/** Keep canonical card content behind the same evidence gate in every card layout. */
+export function EvidenceCard({ concept, children }: { concept: ConceptPresentation; children: ReactNode }) {
+  return concept.demonstrated && concept.item ? <Revealed item={concept.item} /> : children;
+}
+
+export function UnresolvedCard({
+  title,
+  evidence,
+  className,
+  statusClassName,
+}: {
+  title: string;
+  evidence?: ConceptEvidenceRecord;
+  className: string;
+  statusClassName?: string;
+}) {
+  return (
+    <article className={className}>
+      <h3 className="font-medium">{title}</h3>
+      {statusClassName ? (
+        <div className={statusClassName}>
+          <EvidenceState evidence={evidence} />
+        </div>
+      ) : (
+        <EvidenceState evidence={evidence} />
+      )}
+    </article>
+  );
+}
+
+export function ExplanationList({ concepts }: { concepts: RevealPresentation[] }) {
+  return (
+    <ul className={styles.differenceList}>
+      {concepts
+        .filter(concept => concept.demonstrated)
+        .map(({ criterionId, item }) => (
+          <li className={styles.difference} key={criterionId}>
+            <span className={styles.differenceCheck} aria-hidden="true">
+              ✓
+            </span>
+            <div>
+              <h4>{item.title}</h4>
+              <p>{item.text}</p>
+            </div>
+          </li>
+        ))}
+    </ul>
+  );
+}
 
 export function Revealed({ item }: { item: RevealItem }) {
   return (
@@ -61,7 +138,7 @@ export function SceneHeader({
 }) {
   const title =
     nodeId === "techno-literate-culture"
-      ? (node.concepts ?? []).every(concept => evidenceFor(state, nodeId, concept.id)?.status === "demonstrated")
+      ? sceneConcepts(state, nodeId).every(concept => concept.demonstrated)
         ? "Techno-literate culture"
         : "Culture and literacy"
       : String(node.presentation.title);

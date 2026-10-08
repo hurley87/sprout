@@ -1,9 +1,5 @@
-import {
-  CATCHING_UNICORNS_LESSON,
-  CATCHING_UNICORNS_PRESENTATION,
-} from "@/lib/lesson-runtime/catching-unicorns-lesson";
 import type { ConceptEvidenceRecord, LessonRuntimeState } from "@/lib/lesson-runtime/lesson-runtime-reducer";
-import { evidenceFor, revealText, sceneIds } from "./presentation-helpers";
+import { sceneConcepts, sceneIds } from "./presentation-helpers";
 
 const recapSceneLabel = (id: string) =>
   ({
@@ -37,21 +33,14 @@ export function RecapPresentation({ state }: { state: LessonRuntimeState | null 
     },
     { id: "partial", title: "Partly explained", filter: (item: ConceptEvidenceRecord) => item.status === "partial" },
   ];
-  const all = sceneIds.flatMap(id =>
-    (CATCHING_UNICORNS_LESSON.nodes[id].concepts ?? []).map(concept => ({
-      nodeId: id,
-      criterionId: concept.id,
-      evidence: evidenceFor(state, id, concept.id),
-      reveal: revealText(id as keyof typeof CATCHING_UNICORNS_PRESENTATION, concept.id),
-    })),
-  );
+  const all = sceneIds.flatMap(id => sceneConcepts(state, id));
   const groups = evidenceGroups
     .map(group => ({
       ...group,
       entries: all.filter(item => item.evidence && group.filter(item.evidence)),
     }))
     .filter(group => group.id !== "unattributed" || group.entries.length > 0);
-  const unresolved = all.filter(item => item.evidence?.status !== "demonstrated");
+  const unresolved = all.filter(item => !item.demonstrated);
   return (
     <div className="space-y-5" data-scene="recap">
       <header>
@@ -71,8 +60,8 @@ export function RecapPresentation({ state }: { state: LessonRuntimeState | null 
                 {group.entries.map(item => (
                   <li key={`${item.nodeId}:${item.criterionId}`}>
                     <p className="font-medium">
-                      {item.evidence?.status === "demonstrated"
-                        ? (item.reveal?.title ?? recapSceneLabel(item.nodeId))
+                      {item.demonstrated
+                        ? (item.item?.title ?? recapSceneLabel(item.nodeId))
                         : recapSceneLabel(item.nodeId)}
                     </p>
                     <p className="text-sm text-slate-600">

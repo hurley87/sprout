@@ -1,7 +1,10 @@
-import { createElement } from "react";
+import { createElement, Fragment } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { CATCHING_UNICORNS_LESSON } from "../lib/lesson-runtime/catching-unicorns-lesson";
+import {
+  CATCHING_UNICORNS_LESSON,
+  CATCHING_UNICORNS_PRESENTATION,
+} from "../lib/lesson-runtime/catching-unicorns-lesson";
 import { createLessonRuntime, type ConceptEvidenceRecord } from "../lib/lesson-runtime/lesson-runtime-reducer";
 import { ScenePresentation } from "../components/catching-unicorns-demo";
 
@@ -38,6 +41,29 @@ function renderScene(nodeId: string, conceptEvidence: Readonly<Record<string, Co
 }
 
 describe("Catching Unicorns scene presentation", () => {
+  for (const [nodeId, presentation] of Object.entries(CATCHING_UNICORNS_PRESENTATION)) {
+    if (!("reveals" in presentation)) continue;
+    const reveals = Object.entries(presentation.reveals).map(
+      ([id, item]) => [id, renderToStaticMarkup(createElement(Fragment, null, item.text))] as const,
+    );
+    it.each(["partial", "not_yet"] as const)(`hides all ${nodeId} answers for %s evidence`, status => {
+      const records = Object.fromEntries(
+        reveals.map(([id]) => [`${nodeId}:${id}`, { ...evidence(id), status, understanding: null }]),
+      );
+      const html = renderScene(nodeId, records);
+      for (const [, text] of reveals) expect(html).not.toContain(text);
+    });
+    it(`reveals each ${nodeId} answer independently, including after a prompt`, () => {
+      for (const [id, text] of reveals) {
+        const html = renderScene(nodeId, { [`${nodeId}:${id}`]: evidence(id, "prompted") });
+        expect(html).toContain(text);
+        for (const [otherId, otherText] of reveals) {
+          if (otherId !== id) expect(html).not.toContain(otherText);
+        }
+      }
+    });
+  }
+
   it("keeps a demonstrated concept visible after advancing, using its authored reveal", () => {
     const accepted = { "engram:engram-biological": evidence("engram-biological") };
     const current = renderScene("engram", accepted);

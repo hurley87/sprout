@@ -1,6 +1,6 @@
 import styles from "../catching-unicorns-demo.module.css";
 import { CATCHING_UNICORNS_PRESENTATION } from "@/lib/lesson-runtime/catching-unicorns-lesson";
-import { evidenceFor, revealText, type SceneProps } from "./presentation-helpers";
+import { conceptPresentation, hasReveal, ExplanationList, type SceneProps } from "./presentation-helpers";
 
 export function MemoryPromptScene({
   state,
@@ -8,8 +8,7 @@ export function MemoryPromptScene({
   node,
 }: Pick<SceneProps, "state" | "node"> & { nodeId: "engram" | "exogram" }) {
   const criterionId = nodeId === "engram" ? "engram-biological" : "exogram-non-biological";
-  const accepted = evidenceFor(state, nodeId, criterionId)?.status === "demonstrated";
-  const definition = revealText(nodeId, criterionId);
+  const { demonstrated: accepted, item: definition } = conceptPresentation(state, nodeId, criterionId);
   return (
     <div className={styles.flashcard} data-scene={nodeId}>
       <h2 className={styles.question}>{String(node.presentation.prompt)}</h2>
@@ -33,14 +32,14 @@ export function MemoryPromptScene({
 
 export function MemoryComparisonScene({ state, nodeId, revealCards }: SceneProps) {
   const definitions = [
-    { from: "engram", id: "engram-biological", title: "Engram" },
-    { from: "exogram", id: "exogram-non-biological", title: "Exogram" },
+    { from: "engram", id: "engram-biological" },
+    { from: "exogram", id: "exogram-non-biological" },
   ] as const;
-  const differences = revealCards.filter(({ criterionId }) =>
-    ["exogram-durability", "exogram-shareability", "exogram-revisability"].includes(criterionId),
-  );
-  const explained = differences.filter(({ evidence }) => evidence?.status === "demonstrated");
-  const shownDefinitions = definitions.filter(({ id }) => evidenceFor(state, nodeId, id)?.status === "demonstrated");
+  const explained = revealCards.filter(concept => concept.demonstrated);
+  const shownDefinitions = definitions
+    .map(({ from, id }) => conceptPresentation(state, nodeId, id, from))
+    .filter(hasReveal)
+    .filter(concept => concept.demonstrated);
   return (
     <div className={styles.comparison} data-scene={nodeId}>
       <header className={styles.comparisonHeader}>
@@ -50,38 +49,23 @@ export function MemoryComparisonScene({ state, nodeId, revealCards }: SceneProps
       </header>
       {shownDefinitions.length > 0 && (
         <div className={styles.memoryPair} aria-label="Concepts you have explained">
-          {shownDefinitions.map(({ from, id, title }) => {
-            const original = revealText(from, id)!;
-            return (
-              <section className={styles.memoryReference} key={id}>
-                <h3>{title}</h3>
-                <p>{original.text}</p>
-              </section>
-            );
-          })}
+          {shownDefinitions.map(({ criterionId, item }) => (
+            <section className={styles.memoryReference} key={criterionId}>
+              <h3>{item.title}</h3>
+              <p>{item.text}</p>
+            </section>
+          ))}
         </div>
       )}
       <section className={styles.comparisonEvidence} aria-labelledby="comparison-evidence-title">
         <div className={styles.comparisonEvidenceHeader}>
           <h3 id="comparison-evidence-title">Your comparison</h3>
           <span className={styles.comparisonCount}>
-            {explained.length} of {differences.length} differences explored
+            {explained.length} of {revealCards.length} differences explored
           </span>
         </div>
         {explained.length ? (
-          <ul className={styles.differenceList}>
-            {explained.map(({ criterionId, item }) => (
-              <li className={styles.difference} key={criterionId}>
-                <span className={styles.differenceCheck} aria-hidden="true">
-                  ✓
-                </span>
-                <div>
-                  <h4>{item.title}</h4>
-                  <p>{item.text}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
+          <ExplanationList concepts={explained} />
         ) : (
           <p className={styles.comparisonEmpty}>
             Describe the differences in your own words. The ideas you explain will appear here.

@@ -1,6 +1,6 @@
 import styles from "../catching-unicorns-demo.module.css";
 import { CATCHING_UNICORNS_PRESENTATION } from "@/lib/lesson-runtime/catching-unicorns-lesson";
-import { evidenceFor, EvidenceState, type SceneProps } from "./presentation-helpers";
+import { conceptPresentation, ExplanationList, EvidenceState, type SceneProps } from "./presentation-helpers";
 
 export function ExographicsPromptScene({ state, nodeId, node, revealCards }: SceneProps) {
   const examples = [
@@ -9,8 +9,8 @@ export function ExographicsPromptScene({ state, nodeId, node, revealCards }: Sce
     { kind: "graph", symbol: "⌁", caption: "Graph" },
     { kind: "map", symbol: "◇ · · ◇", caption: "Map" },
   ];
-  const beyond = evidenceFor(state, nodeId, "beyond-prose")?.status === "demonstrated";
-  const acceptedReveals = revealCards.filter(({ evidence }) => evidence?.status === "demonstrated");
+  const beyond = conceptPresentation(state, nodeId, "beyond-prose").demonstrated;
+  const acceptedReveals = revealCards.filter(concept => concept.demonstrated);
   return (
     <div className={styles.flashcard} data-scene={nodeId}>
       <h2 className={styles.question}>{String(node.presentation.prompt)}</h2>
@@ -44,8 +44,8 @@ export function ExographicsPromptScene({ state, nodeId, node, revealCards }: Sce
 }
 
 export function ExographicsReasoningScene({ nodeId, revealCards }: SceneProps) {
-  const explained = revealCards.filter(({ evidence }) => evidence?.status === "demonstrated");
-  const unresolved = revealCards.filter(({ evidence }) => evidence?.status !== "demonstrated");
+  const explained = revealCards.filter(concept => concept.demonstrated);
+  const unresolved = revealCards.filter(concept => !concept.demonstrated);
   return (
     <div className={styles.reasoning} data-scene={nodeId}>
       <header className={styles.reasoningHeader}>
@@ -78,19 +78,7 @@ export function ExographicsReasoningScene({ nodeId, revealCards }: SceneProps) {
           </span>
         </div>
         {explained.length > 0 ? (
-          <ul className={styles.differenceList}>
-            {explained.map(({ criterionId, item }) => (
-              <li className={styles.difference} key={criterionId}>
-                <span className={styles.differenceCheck} aria-hidden="true">
-                  ✓
-                </span>
-                <div>
-                  <h4>{item.title}</h4>
-                  <p>{item.text}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
+          <ExplanationList concepts={explained} />
         ) : (
           <p className={styles.comparisonEmpty}>The ideas you explain will appear here as you talk.</p>
         )}

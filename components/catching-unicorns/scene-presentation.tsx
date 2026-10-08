@@ -1,18 +1,7 @@
 import styles from "../catching-unicorns-demo.module.css";
-import {
-  CATCHING_UNICORNS_LESSON,
-  CATCHING_UNICORNS_PRESENTATION,
-} from "@/lib/lesson-runtime/catching-unicorns-lesson";
+import { CATCHING_UNICORNS_LESSON } from "@/lib/lesson-runtime/catching-unicorns-lesson";
 import type { LessonRuntimeState } from "@/lib/lesson-runtime/lesson-runtime-reducer";
-import {
-  evidenceFor,
-  revealText,
-  sceneIds,
-  Revealed,
-  EvidenceState,
-  SceneHeader,
-  type RevealItem,
-} from "./presentation-helpers";
+import { sceneConcepts, hasReveal, sceneIds, EvidenceCard, UnresolvedCard, SceneHeader } from "./presentation-helpers";
 import { MemoryPromptScene, MemoryComparisonScene } from "./memory-scenes";
 import { ExographicsPromptScene, ExographicsReasoningScene } from "./exographics-scenes";
 import { CultureScene, ApplicationScene, SynthesisScene } from "./culture-scenes";
@@ -21,12 +10,9 @@ import { RecapPresentation } from "./recap-presentation";
 export function ScenePresentation({ state }: { state: LessonRuntimeState | null | undefined }) {
   const nodeId = state?.nodeId ?? CATCHING_UNICORNS_LESSON.initialNodeId;
   const learned = sceneIds.slice(0, sceneIds.indexOf(nodeId)).flatMap(id =>
-    (CATCHING_UNICORNS_LESSON.nodes[id].concepts ?? []).flatMap(concept => {
-      const item = revealText(id as keyof typeof CATCHING_UNICORNS_PRESENTATION, concept.id);
-      return item && evidenceFor(state, id, concept.id)?.status === "demonstrated"
-        ? [{ criterionId: concept.id, item }]
-        : [];
-    }),
+    sceneConcepts(state, id)
+      .filter(hasReveal)
+      .filter(concept => concept.demonstrated),
   );
 
   return (
@@ -55,16 +41,10 @@ export function ScenePresentation({ state }: { state: LessonRuntimeState | null 
 function CurrentScenePresentation({ state }: { state: LessonRuntimeState | null | undefined }) {
   const nodeId = state?.nodeId ?? CATCHING_UNICORNS_LESSON.initialNodeId;
   const node = CATCHING_UNICORNS_LESSON.nodes[nodeId];
-  const scene = CATCHING_UNICORNS_PRESENTATION[nodeId as keyof typeof CATCHING_UNICORNS_PRESENTATION];
 
   if (nodeId === "recap") return <RecapPresentation state={state} />;
 
-  const currentReveals = (scene as { readonly reveals?: Readonly<Record<string, RevealItem>> }).reveals ?? {};
-  const revealCards = Object.entries(currentReveals).map(([criterionId, item]) => ({
-    criterionId,
-    item,
-    evidence: evidenceFor(state, nodeId, criterionId),
-  }));
+  const revealCards = sceneConcepts(state, nodeId).filter(hasReveal);
 
   const props = { state, nodeId, node, revealCards };
 
@@ -80,16 +60,15 @@ function CurrentScenePresentation({ state }: { state: LessonRuntimeState | null 
     <div className="space-y-5" data-scene={nodeId}>
       <SceneHeader node={node} nodeId={nodeId} state={state} />
       <div className="grid gap-3 md:grid-cols-2">
-        {revealCards.map(({ criterionId, item, evidence }) =>
-          evidence?.status === "demonstrated" ? (
-            <Revealed key={criterionId} item={item} />
-          ) : (
-            <article className="rounded-xl border bg-white p-4" key={criterionId}>
-              <h3 className="font-medium">Concept not yet revealed</h3>
-              <EvidenceState evidence={evidence} />
-            </article>
-          ),
-        )}
+        {revealCards.map(concept => (
+          <EvidenceCard key={concept.criterionId} concept={concept}>
+            <UnresolvedCard
+              title="Concept not yet revealed"
+              evidence={concept.evidence}
+              className="rounded-xl border bg-white p-4"
+            />
+          </EvidenceCard>
+        ))}
       </div>
     </div>
   );
