@@ -27,6 +27,7 @@ const scene = (definition: {
   prompt: string;
   objective: string;
   tutorBrief: string;
+  assessConversationOnEntry?: boolean;
   concepts?: readonly ConceptCriterionDefinition[];
   next: string | null;
   carry?: readonly string[];
@@ -35,6 +36,7 @@ const scene = (definition: {
   presentation: { sceneId: definition.id, title: definition.title, prompt: definition.prompt },
   learningObjective: definition.objective,
   tutorBrief: definition.tutorBrief,
+  ...(definition.assessConversationOnEntry ? { assessConversationOnEntry: true } : {}),
   ...(definition.concepts ? { concepts: definition.concepts, completionPolicy: "all_demonstrated" as const } : {}),
   onSuccess: definition.next
     ? { kind: "node", nodeId: definition.next, ...(definition.carry ? { carryForwardCriteria: definition.carry } : {}) }
@@ -244,6 +246,7 @@ const lesson: LessonDefinition = {
     }),
     recap: scene({
       id: "recap",
+      assessConversationOnEntry: true,
       title: "What the conversation showed",
       prompt:
         "Review what you explained independently, what became clear after a prompt, what is still partial, and what remains to revisit.",

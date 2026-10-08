@@ -197,6 +197,65 @@ it("advances explicit next in the real runtime even with classifier outage, and 
   expect(runtime.snapshot().runtime?.conceptEvidence).toEqual({});
 });
 
+it.each([
+  { nodeId: "recap", configured: true },
+  { nodeId: "summary", configured: true },
+  { nodeId: "ordinary", configured: false },
+  { nodeId: "recap", configured: false },
+])("assesses on confirmed entry to $nodeId only when configured=$configured", async ({ nodeId, configured }) => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance", "Date"] });
+  const fetchMock = vi.fn(async () => Response.json({ assessment: normalizeAssessment(assessmentBody(), lesson) }));
+  vi.stubGlobal("fetch", fetchMock);
+  const { assessConversationOnEntry, ...ordinaryScene } = lesson.nodes.recap;
+  expect(assessConversationOnEntry).toBe(true);
+  const definition = {
+    ...lesson,
+    initialNodeId: "synthesis",
+    nodes: {
+      ...lesson.nodes,
+      synthesis: { ...lesson.nodes.synthesis, onSuccess: { kind: "node" as const, nodeId } },
+      [nodeId]: { ...ordinaryScene, id: nodeId, ...(configured ? { assessConversationOnEntry: true } : {}) },
+    },
+  };
+  const runtime = new LessonRuntime({} as HTMLAudioElement, () => {}, definition);
+  try {
+    runtime.confirmRendered(runtime.snapshot().display);
+    await vi.advanceTimersByTimeAsync(0);
+    const steering = transport.send.mock.calls[0][0];
+    if (steering.type !== "session.instructions.append") throw new Error("Expected steering");
+    transport.receive!({
+      type: "context.appended", name: "session.instructions.appended",
+      clientEventId: steering.event_id, startMs: 0,
+    });
+    transport.receive!({ type: "output.activity", state: "quiet" });
+    transport.receive!({ type: "microphone.activity_started" });
+    transport.receive!({ type: "transcript", speaker: "child", delta: "Next question, then", startMs: 100, endMs: 200 });
+    transport.receive!({ type: "microphone.speech_stopped", quietMs: 900 });
+    await vi.advanceTimersByTimeAsync(900);
+    expect(runtime.snapshot().runtime).toMatchObject({ nodeId, phase: "rendering" });
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    const display = runtime.snapshot().display;
+    runtime.confirmRendered(display);
+    // Assessment starts at render confirmation, without waiting for the steering acknowledgment.
+    expect(fetchMock).toHaveBeenCalledTimes(configured ? 1 : 0);
+    if (configured) {
+      expect(fetchMock).toHaveBeenCalledWith("/api/assess", expect.objectContaining({
+        body: JSON.stringify({ lessonId: lesson.id, visits: runtime.report().conversation }),
+      }));
+      runtime.confirmRendered(display);
+      runtime.stop();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetchMock).toHaveBeenCalledOnce();
+      expect(runtime.report().assessment?.status).toBe("complete");
+    }
+    expect(runtime.snapshot().runtime?.conceptEvidence).toEqual({});
+  } finally {
+    runtime.stop();
+    await vi.advanceTimersByTimeAsync(0);
+  }
+});
+
 it.each(["active", "unavailable"] as const)("holds a next request while audio is %s", activity => {
   const h = harness();
   h.send({ type: "output.activity", source: runtimeSource(h.state), state: activity });

@@ -326,7 +326,8 @@ export class LessonRuntime {
           this.display = effect.identity;
           break;
         case "steering.ready":
-          if (effect.context.nodeId === "recap") void this.assessConversation();
+          if (this.lessonDefinition.nodes[effect.context.nodeId].assessConversationOnEntry)
+            void this.assessConversation();
           this.log("transcript.reset", { reason: "node_render_confirmed" });
           this.appendSteering(effect.context, effect.renderToken);
           break;

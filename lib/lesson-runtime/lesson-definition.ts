@@ -4,6 +4,8 @@ export type LessonNodeDefinition = {
   readonly presentation: Readonly<Record<string, string | number | boolean>>;
   readonly learningObjective: string;
   readonly tutorBrief: string;
+  /** Assess the saved conversation when this scene's render is confirmed, before steering. */
+  readonly assessConversationOnEntry?: boolean;
   readonly concepts?: readonly ConceptCriterionDefinition[];
   /** `allow_unresolved` is an explicit early-exit policy; unresolved concepts stay unresolved. */
   readonly completionPolicy?: "all_demonstrated" | "all_independent" | "allow_unresolved";
