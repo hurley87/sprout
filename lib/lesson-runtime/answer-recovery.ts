@@ -1,9 +1,10 @@
 import { runtimeSource, type ClassificationSource, type LessonRuntimeState } from "./lesson-runtime-reducer";
 
-export const ANSWER_RECOVERY_WAIT_MS = 4_000;
-export const ANSWER_RECOVERY_INSTRUCTION =
-  "One-time clarification for the still-rendered current scene: the application cannot yet establish a settled child answer. If the child is still waiting and has not spoken again, naturally ask them to repeat their answer. If they are speaking or have responded since this request, ignore it and follow their response. Ask at most once. Do not supply or repeat a count, total, answer, counting method, hint, or imply success. Wait for a fresh child answer; if it establishes settled correct current-scene success, explicitly confirm it with its number and object, then pause. For unfinished or uncertain answers, wait or clarify without giving the total. Never change scenes. This request grants no completion authority.";
+// Compatibility export for counting-specific callers; runtime prompt selection uses LessonDefinition.
+export { COUNTING_ANSWER_RECOVERY_INSTRUCTION as ANSWER_RECOVERY_INSTRUCTION } from "./counting-lesson";
 
+export const ANSWER_RECOVERY_WAIT_MS = 4_000;
+export const ANSWER_COMPLETION_WAIT_MS = 1_000;
 const turnKey = (source: ClassificationSource) =>
   JSON.stringify([source.runtimeId, source.nodeId, source.visitId, source.childTurnId]);
 const sourceFor = (state: LessonRuntimeState): ClassificationSource => ({
@@ -12,19 +13,27 @@ const sourceFor = (state: LessonRuntimeState): ClassificationSource => ({
   transcriptRevision: state.transcriptRevision,
 });
 
-/** Conversational recovery for missing text or canonical semantic holds; never restores
- * earlier evidence or makes a classification request without a child transcript. */
+/** Conversational recovery for missing text or canonical semantic holds. A caller
+ * may recheck visit-local closure before prompting, without restoring mastery. */
 export class AnswerRecovery {
   private turn?: ClassificationSource;
   private reason: "missing_transcript" | "semantic_hold" = "missing_transcript";
+  private completionReady = false;
+  private allowRecheck = true;
+  private missingQuietSince?: number;
+  private missingCandidateTurn?: number;
   private timer?: ReturnType<typeof setTimeout>;
   private state?: LessonRuntimeState;
   private enabled = false;
-  private readonly requestedVisits = new Set<string>();
+  private readonly requestedStages = new Set<string>();
 
   constructor(
     private readonly request: (source: ClassificationSource) => void,
     private readonly diagnostic: (type: string, source: ClassificationSource, detail: unknown) => void,
+    private readonly preserveMissingAcrossCandidates = false,
+    // Closure rechecks have no mastery authority and do not spend the prompt
+    // budget. A later microphone-only turn can retry a cancelled recheck.
+    private readonly recheckBeforePrompt?: (source: ClassificationSource) => boolean,
   ) {}
 
   arm(state: LessonRuntimeState, enabled: boolean) {
@@ -39,16 +48,19 @@ export class AnswerRecovery {
       return;
     this.turn = sourceFor(state);
     this.reason = "missing_transcript";
+    this.allowRecheck = true;
+    this.completionReady = false;
     this.observe(state, enabled);
   }
 
-  armSemanticHold(state: LessonRuntimeState, enabled: boolean, source: ClassificationSource) {
+  armSemanticHold(state: LessonRuntimeState, enabled: boolean, source: ClassificationSource, completionReady = false) {
     // Only a successful canonical response for the exact current snapshot may
     // request this recovery. Network errors or cancelled requests are not holds.
     if (!state.hasChildTranscript || JSON.stringify(sourceFor(state)) !== JSON.stringify(source)) return;
     this.cancel("semantic_hold");
     this.turn = source;
     this.reason = "semantic_hold";
+    this.completionReady = completionReady;
     this.observe(state, enabled);
   }
 
@@ -56,21 +68,30 @@ export class AnswerRecovery {
     this.state = state;
     this.enabled = enabled;
     if (!this.turn) return;
+    // Energy candidates are not confirmed learner speech. Keep a missing-text
+    // recovery pending across discarded bursts, but never send while a candidate
+    // is active and never restore answer or acknowledgment authority.
+    const missingText = this.reason === "missing_transcript" && this.preserveMissingAcrossCandidates;
     if (
       !enabled ||
       state.phase !== "active" ||
       !state.hasChildTurn ||
-      state.childSpeaking ||
-      state.childCandidate ||
+      (state.childSpeaking && !(missingText && state.childCandidate)) ||
+      (!missingText && state.childCandidate) ||
       (this.reason === "missing_transcript"
         ? state.hasChildTranscript
         : !state.hasChildTranscript || state.transcriptRevision !== this.turn.transcriptRevision) ||
-      turnKey(sourceFor(state)) !== turnKey(this.turn)
+      (missingText
+        ? state.runtimeId !== this.turn.runtimeId || state.visitId !== this.turn.visitId || state.nodeId !== this.turn.nodeId ||
+          (state.childTurnId !== this.turn.childTurnId && !state.childCandidate && this.missingCandidateTurn !== state.childTurnId)
+        : turnKey(sourceFor(state)) !== turnKey(this.turn))
     ) {
       this.cancel("turn_or_eligibility_changed");
       return;
     }
+    if (missingText && state.childCandidate) this.missingCandidateTurn = state.childTurnId;
     if (state.outputActivity !== "quiet") {
+      this.missingQuietSince = undefined;
       if (this.timer) {
         clearTimeout(this.timer);
         this.timer = undefined;
@@ -78,10 +99,19 @@ export class AnswerRecovery {
       }
       return;
     }
-    const visit = `${state.runtimeId}:${state.visitId}`;
-    if (this.timer || this.requestedVisits.has(visit)) return;
+    if (missingText) {
+      this.missingQuietSince ??= Date.now();
+      if (state.childCandidate) return;
+      this.turn = sourceFor(state);
+      this.missingCandidateTurn = undefined;
+    }
+    // A support prompt must not exhaust the later completion prompt. Each stage
+    // remains bounded to one request per visit, including failed sends.
+    const stage = `${state.runtimeId}:${state.visitId}:${this.completionReady ? "completion" : "support"}`;
+    if (this.timer || (this.requestedStages.has(stage) && !this.recheckBeforePrompt)) return;
+    const waitMs = this.completionReady ? ANSWER_COMPLETION_WAIT_MS : ANSWER_RECOVERY_WAIT_MS;
     this.diagnostic("answer_recovery.scheduled", sourceFor(state), {
-      waitMs: ANSWER_RECOVERY_WAIT_MS,
+      waitMs,
       reason: this.reason,
     });
     this.timer = setTimeout(() => {
@@ -90,12 +120,21 @@ export class AnswerRecovery {
       // revision without supplying the missing child evidence or resetting quiet.
       const current = this.state;
       if (!current || !this.enabled || !this.turn || current.outputActivity !== "quiet") return;
+      if (current.childSpeaking || current.childCandidate) return;
       const source = sourceFor(current);
-      this.requestedVisits.add(visit); // Send failures also spend the budget.
       this.turn = undefined;
-      this.diagnostic("answer_recovery.requested", source, { waitMs: ANSWER_RECOVERY_WAIT_MS, reason: this.reason });
+      this.diagnostic("answer_recovery.requested", source, { waitMs, reason: this.reason });
+      if (this.reason === "missing_transcript" && this.allowRecheck && this.recheckBeforePrompt?.(source)) return;
+      if (this.requestedStages.has(stage)) return;
+      this.requestedStages.add(stage); // Send failures also spend the budget.
       this.request(source);
-    }, ANSWER_RECOVERY_WAIT_MS);
+    }, missingText ? Math.max(0, waitMs - (Date.now() - this.missingQuietSince!)) : waitMs);
+  }
+
+  /** A failed/held closure check still waits for quiet and shares the support prompt budget. */
+  armMissingFallback(state: LessonRuntimeState, enabled: boolean) {
+    this.arm(state, enabled);
+    this.allowRecheck = false;
   }
 
   cancel(reason: string) {
@@ -103,5 +142,7 @@ export class AnswerRecovery {
     this.timer = undefined;
     if (this.turn) this.diagnostic("answer_recovery.cancelled", this.turn, { reason });
     this.turn = undefined;
+    this.missingQuietSince = undefined;
+    this.missingCandidateTurn = undefined;
   }
 }

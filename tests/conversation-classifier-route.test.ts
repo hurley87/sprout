@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { POST } from "../app/api/classify/route";
 import * as canonical from "../lib/lesson-runtime/jev-conversation-state-classifier";
 import { JEV_MODEL } from "../lib/jev";
+import { COUNTING_LESSON } from "../lib/lesson-runtime/counting-lesson";
 import {
   CONTEXT_PROJECTION_QUESTIONS,
   fullTranscriptObserverState,
@@ -12,8 +13,9 @@ import {
 } from "../lib/experiments/issue-57/simplified-observer-contract";
 import { parseLiveClassificationDiagnostic } from "../lib/lesson-runtime/live-classification-diagnostic";
 import fixture from "./fixtures/issue-57-fragmented-confirmation.json";
-const input = { ...fixture.input, nodeId: "count-2-ducks" as const };
-const request = (fields: Record<string, unknown> = input) =>
+const wireInput = { ...fixture.input, lessonId: "counting" };
+const input = { ...wireInput, lesson: COUNTING_LESSON };
+const request = (fields: Record<string, unknown> = wireInput) =>
   new Request("http://localhost:3000/api/classify", {
     method: "POST",
     headers: { "Content-Type": "application/json", origin: "http://localhost:3000", host: "localhost:3000" },
@@ -105,7 +107,25 @@ it("fails closed without retry on provider failure", async () => {
 it("rejects retired mode selection before a provider call", async () => {
   const fetch = vi.fn();
   vi.stubGlobal("fetch", fetch);
-  expect((await POST(request({ ...input, classifierMode: "other" }))).status).toBe(400);
+  expect((await POST(request({ ...wireInput, classifierMode: "other" }))).status).toBe(400);
+  expect(fetch).not.toHaveBeenCalled();
+});
+it("rejects unknown lessons and cross-lesson nodes before provider classification", async () => {
+  const fetch = vi.fn();
+  vi.stubGlobal("fetch", fetch);
+  expect((await POST(request({ ...wireInput, lessonId: "unknown" }))).status).toBe(400);
+  expect((await POST(request({ ...wireInput, nodeId: "pattern-a" }))).status).toBe(400);
+  expect(fetch).not.toHaveBeenCalled();
+});
+it.each([
+  { ...wireInput, lessonId: "__proto__" },
+  { ...wireInput, lessonId: "constructor" },
+  { ...wireInput, nodeId: "__proto__" },
+  { ...wireInput, nodeId: "constructor" },
+])("rejects prototype-like lesson and node IDs before provider classification", async fields => {
+  const fetch = vi.fn();
+  vi.stubGlobal("fetch", fetch);
+  expect((await POST(request(fields))).status).toBe(400);
   expect(fetch).not.toHaveBeenCalled();
 });
 it("returns held-scene diagnostics for valid negative semantic states", async () => {
@@ -150,10 +170,10 @@ it("reports a server timeout without returning completion evidence", async () =>
   expect(await response.json()).toMatchObject({ code: "timeout", classifierVersion: "conversation-state-v2" });
 });
 it.each([
-  { nodeId: "unknown", transcriptRevision: 1, transcript: "Child: One" },
-  { ...input, transcriptRevision: -1 },
-  { ...input, transcript: "" },
-  { ...input, transcript: "x".repeat(12001) },
+  { ...wireInput, nodeId: "unknown", transcriptRevision: 1, transcript: "Child: One" },
+  { ...wireInput, transcriptRevision: -1 },
+  { ...wireInput, transcript: "" },
+  { ...wireInput, transcript: "x".repeat(12001) },
 ])("rejects invalid identity/transcript before a provider call", async fields => {
   const fetch = vi.fn();
   vi.stubGlobal("fetch", fetch);

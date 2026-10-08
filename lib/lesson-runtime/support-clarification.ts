@@ -1,9 +1,9 @@
 import { classificationSource, type ClassificationSource, type LessonRuntimeState } from "./lesson-runtime-reducer";
 
-export const SUPPORT_CLARIFICATION_POLICY = { waitMs: 4_000, maxRequestsPerVisit: 1 } as const;
-export const SUPPORT_CLARIFICATION_INSTRUCTION =
-  "One-time clarification for the still-rendered current scene: if the child is still waiting and has not spoken again, naturally ask whether they have finished their answer or would like help. If they are speaking or have responded since this request, ignore it and follow their response. Ask at most once; do not repeat this instruction on later turns. In that clarification question only, do not supply or repeat a count, total, answer, counting method, or hint, or imply success. After the child responds, follow session guidance: if their response establishes a settled correct current-scene answer or reaffirms their previous correct answer without renewed help or uncertainty, explicitly confirm it again with its number and object, then pause. A generic finished/yes reply alone is insufficient. For renewed help, unresolved alternatives, or unfinished/uncertain replies, help, wait, or clarify without giving the total. Never change scenes. This request grants no completion authority.";
+// Compatibility export for counting-specific callers; runtime prompt selection uses LessonDefinition.
+export { COUNTING_SUPPORT_CLARIFICATION_INSTRUCTION as SUPPORT_CLARIFICATION_INSTRUCTION } from "./counting-lesson";
 
+export const SUPPORT_CLARIFICATION_POLICY = { waitMs: 4_000, maxRequestsPerVisit: 1 } as const;
 const key = (source: ClassificationSource) =>
   JSON.stringify([source.runtimeId, source.nodeId, source.visitId, source.childTurnId, source.transcriptRevision]);
 const visitKey = (source: ClassificationSource) => `${source.runtimeId}:${source.visitId}`;

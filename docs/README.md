@@ -11,6 +11,11 @@ The production prototype is the realtime counting lesson at `/`, backed by
 | [Reducer contract](lesson-runtime-reducer.md) | Identity, completion gate, render and steering handoff |
 | [Browser evaluation guide](lesson-browser-guide.md) | Reproduction steps, timing, diagnostic interpretation and limitations |
 | [Browser test suites](browser-tests.md) | Provider-free versus live selection, configuration and costs |
+| [Catching Unicorns demo validation](catching-unicorns-demo-validation.md) | Demo coverage, source limits, live acceptance status and removal rehearsal |
+
+The standalone adult-learning demonstration is available at
+`/demos/catching-unicorns`. It is registered as an application lesson alongside
+the production counting lesson; it does not replace the root route.
 
 Sprout separates pedagogical intent from conversational realization: the authored
 lesson specifies the objective and success edge; GPT-Live realizes the conversation

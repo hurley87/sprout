@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { classifyConversationStateWithDiagnostics } from "../lib/experiments/issue-57/legacy/jev-conversation-state-classifier";
 import { COUNTING_LESSON_GRAPH, COUNTING_NODE_IDS } from "../lib/lesson-runtime/counting-lesson";
-import { SPROUT_LIVE_CONFIG, teachingInstruction } from "../lib/lesson-runtime/live-context";
+import { SPROUT_LIVE_CONFIG, teachingInstruction } from "./helpers/counting-live-context";
 import {
   classificationSource,
   createLessonRuntime,
   reduceLessonRuntime,
   runtimeSource,
   type LessonRuntimeEvent,
-} from "../lib/lesson-runtime/lesson-runtime-reducer";
+} from "./helpers/counting-runtime";
 import { conversationProbabilities, conversationProviderBody } from "./fixtures/conversation-classification";
 
 // Literal diagnostic excerpt, not independent audio verification or a claim of mastery.

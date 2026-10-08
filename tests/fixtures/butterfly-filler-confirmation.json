@@ -625,6 +625,7 @@
     "acknowledgmentObserved": false,
     "tutorOutputObserved": true,
     "tutorOutputDrained": true,
+    "transitionReady": false,
     "quietSinceMs": 36357.10000002384,
     "outputActivity": "quiet",
     "quietDrainMs": 250,

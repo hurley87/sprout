@@ -1,0 +1,204 @@
+{
+  "source": "Recorded Engram retry session, 7 October 2026. Only speaker-labelled transcripts and normalized classifier scores retained.",
+  "snapshots": [
+    {
+      "transcript": "Tutor: All right. What is an engram?\nChild: So an engram is a piece of information stored in your brain or mind",
+      "outputs": {
+        "objectiveState": {
+          "choice": "unclear_or_incomplete",
+          "confidence": 0.9,
+          "probabilities": {
+            "completed": 0.07,
+            "incorrect": 0.01,
+            "unclear_or_incomplete": 0.92,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "asking",
+          "confidence": 0.9,
+          "probabilities": {
+            "confirmed_completion": 0.03,
+            "clarifying": 0.02,
+            "helping": 0,
+            "asking": 0.92,
+            "other": 0.03
+          }
+        },
+        "concepts": {
+          "concept_engram-biological": {
+            "choice": "partial",
+            "confidence": 0.47,
+            "probabilities": {
+              "not_yet": 0.01,
+              "partial": 0.6,
+              "demonstrated_independent": 0.37,
+              "demonstrated_prompted": 0.02
+            }
+          }
+        },
+        "sources": {
+          "source_engram-biological": {
+            "choice": "message_1",
+            "confidence": 1,
+            "probabilities": {
+              "none": 0,
+              "message_1": 1
+            }
+          }
+        }
+      }
+    },
+    {
+      "transcript": "Tutor: All right. What is an engram?\nChild: So an engram is a piece of information stored in your brain or mind\nTutor: Hmm. Go on and tell me a little bit more about it. Like, how is that different from say, a note on paper?",
+      "outputs": {
+        "objectiveState": {
+          "choice": "unclear_or_incomplete",
+          "confidence": 0.95,
+          "probabilities": {
+            "completed": 0.02,
+            "incorrect": 0,
+            "unclear_or_incomplete": 0.96,
+            "unresolved_help": 0.02,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "clarifying",
+          "confidence": 0.85,
+          "probabilities": {
+            "confirmed_completion": 0,
+            "clarifying": 0.88,
+            "helping": 0.08,
+            "asking": 0.04,
+            "other": 0
+          }
+        },
+        "concepts": {
+          "concept_engram-biological": {
+            "choice": "partial",
+            "confidence": 0.37,
+            "probabilities": {
+              "not_yet": 0.01,
+              "partial": 0.53,
+              "demonstrated_independent": 0.44,
+              "demonstrated_prompted": 0.02
+            }
+          }
+        },
+        "sources": {
+          "source_engram-biological": {
+            "choice": "message_1",
+            "confidence": 1,
+            "probabilities": {
+              "none": 0,
+              "message_1": 1
+            }
+          }
+        }
+      }
+    },
+    {
+      "transcript": "Tutor: All right. What is an engram?\nChild: So an engram is a piece of information stored in your brain or mind\nTutor: Hmm. Go on and tell me a little bit more about it. Like, how is that different from say, a note on paper?\nChild: Well a note on paper is external to the brain or mind. What I'm talking about is an actual data that's contained\nChild: as, you know, a memory inside of your brain or mind",
+      "outputs": {
+        "objectiveState": {
+          "choice": "completed",
+          "confidence": 0.91,
+          "probabilities": {
+            "completed": 0.93,
+            "incorrect": 0,
+            "unclear_or_incomplete": 0.07,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "clarifying",
+          "confidence": 0.82,
+          "probabilities": {
+            "confirmed_completion": 0.02,
+            "clarifying": 0.86,
+            "helping": 0.06,
+            "asking": 0.06,
+            "other": 0
+          }
+        },
+        "concepts": {
+          "concept_engram-biological": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.67,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.01,
+              "demonstrated_independent": 0.75,
+              "demonstrated_prompted": 0.24
+            }
+          }
+        },
+        "sources": {
+          "source_engram-biological": {
+            "choice": "message_3",
+            "confidence": 1,
+            "probabilities": {
+              "none": 0,
+              "message_1": 0,
+              "message_3": 1
+            }
+          }
+        }
+      }
+    },
+    {
+      "transcript": "Tutor: All right. What is an engram?\nChild: So an engram is a piece of information stored in your brain or mind\nTutor: Hmm. Go on and tell me a little bit more about it. Like, how is that different from say, a note on paper?\nChild: Well a note on paper is external to the brain or mind. What I'm talking about is an actual data that's contained\nChild: as, you know, a memory inside of your brain or mind\nTutor: Mm. That explanation works. You're pointing to a memory inside the mind and not an external record like a piece of paper. That meets this objective.",
+      "outputs": {
+        "objectiveState": {
+          "choice": "completed",
+          "confidence": 0.99,
+          "probabilities": {
+            "completed": 0.99,
+            "incorrect": 0,
+            "unclear_or_incomplete": 0.01,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "confirmed_completion",
+          "confidence": 0.97,
+          "probabilities": {
+            "confirmed_completion": 0.98,
+            "clarifying": 0.02,
+            "helping": 0,
+            "asking": 0,
+            "other": 0
+          }
+        },
+        "concepts": {
+          "concept_engram-biological": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.68,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.01,
+              "demonstrated_independent": 0.76,
+              "demonstrated_prompted": 0.23
+            }
+          }
+        },
+        "sources": {
+          "source_engram-biological": {
+            "choice": "message_3",
+            "confidence": 1,
+            "probabilities": {
+              "none": 0,
+              "message_1": 0,
+              "message_3": 1
+            }
+          }
+        }
+      }
+    }
+  ],
+  "provenanceAnnotation": "Source selections are controlled, manually reviewed regression inputs added for utterance attribution; they were not returned by the recorded provider. Original concept/objective/tutor scores are unchanged."
+}

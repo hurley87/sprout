@@ -8,7 +8,7 @@ import {
   runtimeSource,
   type LessonRuntimeEvent,
   type LessonRuntimeState,
-} from "../../../lib/lesson-runtime/lesson-runtime-reducer";
+} from "../../helpers/counting-runtime";
 import { matchesLessonEvent } from "../../helpers/lesson-observer";
 import { scopeFromEvent } from "../../helpers/child-scenario";
 

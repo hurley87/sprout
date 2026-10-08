@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { COUNTING_NODE_IDS, type CountingNodeId } from "../lib/lesson-runtime/counting-lesson";
+import { COUNTING_NODE_IDS } from "../lib/lesson-runtime/counting-lesson";
 import {
   ANSWER_OUTCOMES,
   CHILD_ACTIVITIES,
@@ -23,7 +23,7 @@ const proposal: ConversationStateProposal = {
 describe("ConversationStateClassifier ephemeral runtime contract", () => {
   it("classifies a supplied snapshot into a state proposal or abstention, without session-record inputs", () => {
     expectTypeOf<keyof ConversationStateClassifierInput>().toEqualTypeOf<
-      "nodeId" | "transcriptRevision" | "transcript"
+      "lesson" | "nodeId" | "transcriptRevision" | "transcript"
     >();
     expectTypeOf<Parameters<ConversationStateClassifier["classify"]>>().toEqualTypeOf<
       [input: ConversationStateClassifierInput, signal: AbortSignal]
@@ -35,9 +35,9 @@ describe("ConversationStateClassifier ephemeral runtime contract", () => {
 
   it("types exactly the descriptive fields and restricts node identity to authored IDs", () => {
     expectTypeOf<keyof ConversationStateProposal>().toEqualTypeOf<
-      "nodeId" | "transcriptRevision" | "childActivity" | "answerOutcome" | "supportState" | "tutorState"
+      "nodeId" | "transcriptRevision" | "childActivity" | "answerOutcome" | "supportState" | "tutorState" | "conceptObservations"
     >();
-    expectTypeOf<ConversationStateProposal["nodeId"]>().toEqualTypeOf<CountingNodeId>();
+    expectTypeOf<ConversationStateProposal["nodeId"]>().toEqualTypeOf<string>();
     expectTypeOf<ConversationStateProposal["childActivity"]>().toEqualTypeOf<
       "unknown" | "waiting" | "thinking" | "answering"
     >();
@@ -116,9 +116,11 @@ describe("ConversationStateClassifier ephemeral runtime contract", () => {
   );
 
   it.each(["count-4-ducks", "hello-duck", "__proto__", "constructor", "count-1-duck ", "", 0, {}, null, undefined])(
-    "rejects unauthored node identity %j",
+    "parses proposal node shape independently of lesson selection %j",
     nodeId => {
-      expect(parseConversationStateProposal({ ...proposal, nodeId })).toBeNull();
+      const parsed = parseConversationStateProposal({ ...proposal, nodeId });
+      if (typeof nodeId === "string") expect(parsed?.nodeId).toBe(nodeId);
+      else expect(parsed).toBeNull();
     },
   );
 

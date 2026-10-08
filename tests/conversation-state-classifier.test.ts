@@ -1,12 +1,15 @@
 import { afterEach, expect, it, vi } from "vitest";
 import {
   classifyConversationStateWithDiagnostics,
-  CONVERSATION_STATE_QUESTIONS,
   conversationObserverState,
   CLASSIFIER_VERSION,
+  normalizeConversationOutputs,
+  mapConversationObservation,
   type ObjectiveState,
   type ObservedTutorState,
 } from "../lib/lesson-runtime/jev-conversation-state-classifier";
+import { CONVERSATION_STATE_QUESTIONS } from "../lib/experiments/issue-57/counting-classifier-contract";
+import { COUNTING_LESSON } from "../lib/lesson-runtime/counting-lesson";
 import { JEV_MODEL } from "../lib/jev";
 const distribution = (options: Record<string, string>, choice: string, p = 0.96) => ({
   type: "choice",
@@ -26,6 +29,7 @@ function body(objective: ObjectiveState = "completed", tutor: ObservedTutorState
   };
 }
 const input = {
+  lesson: COUNTING_LESSON,
   nodeId: "count-2-ducks" as const,
   transcriptRevision: 4,
   transcript: "Child: Two\nTutor: Yes, two ducks.",
@@ -35,6 +39,34 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 // Supplied judgments verify transport and deterministic mapping, not live semantic accuracy.
+it.each([0.94, 0.92, 0.89])("accepts hundredth-rounded totals without inflating confidence: %s", selected => {
+  const raw = body();
+  raw.answers.objectiveState = {
+    type: "choice", choice: "completed", confidence: selected,
+    probabilities: { completed: selected, incorrect: 0.02, unclear_or_incomplete: 0.03, unresolved_help: 0, no_attempt: 0 },
+  };
+  // Totals 0.99, 0.97 and 0.94 respectively: only the actual rounding band passes.
+  const normalized = normalizeConversationOutputs(raw, COUNTING_LESSON, input.nodeId);
+  if (selected === 0.94) {
+    expect(normalized?.objectiveState.probabilities.completed).toBe(selected);
+    expect(mapConversationObservation(input, normalized!).outcome).toBe("allow_semantic_completion_evidence");
+  } else expect(normalized).toBeNull();
+});
+
+it("holds a rounded valid distribution when its unmodified winning score is below the confidence threshold", () => {
+  const raw = body();
+  raw.answers.objectiveState = { type: "choice", choice: "completed", confidence: 0.89,
+    probabilities: { completed: 0.89, incorrect: 0.02, unclear_or_incomplete: 0.06, unresolved_help: 0.01, no_attempt: 0.01 } };
+  const normalized = normalizeConversationOutputs(raw, COUNTING_LESSON, input.nodeId);
+  expect(normalized).not.toBeNull();
+  expect(mapConversationObservation(input, normalized!)).toMatchObject({ status: "abstained", reason: "objectiveState_no_winner" });
+});
+
+it("rejects invalid totals that are not hundredth-rounded", () => {
+  const raw = body();
+  raw.answers.objectiveState.probabilities.completed = 0.95001;
+  expect(normalizeConversationOutputs(raw, COUNTING_LESSON, input.nodeId)).toBeNull();
+});
 it.each([
   ["normal", "Child: Two\nTutor: Yes, two ducks.", "completed", "confirmed_completion", true],
   ["self-correction", "Child: Three. Uh, I mean two\nTutor: Yes, two ducks", "completed", "confirmed_completion", true],

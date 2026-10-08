@@ -5,15 +5,38 @@ recovery design continue in [#56](https://github.com/hurley87/sprout/issues/56).
 
 The pure `lib/lesson-runtime/lesson-runtime-reducer.ts` is the
 authority layer. It consumes descriptive proposals and local runtime evidence,
-and reads destinations exclusively from `COUNTING_LESSON_GRAPH[nodeId].onSuccess`.
+and reads destinations exclusively from the selected lesson definition's authored
+`nodes[nodeId].onSuccess` edge.
 The root browser runtime supplies transcripts, local media evidence, and
 render confirmation and handles the reducer's effects. The reducer itself has
 no transcript accumulator, provider calls, steering sends, or persistence.
 
+## Conversation-first progression
+
+For `conversationFirst` lessons, conversational closure and mastery are separate.
+The reducer records a current tutor acknowledgment as a closure candidate without
+setting `answerAccepted`. New tutor text clears that candidate; new learner speech
+clears all conversational completion authority. The exact current classification
+source and transcript guards still apply. Concept source validation and reveal
+rules remain unchanged.
+
+`conversation.advance.requested` validates a standalone latest learner request in
+the exact current snapshot and follows only the current authored edge. It can
+advance after sustained quiet even without new tutor audio. Ordinary tutor closure
+still requires relevant observed tutor audio to drain. Active or unavailable audio,
+pending learner speech, stale sources, stopped sessions, and unconfirmed rendering
+cannot authorize advancement. Render confirmation still precedes next-question
+steering. Optional presentation confirmation remains supported.
+
+Post-conversation grading lives in the browser runtime and `/api/assess`, outside
+this reducer. It cannot reveal concepts, change live mastery, or choose a scene.
+
 ## Caller contract
 
-Create a runtime with a unique app-owned `runtimeId` for each lesson start or
-reconnect. The initial authored scene must already be rendered. The default
+Create a runtime with a unique app-owned `runtimeId` and one validated
+`LessonDefinition` for each lesson start or reconnect. The runtime stores the
+lesson ID and ignores reducer calls supplied with a different definition. The
+initial authored scene must already be rendered. The default
 sustained quiet interval is 250 ms; callers can configure a positive interval.
 All events use `atMs` from the same local monotonic clock. Tick events drive the
 gate; the reducer itself has no timers. Classifier results use their receipt time,
@@ -36,6 +59,52 @@ from current state when the result arrives. Both source and proposal must match
 the exact current node, visit, child turn, runtime, and revision. The reducer
 parses the closed proposal schema again and consumes at most one valid proposal
 per revision. Abstentions and malformed/stale proposals have no effects.
+
+## Session-local concept evidence
+
+Nodes may optionally author `concepts` with stable criterion IDs and descriptions.
+The current-node classifier receives only those current-node criteria and proposes
+`not_yet`, `partial`, `demonstrated_independent`, or `demonstrated_prompted` for
+each. These are interpretations, not accepted evidence. The reducer checks the
+closed proposal, exact runtime/visit/turn/revision, authored criterion IDs, and
+the application-captured transcript snapshot. It records a source reference to
+the exact child message and preserves prompted/independent status and prompting
+history in the current runtime. New runtimes start with an empty evidence map.
+
+Only a demonstrated observation emits `concept.revealed`; partial and not-yet
+states remain hidden. A child response that simply repeats or substantially
+copies prior tutor wording cannot be accepted as independent evidence and is
+retained as partial. This deterministic text overlap check is a guardrail, not a
+semantic classifier. Classifier accuracy still needs reviewed live evaluation.
+
+Concept nodes require an authored `completionPolicy`:
+
+- `all_demonstrated` requires every current criterion to be demonstrated.
+- `all_independent` also requires independent rather than prompted understanding.
+- `allow_unresolved` permits the authored success edge with unresolved criteria;
+  it does not change their evidence status or count them as mastery.
+
+An explicit learner scene skip uses the same authored edge without accepting an
+answer or emitting reveal effects. It preserves the evidence ledger, and only
+criteria explicitly carried by that edge with demonstrated evidence appear in
+the next node. A skip requires an explicit current `quiet` media observation
+that has remained quiet for the configured drain interval. `unavailable` media
+is not quiet evidence. The runtime also requires the current scene's steering
+append to be acknowledged and no child speech or pending child candidate.
+Rejected skip attempts leave runtime and timer/classification authority intact.
+An accepted skip invalidates old classification work, then still requires exact
+render confirmation before sending the next steering append; the next skip
+remains unavailable until that append is acknowledged. Stopping instead ends
+the runtime and preserves its evidence snapshot for a caller-owned recap; it
+does not reveal unresolved canonical answers.
+
+Normal answer progression retains the existing correct-answer,
+tutor-acknowledgment, relevant-output-drain, render-confirmation, and steering
+gates. Explicit skip uses quiet drain and acknowledged steering as its local
+eligibility gates without turning media quiet into answer evidence. An authored edge may list `carryForwardCriteria`; only demonstrated
+evidence for those IDs is copied into the target node. No carry-forward is
+implicit. Counting nodes do not opt into concept evidence and retain their
+existing completion path.
 
 ## Completion gate
 
@@ -63,7 +132,9 @@ output starting during child speech, and PCM remaining active across that bounda
 cannot satisfy this gate. Candidate audio must then become `quiet` for the
 configured interval. Repeated quiet events preserve its start time; renewed
 activity resets it. `unavailable` clears candidate audio and is never silence;
-quiet alone after unavailable cannot restore it.
+quiet alone after unavailable cannot restore it. A fresh quiet observation
+also starts a quiet interval when no candidate tutor audio exists; only an
+explicit skip can use that interval, and it does not count as answer evidence.
 
 Both orderings work: acknowledgment followed by audio drain, and audio drain
 followed by acknowledgment. In the second ordering, the still-current quiet
@@ -91,7 +162,7 @@ No next-node steering context is available before confirmation.
 
 `render.confirmed` must match the runtime, token, node, and scene exactly. It
 activates the rendered node and emits one `steering.ready` payload containing
-only that node, displayed scene facts, learning objective, and tutor brief.
+only that node's presentation facts, learning objective, and tutor brief.
 Graph edges and future nodes are explicitly excluded. Terminal confirmation
 instead emits `lesson.completed` once and enters the complete phase. Duplicate,
 mismatched, previous-visit, and previous-runtime confirmations do nothing.
@@ -183,3 +254,52 @@ proven discarded-candidate dead end; it does not prove that this exact live run
 would complete. A fresh authorized live rerun and independent listening are needed
 to assess the later confirmed activity and conversational behavior. No paid live
 lesson was started for this investigation.
+
+### Question-six navigation across microphone segments
+
+The October 8 export (`145156dc-f55a-49bf-83d4-fd502f0686f1`) contains the
+complete request “I am, I think next question. I think I've answered this” at
+revision 740 in turn 65 (437.222 seconds). Speech ended at 437.265; a new
+candidate began at 437.474, was confirmed at 437.557, and ended at 438.490
+without learner text. The tutor closure arrived in turn 66 at revisions 741–744.
+The standalone request matcher rejected the sentence, while the empty segment
+cleared `hasChildTranscript` and blocked both classification and navigation.
+The journal proves this identity mismatch; it does not establish why that
+microphone activity occurred.
+
+Navigation now recognizes bounded conversational fillers and an answered-this
+suffix, using only the latest learner message in the current visit. It never
+searches inside arbitrary quoted, reported, negative, or hypothetical speech.
+The navigation event uses the current runtime/visit/turn/revision identity, but
+needs no current-turn answer transcript. Empty segments may revalidate the
+latest request; actual subsequent learner text replaces it and must itself
+express navigation. Mastery classification retains its current-turn gate.
+Neither requests nor tutor closure supply missing concept evidence.
+
+Requests are debounced for 300 ms and must satisfy a fresh output quiet window.
+Conversation-first live runtimes use 500 ms quiet drain (the existing tutor
+classification quiet duration), preventing the recorded 299 ms gap between
+closure audio chunks from committing a transition. Child speech, active or
+unavailable output, stale identities, and visit changes still block advancement.
+The minimal replay fixture retains recorded event offsets and provider intervals;
+regression coverage checks the empty segment, split closure, audio gaps, one
+transition, and unchanged unresolved assessment evidence. Live microphone/model
+behavior still requires a fresh session; no live session is claimed here.
+
+### Microphone-only interruption recovery
+
+For conversation-first lessons, an interruption retains visit-local transcript/audio
+eligibility in `interruptedExchange`, separately from current-turn child text and
+completion authority. Speech confirmation alone does not erase this context.
+After the existing four-second missing-transcript quiet window, recovery may
+reclassify the latest stable tutor snapshot. A fresh matching closure proposal can
+navigate, but cannot add concept evidence or treat the empty turn as an answer.
+New child text clears this path; turn/revision/visit changes still invalidate
+in-flight responses. Navigation requires a fresh audio drain after recheck.
+Rechecks do not consume the support-prompt budget. Failed or held checks wait for
+quiet and use that existing budget to request conversational recovery.
+
+`tests/microphone-only-stall.test.ts` replays both October 8 recordings with their
+recorded provider-event timing through the first recovery boundary. Its classifier
+responses are deterministic doubles; it does not validate live model accuracy or
+establish whether microphone activity was treadmill noise.

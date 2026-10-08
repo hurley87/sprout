@@ -1,0 +1,51 @@
+{
+  "source": "Transcript from 7 October interruption session; normalized scores from one live reclassification after correcting rounded-total validation. Original report retained no readable scores.",
+  "transcript": "Tutor: Okay, let's dive in. What is an engram?\nChild: It's an idea or memory stored inside the\nChild: mind or brain\nTutor: Mhm. So, you're pointing to it being something that exists internally, not an external record, like a note or a paper. Yeah, that answers it.\nChild: That's right\nChild: That's right",
+  "outputs": {
+    "objectiveState": {
+      "choice": "completed",
+      "confidence": 0.92,
+      "probabilities": {
+        "completed": 0.94,
+        "incorrect": 0,
+        "unclear_or_incomplete": 0.06,
+        "unresolved_help": 0,
+        "no_attempt": 0
+      }
+    },
+    "tutorState": {
+      "choice": "confirmed_completion",
+      "confidence": 0.92,
+      "probabilities": {
+        "confirmed_completion": 0.94,
+        "clarifying": 0,
+        "helping": 0.05,
+        "asking": 0.01,
+        "other": 0
+      }
+    },
+    "concepts": {
+      "concept_engram-biological": {
+        "choice": "demonstrated_independent",
+        "confidence": 0.91,
+        "probabilities": {
+          "not_yet": 0,
+          "partial": 0.02,
+          "demonstrated_independent": 0.93,
+          "demonstrated_prompted": 0.05
+        }
+      }
+    },
+    "sources": {
+      "source_engram-biological": {
+        "choice": "message_1",
+        "confidence": 1,
+        "probabilities": {
+          "none": 0,
+          "message_1": 1
+        }
+      }
+    }
+  },
+  "provenanceAnnotation": "Source selections are controlled, manually reviewed regression inputs added for utterance attribution; they were not returned by the recorded provider. Original concept/objective/tutor scores are unchanged."
+}

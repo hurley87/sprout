@@ -1,6 +1,6 @@
 import { expect, it, vi, afterEach } from "vitest";
 import { attemptWindowInjection, diagnoseWindowMiss, type InjectionTiming } from "./helpers/injection-window";
-import { createLessonRuntime } from "../lib/lesson-runtime/lesson-runtime-reducer";
+import { createLessonRuntime } from "./helpers/counting-runtime";
 import type { LessonDiagnostic, LessonObservation } from "../lib/lesson-runtime/lesson-runtime";
 import { assertInjectionWindow, butterflySummary, assertButterflySafety } from "./browser/live/butterfly-evidence";
 import type { Report } from "./browser/live/evidence";

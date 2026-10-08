@@ -1,0 +1,237 @@
+{
+  "source": "Normalized original-session classifier outputs and transcripts from 595a0a09-d886-4c85-ab53-679bd49085f8. First snapshot lacks visual-symbol evidence; second records all required concepts while the tutor still asks a question. These are original scores, not a fresh provider replay.",
+  "nodeId": "exographics",
+  "snapshots": [
+    {
+      "atMs": 222179.39999997616,
+      "transcriptRevision": 330,
+      "transcript": "Tutor: What broader practice might be at work when people represent\nTutor: ideas visually? And how might it differ from one stored record?\nChild: Um, well, I mean, that's what creates culture\nChild: . Create fields like mathematics... And English, where we can, you know, store\nChild: ... outside of ourselves and people can contribute to those ideas and\nChild: ... Yeah, that's\nChild: - that's- Just- it allows for\nChild: ... you know the growth of ideas a lot faster than if we just stored them in our own heads\nTutor: Yeah, I hear you. You're talking about a shared space for ideas. When you mention things like math or English, what makes those marks or diagrams actually carry the same meaning for different people?\nChild: We have a common\nChild: language for even math. Even the numbers one, two, three\nChild: ... Those external symbols are\nChild: ... Things that we share... share common language so we can exchange ideas easier\nTutor: Okay. So shared symbols and meanings. Can you\nTutor: give an example, maybe not prose, that shows what you mean? And what kind of idea it can express, even if it's not a physical thing.\nChild: Sure, maybe E equals MC squared\nChild: . So, something\nChild: ... it's a math equation that represents... something very real in the, in the real world\nTutor: Right, mhm.\nChild: [inhale",
+      "outputs": {
+        "objectiveState": {
+          "choice": "unclear_or_incomplete",
+          "confidence": 0.59,
+          "probabilities": {
+            "completed": 0.31,
+            "incorrect": 0.02,
+            "unclear_or_incomplete": 0.67,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "clarifying",
+          "confidence": 0.1,
+          "probabilities": {
+            "confirmed_completion": 0.24,
+            "clarifying": 0.27999999999999997,
+            "helping": 0.05,
+            "asking": 0.22,
+            "other": 0.21
+          }
+        },
+        "concepts": {
+          "concept_visual-symbols": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.52,
+            "probabilities": {
+              "not_yet": 0.01,
+              "partial": 0.14,
+              "demonstrated_independent": 0.64,
+              "demonstrated_prompted": 0.21
+            }
+          },
+          "concept_cultural-agreement": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.41,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.03,
+              "demonstrated_independent": 0.56,
+              "demonstrated_prompted": 0.41
+            }
+          },
+          "concept_beyond-prose": {
+            "choice": "demonstrated_prompted",
+            "confidence": 0.36,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.01,
+              "demonstrated_independent": 0.47,
+              "demonstrated_prompted": 0.52
+            }
+          },
+          "concept_abstract-concepts": {
+            "choice": "demonstrated_prompted",
+            "confidence": 0.59,
+            "probabilities": {
+              "not_yet": 0.01,
+              "partial": 0.09,
+              "demonstrated_independent": 0.21,
+              "demonstrated_prompted": 0.69
+            }
+          }
+        },
+        "sources": {
+          "source_visual-symbols": {
+            "choice": "message_3",
+            "confidence": 1,
+            "probabilities": {
+              "none": 0,
+              "message_1": 0,
+              "message_3": 1,
+              "message_5": 0
+            }
+          },
+          "source_cultural-agreement": {
+            "choice": "message_3",
+            "confidence": 1,
+            "probabilities": {
+              "none": 0,
+              "message_1": 0,
+              "message_3": 1,
+              "message_5": 0
+            }
+          },
+          "source_beyond-prose": {
+            "choice": "message_5",
+            "confidence": 1,
+            "probabilities": {
+              "none": 0,
+              "message_1": 0,
+              "message_3": 0,
+              "message_5": 1
+            }
+          },
+          "source_abstract-concepts": {
+            "choice": "message_5",
+            "confidence": 1,
+            "probabilities": {
+              "none": 0,
+              "message_1": 0,
+              "message_3": 0,
+              "message_5": 1
+            }
+          }
+        }
+      }
+    },
+    {
+      "atMs": 257251.80000001192,
+      "transcriptRevision": 383,
+      "transcript": "Tutor: What broader practice might be at work when people represent\nTutor: ideas visually? And how might it differ from one stored record?\nChild: Um, well, I mean, that's what creates culture\nChild: . Create fields like mathematics... And English, where we can, you know, store\nChild: ... outside of ourselves and people can contribute to those ideas and\nChild: ... Yeah, that's\nChild: - that's- Just- it allows for\nChild: ... you know the growth of ideas a lot faster than if we just stored them in our own heads\nTutor: Yeah, I hear you. You're talking about a shared space for ideas. When you mention things like math or English, what makes those marks or diagrams actually carry the same meaning for different people?\nChild: We have a common\nChild: language for even math. Even the numbers one, two, three\nChild: ... Those external symbols are\nChild: ... Things that we share... share common language so we can exchange ideas easier\nTutor: Okay. So shared symbols and meanings. Can you\nTutor: give an example, maybe not prose, that shows what you mean? And what kind of idea it can express, even if it's not a physical thing.\nChild: Sure, maybe E equals MC squared\nChild: . So, something\nChild: ... it's a math equation that represents... something very real in the, in the real world\nTutor: Right, mhm.\nChild: [inhale\nTutor: With things like E equals MC squared, or even code or drawings, how do you see the act of inscribing those symbols on a page or screen functioning for the people who use them?\nChild: Well, they would be exograms. They would be written down. Um, share them as a diagram on a computer\nChild: . Many ways to express it",
+      "outputs": {
+        "objectiveState": {
+          "choice": "unclear_or_incomplete",
+          "confidence": 0.57,
+          "probabilities": {
+            "completed": 0.32,
+            "incorrect": 0.02,
+            "unclear_or_incomplete": 0.66,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "clarifying",
+          "confidence": 0.35,
+          "probabilities": {
+            "confirmed_completion": 0.05,
+            "clarifying": 0.48,
+            "helping": 0.09,
+            "asking": 0.36,
+            "other": 0.02
+          }
+        },
+        "concepts": {
+          "concept_visual-symbols": {
+            "choice": "demonstrated_prompted",
+            "confidence": 0.39,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.06,
+              "demonstrated_independent": 0.4,
+              "demonstrated_prompted": 0.54
+            }
+          },
+          "concept_cultural-agreement": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.39,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.03,
+              "demonstrated_independent": 0.54,
+              "demonstrated_prompted": 0.43
+            }
+          },
+          "concept_beyond-prose": {
+            "choice": "demonstrated_prompted",
+            "confidence": 0.4,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.01,
+              "demonstrated_independent": 0.44,
+              "demonstrated_prompted": 0.55
+            }
+          },
+          "concept_abstract-concepts": {
+            "choice": "demonstrated_prompted",
+            "confidence": 0.47,
+            "probabilities": {
+              "not_yet": 0.01,
+              "partial": 0.07,
+              "demonstrated_independent": 0.32,
+              "demonstrated_prompted": 0.6
+            }
+          }
+        },
+        "sources": {
+          "source_visual-symbols": {
+            "choice": "message_9",
+            "confidence": 1,
+            "probabilities": {
+              "none": 0,
+              "message_1": 0,
+              "message_3": 0,
+              "message_5": 0,
+              "message_9": 1
+            }
+          },
+          "source_cultural-agreement": {
+            "choice": "message_3",
+            "confidence": 1,
+            "probabilities": {
+              "none": 0,
+              "message_1": 0,
+              "message_3": 1,
+              "message_5": 0,
+              "message_9": 0
+            }
+          },
+          "source_beyond-prose": {
+            "choice": "message_5",
+            "confidence": 1,
+            "probabilities": {
+              "none": 0,
+              "message_1": 0,
+              "message_3": 0,
+              "message_5": 1,
+              "message_9": 0
+            }
+          },
+          "source_abstract-concepts": {
+            "choice": "message_5",
+            "confidence": 1,
+            "probabilities": {
+              "none": 0,
+              "message_1": 0,
+              "message_3": 0,
+              "message_5": 1,
+              "message_9": 0
+            }
+          }
+        }
+      }
+    }
+  ],
+  "provenanceAnnotation": "Source selections are controlled, manually reviewed regression inputs added for utterance attribution; they were not returned by the recorded provider. Original concept/objective/tutor scores are unchanged."
+}

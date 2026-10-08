@@ -1,0 +1,104 @@
+{
+  "basis": "Minimal replay of exported request at revision 740, turn 65, followed by empty turn 66 and tutor closure. Times relative to final request fragment. Provider times retained; no credentials or full session.",
+  "request": "I am, I think next question. I think I've answered this",
+  "requestInterval": {
+    "startMs": 455000,
+    "endMs": 457600
+  },
+  "events": [
+    {
+      "atMs": 43,
+      "event": {
+        "type": "microphone.speech_stopped",
+        "quietMs": 901.3999999999651
+      }
+    },
+    {
+      "atMs": 252,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 335,
+      "event": {
+        "type": "microphone.speech_started"
+      }
+    },
+    {
+      "atMs": 1268,
+      "event": {
+        "type": "microphone.speech_stopped",
+        "quietMs": 900.2000000000116
+      }
+    },
+    {
+      "atMs": 1488,
+      "event": {
+        "type": "transcript",
+        "speaker": "tutor",
+        "delta": "Okay,",
+        "startMs": 458800,
+        "endMs": 459000
+      }
+    },
+    {
+      "atMs": 1766,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 1880,
+      "event": {
+        "type": "transcript",
+        "speaker": "tutor",
+        "delta": " we'll",
+        "startMs": 459200,
+        "endMs": 459400
+      }
+    },
+    {
+      "atMs": 2075,
+      "event": {
+        "type": "transcript",
+        "speaker": "tutor",
+        "delta": " move",
+        "startMs": 459400,
+        "endMs": 459600
+      }
+    },
+    {
+      "atMs": 2217,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    },
+    {
+      "atMs": 2250,
+      "event": {
+        "type": "transcript",
+        "speaker": "tutor",
+        "delta": " on.",
+        "startMs": 459600,
+        "endMs": 459800
+      }
+    },
+    {
+      "atMs": 2516,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 3216,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    }
+  ]
+}
