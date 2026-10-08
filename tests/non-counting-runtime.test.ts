@@ -1,3 +1,5 @@
+import { classifierProposal } from "./helpers/runtime-classifier";
+import { useRuntimeFakeTimers, providerEvents } from "./helpers/runtime-harness";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ClientCommand, ProviderEvent } from "../lib/events";
 import { LessonRuntime } from "../lib/lesson-runtime/lesson-runtime";
@@ -10,35 +12,16 @@ const transport = vi.hoisted(() => ({
   start: vi.fn<(lessonId: string) => void>(),
 }));
 
-vi.mock("../lib/browser-transport", () => ({
-  BrowserTransport: class {
-    activeSourceId = 1;
-    setMicrophoneDiagnosticSink() {}
-    async start(receive: (event: ProviderEvent) => void, _failed: () => void, lessonId: string) {
-      transport.start(lessonId);
-      transport.receive = receive;
-      // Model the production transport's session request boundary while keeping
-      // the real LessonRuntime responsible for choosing and passing lessonId.
-      await fetch("/api/live", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sdp: "mock-offer", lessonId }),
-      });
-      receive({ type: "session.started", sourceId: 1 });
-    }
-    openInput() {
-      return true;
-    }
-    send = transport.send;
-    close = transport.close;
-  },
-}));
+vi.mock("../lib/browser-transport", async () => {
+  const { mockBrowserTransport } = await import("./helpers/runtime-harness");
+  return { BrowserTransport: mockBrowserTransport(transport, { requestLiveSession: true }) };
+});
 
 let lesson: LessonRuntime;
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance", "Date"] });
+  useRuntimeFakeTimers();
   vi.clearAllMocks();
   transport.receive = undefined;
   fetchMock = vi.fn(async () => Response.json({ proposal: null }));
@@ -62,37 +45,26 @@ async function start() {
   await vi.advanceTimersByTimeAsync(0);
   const initialSteering = transport.send.mock.calls[0]?.[0];
   if (initialSteering?.type !== "session.instructions.append") throw new Error("Expected initial steering");
-  emit({
-    type: "context.appended",
-    name: "session.instructions.appended",
-    clientEventId: initialSteering.event_id,
-    startMs: 0,
-  });
+  events.acknowledgeSteering(initialSteering.event_id, 0);
   emit({ type: "output.activity", state: "quiet" });
   return initialSteering;
 }
 
+const events = providerEvents(emit);
+
 function childTurn(transcript: string, startMs = 100) {
-  emit({ type: "microphone.activity_started" });
-  emit({ type: "transcript", speaker: "child", delta: transcript, startMs, endMs: startMs + 100 });
-  emit({ type: "microphone.speech_stopped", quietMs: 900 });
+  events.childTurn(transcript, startMs);
 }
 
 function tutorTranscript(transcript: string, startMs = 300) {
-  emit({ type: "transcript", speaker: "sprout", delta: transcript, startMs, endMs: startMs + 100 });
-  emit({ type: "output.activity", state: "active" });
-  emit({ type: "output.activity", state: "quiet" });
+  events.tutorTurn(transcript, startMs);
 }
 
-function proposalFor(input: { nodeId: string; transcriptRevision: number }, tutorState: string) {
-  return {
-    nodeId: input.nodeId,
-    transcriptRevision: input.transcriptRevision,
-    childActivity: "unknown",
-    answerOutcome: "correct",
-    supportState: "none",
-    tutorState,
-  };
+function proposalFor(
+  input: { nodeId: string; transcriptRevision: number },
+  tutorState: "acknowledging" | "unknown" | "clarifying",
+) {
+  return classifierProposal(input, { answerOutcome: "correct", tutorState });
 }
 
 function classifierInputs() {

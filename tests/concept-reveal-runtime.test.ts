@@ -1,3 +1,5 @@
+import { classifierProposal } from "./helpers/runtime-classifier";
+import { useRuntimeFakeTimers, providerEvents } from "./helpers/runtime-harness";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ClientCommand, ProviderEvent } from "../lib/events";
 import { LessonRuntime } from "../lib/lesson-runtime/lesson-runtime";
@@ -14,26 +16,10 @@ const transport = vi.hoisted(() => ({
   close: vi.fn(),
 }));
 
-vi.mock("../lib/browser-transport", () => ({
-  BrowserTransport: class {
-    activeSourceId = 1;
-    setMicrophoneDiagnosticSink() {}
-    async start(receive: (event: ProviderEvent) => void, _failed: () => void, lessonId: string) {
-      transport.receive = receive;
-      await fetch("/api/live", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sdp: "mock-offer", lessonId }),
-      });
-      receive({ type: "session.started", sourceId: 1 });
-    }
-    openInput() {
-      return true;
-    }
-    send = transport.send;
-    close = transport.close;
-  },
-}));
+vi.mock("../lib/browser-transport", async () => {
+  const { mockBrowserTransport } = await import("./helpers/runtime-harness");
+  return { BrowserTransport: mockBrowserTransport(transport, { requestLiveSession: true }) };
+});
 
 let lesson: LessonRuntime;
 let fetchMock: ReturnType<typeof vi.fn>;
@@ -44,7 +30,7 @@ let proposals: Array<{
 }>;
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance", "Date"] });
+  useRuntimeFakeTimers();
   vi.clearAllMocks();
   transport.receive = undefined;
   proposals = [];
@@ -55,15 +41,7 @@ beforeEach(() => {
     const next = proposals.shift();
     if (!next) throw new Error("No classifier proposal queued");
     return Response.json({
-      proposal: {
-        nodeId: input.nodeId,
-        transcriptRevision: input.transcriptRevision,
-        childActivity: "unknown",
-        answerOutcome: next.answerOutcome,
-        supportState: "none",
-        tutorState: next.tutorState,
-        conceptObservations: next.conceptObservations,
-      },
+      proposal: classifierProposal(input, next),
     });
   });
   vi.stubGlobal("fetch", fetchMock);
@@ -89,26 +67,7 @@ async function start() {
   acknowledgeSteering(steering.event_id, 0);
 }
 
-function acknowledgeSteering(eventId: string, startMs: number) {
-  emit({
-    type: "context.appended",
-    name: "session.instructions.appended",
-    clientEventId: eventId,
-    startMs,
-  });
-}
-
-function childTurn(transcript: string, startMs: number) {
-  emit({ type: "microphone.activity_started" });
-  emit({ type: "transcript", speaker: "child", delta: transcript, startMs, endMs: startMs + 100 });
-  emit({ type: "microphone.speech_stopped", quietMs: 900 });
-}
-
-function tutorTurn(transcript: string, startMs: number) {
-  emit({ type: "transcript", speaker: "sprout", delta: transcript, startMs, endMs: startMs + 100 });
-  emit({ type: "output.activity", state: "active" });
-  emit({ type: "output.activity", state: "quiet" });
-}
+const { acknowledgeSteering, childTurn, tutorTurn } = providerEvents(emit);
 
 const observation = (criterionId: string, value: "partial" | "demonstrated_independent") => ({
   criterionId,

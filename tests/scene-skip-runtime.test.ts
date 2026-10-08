@@ -1,3 +1,4 @@
+import { useRuntimeFakeTimers, providerEvents } from "./helpers/runtime-harness";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ClientCommand, ProviderEvent } from "../lib/events";
 import { LessonRuntime } from "../lib/lesson-runtime/lesson-runtime";
@@ -15,21 +16,10 @@ const transport = vi.hoisted(() => ({
   close: vi.fn(),
 }));
 
-vi.mock("../lib/browser-transport", () => ({
-  BrowserTransport: class {
-    activeSourceId = 1;
-    setMicrophoneDiagnosticSink() {}
-    async start(receive: (event: ProviderEvent) => void) {
-      transport.receive = receive;
-      receive({ type: "session.started", sourceId: 1 });
-    }
-    openInput() {
-      return true;
-    }
-    send = transport.send;
-    close = transport.close;
-  },
-}));
+vi.mock("../lib/browser-transport", async () => {
+  const { mockBrowserTransport } = await import("./helpers/runtime-harness");
+  return { BrowserTransport: mockBrowserTransport(transport) };
+});
 
 const SKIP_LESSON: LessonDefinition = validateLessonDefinition({
   id: "skip-test",
@@ -84,7 +74,7 @@ let runtime: LessonRuntime;
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance", "Date"] });
+  useRuntimeFakeTimers();
   vi.clearAllMocks();
   transport.receive = undefined;
   fetchMock = vi.fn(async () => Response.json({ proposal: null }));
@@ -121,13 +111,10 @@ function steeringCommand() {
   return command;
 }
 
+const events = providerEvents(emit);
+
 function acknowledge(command: Extract<ClientCommand, { type: "session.instructions.append" }>, startMs: number) {
-  emit({
-    type: "context.appended",
-    name: "session.instructions.appended",
-    clientEventId: command.event_id,
-    startMs,
-  });
+  events.acknowledgeSteering(command.event_id, startMs);
 }
 
 async function observedQuiet(ms = 250) {

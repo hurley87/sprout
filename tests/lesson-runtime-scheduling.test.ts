@@ -1,3 +1,4 @@
+import { useRuntimeFakeTimers } from "./helpers/runtime-harness";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ClientCommand, ProviderEvent } from "../lib/events";
 import { LessonRuntime } from "../lib/lesson-runtime/lesson-runtime";
@@ -11,25 +12,14 @@ const transport = vi.hoisted(() => ({
   send: vi.fn<(command: ClientCommand) => void>(),
   close: vi.fn(),
 }));
-vi.mock("../lib/browser-transport", () => ({
-  BrowserTransport: class {
-    activeSourceId = 1;
-    setMicrophoneDiagnosticSink() {}
-    async start(receive: (event: ProviderEvent) => void) {
-      transport.receive = receive;
-      receive({ type: "session.started", sourceId: 1 });
-    }
-    openInput() {
-      return true;
-    }
-    send = transport.send;
-    close = transport.close;
-  },
-}));
+vi.mock("../lib/browser-transport", async () => {
+  const { mockBrowserTransport } = await import("./helpers/runtime-harness");
+  return { BrowserTransport: mockBrowserTransport(transport) };
+});
 
 let lesson: LessonRuntime;
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance", "Date"] });
+  useRuntimeFakeTimers();
   vi.clearAllMocks();
   transport.receive = undefined;
 });

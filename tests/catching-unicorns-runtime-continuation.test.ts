@@ -1,3 +1,5 @@
+import { classifierProposal } from "./helpers/runtime-classifier";
+import { useRuntimeFakeTimers, providerEvents } from "./helpers/runtime-harness";
 import { sourceOutputs } from "./fixtures/concept-source-outputs";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ClientCommand, ProviderEvent } from "../lib/events";
@@ -22,27 +24,16 @@ const transport = vi.hoisted(() => ({
   close: vi.fn(),
 }));
 
-vi.mock("../lib/browser-transport", () => ({
-  BrowserTransport: class {
-    activeSourceId = 1;
-    setMicrophoneDiagnosticSink() {}
-    async start(receive: (event: ProviderEvent) => void) {
-      transport.receive = receive;
-      receive({ type: "session.started", sourceId: 1 });
-    }
-    openInput() {
-      return true;
-    }
-    send = transport.send;
-    close = transport.close;
-  },
-}));
+vi.mock("../lib/browser-transport", async () => {
+  const { mockBrowserTransport } = await import("./helpers/runtime-harness");
+  return { BrowserTransport: mockBrowserTransport(transport) };
+});
 
 let runtime: LessonRuntime;
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance", "Date"] });
+  useRuntimeFakeTimers();
   vi.clearAllMocks();
   transport.receive = undefined;
   fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
@@ -51,18 +42,14 @@ beforeEach(() => {
     const input = JSON.parse(init?.body as string);
     const node = CATCHING_UNICORNS_LESSON.nodes[input.nodeId];
     return Response.json({
-      proposal: {
-        nodeId: input.nodeId,
-        transcriptRevision: input.transcriptRevision,
-        childActivity: "unknown",
+      proposal: classifierProposal(input, {
         answerOutcome: "correct",
-        supportState: "none",
         tutorState: input.transcript.includes("Tutor:") ? "acknowledging" : "unknown",
         conceptObservations: (node.concepts ?? []).map(concept => ({
           criterionId: concept.id,
           observation: "demonstrated_independent",
         })),
-      },
+      }),
     });
   });
   vi.stubGlobal("fetch", fetchMock);
@@ -115,32 +102,17 @@ async function start(
   await vi.advanceTimersByTimeAsync(0);
   const steering = transport.send.mock.calls[0]?.[0];
   if (steering?.type !== "session.instructions.append") throw new Error("Expected initial steering");
-  emit({
-    type: "context.appended",
-    name: "session.instructions.appended",
-    clientEventId: steering.event_id,
-    startMs: 0,
-  });
+  events.acknowledgeSteering(steering.event_id, 0);
   emit({ type: "output.activity", state: "quiet" });
 }
+
+const events = providerEvents(emit);
 
 function childTurn() {
-  emit({ type: "microphone.activity_started" });
-  emit({
-    type: "transcript",
-    speaker: "child",
-    delta: "It is memory carried inside a person.",
-    startMs: 100,
-    endMs: 200,
-  });
-  emit({ type: "microphone.speech_stopped", quietMs: 900 });
+  events.childTurn("It is memory carried inside a person.", 100);
 }
 
-function tutorTranscript(delta: string, startMs: number) {
-  emit({ type: "transcript", speaker: "sprout", delta, startMs, endMs: startMs + 100 });
-  emit({ type: "output.activity", state: "active" });
-  emit({ type: "output.activity", state: "quiet" });
-}
+const tutorTranscript = events.tutorTurn;
 
 it("rejects continuation after a new tutor revision until the real runtime reclassifies it", async () => {
   await start();

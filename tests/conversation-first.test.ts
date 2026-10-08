@@ -1,3 +1,4 @@
+import { useRuntimeFakeTimers, providerEvents } from "./helpers/runtime-harness";
 import { afterEach, expect, it, vi } from "vitest";
 import { CATCHING_UNICORNS_LESSON as lesson } from "../lib/lesson-runtime/catching-unicorns-lesson";
 import {
@@ -29,21 +30,11 @@ const transport = vi.hoisted(() => ({
   send: vi.fn<(command: ClientCommand) => void>(),
   close: vi.fn(),
 }));
-vi.mock("../lib/browser-transport", () => ({
-  BrowserTransport: class {
-    activeSourceId = 1;
-    setMicrophoneDiagnosticSink() {}
-    async start(receive: (event: ProviderEvent) => void) {
-      transport.receive = receive;
-      receive({ type: "session.started", sourceId: 1 });
-    }
-    openInput() {
-      return true;
-    }
-    send = transport.send;
-    close = transport.close;
-  },
-}));
+vi.mock("../lib/browser-transport", async () => {
+  const { mockBrowserTransport } = await import("./helpers/runtime-harness");
+  return { BrowserTransport: mockBrowserTransport(transport) };
+});
+const events = providerEvents(event => transport.receive!(event));
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
@@ -162,7 +153,7 @@ it("preserves full probabilities and uncertain grading without single-message at
   expect(normalizeAssessment(broken, lesson)).toBeNull();
 });
 it("advances explicit next in the real runtime even with classifier outage, and assesses the saved conversation after stopping", async () => {
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance", "Date"] });
+  useRuntimeFakeTimers();
   const fetchMock = vi.fn(async (url: string) =>
     url === "/api/assess"
       ? Response.json({ assessment: normalizeAssessment(assessmentBody(), lesson) })
@@ -176,16 +167,9 @@ it("advances explicit next in the real runtime even with classifier outage, and 
   await vi.advanceTimersByTimeAsync(0);
   const steering = transport.send.mock.calls[0][0];
   if (steering.type !== "session.instructions.append") throw new Error("Expected steering");
-  transport.receive!({
-    type: "context.appended",
-    name: "session.instructions.appended",
-    clientEventId: steering.event_id,
-    startMs: 0,
-  });
+  events.acknowledgeSteering(steering.event_id, 0);
   transport.receive!({ type: "output.activity", state: "quiet" });
-  transport.receive!({ type: "microphone.activity_started" });
-  transport.receive!({ type: "transcript", speaker: "child", delta: "Next question, then", startMs: 100, endMs: 200 });
-  transport.receive!({ type: "microphone.speech_stopped", quietMs: 900 });
+  events.childTurn("Next question, then", 100);
   await vi.advanceTimersByTimeAsync(900);
   expect(runtime.snapshot().display.nodeId).toBe("why-exographics");
   expect(fetchMock.mock.calls.some(([url]) => url === "/api/classify")).toBe(false);
@@ -203,7 +187,7 @@ it.each([
   { nodeId: "ordinary", configured: false },
   { nodeId: "recap", configured: false },
 ])("assesses on confirmed entry to $nodeId only when configured=$configured", async ({ nodeId, configured }) => {
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance", "Date"] });
+  useRuntimeFakeTimers();
   const fetchMock = vi.fn(async () => Response.json({ assessment: normalizeAssessment(assessmentBody(), lesson) }));
   vi.stubGlobal("fetch", fetchMock);
   const { assessConversationOnEntry, ...ordinaryScene } = lesson.nodes.recap;
@@ -223,14 +207,9 @@ it.each([
     await vi.advanceTimersByTimeAsync(0);
     const steering = transport.send.mock.calls[0][0];
     if (steering.type !== "session.instructions.append") throw new Error("Expected steering");
-    transport.receive!({
-      type: "context.appended", name: "session.instructions.appended",
-      clientEventId: steering.event_id, startMs: 0,
-    });
+    events.acknowledgeSteering(steering.event_id, 0);
     transport.receive!({ type: "output.activity", state: "quiet" });
-    transport.receive!({ type: "microphone.activity_started" });
-    transport.receive!({ type: "transcript", speaker: "child", delta: "Next question, then", startMs: 100, endMs: 200 });
-    transport.receive!({ type: "microphone.speech_stopped", quietMs: 900 });
+    events.childTurn("Next question, then", 100);
     await vi.advanceTimersByTimeAsync(900);
     expect(runtime.snapshot().runtime).toMatchObject({ nodeId, phase: "rendering" });
     expect(fetchMock).not.toHaveBeenCalled();
@@ -306,7 +285,7 @@ it.each([
   expect(learnerRequestedNext(`Child: ${request}`)).toBe(false);
 });
 it("replays question six empty turn, split tutor closure and audio gaps without granting mastery or advancing twice", async () => {
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance", "Date"] });
+  useRuntimeFakeTimers();
   vi.stubGlobal(
     "fetch",
     vi.fn(async () => Response.json({}, { status: 503 })),
@@ -320,12 +299,7 @@ it("replays question six empty turn, split tutor closure and audio gaps without 
   const steering = transport.send.mock.calls[0][0];
   if (steering.type !== "session.instructions.append") throw new Error("Expected steering");
   const receive = transport.receive!;
-  receive({
-    type: "context.appended",
-    name: "session.instructions.appended",
-    clientEventId: steering.event_id,
-    startMs: 0,
-  });
+  events.acknowledgeSteering(steering.event_id, 0);
   receive({ type: "output.activity", state: "quiet" });
   receive({ type: "microphone.activity_started" });
   receive({ type: "transcript", speaker: "child", delta: questionSix.request, ...questionSix.requestInterval });
