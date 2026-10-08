@@ -1,7 +1,9 @@
 import { sourceOutputs } from "./fixtures/concept-source-outputs";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ClientCommand, ProviderEvent } from "../lib/events";
-import { CATCHING_UNICORNS_LESSON } from "../lib/lesson-runtime/catching-unicorns-lesson";
+import { CATCHING_UNICORNS_LESSON as CONVERSATIONAL_LESSON } from "../lib/lesson-runtime/catching-unicorns-lesson";
+// Retain coverage for the shared mastery-gated policy; production Sprout uses conversationFirst.
+const CATCHING_UNICORNS_LESSON = { ...CONVERSATIONAL_LESSON, conversationFirst: false };
 import { LessonRuntime } from "../lib/lesson-runtime/lesson-runtime";
 import { mapConversationObservation } from "../lib/lesson-runtime/conversation-observer-contract";
 import type { ConversationStateOutputs } from "../lib/lesson-runtime/conversation-observer-contract";
@@ -76,6 +78,34 @@ afterEach(() => {
 function emit(event: ProviderEvent) {
   transport.receive?.(event);
 }
+
+it("checks presence once when detected speech has no transcript, without accepting or advancing", async () => {
+  await start(CATCHING_UNICORNS_LESSON);
+  const recoveries = () => transport.send.mock.calls.map(([command]) => command)
+    .filter(command => command.type === "session.instructions.append" && command.event_id.includes(":answer-recovery:"));
+  emit({ type: "microphone.speech_started" });
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(recoveries()).toHaveLength(0);
+  emit({ type: "microphone.speech_stopped", quietMs: 900 });
+  await vi.advanceTimersByTimeAsync(3999);
+  expect(recoveries()).toHaveLength(0);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(recoveries()).toHaveLength(1);
+  const checkIn = recoveries()[0];
+  expect(checkIn).toMatchObject({ content: expect.stringContaining("I didn't catch your answer. Are you still there?") });
+  if (checkIn.type !== "session.instructions.append") throw new Error("Expected check-in");
+  // Receiving an instruction acknowledgment is not a spoken response or learner evidence.
+  emit({ type: "context.appended", name: "session.instructions.appended", clientEventId: checkIn.event_id, startMs: 100 });
+  emit({ type: "microphone.speech_started" });
+  emit({ type: "microphone.speech_stopped", quietMs: 900 });
+  await vi.advanceTimersByTimeAsync(10000);
+  expect(recoveries()).toHaveLength(1);
+  expect(runtime.snapshot().runtime).toMatchObject({
+    nodeId: "engram", phase: "active", hasChildTranscript: false,
+    answerAccepted: false, acknowledgmentObserved: false, conceptEvidence: {},
+  });
+  expect(fetchMock.mock.calls.filter(([url]) => url === "/api/classify")).toHaveLength(0);
+});
 
 async function start(
   lesson: typeof CATCHING_UNICORNS_LESSON = { ...CATCHING_UNICORNS_LESSON, requirePresentationConfirmation: true },

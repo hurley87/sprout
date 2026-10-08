@@ -109,7 +109,7 @@ export function parseLiveClassificationDiagnostic(
   if (
     value.labelCompletionEligible !== labelCompletionEligible ||
     (value.decision === "accepted" &&
-      (!outputs || (hasConceptQuestions ? (!completionEligible && !confidentConcepts) : !genericConfident) ||
+      (!outputs || (hasConceptQuestions ? (!completionEligible && !confidentConcepts) : (!genericConfident && !completionEligible)) ||
         (value.outcome === "allow_semantic_completion_evidence") !== completionEligible ||
         (value.outcome === "hold_scene") !== !completionEligible)) ||
     (value.decision === "abstained" && value.reason === "no_confident_concept_observation" &&

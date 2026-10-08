@@ -1,0 +1,108 @@
+{
+  "nodeId": "exographics",
+  "transcript": "Tutor: What does exographics mean?\nChild: So exographics are a visual representation of\nChild: of\nChild: of information\nTutor: So you're picturing things like, what kinds of marks or symbols?\nChild: Yeah. So think about math. It's a it's a shared language. So we're able to represent abstract ideas. Like, like numbers, um, and, and through that common language we could communicate these abstract ideas with each\nChild: other\nTutor: Yeah. You're getting at the shared symbol system there. I'm with you.",
+  "outputs": {
+    "objectiveState": {
+      "choice": "unclear_or_incomplete",
+      "confidence": 0.46,
+      "probabilities": {
+        "completed": 0.42,
+        "incorrect": 0.01,
+        "unclear_or_incomplete": 0.57,
+        "unresolved_help": 0,
+        "no_attempt": 0
+      }
+    },
+    "tutorState": {
+      "choice": "confirmed_completion",
+      "confidence": 0.96,
+      "probabilities": {
+        "confirmed_completion": 0.97,
+        "clarifying": 0.01,
+        "helping": 0.02,
+        "asking": 0,
+        "other": 0
+      }
+    },
+    "concepts": {
+      "concept_visual-symbols": {
+        "choice": "demonstrated_prompted",
+        "confidence": 0.32,
+        "probabilities": {
+          "not_yet": 0,
+          "partial": 0.1,
+          "demonstrated_independent": 0.4,
+          "demonstrated_prompted": 0.5
+        }
+      },
+      "concept_cultural-agreement": {
+        "choice": "demonstrated_independent",
+        "confidence": 0.35,
+        "probabilities": {
+          "not_yet": 0,
+          "partial": 0.06,
+          "demonstrated_independent": 0.52,
+          "demonstrated_prompted": 0.42
+        }
+      },
+      "concept_beyond-prose": {
+        "choice": "demonstrated_independent",
+        "confidence": 0.45,
+        "probabilities": {
+          "not_yet": 0,
+          "partial": 0.01,
+          "demonstrated_independent": 0.6,
+          "demonstrated_prompted": 0.39
+        }
+      },
+      "concept_abstract-concepts": {
+        "choice": "demonstrated_independent",
+        "confidence": 0.57,
+        "probabilities": {
+          "not_yet": 0,
+          "partial": 0.03,
+          "demonstrated_independent": 0.68,
+          "demonstrated_prompted": 0.29
+        }
+      }
+    },
+    "sources": {
+      "source_visual-symbols": {
+        "choice": "message_3",
+        "confidence": 0.2,
+        "probabilities": {
+          "none": 0.21,
+          "message_1": 0.32,
+          "message_3": 0.47
+        }
+      },
+      "source_cultural-agreement": {
+        "choice": "message_3",
+        "confidence": 0.89,
+        "probabilities": {
+          "none": 0.08,
+          "message_1": 0,
+          "message_3": 0.92
+        }
+      },
+      "source_beyond-prose": {
+        "choice": "message_3",
+        "confidence": 0.98,
+        "probabilities": {
+          "none": 0.01,
+          "message_1": 0,
+          "message_3": 0.99
+        }
+      },
+      "source_abstract-concepts": {
+        "choice": "message_3",
+        "confidence": 0.92,
+        "probabilities": {
+          "none": 0.05,
+          "message_1": 0,
+          "message_3": 0.95
+        }
+      }
+    }
+  }
+}

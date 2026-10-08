@@ -61,7 +61,7 @@ function replayReducer() {
 
 describe("saved butterfly filler-confirmation evidence (provider-free)", () => {
   it("replays the production reducer transitions and exact final held state", () => {
-    expect(replayReducer()).toEqual(trace.expectedState);
+    expect(replayReducer()).toEqual({ ...trace.expectedState, interruptedExchange: null, conversationAdvanceRequested: false });
   });
 
   it("still needs a fresh tutor revision if the child-ending snapshot hypothetically classifies correct", () => {

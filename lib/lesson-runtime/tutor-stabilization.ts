@@ -106,7 +106,7 @@ export class TutorStabilizationGate {
       !this.enabled ||
       state.phase !== "active" ||
       state.childSpeaking ||
-      !state.hasChildTranscript ||
+      (!state.hasChildTranscript && !state.interruptedExchange?.ready) ||
       state.transcriptSource !== "tutor"
     ) {
       this.clearSchedule(

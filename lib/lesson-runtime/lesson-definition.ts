@@ -22,6 +22,8 @@ export type LessonDefinition = {
   readonly initialNodeId: string;
   /** Hold accepted scene transitions until the application confirms the reveal was reviewed. */
   readonly requirePresentationConfirmation?: boolean;
+  /** Conversational closure advances independently of assessment/mastery. */
+  readonly conversationFirst?: boolean;
   readonly nodes: Readonly<Record<string, LessonNodeDefinition>>;
   readonly recovery: {
     readonly supportClarificationInstruction: string;

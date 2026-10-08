@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { CATCHING_UNICORNS_LESSON, CATCHING_UNICORNS_SCENE_IDS } from "../lib/lesson-runtime/catching-unicorns-lesson";
+import { CATCHING_UNICORNS_LESSON as CONVERSATIONAL_LESSON, CATCHING_UNICORNS_SCENE_IDS } from "../lib/lesson-runtime/catching-unicorns-lesson";
+// Retain coverage for the shared mastery-gated policy; production Sprout uses conversationFirst.
+const CATCHING_UNICORNS_LESSON = { ...CONVERSATIONAL_LESSON, conversationFirst: false };
 import {
   classificationSource,
   createLessonRuntime,

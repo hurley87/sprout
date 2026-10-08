@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { CATCHING_UNICORNS_LESSON as lesson } from "../lib/lesson-runtime/catching-unicorns-lesson";
+import { CATCHING_UNICORNS_LESSON as conversationalLesson } from "../lib/lesson-runtime/catching-unicorns-lesson";
+const lesson = { ...conversationalLesson, conversationFirst: false };
 import {
   mapConversationObservation,
   type ConversationStateOutputs,

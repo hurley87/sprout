@@ -207,7 +207,7 @@ describe("tentative progress remains a hold", () => {
     expect(result.effects).toEqual([]);
     expect(meetsAuthoredCompletionPolicy(h.state, h.definition)).toBe(false);
     expect(lesson.nodes[checkpoint.nodeId].concepts).toHaveLength(4);
-    const instruction = answerRecoveryInstruction(h.definition, h.state);
+    const instruction = answerRecoveryInstruction({ ...h.definition, conversationFirst: false }, h.state);
     expect(instruction).toContain("Private learner progress (not demonstration)");
     expect(instruction).toContain("If you want to read, you have to be literate");
     expect(instruction).toContain("using tentative language");

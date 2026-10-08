@@ -6,6 +6,41 @@ contract, validation, thresholds, and deterministic mapper are in
 `lib/lesson-runtime/conversation-observer-contract.ts`.
 The stable diagnostic identifier is `conversation-state-v2`.
 
+## Catching Unicorns conversation and later assessment
+
+Catching Unicorns opts into `LessonDefinition.conversationFirst`. For that lesson,
+confident tutor closure is a conversational observation, independent of the
+objective and concept scores. It permits the app to follow its authored edge
+once tutor audio drains; it does not accept an answer or upgrade concept evidence.
+A useful follow-up still holds the question. A revised tutor snapshot revokes the
+previous closure until the current snapshot is classified again.
+
+A standalone latest learner request such as “Next question, then” takes a separate
+app-owned path, without a classifier request. It follows the same authored edge
+only after confirmed learner speech ends and sustained quiet audio. Quoted
+requests, tutor speech, and questions about the next question are not commands.
+The tutor may close a sufficient discussion or ask a useful follow-up; assessment
+uncertainty must not demand repeated answers or permission from assessment.
+
+The runtime saves each visit's final ordered transcript before resetting the
+current scene. At recap, and again when stopped if the conversation changed,
+`/api/assess` grades all saved visits together. Each authored criterion can draw
+on multiple learner answers, including answers on other questions. It requires
+no single-message locator. Tutor words and navigation requests alone cannot
+establish understanding. The endpoint uses the pinned provider model, validates
+closed Choice scores, and retains every probability. Existing confidence bands
+are unchanged; ambiguous outcomes become `uncertain`, not mastered.
+
+This later assessment is separate from live `conceptEvidence` and visual reveals.
+It appears in a Conversation assessment panel at recap or after Stop. Exports
+include `conversation` and `assessment`, with pending, complete, or unavailable
+status. Assessment errors do not affect question advancement. Requests are local
+only, bounded to 100 visits and 120,000 transcript characters, and time out after
+30 seconds server-side. Live voice and provider grading still need a manual retest.
+
+The mastery gates described below continue to apply to lessons without
+`conversationFirst`, and to the acceptance of live concept evidence.
+
 ## Request and semantic contract
 
 `/api/classify` accepts exactly `lessonId`, `nodeId`, `transcriptRevision`, and
@@ -116,6 +151,14 @@ candidate is active, then binds to the current source after discard. Confirmed
 speech, late child text and visit changes still cancel it. This is conversational
 recovery only: no prior answer, transcript eligibility or acknowledgment is restored.
 Counting retains cancellation on candidate activity.
+For concept scenes with no current learner transcript, the recovery explicitly
+requests a gentle spoken presence check: "I didn't catch your answer. Are you
+still there?" The tutor should pause, then invite another answer if the learner
+confirms their presence. This uses the existing four-second quiet wait and
+single support-request budget; it adds no inactivity timer or repeated prompts.
+An instruction acknowledgment does not prove that the tutor spoke, and the
+check-in cannot establish learner evidence or advance the scene. A usable but
+incomplete transcript still uses assessment recovery rather than a presence check.
 For semantic holds, any newer transcript revision cancels the wait so only a new
 current classification can arm it again. For missing text, tutor transcript
 fragments do not supply the missing child evidence. Both causes share a single

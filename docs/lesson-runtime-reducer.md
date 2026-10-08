@@ -11,6 +11,26 @@ The root browser runtime supplies transcripts, local media evidence, and
 render confirmation and handles the reducer's effects. The reducer itself has
 no transcript accumulator, provider calls, steering sends, or persistence.
 
+## Conversation-first progression
+
+For `conversationFirst` lessons, conversational closure and mastery are separate.
+The reducer records a current tutor acknowledgment as a closure candidate without
+setting `answerAccepted`. New tutor text clears that candidate; new learner speech
+clears all conversational completion authority. The exact current classification
+source and transcript guards still apply. Concept source validation and reveal
+rules remain unchanged.
+
+`conversation.advance.requested` validates a standalone latest learner request in
+the exact current snapshot and follows only the current authored edge. It can
+advance after sustained quiet even without new tutor audio. Ordinary tutor closure
+still requires relevant observed tutor audio to drain. Active or unavailable audio,
+pending learner speech, stale sources, stopped sessions, and unconfirmed rendering
+cannot authorize advancement. Render confirmation still precedes next-question
+steering. Optional presentation confirmation remains supported.
+
+Post-conversation grading lives in the browser runtime and `/api/assess`, outside
+this reducer. It cannot reveal concepts, change live mastery, or choose a scene.
+
 ## Caller contract
 
 Create a runtime with a unique app-owned `runtimeId` and one validated
@@ -234,3 +254,52 @@ proven discarded-candidate dead end; it does not prove that this exact live run
 would complete. A fresh authorized live rerun and independent listening are needed
 to assess the later confirmed activity and conversational behavior. No paid live
 lesson was started for this investigation.
+
+### Question-six navigation across microphone segments
+
+The October 8 export (`145156dc-f55a-49bf-83d4-fd502f0686f1`) contains the
+complete request “I am, I think next question. I think I've answered this” at
+revision 740 in turn 65 (437.222 seconds). Speech ended at 437.265; a new
+candidate began at 437.474, was confirmed at 437.557, and ended at 438.490
+without learner text. The tutor closure arrived in turn 66 at revisions 741–744.
+The standalone request matcher rejected the sentence, while the empty segment
+cleared `hasChildTranscript` and blocked both classification and navigation.
+The journal proves this identity mismatch; it does not establish why that
+microphone activity occurred.
+
+Navigation now recognizes bounded conversational fillers and an answered-this
+suffix, using only the latest learner message in the current visit. It never
+searches inside arbitrary quoted, reported, negative, or hypothetical speech.
+The navigation event uses the current runtime/visit/turn/revision identity, but
+needs no current-turn answer transcript. Empty segments may revalidate the
+latest request; actual subsequent learner text replaces it and must itself
+express navigation. Mastery classification retains its current-turn gate.
+Neither requests nor tutor closure supply missing concept evidence.
+
+Requests are debounced for 300 ms and must satisfy a fresh output quiet window.
+Conversation-first live runtimes use 500 ms quiet drain (the existing tutor
+classification quiet duration), preventing the recorded 299 ms gap between
+closure audio chunks from committing a transition. Child speech, active or
+unavailable output, stale identities, and visit changes still block advancement.
+The minimal replay fixture retains recorded event offsets and provider intervals;
+regression coverage checks the empty segment, split closure, audio gaps, one
+transition, and unchanged unresolved assessment evidence. Live microphone/model
+behavior still requires a fresh session; no live session is claimed here.
+
+### Microphone-only interruption recovery
+
+For conversation-first lessons, an interruption retains visit-local transcript/audio
+eligibility in `interruptedExchange`, separately from current-turn child text and
+completion authority. Speech confirmation alone does not erase this context.
+After the existing four-second missing-transcript quiet window, recovery may
+reclassify the latest stable tutor snapshot. A fresh matching closure proposal can
+navigate, but cannot add concept evidence or treat the empty turn as an answer.
+New child text clears this path; turn/revision/visit changes still invalidate
+in-flight responses. Navigation requires a fresh audio drain after recheck.
+Rechecks do not consume the support-prompt budget. Failed or held checks wait for
+quiet and use that existing budget to request conversational recovery.
+
+`tests/microphone-only-stall.test.ts` replays both October 8 recordings with their
+recorded provider-event timing through the first recovery boundary. Its classifier
+responses are deterministic doubles; it does not validate live model accuracy or
+establish whether microphone activity was treadmill noise.

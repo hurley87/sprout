@@ -13,12 +13,13 @@ const sourceFor = (state: LessonRuntimeState): ClassificationSource => ({
   transcriptRevision: state.transcriptRevision,
 });
 
-/** Conversational recovery for missing text or canonical semantic holds; never restores
- * earlier evidence or makes a classification request without a child transcript. */
+/** Conversational recovery for missing text or canonical semantic holds. A caller
+ * may recheck visit-local closure before prompting, without restoring mastery. */
 export class AnswerRecovery {
   private turn?: ClassificationSource;
   private reason: "missing_transcript" | "semantic_hold" = "missing_transcript";
   private completionReady = false;
+  private allowRecheck = true;
   private missingQuietSince?: number;
   private missingCandidateTurn?: number;
   private timer?: ReturnType<typeof setTimeout>;
@@ -30,6 +31,9 @@ export class AnswerRecovery {
     private readonly request: (source: ClassificationSource) => void,
     private readonly diagnostic: (type: string, source: ClassificationSource, detail: unknown) => void,
     private readonly preserveMissingAcrossCandidates = false,
+    // Closure rechecks have no mastery authority and do not spend the prompt
+    // budget. A later microphone-only turn can retry a cancelled recheck.
+    private readonly recheckBeforePrompt?: (source: ClassificationSource) => boolean,
   ) {}
 
   arm(state: LessonRuntimeState, enabled: boolean) {
@@ -44,6 +48,7 @@ export class AnswerRecovery {
       return;
     this.turn = sourceFor(state);
     this.reason = "missing_transcript";
+    this.allowRecheck = true;
     this.completionReady = false;
     this.observe(state, enabled);
   }
@@ -103,7 +108,7 @@ export class AnswerRecovery {
     // A support prompt must not exhaust the later completion prompt. Each stage
     // remains bounded to one request per visit, including failed sends.
     const stage = `${state.runtimeId}:${state.visitId}:${this.completionReady ? "completion" : "support"}`;
-    if (this.timer || this.requestedStages.has(stage)) return;
+    if (this.timer || (this.requestedStages.has(stage) && !this.recheckBeforePrompt)) return;
     const waitMs = this.completionReady ? ANSWER_COMPLETION_WAIT_MS : ANSWER_RECOVERY_WAIT_MS;
     this.diagnostic("answer_recovery.scheduled", sourceFor(state), {
       waitMs,
@@ -117,11 +122,19 @@ export class AnswerRecovery {
       if (!current || !this.enabled || !this.turn || current.outputActivity !== "quiet") return;
       if (current.childSpeaking || current.childCandidate) return;
       const source = sourceFor(current);
-      this.requestedStages.add(stage); // Send failures also spend the budget.
       this.turn = undefined;
       this.diagnostic("answer_recovery.requested", source, { waitMs, reason: this.reason });
+      if (this.reason === "missing_transcript" && this.allowRecheck && this.recheckBeforePrompt?.(source)) return;
+      if (this.requestedStages.has(stage)) return;
+      this.requestedStages.add(stage); // Send failures also spend the budget.
       this.request(source);
     }, missingText ? Math.max(0, waitMs - (Date.now() - this.missingQuietSince!)) : waitMs);
+  }
+
+  /** A failed/held closure check still waits for quiet and shares the support prompt budget. */
+  armMissingFallback(state: LessonRuntimeState, enabled: boolean) {
+    this.arm(state, enabled);
+    this.allowRecheck = false;
   }
 
   cancel(reason: string) {

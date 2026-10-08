@@ -53,6 +53,7 @@ const exogram = criterion(
 const lesson: LessonDefinition = {
   id: "catching-unicorns",
   initialNodeId: "engram",
+  conversationFirst: true,
   nodes: {
     engram: scene({
       id: "engram",
@@ -82,7 +83,7 @@ const lesson: LessonDefinition = {
       prompt: "Compare engrams and exograms. What differences does the manuscript describe?",
       objective: "Compare engrams and exograms using only the manuscript's stated dimensions.",
       tutorBrief:
-        "Assess durability, shareability, and revisability separately, using the private assessment checklist. The internal and external memory definitions were already demonstrated; do not require them again. A learner can demonstrate a property with an explanation or clear example. Do not confirm completion until all three differences have learner evidence. If unclear, ask what the learner means by a difference they already mentioned rather than naming a property. Do not claim that biological memories are never durable, shareable, or revisable.",
+        "Assess durability, shareability, and revisability separately, using the private assessment checklist. The internal and external memory definitions were already demonstrated; do not require them again. A learner can demonstrate a property with an explanation or clear example. Ask a useful follow-up if the meaning is unclear; move on when the conversation has run its course. If unclear, ask what the learner means by a difference they already mentioned rather than naming a property. Do not claim that biological memories are never durable, shareable, or revisable.",
       concepts: [
         engram,
         exogram,
@@ -105,9 +106,10 @@ const lesson: LessonDefinition = {
       id: "exographics",
       title: "Exographics",
       prompt: "What does exographics mean?",
-      objective: "Explain how exographics uses meaningful visual symbols and shared conventions to represent ideas, including abstract concepts, with an example beyond prose.",
+      objective:
+        "Explain how exographics uses meaningful visual symbols and shared conventions to represent ideas, including abstract concepts, with an example beyond prose.",
       tutorBrief:
-        "Assess four targets separately: meaningful visual symbols, culturally agreed meanings, an example beyond prose, and abstraction. Accept learner explanations across replies. Naming mathematics or a map establishes an example, but not automatically shared meanings or abstraction. Probe one missing target at a time using their example. Once shared conventions are explained, stop asking how marks acquire meaning. For abstraction, ask what idea or relationship the example expresses. Do not supply definitions or an example answer, count your own words as learner evidence, or reduce exographics to external storage. Briefly confirm only when all four have evidence.",
+        "Assess four targets separately: meaningful visual symbols, culturally agreed meanings, an example beyond prose, and abstraction. Accept learner explanations across replies. Naming mathematics or a map establishes an example, but not automatically shared meanings or abstraction. Probe one missing target at a time using their example. Once shared conventions are explained, stop asking how marks acquire meaning. For abstraction, ask what idea or relationship the example expresses. Do not supply definitions or an example answer, count your own words as learner evidence, or reduce exographics to external storage. Ask a useful follow-up or close the question when the discussion is sufficient; uncertain assessment must not hold the conversation.",
       concepts: [
         criterion(
           "visual-symbols",
@@ -155,10 +157,11 @@ const lesson: LessonDefinition = {
     "techno-literate-culture": scene({
       id: "techno-literate-culture",
       title: "Culture and literacy",
-      prompt: "What makes a culture able to develop and share knowledge across many people?",
+      prompt:
+        "The Introduction describes four characteristics of a techno-literate culture. What do you remember about them? Start with any one, and explain how it helps the culture develop.",
       objective: "Explain each of the four characteristics presented in the Introduction.",
       tutorBrief:
-        "Resolve the four characteristics independently. Accept paraphrases, not a vague claim that a culture merely uses a lot of technology. Ask the learner to clarify or expand their own explanation; do not enumerate the characteristics or supply an answer for one.",
+        "Assess four separately; accept paraphrases. Start with any one. Rephrase around the framework and their example. Build on records, shared languages and schools; avoid repeated What else? After difficulty or a help request, offer one targeted cue: most people's basic skills, who discovers ideas, how strangers coordinate, or levels of education. If needed, explain that one characteristic and invite their own explanation of its role. Explain all four if requested; wait for an attempt first. Tutor words alone are not learner evidence; an explanation after help is supported understanding, not independent recall. Keep gaps unresolved; honor next requests.",
       concepts: [
         criterion(
           "widespread-literacy",
@@ -252,18 +255,18 @@ const lesson: LessonDefinition = {
   },
   recovery: {
     supportClarificationInstruction:
-      "Ask briefly whether the learner wants a clarification or another try. Do not reveal a criterion description, canonical answer, example answer, or later scene. If they want to stop or move on, acknowledge that and preserve the unresolved evidence state.",
+      "Ask briefly whether the learner wants a clarification or another try. Keep criterion descriptions, canonical answers and later scenes private unless the current scene tutor brief explicitly permits targeted help after difficulty or a request. If they want to stop or move on, acknowledge that and preserve the unresolved evidence state.",
     answerRecoveryInstruction:
-      "Invite the learner to explain in their own words, or ask one short non-leading question about what they mean. Do not paraphrase the answer they should give, provide a hint that supplies a missing criterion, or present hidden canonical text. If they choose to stop, do not turn the unresolved criterion into a demonstration.",
+      "Invite the learner to explain in their own words, or ask one short non-leading question about what they mean. Follow the current scene tutor brief: when it explicitly permits help, offer a targeted cue or brief explanation after difficulty or a request. Otherwise do not supply missing answers. If they choose to stop, do not turn the unresolved criterion into a demonstration.",
   },
   tutor: {
     persona:
       "You are a curious, respectful discussion partner helping an adult learner think through Catching Unicorns.",
-    sessionGuidance: `Use only claims grounded in ${SOURCE.preface} and ${SOURCE.introduction}. The app, not you, controls scene changes and visual reveals. Let the learner answer before teaching. Never state hidden canonical answers for an unresolved criterion. Natural paraphrases count. A probe must clarify the learner's meaning without putting an answer in their mouth. Honor a request to stop or skip without treating it as evidence. Google/AI/memorization may be discussed only as optional transfer conversation and cannot gate mastery.`,
+    sessionGuidance: `Use only claims grounded in ${SOURCE.preface} and ${SOURCE.introduction}. The app, not you, controls scene changes and visual reveals. Let the learner answer before teaching. Keep unresolved canonical answers private except when the current scene tutor brief explicitly permits targeted scaffolding after difficulty or a request. Tutor-supplied content alone never establishes learner mastery. Natural paraphrases count. A probe must clarify the learner's meaning without putting an answer in their mouth. Honor a request to stop or skip without treating it as evidence. Google/AI/memorization may be discussed only as optional transfer conversation and cannot gate mastery.`,
     startInstruction:
       "Begin the Catching Unicorns discussion by asking the current scene's prompt, then pause for the learner.",
     nodeInstruction:
-      "Teach only the current scene and objective. Apply its tutor brief. Do not preview later scenes, reveal an unresolved answer, or select a transition; the app owns those decisions. Ask naturally and leave space for the learner to reason. When the explanation appears sufficient, briefly acknowledge the specific idea and pause without a question. Say the scene is complete only after the application reports that required concept evidence is recorded; then confirm once and end without a question. The app advances automatically after accepted evidence and your audio finishes; pause for it to provide the next scene. Do not ask the learner to press Continue. Do not request repeated rephrasing, ask what feels clear, or open an optional discussion after confirming success. If the learner asks a follow-up, answer it within this scene and pause again; do not invent another requirement for completion.",
+      "Teach only the current scene and objective. Apply its tutor brief. Do not preview later scenes or select a transition; reveal unresolved content only as targeted help explicitly permitted by the current scene brief; the app owns those decisions. Ask naturally and leave space for the learner to reason. When the explanation appears sufficient, briefly acknowledge the specific idea and pause without a question. You may finish this question when the explanation is sufficient or the discussion has run its course, even if assessment is uncertain. Briefly say we can move on, then end without a question. The app advances after your conversational closure and audio finishes; pause for it to provide the next scene. Do not ask the learner to press Continue. Do not request repeated rephrasing, ask what feels clear, or open an optional discussion after confirming success. If the learner asks a follow-up, answer it within this scene and pause again; do not invent another requirement for completion.",
   },
   classifier: {
     objectiveInstructions:

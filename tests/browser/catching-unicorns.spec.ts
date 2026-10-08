@@ -310,7 +310,7 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
           childActivity: "unknown",
           answerOutcome: "correct",
           supportState: "none",
-          tutorState: "acknowledging",
+          tutorState: transcriptMessages(body.transcript)?.findLast(message => message.speaker === "Tutor")?.text.includes("?") ? "clarifying" : "acknowledging",
           conceptObservations: observations,
         },
       },
@@ -420,7 +420,7 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
   await page.evaluate(() => {
     (window as unknown as LocalSessionWindow).sendTranscript(
       "session.output_transcript.delta",
-      "Where does that memory exist, and how is a note different?",
+      "Yes, that explanation is sufficient.",
     );
     (window as unknown as LocalSessionWindow).currentPeer.level.gain.value = 0.15;
   });
@@ -487,7 +487,7 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
 
   await speakThenTutor(
     "An external record can persist beyond the moment of thinking.",
-    "That explains one difference.",
+    "That explains one difference. What else differs?",
   );
   await expect(page.locator('[data-scene="compare"]')).toContainText("Durable");
   await page.screenshot({ path: testInfo.outputPath("comparison-explained.png") });

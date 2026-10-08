@@ -39,7 +39,7 @@ export function conversationStateQuestions(lesson: LessonDefinition, nodeId?: st
     },
     tutorState: {
       type: "choice" as const,
-      instructions: `${scope} ${lesson.classifier.tutorInstructions}${conceptScope}`,
+      instructions: `${scope} ${lesson.classifier.tutorInstructions}${conceptScope}${lesson.conversationFirst ? " For this lesson, confirmed_completion also includes the tutor closing this question or saying the discussion is sufficient to move on, regardless of correctness or uncertain concept assessment. A pause alone is not closure; a new follow-up question is not closure." : ""}`,
       criteria: lesson.classifier.tutorCriteria,
     },
   };
@@ -270,7 +270,9 @@ export function interpretConversationOutputs(outputs: ConversationStateOutputs, 
       (observation.observation === "demonstrated_independent" || (node?.completionPolicy === "all_demonstrated" &&
         ["demonstrated_prompted", "demonstrated_unattributed"].includes(observation.observation))),
     ));
-  const completionEligible = (genericConfident && labelCompletionEligible) || criterionCompletionEligible;
+  const completionEligible = lesson?.conversationFirst
+    ? tutorConfident && outputs.tutorState.choice === "confirmed_completion"
+    : (genericConfident && labelCompletionEligible) || criterionCompletionEligible;
   return { objectiveConfident, tutorConfident, genericConfident, labelCompletionEligible, hasConceptQuestions, conceptObservations, criterionCompletionEligible, completionEligible };
 }
 
@@ -292,7 +294,7 @@ export function mapConversationObservation(
   if (!normalized) return abstain("invalid_outputs");
   const { objectiveConfident, tutorConfident, labelCompletionEligible, hasConceptQuestions, conceptObservations, criterionCompletionEligible, completionEligible } =
     interpretConversationOutputs(normalized, input.lesson, input.nodeId);
-  if (!hasConceptQuestions) {
+  if (!hasConceptQuestions && !input.lesson?.conversationFirst) {
     if (!objectiveConfident) return abstain(confidenceFailureReason("objectiveState", normalized.objectiveState), normalized, labelCompletionEligible);
     if (!tutorConfident) return abstain(confidenceFailureReason("tutorState", normalized.tutorState), normalized, labelCompletionEligible);
     if (normalized.tutorState.choice === "confirmed_completion" && normalized.objectiveState.choice !== "completed")

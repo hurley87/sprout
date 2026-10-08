@@ -148,7 +148,9 @@ describe("isolated Catching Unicorns lesson content", () => {
         "reveals" in currentPresentation ? Object.values(currentPresentation.reveals).map(item => item.text) : [];
       for (const answer of currentRevealText) expect(JSON.stringify(context)).not.toContain(answer);
     }
-    expect(CATCHING_UNICORNS_LESSON.tutor.sessionGuidance).toContain("Never state hidden canonical answers");
+    expect(CATCHING_UNICORNS_LESSON.tutor.sessionGuidance).toContain(
+      "except when the current scene tutor brief explicitly permits targeted scaffolding",
+    );
     expect(CATCHING_UNICORNS_LESSON.tutor.sessionGuidance).toContain("cannot gate mastery");
   });
 });
