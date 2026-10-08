@@ -63,6 +63,51 @@
   padding-bottom: 32px;
 }
 
+.learned {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 16px;
+  margin: 28px auto 0;
+  max-width: 880px;
+  padding-top: 16px;
+  border-top: 1px solid #e1e9e6;
+  color: var(--lesson-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.learned h3 {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.learnedList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+}
+
+.learnedConcept {
+  border: 1px solid #e1e9e6;
+  border-radius: 12px;
+  padding: 6px 12px;
+  max-width: 48ch;
+}
+
+.learnedConcept summary {
+  cursor: pointer;
+}
+
+.learnedConcept p {
+  margin-top: 8px;
+}
+
+.learnedSource {
+  font-size: 11px;
+}
+
 .question {
   font-size: clamp(36px, 4.7vw, 72px);
   line-height: 1.14;
@@ -443,6 +488,15 @@
 
   .scene {
     padding: 32px 0;
+  }
+
+  .scene:has(.learned) {
+    padding: 16px 0;
+  }
+
+  .learned {
+    margin-top: 16px;
+    padding-top: 12px;
   }
 
   .footer {

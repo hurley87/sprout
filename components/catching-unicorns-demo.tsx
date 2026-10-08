@@ -76,6 +76,40 @@ function EvidenceState({ evidence }: { evidence?: ConceptEvidenceRecord }) {
 
 export function ScenePresentation({ state }: { state: LessonRuntimeState | null | undefined }) {
   const nodeId = state?.nodeId ?? CATCHING_UNICORNS_LESSON.initialNodeId;
+  const learned = sceneIds.slice(0, sceneIds.indexOf(nodeId)).flatMap(id =>
+    (CATCHING_UNICORNS_LESSON.nodes[id].concepts ?? []).flatMap(concept => {
+      const item = revealText(id as keyof typeof CATCHING_UNICORNS_PRESENTATION, concept.id);
+      return item && evidenceFor(state, id, concept.id)?.status === "demonstrated"
+        ? [{ criterionId: concept.id, item }]
+        : [];
+    }),
+  );
+
+  return (
+    <>
+      <CurrentScenePresentation state={state} />
+      {nodeId !== "recap" && learned.length > 0 && (
+        <section className={styles.learned} aria-labelledby="learned-so-far-title">
+          <h3 id="learned-so-far-title">Learned so far</h3>
+          <ul className={styles.learnedList}>
+            {learned.map(({ criterionId, item }) => (
+              <li key={criterionId}>
+                <details className={styles.learnedConcept}>
+                  <summary>{item.title}</summary>
+                  <p>{item.text}</p>
+                  <p className={styles.learnedSource}>Source: {item.source}</p>
+                </details>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </>
+  );
+}
+
+function CurrentScenePresentation({ state }: { state: LessonRuntimeState | null | undefined }) {
+  const nodeId = state?.nodeId ?? CATCHING_UNICORNS_LESSON.initialNodeId;
   const node = CATCHING_UNICORNS_LESSON.nodes[nodeId];
   const scene = CATCHING_UNICORNS_PRESENTATION[nodeId as keyof typeof CATCHING_UNICORNS_PRESENTATION];
   const concepts = node.concepts ?? [];

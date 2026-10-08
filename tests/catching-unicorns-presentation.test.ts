@@ -38,6 +38,63 @@ function renderScene(nodeId: string, conceptEvidence: Readonly<Record<string, Co
 }
 
 describe("Catching Unicorns scene presentation", () => {
+  it("keeps a demonstrated concept visible after advancing, using its authored reveal", () => {
+    const accepted = { "engram:engram-biological": evidence("engram-biological") };
+    const current = renderScene("engram", accepted);
+    expect(current).toContain("Explore the definition");
+    expect(current).not.toContain("Learned so far");
+
+    const next = renderScene("exogram", accepted);
+    expect(next).toContain("What is an exogram?");
+    expect(next).toContain("Learned so far");
+    expect(next).toContain("<summary>Engram</summary>");
+    expect(next).toContain("Biological memory: memory held within a biological mind.");
+    expect(next).not.toContain("Non-biological memory: a representation kept outside biological memory.");
+    expect(next).not.toContain("Explore the definition");
+    expect(next).not.toContain("Continue");
+  });
+
+  it("hides prior partial, uncertain, skipped, and unresolved concepts", () => {
+    const html = renderScene("techno-literate-culture", {
+      "engram:engram-biological": { ...evidence("engram-biological"), status: "partial" },
+      "exogram:exogram-non-biological": { ...evidence("exogram-non-biological"), status: "not_yet" },
+      "compare:exogram-durability": evidence("exogram-durability", null),
+    });
+    expect(html).toContain("<summary>Durable</summary>");
+    expect(html).not.toContain("<summary>Engram</summary>");
+    expect(html).not.toContain("<summary>Exogram</summary>");
+    expect(html).not.toContain("Biological memory: memory held within a biological mind.");
+    expect(html).not.toContain("<summary>Shareable</summary>");
+    expect(html).not.toContain("<summary>Revisable</summary>");
+    expect(html).not.toContain("<summary>Reification purpose</summary>");
+    expect(renderScene("exogram")).not.toContain("Learned so far");
+  });
+
+  it("lists carried-forward evidence once and excludes current and later scenes", () => {
+    const html = renderScene("exographics", {
+      "engram:engram-biological": evidence("engram-biological"),
+      "exogram:engram-biological": evidence("engram-biological"),
+      "compare:engram-biological": evidence("engram-biological"),
+      "exogram:exogram-non-biological": evidence("exogram-non-biological", "prompted"),
+      "compare:exogram-non-biological": evidence("exogram-non-biological", "prompted"),
+      "exographics:visual-symbols": evidence("visual-symbols"),
+      "techno-literate-culture:widespread-literacy": evidence("widespread-literacy"),
+    });
+    const learned = html.slice(html.indexOf('aria-labelledby="learned-so-far-title"'));
+    expect(learned.match(/<summary>Engram<\/summary>/g)).toHaveLength(1);
+    expect(learned.match(/<summary>Exogram<\/summary>/g)).toHaveLength(1);
+    expect(learned).not.toContain("Meaningful symbols on visual media");
+    expect(learned).not.toContain("Widespread basic literacy");
+    expect(html).toContain("Explore the definition");
+  });
+
+  it("leaves the final recap as the evidence summary", () => {
+    const html = renderScene("recap", { "engram:engram-biological": evidence("engram-biological") });
+    expect(html).toContain("What this conversation showed");
+    expect(html).toContain("Demonstrated independently");
+    expect(html).not.toContain("Learned so far");
+  });
+
   it("keeps demonstrated evidence with uncertain prompting visible in the recap", () => {
     const recap = renderScene("recap", { "engram:engram-biological": evidence("engram-biological", null, "A memory inside my brain, unlike an external note.") });
     expect(recap).toContain("Demonstrated · prompting unclear");

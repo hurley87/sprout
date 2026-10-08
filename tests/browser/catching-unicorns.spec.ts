@@ -464,6 +464,9 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
   await expect(page.getByRole("button", { name: "Continue", exact: true })).toHaveCount(0);
   holdSecondResponse();
   await waitForScene("exogram");
+  const learned = page.getByRole("region", { name: "Learned so far", exact: true });
+  await expect(learned.locator("summary", { hasText: /^Engram$/ })).toBeVisible();
+  await expect(learned.locator("summary", { hasText: /^Exogram$/ })).toHaveCount(0);
   expect(await questionStyle()).toEqual(initialQuestionStyle);
   await page.screenshot({ path: testInfo.outputPath("exogram-question.png") });
   await expectEvidence("engram:engram-biological", { status: "demonstrated", understanding: "independent" });
@@ -499,6 +502,9 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
     "Those are the stated differences.",
   );
   await waitForScene("exographics");
+  await expect(learned.locator("summary", { hasText: /^Engram$/ })).toHaveCount(1);
+  await expect(learned.locator("summary", { hasText: /^Exogram$/ })).toHaveCount(1);
+  await expect(learned.locator("summary", { hasText: /^Durable$/ })).toBeVisible();
   expect(await questionStyle()).toEqual(initialQuestionStyle);
   await page.screenshot({ path: testInfo.outputPath("exographics-question.png") });
 
