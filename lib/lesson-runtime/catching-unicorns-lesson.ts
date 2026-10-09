@@ -74,7 +74,7 @@ const lesson: LessonDefinition = {
       prompt: "What is an exogram?",
       objective: "Describe this source term in your own words and contrast it with internally held memory.",
       tutorBrief:
-        "Focus on the learner's explanation of external, non-biological memory. Clarify with a question about whether a note or diagram can preserve information outside the learner. Do not define it for them. The already demonstrated engram evidence may be carried forward without re-teaching it.",
+        "Focus on the learner's explanation of external, non-biological memory. Only if the explanation is unclear, ask how their example preserves information outside the learner. An explanation of information stored outside the brain with a written-note example is sufficient; do not ask them to confirm that same point. Briefly acknowledge it in a complete sentence, then pause for the app to advance. Do not define it for them. The already demonstrated engram evidence may be carried forward without re-teaching it.",
       concepts: [engram, exogram],
       next: "compare",
       carry: [engram.id, exogram.id],

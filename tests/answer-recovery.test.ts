@@ -1,5 +1,9 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { AnswerRecovery, ANSWER_RECOVERY_WAIT_MS, ANSWER_COMPLETION_WAIT_MS } from "../lib/lesson-runtime/answer-recovery";
+import {
+  AnswerRecovery,
+  ANSWER_RECOVERY_WAIT_MS,
+  ANSWER_COMPLETION_WAIT_MS,
+} from "../lib/lesson-runtime/answer-recovery";
 import { createLessonRuntime, classificationSource } from "./helpers/counting-runtime";
 
 const state = () => ({
@@ -127,7 +131,12 @@ it("allows one faster completion prompt after the visit's support recovery was s
   await vi.advanceTimersByTimeAsync(1);
   expect(request).toHaveBeenCalledTimes(2);
   expect(request).toHaveBeenLastCalledWith(classificationSource(completed));
-  recovery.armSemanticHold({ ...completed, transcriptRevision: 5 }, true, classificationSource({ ...completed, transcriptRevision: 5 })!, true);
+  recovery.armSemanticHold(
+    { ...completed, transcriptRevision: 5 },
+    true,
+    classificationSource({ ...completed, transcriptRevision: 5 })!,
+    true,
+  );
   await vi.advanceTimersByTimeAsync(5000);
   expect(request).toHaveBeenCalledTimes(2);
 });
@@ -159,23 +168,34 @@ it("keeps missing-text recovery through discarded candidates but never sends dur
   recovery.arm(initial, true);
   for (let turn = 3; turn <= 5; turn++) {
     await vi.advanceTimersByTimeAsync(1000);
-    const candidate = { ...initial, childTurnId: turn, childSpeaking: true,
-      childCandidate: { hasChildTranscript: false, tutorOutputObserved: false } };
+    const candidate = {
+      ...initial,
+      childTurnId: turn,
+      childSpeaking: true,
+      childCandidate: { hasChildTranscript: false, tutorOutputObserved: false },
+    };
     recovery.observe(candidate, true);
     await vi.advanceTimersByTimeAsync(200);
     recovery.observe({ ...initial, childTurnId: turn }, true);
   }
   await vi.advanceTimersByTimeAsync(300);
-  const candidate = { ...initial, childTurnId: 6, childSpeaking: true,
-    childCandidate: { hasChildTranscript: false, tutorOutputObserved: false } };
+  const candidate = {
+    ...initial,
+    childTurnId: 6,
+    childSpeaking: true,
+    childCandidate: { hasChildTranscript: false, tutorOutputObserved: false },
+  };
   recovery.observe(candidate, true);
   await vi.advanceTimersByTimeAsync(200);
   expect(request).not.toHaveBeenCalled();
   recovery.observe({ ...initial, childTurnId: 6 }, true);
   await vi.advanceTimersByTimeAsync(0);
   expect(request).toHaveBeenCalledExactlyOnceWith({
-    runtimeId: initial.runtimeId, nodeId: initial.nodeId, visitId: initial.visitId,
-    childTurnId: 6, transcriptRevision: initial.transcriptRevision,
+    runtimeId: initial.runtimeId,
+    nodeId: initial.nodeId,
+    visitId: initial.visitId,
+    childTurnId: 6,
+    transcriptRevision: initial.transcriptRevision,
   });
 });
 
@@ -185,8 +205,12 @@ it("still cancels preserved missing-text recovery on confirmed speech or late ch
   const recovery = new AnswerRecovery(request, vi.fn(), true);
   const initial = state();
   recovery.arm(initial, true);
-  const candidate = { ...initial, childTurnId: 3, childSpeaking: true,
-    childCandidate: { hasChildTranscript: false, tutorOutputObserved: false } };
+  const candidate = {
+    ...initial,
+    childTurnId: 3,
+    childSpeaking: true,
+    childCandidate: { hasChildTranscript: false, tutorOutputObserved: false },
+  };
   recovery.observe(candidate, true);
   recovery.observe({ ...candidate, childCandidate: null }, true);
   await vi.advanceTimersByTimeAsync(5000);
@@ -195,4 +219,60 @@ it("still cancels preserved missing-text recovery on confirmed speech or late ch
   recovery.observe({ ...initial, hasChildTranscript: true }, true);
   await vi.advanceTimersByTimeAsync(5000);
   expect(request).not.toHaveBeenCalled();
+});
+
+it("repairs the recorded exogram fragment once after new tutor text, without learner speech", async () => {
+  // Session 563329ad: revision 66 ('That's right') received completion recovery;
+  // revision 68 ('Okay. That's') remained held, then candidates repeated it.
+  vi.useFakeTimers();
+  const request = vi.fn();
+  const recovery = new AnswerRecovery(request, vi.fn(), true, () => false);
+  const confirmed = {
+    ...state(),
+    hasChildTranscript: true,
+    transcriptRevision: 66,
+    transcriptSource: "child" as const,
+  };
+  recovery.armSemanticHold(confirmed, true, classificationSource(confirmed)!, true);
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(request).toHaveBeenCalledTimes(1);
+  const fragment = { ...confirmed, transcriptRevision: 68, transcriptSource: "tutor" as const };
+  recovery.armSemanticHold(fragment, true, classificationSource(fragment)!, true);
+  await vi.advanceTimersByTimeAsync(3999);
+  expect(request).toHaveBeenCalledTimes(1);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(request).toHaveBeenCalledTimes(2);
+  for (const revision of [68, 69, 70]) {
+    const repeated = { ...fragment, transcriptRevision: revision, childTurnId: revision };
+    recovery.armSemanticHold(repeated, true, classificationSource(repeated)!, true);
+    await vi.advanceTimersByTimeAsync(10000);
+  }
+  expect(request).toHaveBeenCalledTimes(2);
+});
+
+it.each(["speech", "active audio", "stop", "new visit"])("cancels completion repair on %s", async change => {
+  vi.useFakeTimers();
+  const request = vi.fn();
+  const recovery = new AnswerRecovery(request, vi.fn(), true, () => false);
+  const initial = { ...state(), hasChildTranscript: true, transcriptRevision: 66 };
+  recovery.armSemanticHold(initial, true, classificationSource(initial)!, true);
+  await vi.advanceTimersByTimeAsync(1000);
+  const fragment = { ...initial, transcriptSource: "tutor" as const, transcriptRevision: 68 };
+  recovery.armSemanticHold(fragment, true, classificationSource(fragment)!, true);
+  await vi.advanceTimersByTimeAsync(3999);
+  recovery.observe(
+    {
+      ...fragment,
+      ...(change === "speech"
+        ? { childSpeaking: true }
+        : change === "active audio"
+          ? { outputActivity: "active" as const }
+          : change === "stop"
+            ? { phase: "stopped" as const }
+            : { visitId: 2 }),
+    },
+    true,
+  );
+  await vi.advanceTimersByTimeAsync(10000);
+  expect(request).toHaveBeenCalledTimes(1);
 });

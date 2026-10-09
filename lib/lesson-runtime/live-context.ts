@@ -1,3 +1,4 @@
+import { meetsAuthoredCompletionPolicy } from "./lesson-runtime-reducer";
 import { currentNodeContext, type LessonDefinition } from "./lesson-definition";
 import type { CurrentNodeSteeringContext, LessonRuntimeState } from "./lesson-runtime-reducer";
 
@@ -12,6 +13,14 @@ const targetText = (description: string) => description.replace(/^(?:Source-back
 
 export function answerRecoveryInstruction(lesson: LessonDefinition, state: LessonRuntimeState) {
   const node = lesson.nodes[state.nodeId];
+  if (
+    lesson.conversationFirst &&
+    state.hasChildTranscript &&
+    node.concepts?.length &&
+    node.completionPolicy !== "allow_unresolved" &&
+    meetsAuthoredCompletionPolicy(state, lesson)
+  )
+    return "Application recovery: the required learner evidence for this question is recorded. Speak now and finish your acknowledgment in one complete sentence, then pause for the app to advance. Do not ask for another confirmation or repeat a settled question. If your previous response was cut short, finish it now. If the learner has corrected or contradicted their answer, address that correction instead. Do not teach the next scene; the application owns advancement.";
   if (lesson.conversationFirst && state.hasChildTranscript)
     return "Application conversation guidance: assessment uncertainty must not hold this question. Use the learner’s accumulated answers. Follow the current scene tutor brief for targeted scaffolding when the learner struggles or asks for help; otherwise ask one useful, non-leading follow-up if meaning is unclear. Tutor-supplied content alone is not learner mastery. If the explanation is sufficient or the discussion has run its course, close with a concise acknowledgment and pause without a question. Do not ask whether the learner is ready to move on. Honor a request for the next question. Never ask for repetition to satisfy assessment attribution, claim uncertain concepts are mastered, or wait for an evaluation. The application owns question order and will supply the next rendered screen.";
   if (!state.hasChildTranscript && node.concepts?.length)

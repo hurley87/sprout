@@ -26,6 +26,7 @@ export class AnswerRecovery {
   private state?: LessonRuntimeState;
   private enabled = false;
   private readonly requestedStages = new Set<string>();
+  private readonly completionRequests = new Map<string, number>();
 
   constructor(
     private readonly request: (source: ClassificationSource) => void,
@@ -82,8 +83,12 @@ export class AnswerRecovery {
         ? state.hasChildTranscript
         : !state.hasChildTranscript || state.transcriptRevision !== this.turn.transcriptRevision) ||
       (missingText
-        ? state.runtimeId !== this.turn.runtimeId || state.visitId !== this.turn.visitId || state.nodeId !== this.turn.nodeId ||
-          (state.childTurnId !== this.turn.childTurnId && !state.childCandidate && this.missingCandidateTurn !== state.childTurnId)
+        ? state.runtimeId !== this.turn.runtimeId ||
+          state.visitId !== this.turn.visitId ||
+          state.nodeId !== this.turn.nodeId ||
+          (state.childTurnId !== this.turn.childTurnId &&
+            !state.childCandidate &&
+            this.missingCandidateTurn !== state.childTurnId)
         : turnKey(sourceFor(state)) !== turnKey(this.turn))
     ) {
       this.cancel("turn_or_eligibility_changed");
@@ -108,27 +113,48 @@ export class AnswerRecovery {
     // A support prompt must not exhaust the later completion prompt. Each stage
     // remains bounded to one request per visit, including failed sends.
     const stage = `${state.runtimeId}:${state.visitId}:${this.completionReady ? "completion" : "support"}`;
-    if (this.timer || (this.requestedStages.has(stage) && !this.recheckBeforePrompt)) return;
-    const waitMs = this.completionReady ? ANSWER_COMPLETION_WAIT_MS : ANSWER_RECOVERY_WAIT_MS;
+    // One repair is allowed after a completion request produces new tutor text
+    // but still no closure. Candidate noise or reclassifying identical text must
+    // not replenish the budget. Existing speech, revision and quiet gates apply.
+    const priorRevision = this.completionRequests.get(stage);
+    const repairStage = `${stage}:repair`;
+    const repair =
+      this.completionReady &&
+      !!this.recheckBeforePrompt &&
+      priorRevision !== undefined &&
+      state.transcriptSource === "tutor" &&
+      state.transcriptRevision > priorRevision &&
+      !this.requestedStages.has(repairStage);
+    const requestStage = repair ? repairStage : stage;
+    if (
+      this.timer ||
+      (this.requestedStages.has(requestStage) && (this.reason !== "missing_transcript" || !this.recheckBeforePrompt))
+    )
+      return;
+    const waitMs = this.completionReady && !repair ? ANSWER_COMPLETION_WAIT_MS : ANSWER_RECOVERY_WAIT_MS;
     this.diagnostic("answer_recovery.scheduled", sourceFor(state), {
       waitMs,
       reason: this.reason,
     });
-    this.timer = setTimeout(() => {
-      this.timer = undefined;
-      // Every runtime transition updates this state; tutor fragments may change
-      // revision without supplying the missing child evidence or resetting quiet.
-      const current = this.state;
-      if (!current || !this.enabled || !this.turn || current.outputActivity !== "quiet") return;
-      if (current.childSpeaking || current.childCandidate) return;
-      const source = sourceFor(current);
-      this.turn = undefined;
-      this.diagnostic("answer_recovery.requested", source, { waitMs, reason: this.reason });
-      if (this.reason === "missing_transcript" && this.allowRecheck && this.recheckBeforePrompt?.(source)) return;
-      if (this.requestedStages.has(stage)) return;
-      this.requestedStages.add(stage); // Send failures also spend the budget.
-      this.request(source);
-    }, missingText ? Math.max(0, waitMs - (Date.now() - this.missingQuietSince!)) : waitMs);
+    this.timer = setTimeout(
+      () => {
+        this.timer = undefined;
+        // Every runtime transition updates this state; tutor fragments may change
+        // revision without supplying the missing child evidence or resetting quiet.
+        const current = this.state;
+        if (!current || !this.enabled || !this.turn || current.outputActivity !== "quiet") return;
+        if (current.childSpeaking || current.childCandidate) return;
+        const source = sourceFor(current);
+        this.turn = undefined;
+        this.diagnostic("answer_recovery.requested", source, { waitMs, reason: this.reason });
+        if (this.reason === "missing_transcript" && this.allowRecheck && this.recheckBeforePrompt?.(source)) return;
+        if (this.requestedStages.has(requestStage)) return;
+        this.requestedStages.add(requestStage);
+        if (this.completionReady && !repair) this.completionRequests.set(stage, source.transcriptRevision); // Send failures also spend the budget.
+        this.request(source);
+      },
+      missingText ? Math.max(0, waitMs - (Date.now() - this.missingQuietSince!)) : waitMs,
+    );
   }
 
   /** A failed/held closure check still waits for quiet and shares the support prompt budget. */
