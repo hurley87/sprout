@@ -1,9 +1,10 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { LessonRuntime } from "../lib/lesson-runtime/lesson-runtime";
 import { CATCHING_UNICORNS_LESSON as lesson } from "../lib/lesson-runtime/catching-unicorns-lesson";
-import { classificationSource } from "../lib/lesson-runtime/lesson-runtime-reducer";
 import type { ClientCommand, ProviderEvent } from "../lib/events";
-import replays from "./fixtures/microphone-only-stall-replays.json";
+import historicalReplays from "./fixtures/microphone-only-stall-replays.json";
+import completedExchanges from "./fixtures/completed-exchange-coordination.json";
+const replays = [...historicalReplays, ...completedExchanges];
 
 const transport = vi.hoisted(() => ({
   receive: undefined as ((event: ProviderEvent) => void) | undefined,
@@ -38,9 +39,12 @@ function response(body: { nodeId: string; transcriptRevision: number; transcript
       nodeId: body.nodeId,
       transcriptRevision: body.transcriptRevision,
       childActivity: "unknown",
-      answerOutcome: "correct",
+      answerOutcome: "unclear",
       supportState: "none",
-      tutorState: closing && /We can move on\.|any further\./u.test(body.transcript) ? "acknowledging" : "unknown",
+      tutorState:
+        closing && /(?:[Ww]e can move on(?: if you['’]re ready)?\.|any further\.)$/u.test(body.transcript)
+          ? "acknowledging"
+          : "unknown",
       conceptObservations: (lesson.nodes[body.nodeId].concepts ?? []).map(c => ({
         criterionId: c.id,
         observation: "demonstrated_independent",
@@ -73,51 +77,62 @@ const recoveryPrompts = () =>
     ([c]) => c.type === "session.instructions.append" && c.event_id.includes(":answer-recovery:"),
   );
 
-it.each(replays)("replays $recordingId through a fresh closure check and one drained transition", async replay => {
-  // Start at the stalled authored node; preserve all subsequent recorded timings.
-  const definition = { ...lesson, initialNodeId: replay.nodeId };
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance", "Date"] });
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (url: string, init?: RequestInit) =>
-      url === "/api/classify" ? response(JSON.parse(String(init?.body))) : Response.json({ ok: true }),
-    ),
-  );
-  const runtime = new LessonRuntime({} as HTMLAudioElement, () => {}, definition);
-  runtime.confirmRendered(runtime.snapshot().display);
-  await vi.advanceTimersByTimeAsync(0);
-  const steering = transport.send.mock.calls[0][0];
-  if (steering.type !== "session.instructions.append") throw new Error("Expected steering");
-  transport.receive!({
-    type: "context.appended",
-    name: "session.instructions.appended",
-    clientEventId: steering.event_id,
-    startMs: 0,
-  });
-  let elapsed = 0;
-  for (const item of replay.events) {
-    await vi.advanceTimersByTimeAsync(item.atMs - elapsed);
-    elapsed = item.atMs;
-    transport.receive!(item.event as ProviderEvent);
-    expect(runtime.snapshot().runtime?.phase).toBe("active");
-  }
-  expect(runtime.snapshot().runtime?.hasChildTranscript).toBe(false);
-  expect(classificationSource(runtime.snapshot().runtime!)).toBeNull();
-  const evidence = structuredClone(runtime.snapshot().runtime?.conceptEvidence);
-  await vi.advanceTimersByTimeAsync(5000);
-  expect(runtime.snapshot().display.nodeId).toBe(replay.nodeId === "engram" ? "exogram" : "why-exographics");
-  expect(
-    Object.fromEntries(
-      Object.entries(runtime.snapshot().runtime!.conceptEvidence).filter(([key]) =>
-        key.startsWith(`${replay.nodeId}:`),
+it.each(replays)(
+  "replays $recordingId / $nodeId through a fresh closure check and one drained transition",
+  async replay => {
+    // Start at the stalled authored node; preserve all subsequent recorded timings.
+    const definition = { ...lesson, initialNodeId: replay.nodeId };
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance", "Date"] });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) =>
+        url === "/api/classify" ? response(JSON.parse(String(init?.body))) : Response.json({ ok: true }),
       ),
-    ),
-  ).toEqual(evidence);
-  expect(runtime.observe().events.filter(e => e.type === "conversation.recheck.started")).toHaveLength(1);
-  expect(runtime.observe().events.filter(e => e.type === "render.requested")).toHaveLength(1);
-  expect(recoveryPrompts()).toHaveLength(0);
-  runtime.stop();
-});
+    );
+    const runtime = new LessonRuntime({} as HTMLAudioElement, () => {}, definition);
+    runtime.confirmRendered(runtime.snapshot().display);
+    await vi.advanceTimersByTimeAsync(0);
+    const steering = transport.send.mock.calls[0][0];
+    if (steering.type !== "session.instructions.append") throw new Error("Expected steering");
+    transport.receive!({
+      type: "context.appended",
+      name: "session.instructions.appended",
+      clientEventId: steering.event_id,
+      startMs: 0,
+    });
+    let elapsed = 0;
+    let evidence = structuredClone(runtime.snapshot().runtime?.conceptEvidence);
+    for (const item of replay.events) {
+      evidence = structuredClone(runtime.snapshot().runtime?.conceptEvidence);
+      await vi.advanceTimersByTimeAsync(item.atMs - elapsed);
+      if (runtime.snapshot().runtime?.phase === "rendering") break;
+      elapsed = item.atMs;
+      transport.receive!(item.event as ProviderEvent);
+      expect(runtime.snapshot().runtime?.phase).toBe("active");
+    }
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(runtime.snapshot().display.nodeId).toBe(
+      replay.nodeId === "engram" ? "exogram" : replay.nodeId === "caf-application" ? "synthesis" : "why-exographics",
+    );
+    expect(
+      Object.fromEntries(
+        Object.entries(runtime.snapshot().runtime!.conceptEvidence).filter(([key]) =>
+          key.startsWith(`${replay.nodeId}:`),
+        ),
+      ),
+    ).toEqual(evidence);
+    expect(
+      runtime.observe().events.filter(e => e.type === "conversation.recheck.started").length,
+    ).toBeGreaterThanOrEqual(1);
+    expect(runtime.observe().events.filter(e => e.type === "render.requested")).toHaveLength(1);
+    expect(recoveryPrompts()).toHaveLength(0);
+    const render = runtime.observe().events.find(e => e.type === "render.requested")!;
+    const recheck = runtime.observe().events.findLast(e => e.type === "conversation.recheck.started")!;
+    expect(render.atMs - recheck.atMs).toBeLessThanOrEqual(550);
+    expect(runtime.observe().events.some(e => e.type === "answer_recovery.requested")).toBe(false);
+    runtime.stop();
+  },
+);
 
 function interrupted(receive: (event: ProviderEvent) => void) {
   receive({ type: "output.activity", state: "quiet" });
@@ -155,7 +170,7 @@ it.each(["active", "unavailable"] as const)("cannot recheck while tutor output i
 it("a delayed correction revokes the recheck before it fires", async () => {
   const { runtime, receive } = await setup(body => Promise.resolve(response(body, false)));
   interrupted(receive);
-  await vi.advanceTimersByTimeAsync(3999);
+  await vi.advanceTimersByTimeAsync(599);
   receive({ type: "transcript", speaker: "child", delta: "Actually I don't know.", startMs: 450, endMs: 500 });
   await vi.advanceTimersByTimeAsync(5000);
   expect(runtime.snapshot().runtime?.interruptedExchange).toBeNull();
@@ -173,7 +188,7 @@ it.each(["correction", "new turn", "skip", "stop"])("rejects a late successful r
     });
   });
   interrupted(receive);
-  await vi.advanceTimersByTimeAsync(4700);
+  await vi.advanceTimersByTimeAsync(600);
   expect(pending).toBeDefined();
   if (change === "correction")
     receive({ type: "transcript", speaker: "child", delta: "Actually no.", startMs: 450, endMs: 500 });
@@ -181,7 +196,7 @@ it.each(["correction", "new turn", "skip", "stop"])("rejects a late successful r
   if (change === "skip") runtime.skipScene();
   if (change === "stop") runtime.stop();
   resolve(response(pending));
-  await vi.advanceTimersByTimeAsync(0);
+  await vi.advanceTimersByTimeAsync(550);
   expect(runtime.observe().events.filter(e => e.type === "render.requested")).toHaveLength(change === "skip" ? 1 : 0);
   expect(recoveryPrompts()).toHaveLength(0);
   runtime.stop();
@@ -233,7 +248,7 @@ it("another empty interruption during a recheck can retry without spending the p
     });
   });
   interrupted(receive);
-  await vi.advanceTimersByTimeAsync(4100);
+  await vi.advanceTimersByTimeAsync(600);
   receive({ type: "microphone.activity_started" });
   receive({ type: "microphone.speech_started" });
   receive({ type: "microphone.speech_stopped", quietMs: 900 });

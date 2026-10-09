@@ -102,11 +102,13 @@ export class TutorStabilizationGate {
   private evaluate(trigger: string) {
     const state = this.state;
     if (!state || !this.snapshot) return;
+    // Interrupted visit-local exchanges use the same stability/quiet boundary.
+    // Readiness only invites a closure recheck; it does not restore child evidence.
     if (
       !this.enabled ||
       state.phase !== "active" ||
       state.childSpeaking ||
-      (!state.hasChildTranscript && !state.interruptedExchange?.ready) ||
+      (!state.hasChildTranscript && !state.interruptedExchange?.tutorOutputObserved) ||
       state.transcriptSource !== "tutor"
     ) {
       this.clearSchedule(

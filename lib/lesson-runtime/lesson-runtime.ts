@@ -651,6 +651,28 @@ export class LessonRuntime {
 
   private async classify(trigger: string) {
     if (!this.state || this.status !== "live" || this.steering) return;
+    // A microphone-only interruption revokes the current turn's evidence, but
+    // need not delay checking visit-local tutor closure until answer recovery.
+    // Only the stable tutor boundary can enable this check; the reducer still
+    // requires a fresh proposal and grants no mastery from historical words.
+    if (
+      trigger === "tutor_utterance_stable" &&
+      this.lessonDefinition.conversationFirst &&
+      !learnerRequestedNext(this.transcript) &&
+      !this.state.hasChildTranscript &&
+      !this.state.interruptedExchange?.ready
+    ) {
+      this.dispatch({
+        type: "conversation.recheck.requested",
+        source: {
+          ...runtimeSource(this.state),
+          nodeId: this.state.nodeId,
+          transcriptRevision: this.state.transcriptRevision,
+        },
+        atMs: this.now(),
+      });
+      if (this.state.interruptedExchange?.ready) this.log("conversation.recheck.started", { trigger });
+    }
     // These two values are captured together, once, before any async work.
     const source = classificationSource(this.state);
     const transcript = this.transcript;

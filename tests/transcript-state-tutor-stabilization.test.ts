@@ -1,9 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createLessonRuntime, type LessonRuntimeState } from "./helpers/counting-runtime";
-import {
-  TutorStabilizationGate,
-  type TutorStabilizationDiagnostic,
-} from "../lib/lesson-runtime/tutor-stabilization";
+import { TutorStabilizationGate, type TutorStabilizationDiagnostic } from "../lib/lesson-runtime/tutor-stabilization";
 
 const timing = { tutorTranscriptStableMs: 600, tutorClassificationQuietMs: 500 };
 beforeEach(() => {
@@ -40,6 +37,28 @@ function setup(patch: Partial<LessonRuntimeState> = {}) {
 }
 
 describe("lesson tutor classification boundary", () => {
+  it("stabilizes an interrupted exchange without waiting for missing-text recovery", () => {
+    const { ready } = setup({
+      hasChildTranscript: false,
+      interruptedExchange: { tutorOutputObserved: true, ready: false },
+      outputActivity: "quiet",
+    });
+    vi.advanceTimersByTime(599);
+    expect(ready).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(ready).toHaveBeenCalledOnce();
+  });
+
+  it("does not stabilize missing text without observed tutor output from an exchange", () => {
+    const { ready } = setup({
+      hasChildTranscript: false,
+      interruptedExchange: { tutorOutputObserved: false, ready: false },
+      outputActivity: "quiet",
+    });
+    vi.advanceTimersByTime(6000);
+    expect(ready).not.toHaveBeenCalled();
+  });
+
   it("does not classify a partial tutor transcript or a 350 ms pause while audio remains active", () => {
     const { observe, ready, diagnostics } = setup();
     vi.advanceTimersByTime(350);
