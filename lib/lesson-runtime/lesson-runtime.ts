@@ -1,5 +1,10 @@
 import { buildSessionSummary, sessionSummaryInstruction, type SessionSummary } from "./session-summary";
-import { normalizeAssessment, type ConversationAssessment, type ConversationVisit } from "./conversation-assessment";
+import {
+  ASSESSMENT_VERSION,
+  parseAssessment,
+  type ConversationAssessment,
+  type ConversationVisit,
+} from "./conversation-assessment";
 import { BrowserTransport } from "../browser-transport";
 import type { ProviderEvent, TranscriptEvent } from "../events";
 import { MICROPHONE_ONSET_MS, MICROPHONE_ONSET_QUIET_MS, MICROPHONE_QUIET_MS } from "../microphone-turn";
@@ -101,7 +106,7 @@ export class LessonRuntime {
   private transcript = "";
   private revision = 0;
   private readonly conversationVisits = new Map<number, ConversationVisit>();
-  private assessment: ConversationAssessment = { status: "idle", results: {} };
+  private assessment: ConversationAssessment = { version: ASSESSMENT_VERSION, status: "idle", results: {} };
   private assessedConversation = "";
   private assessmentGeneration = 0;
   private summary?: SessionSummary;
@@ -941,7 +946,7 @@ export class LessonRuntime {
     const abort = new AbortController();
     this.assessmentAbort = abort;
     const generation = ++this.assessmentGeneration;
-    this.assessment = { status: "pending", results: {} };
+    this.assessment = { version: ASSESSMENT_VERSION, status: "pending", results: {} };
     this.refreshSummary();
     this.publish();
     try {
@@ -954,20 +959,14 @@ export class LessonRuntime {
       if (!response.ok) throw new Error("Assessment unavailable");
       const body = await response.json();
       // Revalidate the closed score schema; never trust provider text or let grading advance a scene.
-      const answers = Object.fromEntries(
-        Object.entries(body?.assessment?.results ?? {}).map(([id, value]) => [
-          id,
-          { type: "choice", ...(value as { scores?: object }).scores },
-        ]),
-      );
-      const assessment = normalizeAssessment({ answers }, this.lessonDefinition);
+      const assessment = parseAssessment(body?.assessment, this.lessonDefinition);
       if (!assessment) throw new Error("Invalid assessment");
       if (generation !== this.assessmentGeneration) return;
       this.assessment = assessment;
       this.log("assessment.completed", { assessment, visitCount: visits.length });
     } catch {
       if (generation !== this.assessmentGeneration) return;
-      this.assessment = { status: "unavailable", results: {} };
+      this.assessment = { version: ASSESSMENT_VERSION, status: "unavailable", results: {} };
       this.log("assessment.unavailable", { message: "Conversation preserved; assessment unavailable." });
     }
     this.refreshSummary();

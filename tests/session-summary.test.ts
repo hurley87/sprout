@@ -4,7 +4,7 @@ import { expect, it } from "vitest";
 import { CATCHING_UNICORNS_LESSON as lesson } from "../lib/lesson-runtime/catching-unicorns-lesson";
 import { createLessonRuntime, type ConceptEvidenceRecord } from "../lib/lesson-runtime/lesson-runtime-reducer";
 import { buildSessionSummary, sessionSummaryInstruction } from "../lib/lesson-runtime/session-summary";
-import type { ConversationAssessment } from "../lib/lesson-runtime/conversation-assessment";
+import { ASSESSMENT_VERSION, type ConversationAssessment } from "../lib/lesson-runtime/conversation-assessment";
 import { RecapPresentation } from "../components/catching-unicorns/recap-presentation";
 
 const state = createLessonRuntime("summary-test", { lesson });
@@ -29,20 +29,30 @@ function live(
   };
 }
 function review(
-  outcome: ConversationAssessment["results"][string]["outcome"],
+  outcome: "uncertain" | "partial" | "not_yet" | "demonstrated_prompted",
   key = "engram:engram-biological",
 ): ConversationAssessment {
   return {
+    version: ASSESSMENT_VERSION,
     status: "complete",
     results: {
       [key]: {
         nodeId: key.split(":")[0],
         criterionId: key.split(":")[1],
-        outcome,
-        scores: {
-          choice: "partial",
-          confidence: 0.5,
-          probabilities: { not_yet: 0.1, partial: 0.5, demonstrated_independent: 0.4, demonstrated_prompted: 0 },
+        sourceContract: "v2",
+        understanding: {
+          outcome: outcome === "demonstrated_prompted" ? "demonstrated" : outcome,
+          abstained: outcome === "uncertain",
+          scores: {
+            choice: "partial",
+            confidence: 0.5,
+            probabilities: { not_yet: 0.1, partial: 0.5, demonstrated: 0.4 },
+          },
+        },
+        assistance: {
+          outcome: outcome === "demonstrated_prompted" ? "prompted" : "unclear",
+          abstained: outcome !== "demonstrated_prompted",
+          scores: { choice: "unclear", confidence: 1, probabilities: { independent: 0, prompted: 0, unclear: 1 } },
         },
       },
     },
@@ -68,7 +78,7 @@ it("keeps confident disagreements open and prompting conservative", () => {
   const disputed = buildSessionSummary(current, review("not_yet"));
   expect(disputed.strengths).toEqual([]);
   expect(disputed.improvement.text).toContain("evidence sources disagree");
-  expect(disputed.concepts[0].records[0].review?.scores.confidence).toBe(0.5);
+  expect(disputed.concepts[0].records[0].review?.understanding.scores.confidence).toBe(0.5);
   const prompted = buildSessionSummary(current, review("demonstrated_prompted"));
   expect(prompted.strengths[0].text).toContain("with prompting");
   expect(prompted.strengths[0].text).not.toContain("independent");
@@ -76,7 +86,11 @@ it("keeps confident disagreements open and prompting conservative", () => {
 it.each(["idle", "pending", "unavailable", "complete"] as const)(
   "does not diagnose missing or uncertain evidence with %s review",
   status => {
-    const summary = buildSessionSummary(state, { status, results: review("uncertain").results });
+    const summary = buildSessionSummary(state, {
+      version: ASSESSMENT_VERSION,
+      status,
+      results: review("uncertain").results,
+    });
     expect(summary.strengths).toEqual([]);
     expect(summary.improvement.text).toContain("does not mean you got it wrong");
     expect(summary.exercise).toContain("in your own words");
@@ -185,4 +199,25 @@ it("shows repeated quotations once per concept while retaining distinct scene ob
   expect(html).toContain("review uncertain");
   expect(html).not.toContain("engram:engram-biological:");
   expect(html.indexOf("It is memory inside my mind.")).toBeGreaterThan(html.indexOf("<details"));
+});
+it("preserves a recorded strength when content is demonstrated and review assistance abstains", () => {
+  const assessment = review("demonstrated_prompted");
+  assessment.results["engram:engram-biological"].assistance = {
+    outcome: "unclear",
+    abstained: true,
+    scores: {
+      choice: "independent",
+      confidence: 0.52,
+      probabilities: { independent: 0.52, prompted: 0.47, unclear: 0.01 },
+    },
+  };
+  const current = { ...state, conceptEvidence: { "engram:engram-biological": live() } };
+  const summary = buildSessionSummary(current, assessment);
+  expect(summary.strengths).toHaveLength(1);
+  expect(summary.strengths[0].text).not.toContain("full review inconclusive");
+  expect(summary.strengths[0].text).toContain("independent live evidence");
+  const html = renderToStaticMarkup(createElement(RecapPresentation, { state: current, summary }));
+  expect(html).toContain("review demonstrated");
+  expect(html).toContain("assistance unclear");
+  expect(summary.concepts[0].records[0].review?.assistance.abstained).toBe(true);
 });

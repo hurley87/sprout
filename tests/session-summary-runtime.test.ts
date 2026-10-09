@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ClientCommand, ProviderEvent } from "../lib/events";
 import { CATCHING_UNICORNS_LESSON as lesson } from "../lib/lesson-runtime/catching-unicorns-lesson";
-import { assessmentQuestions, normalizeAssessment } from "../lib/lesson-runtime/conversation-assessment";
+import {
+  ASSESSMENT_VERSION,
+  assessmentQuestions,
+  normalizeAssessment,
+} from "../lib/lesson-runtime/conversation-assessment";
 import { LessonRuntime } from "../lib/lesson-runtime/lesson-runtime";
 import { providerEvents, useRuntimeFakeTimers } from "./helpers/runtime-harness";
 
@@ -25,15 +29,23 @@ const response = () =>
   Response.json({
     assessment: normalizeAssessment(
       {
+        version: ASSESSMENT_VERSION,
         answers: Object.fromEntries(
           Object.keys(assessmentQuestions(lesson)).map(key => [
             key,
-            {
-              type: "choice",
-              choice: "partial",
-              confidence: 0.6,
-              probabilities: { not_yet: 0.1, partial: 0.6, demonstrated_independent: 0.3, demonstrated_prompted: 0 },
-            },
+            key.endsWith(":understanding")
+              ? {
+                  type: "choice",
+                  choice: "partial",
+                  confidence: 0.6,
+                  probabilities: { not_yet: 0.1, partial: 0.6, demonstrated: 0.3 },
+                }
+              : {
+                  type: "choice",
+                  choice: "unclear",
+                  confidence: 1,
+                  probabilities: { independent: 0, prompted: 0, unclear: 1 },
+                },
           ]),
         ),
       },
@@ -131,4 +143,14 @@ it("supersedes in-flight entry review on stop, ignores late completion, and send
   expect(fresh.snapshot().assessment?.status).toBe("idle");
   expect(fresh.report().runtimeId).not.toBe(previous.runtimeId);
   fresh.stop();
+});
+it("keeps malformed successful API responses unavailable without changing accepted live evidence", async () => {
+  await enterRecap();
+  const before = structuredClone(runtime.snapshot().runtime?.conceptEvidence);
+  requests[0].resolve(Response.json({ assessment: { version: ASSESSMENT_VERSION, status: "complete", results: {} } }));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(runtime.snapshot().assessment?.status).toBe("unavailable");
+  expect(runtime.snapshot().assessment?.version).toBe(ASSESSMENT_VERSION);
+  expect(runtime.snapshot().runtime?.conceptEvidence).toEqual(before);
+  expect(runtime.snapshot().summary?.notice).toContain("unavailable");
 });

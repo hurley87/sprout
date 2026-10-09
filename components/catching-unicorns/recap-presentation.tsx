@@ -41,7 +41,8 @@ function EvidenceDetails({
                     {CATCHING_UNICORNS_LESSON.nodes[nodeId]?.presentation.title ?? nodeId}
                   </span>
                   : live {record.live?.status ?? "unobserved"} ({record.live?.understanding ?? "attribution unclear"});
-                  review {record.review?.outcome.replaceAll("_", " ") ?? reviewStatus}
+                  review {record.review?.understanding.outcome.replaceAll("_", " ") ?? reviewStatus}
+                  {record.review && <> · assistance {record.review.assistance.outcome}</>}
                   {source && (
                     <span className="block">
                       Learner turn {source.childTurnId} ·{" "}

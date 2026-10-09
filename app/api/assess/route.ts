@@ -1,6 +1,7 @@
 import { isLocalRequest, readJsonBody } from "@/lib/local-request";
 import { resolveLessonDefinition } from "@/lib/lesson-runtime/lesson-registry";
 import {
+  ASSESSMENT_VERSION,
   assessmentQuestions,
   normalizeAssessment,
   parseConversationVisits,
@@ -40,7 +41,10 @@ export async function POST(request: Request) {
     });
     if (!response.ok) return json({ error: "Assessment unavailable." }, 502);
     const result = await response.json();
-    const assessment = result?.model === JEV_MODEL ? normalizeAssessment(result, lesson) : null;
+    const assessment =
+      result?.model === JEV_MODEL
+        ? normalizeAssessment({ version: ASSESSMENT_VERSION, answers: result?.answers }, lesson)
+        : null;
     return assessment ? json({ assessment }) : json({ error: "Assessment unavailable." }, 502);
   } catch {
     return json({ error: "Assessment unavailable." }, 502);

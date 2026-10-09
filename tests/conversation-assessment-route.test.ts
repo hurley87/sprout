@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { POST } from "../app/api/assess/route";
 import { CATCHING_UNICORNS_LESSON as lesson } from "../lib/lesson-runtime/catching-unicorns-lesson";
-import { assessmentQuestions } from "../lib/lesson-runtime/conversation-assessment";
+import { ASSESSMENT_VERSION, assessmentQuestions } from "../lib/lesson-runtime/conversation-assessment";
 import { JEV_MODEL } from "../lib/jev";
 const visits = [
   {
@@ -32,12 +32,19 @@ it("sends all ordered answers for cumulative assessment and returns uncertain sc
   const answers = Object.fromEntries(
     Object.keys(assessmentQuestions(lesson)).map(id => [
       id,
-      {
-        type: "choice",
-        choice: "demonstrated_independent",
-        confidence: 0.6,
-        probabilities: { not_yet: 0, partial: 0.4, demonstrated_independent: 0.6, demonstrated_prompted: 0 },
-      },
+      id.endsWith(":understanding")
+        ? {
+            type: "choice",
+            choice: "demonstrated",
+            confidence: 0.6,
+            probabilities: { not_yet: 0, partial: 0.4, demonstrated: 0.6 },
+          }
+        : {
+            type: "choice",
+            choice: "unclear",
+            confidence: 1,
+            probabilities: { independent: 0, prompted: 0, unclear: 1 },
+          },
     ]),
   );
   const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
@@ -50,10 +57,16 @@ it("sends all ordered answers for cumulative assessment and returns uncertain sc
   expect(response.status).toBe(200);
   const sent = JSON.parse(fetchMock.mock.calls[0][1]!.body as string);
   expect(sent.state.conversation).toEqual(visits);
-  expect(sent.questions["exographics:visual-symbols"].instructions).toContain("Do not require one learner utterance");
+  expect(sent.questions["exographics:visual-symbols:understanding"].instructions).toContain(
+    "Do not require one learner utterance",
+  );
   const body = await response.json();
-  expect(body.assessment.results["exographics:visual-symbols"].outcome).toBe("uncertain");
-  expect(body.assessment.results["exographics:visual-symbols"].scores.probabilities.demonstrated_independent).toBe(0.6);
+  expect(body.assessment.version).toBe(ASSESSMENT_VERSION);
+  expect(body.assessment.results["exographics:visual-symbols"].assistance.outcome).toBe("unclear");
+  expect(body.assessment.results["exographics:visual-symbols"].understanding.outcome).toBe("uncertain");
+  expect(body.assessment.results["exographics:visual-symbols"].understanding.scores.probabilities.demonstrated).toBe(
+    0.6,
+  );
 });
 it.each([
   { lessonId: lesson.id, visits: [{ ...visits[0], nodeId: "unknown" }] },
@@ -74,3 +87,14 @@ it("keeps provider failure separate from conversation success", async () => {
   expect((await POST(request())).status).toBe(502);
   expect((await POST(request(undefined, "example.com"))).status).toBe(403);
 });
+it.each([{ model: "wrong", answers: {} }, { model: JEV_MODEL, answers: {} }, null])(
+  "reports invalid provider/model results as unavailable: %j",
+  async result => {
+    vi.stubEnv("TYPESAFE_API_KEY", "synthetic-test-key");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json(result)),
+    );
+    expect((await POST(request())).status).toBe(502);
+  },
+);

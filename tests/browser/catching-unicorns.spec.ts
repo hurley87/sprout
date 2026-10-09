@@ -1,4 +1,8 @@
-import { assessmentQuestions, normalizeAssessment } from "../../lib/lesson-runtime/conversation-assessment";
+import {
+  ASSESSMENT_VERSION,
+  assessmentQuestions,
+  normalizeAssessment,
+} from "../../lib/lesson-runtime/conversation-assessment";
 import { expect, test, type Page } from "@playwright/test";
 import { transcriptMessages, substantiveLearnerText } from "../../lib/lesson-runtime/tutor-observation";
 import { readFile } from "node:fs/promises";
@@ -261,20 +265,23 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
       json: {
         assessment: normalizeAssessment(
           {
+            version: ASSESSMENT_VERSION,
             answers: Object.fromEntries(
               Object.keys(assessmentQuestions(CATCHING_UNICORNS_LESSON)).map(key => [
                 key,
-                {
-                  type: "choice",
-                  choice: "partial",
-                  confidence: 0.6,
-                  probabilities: {
-                    not_yet: 0.1,
-                    partial: 0.6,
-                    demonstrated_independent: 0.3,
-                    demonstrated_prompted: 0,
-                  },
-                },
+                key.endsWith(":understanding")
+                  ? {
+                      type: "choice",
+                      choice: "partial",
+                      confidence: 0.6,
+                      probabilities: { not_yet: 0.1, partial: 0.6, demonstrated: 0.3 },
+                    }
+                  : {
+                      type: "choice",
+                      choice: "unclear",
+                      confidence: 1,
+                      probabilities: { independent: 0, prompted: 0, unclear: 1 },
+                    },
               ]),
             ),
           },

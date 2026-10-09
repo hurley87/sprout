@@ -1,5 +1,5 @@
 import { CATCHING_UNICORNS_LESSON, CATCHING_UNICORNS_PRESENTATION } from "./catching-unicorns-lesson";
-import type { ConversationAssessment } from "./conversation-assessment";
+import { ASSESSMENT_VERSION, type ConversationAssessment } from "./conversation-assessment";
 import type { ConceptEvidenceRecord, LessonRuntimeState } from "./lesson-runtime-reducer";
 
 export type SummaryConcept = {
@@ -31,7 +31,7 @@ export type SessionSummary = {
  */
 export function buildSessionSummary(
   state: LessonRuntimeState,
-  assessment: ConversationAssessment = { status: "idle", results: {} },
+  assessment: ConversationAssessment = { version: ASSESSMENT_VERSION, status: "idle", results: {} },
 ): SessionSummary {
   const byId = new Map<string, SummaryConcept>();
   for (const node of Object.values(CATCHING_UNICORNS_LESSON.nodes)) {
@@ -71,8 +71,8 @@ export function buildSessionSummary(
   for (const concept of concepts) {
     const live = concept.records.flatMap(record => (record.live?.source?.childTranscript ? [record.live] : []));
     const demonstrations = live.filter(record => record.status === "demonstrated");
-    const reviews = concept.records.flatMap(record => (record.review ? [record.review.outcome] : []));
-    const positiveReview = reviews.some(outcome => outcome.startsWith("demonstrated_"));
+    const reviews = concept.records.flatMap(record => (record.review ? [record.review.understanding.outcome] : []));
+    const positiveReview = reviews.some(outcome => outcome === "demonstrated");
     const negativeReview = reviews.some(outcome => outcome === "partial" || outcome === "not_yet");
     const disagreement = (demonstrations.length > 0 || positiveReview) && negativeReview;
     concept.evidence = disagreement
@@ -84,7 +84,8 @@ export function buildSessionSummary(
           : "unobserved";
     // Prefer supported attribution over an independent claim if either source records scaffolding.
     concept.attribution =
-      demonstrations.some(record => record.understanding === "prompted") || reviews.includes("demonstrated_prompted")
+      demonstrations.some(record => record.understanding === "prompted") ||
+      concept.records.some(record => record.review?.assistance.outcome === "prompted")
         ? "prompted"
         : demonstrations.length && demonstrations.every(record => record.understanding === "independent")
           ? "independent"

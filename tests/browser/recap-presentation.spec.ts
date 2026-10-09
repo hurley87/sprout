@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test, expect } from "@playwright/test";
 import { RecapPresentation } from "../../components/catching-unicorns/recap-presentation";
+import { ASSESSMENT_VERSION } from "../../lib/lesson-runtime/conversation-assessment";
 import { buildSessionSummary } from "../../lib/lesson-runtime/session-summary";
 import { createLessonRuntime } from "../../lib/lesson-runtime/lesson-runtime-reducer";
 import { CATCHING_UNICORNS_LESSON } from "../../lib/lesson-runtime/catching-unicorns-lesson";
@@ -10,7 +11,7 @@ import { CATCHING_UNICORNS_LESSON } from "../../lib/lesson-runtime/catching-unic
 for (const status of ["pending", "unavailable", "idle"] as const) {
   test(`empty recap with ${status} review is readable at desktop and mobile widths`, async ({ page }, testInfo) => {
     const state = createLessonRuntime("empty-recap", { lesson: CATCHING_UNICORNS_LESSON });
-    const summary = buildSessionSummary(state, { status, results: {} });
+    const summary = buildSessionSummary(state, { version: ASSESSMENT_VERSION, status, results: {} });
     const html = renderToStaticMarkup(createElement(RecapPresentation, { state, summary }));
     await page.goto("/demos/catching-unicorns");
     await page.locator('[data-node-id="engram"]').evaluate((element, markup) => {

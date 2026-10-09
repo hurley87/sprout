@@ -13,7 +13,11 @@ import {
   mapConversationObservation,
   type ConversationStateOutputs,
 } from "../lib/lesson-runtime/conversation-observer-contract";
-import { assessmentQuestions, normalizeAssessment } from "../lib/lesson-runtime/conversation-assessment";
+import {
+  ASSESSMENT_VERSION,
+  assessmentQuestions,
+  normalizeAssessment,
+} from "../lib/lesson-runtime/conversation-assessment";
 import { LessonRuntime } from "../lib/lesson-runtime/lesson-runtime";
 import type { ClientCommand, ProviderEvent } from "../lib/events";
 import replay from "./fixtures/catching-unicorns-stall-replay.json";
@@ -128,28 +132,36 @@ it("never treats quoted requests, tutor speech, or a learner answer containing n
     expect(learnerRequestedNext(text)).toBe(false);
 });
 const assessmentBody = () => ({
+  version: ASSESSMENT_VERSION,
   answers: Object.fromEntries(
     Object.keys(assessmentQuestions(lesson)).map(key => [
       key,
-      {
-        type: "choice",
-        choice: "partial",
-        confidence: 0.6,
-        probabilities: { not_yet: 0.1, partial: 0.6, demonstrated_independent: 0.3, demonstrated_prompted: 0 },
-      },
+      key.endsWith(":understanding")
+        ? {
+            type: "choice",
+            choice: "partial",
+            confidence: 0.6,
+            probabilities: { not_yet: 0.1, partial: 0.6, demonstrated: 0.3 },
+          }
+        : {
+            type: "choice",
+            choice: "unclear",
+            confidence: 1,
+            probabilities: { independent: 0, prompted: 0, unclear: 1 },
+          },
     ]),
   ),
 });
 it("preserves full probabilities and uncertain grading without single-message attribution", () => {
   const body = assessmentBody();
   const result = normalizeAssessment(body, lesson)!;
-  expect(result.results["exographics:visual-symbols"].outcome).toBe("uncertain");
-  expect(result.results["exographics:visual-symbols"].scores.probabilities.partial).toBe(0.6);
-  expect(assessmentQuestions(lesson)["exographics:visual-symbols"].instructions).toContain(
+  expect(result.results["exographics:visual-symbols"].understanding.outcome).toBe("uncertain");
+  expect(result.results["exographics:visual-symbols"].understanding.scores.probabilities.partial).toBe(0.6);
+  expect(assessmentQuestions(lesson)["exographics:visual-symbols:understanding"].instructions).toContain(
     "combined across multiple learner answers",
   );
   const broken = structuredClone(body);
-  broken.answers["exographics:visual-symbols"].probabilities.partial = 2;
+  broken.answers["exographics:visual-symbols:understanding"].probabilities.partial = 2;
   expect(normalizeAssessment(broken, lesson)).toBeNull();
 });
 it("advances explicit next in the real runtime even with classifier outage, and assesses the saved conversation after stopping", async () => {
@@ -371,8 +383,8 @@ it("offers question-six help through all instruction layers while preserving pro
   expect(teachingInstruction(context, lesson)).toContain("offer one targeted cue");
   const h = harness();
   expect(answerRecoveryInstruction(lesson, h.state)).toContain("targeted scaffolding");
-  expect(assessmentQuestions(lesson)["techno-literate-culture:education-system"].instructions).toContain(
-    "Tutor words alone",
+  expect(assessmentQuestions(lesson)["techno-literate-culture:education-system:understanding"].instructions).toContain(
+    "Tutor-only content",
   );
 });
 

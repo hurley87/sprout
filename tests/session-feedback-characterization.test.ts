@@ -90,12 +90,12 @@ describe("saved session feedback characterization", () => {
     expect(answer).toContain("universities");
     const concept = summarize().concepts.find(concept => concept.id === "idea-discoverers")!;
     expect(concept.records[0].live).toMatchObject({ status: "not_yet", source: null });
-    expect(concept.records[0].review?.outcome).toBe("uncertain");
+    expect(concept.records[0].review?.understanding.outcome).toBe("uncertain");
     expect(concept.evidence).toBe("unobserved");
     expect(concept.quote).toBeNull();
   });
 
-  it("preserves synthesis question, learner connections and interleaved tutor scaffolding with inconclusive review", () => {
+  it("preserves synthesis conversation without upgrading missing live provenance after legacy content aggregation", () => {
     const conversation = messages("synthesis");
     expect(conversation[0].text).toContain("Choose a connection and explain why it follows");
     const learnerText = conversation
@@ -119,36 +119,59 @@ describe("saved session feedback characterization", () => {
     expect(synthesis).toHaveLength(4);
     for (const concept of synthesis) {
       expect(concept.records[0].live).toBeUndefined();
-      expect(concept.records[0].review?.outcome).toBe("uncertain");
+      expect(concept.records[0].review?.understanding.outcome).toBe(
+        concept.id === "synthesis-reasoning" ? "demonstrated" : "uncertain",
+      );
+      expect(concept.records[0].review?.assistance.outcome).toBe("unclear");
       expect(concept.evidence).toBe("unobserved");
     }
     // These are current diagnostics, not a claim that listing connections proves or disproves understanding.
   });
 
-  it("abstains on separate demonstration labels even when their combined probability is 0.99", () => {
+  it("aggregates legacy demonstration content while abstaining on its assistance attribution", () => {
     const assessment = assess();
-    expect(
-      Object.fromEntries(Object.entries(assessment.results).map(([key, result]) => [key, result.outcome])),
-    ).toEqual(fixture.assessmentOutcomes);
-    expect(Object.values(assessment.results).filter(result => result.outcome === "uncertain")).toHaveLength(25);
-    expect(
-      Object.entries(assessment.results)
-        .filter(([, result]) => result.outcome === "demonstrated_independent")
-        .map(([key]) => key),
-    ).toEqual(["engram:engram-biological", "exogram:engram-biological", "compare:engram-biological"]);
+    for (const [key, oldOutcome] of Object.entries(fixture.assessmentOutcomes)) {
+      const result = assessment.results[key];
+      expect(result.legacyScores).toEqual({
+        choice: fixture.assessmentAnswers[key as keyof typeof fixture.assessmentAnswers].choice,
+        confidence: fixture.assessmentAnswers[key as keyof typeof fixture.assessmentAnswers].confidence,
+        probabilities: fixture.assessmentAnswers[key as keyof typeof fixture.assessmentAnswers].probabilities,
+      });
+      const aggregated = [
+        "exogram:exogram-non-biological",
+        "compare:exogram-non-biological",
+        "compare:exogram-revisability",
+        "exographics:visual-symbols",
+        "exographics:cultural-agreement",
+        "exographics:beyond-prose",
+        "exographics:abstract-concepts",
+        "why-exographics:memory-extension",
+        "techno-literate-culture:social-coordination",
+        "techno-literate-culture:education-system",
+        "caf-application:caf-coordination-evidence",
+        "synthesis:synthesis-reasoning",
+      ].includes(key);
+      expect(result.understanding.outcome).toBe(
+        oldOutcome === "demonstrated_independent" || aggregated ? "demonstrated" : oldOutcome,
+      );
+      expect(result.assistance.outcome).toBe(oldOutcome === "demonstrated_independent" ? "independent" : "unclear");
+    }
     for (const key of ["exogram:exogram-non-biological", "compare:exogram-non-biological"]) {
       const result = assessment.results[key];
-      expect(result.scores.probabilities).toEqual({
+      expect(result.legacyScores!.probabilities).toEqual({
         not_yet: 0,
         partial: 0.01,
         demonstrated_independent: 0.52,
         demonstrated_prompted: 0.47,
       });
-      expect(
-        result.scores.probabilities.demonstrated_independent + result.scores.probabilities.demonstrated_prompted,
-      ).toBeCloseTo(0.99);
-      expect(result.outcome).toBe("uncertain");
+      expect(result.understanding.scores.probabilities.demonstrated).toBeCloseTo(0.99);
+      expect(result.understanding.outcome).toBe("demonstrated");
+      expect(result.understanding.abstained).toBe(false);
+      expect(result.assistance.outcome).toBe("unclear");
+      expect(result.assistance.abstained).toBe(true);
     }
-    expect(summarize().concepts.find(concept => concept.id === "exogram-non-biological")?.reviewUncertain).toBe(true);
+    // Content review still cannot upgrade the earlier partial live record or invent a quotation.
+    expect(summarize().concepts.find(concept => concept.id === "exogram-non-biological")?.evidence).toBe("partial");
+    expect(summarize().concepts.find(concept => concept.id === "exogram-non-biological")?.reviewUncertain).toBe(false);
   });
 });
