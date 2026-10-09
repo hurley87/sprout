@@ -23,7 +23,7 @@ function messages(nodeId: string) {
 }
 
 describe("saved session feedback characterization", () => {
-  it("retains valid ordered visits and attributable live quotes while reproducing the saved recap", () => {
+  it("retains valid ordered visits and attributable live quotes while changing only selected feedback", () => {
     expect(parseConversationVisits(fixture.conversation, lesson)).toEqual(fixture.conversation);
     expect(fixture.conversation.map(visit => visit.visitId)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
     for (const record of Object.values(evidence)) {
@@ -39,7 +39,12 @@ describe("saved session feedback characterization", () => {
       }
     }
     const { strengths, improvement, exercise } = summarize();
-    expect({ strengths, improvement, exercise }).toEqual(fixture.recap);
+    // Preserve the historical recap and provider distributions in the source fixture.
+    expect(improvement).toEqual(fixture.recap.improvement);
+    expect(strengths[1]).toEqual(fixture.recap.strengths[1]);
+    expect(strengths[0].conceptId).toBe("memory-extension");
+    expect(exercise).toContain("Identify where the information is kept");
+    expect(exercise).toContain("Revisit your earlier explanation");
   });
 
   it("keeps the earlier partial exogram quote despite the saved clarification and chooses it for practice", () => {
@@ -58,7 +63,7 @@ describe("saved session feedback characterization", () => {
     expect(summary.improvement.conceptId).toBe(exogram.id);
   });
 
-  it("records independent memory extension but selects two earlier lesson concepts as strengths", () => {
+  it("prioritizes recorded memory-extension reasoning over a basic definition", () => {
     const summary = summarize();
     const memory = summary.concepts.find(concept => concept.id === "memory-extension")!;
     expect(memory.evidence).toBe("recorded");
@@ -66,13 +71,13 @@ describe("saved session feedback characterization", () => {
     expect(memory.quote).toContain("middle steps that lead up to a final solution");
     expect(memory.quote).toContain("with pen and paper, I would be able to write those down");
     expect(memory.quote).toContain("without having to keep track of everything in my short term memory");
-    expect(summary.strengths.map(strength => strength.conceptId)).toEqual(["engram-biological", "exogram-durability"]);
+    expect(summary.strengths.map(strength => strength.conceptId)).toEqual(["memory-extension", "exogram-durability"]);
     expect(summary.concepts.filter(concept => concept.evidence === "recorded").map(concept => concept.id)).toEqual([
       "engram-biological",
       "exogram-durability",
       "memory-extension",
     ]);
-    // The limit is selection by authored order, not a loss of the later demonstration.
+    // Ranking changes selection, never the underlying accepted evidence.
     const withoutEarlierStrengths = buildSessionSummary(
       {
         ...state,

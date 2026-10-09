@@ -261,3 +261,32 @@ it("requires independently supplied current snapshot ownership at the feedback p
     projectSessionSummary({ ...state, conceptEvidence: {} }, assess(), { ...snapshot, generation: 2 }).strengths,
   ).toEqual([]);
 });
+
+it("uses a labeled synthetic reconciled scenario to prefer memory reasoning and a discovery extension", () => {
+  // Synthetic rubric judgments, NOT a new interpretation of the recorded provider export.
+  // Only the existing exogram references supply a review demonstration; other reviews abstain.
+  const raw = answers();
+  for (const [id, answer] of Object.entries(raw)) {
+    if (id.endsWith(":understanding") && !id.includes(":exogram-non-biological:")) {
+      answer.choice = "partial";
+      answer.confidence = 0.5;
+      answer.probabilities = { demonstrated: 0, partial: 0.5, not_yet: 0.5 };
+    }
+  }
+  const assessment = normalizeAssessment({ version: ASSESSMENT_VERSION, answers: raw }, lesson, snapshot)!;
+  const summary = buildSessionSummary(state, assessment);
+  expect(summary.strengths.map(s => s.conceptId)).toEqual(["memory-extension", "exogram-durability"]);
+  expect(summary.strengths[0].quote).toBe(
+    state.conceptEvidence["why-exographics:memory-extension"].source!.childTranscript,
+  );
+  expect(concept(summary).evidence).toBe("recorded");
+  expect(concept(summary).attribution).toBe("unclear");
+  expect(summary.improvement.conceptId).toBe("discovery");
+  expect(summary.improvement.text).toContain("extension opportunity");
+  expect(summary.exercise).toContain("relationship easier to notice");
+  expect(summary.exercise).toContain("why that helps reasoning");
+  expect(summary.exercise).not.toContain("Einstein");
+  expect(summary.exercise).not.toContain("exogram; contrast");
+  const reordered = { ...state, conceptEvidence: Object.fromEntries(Object.entries(state.conceptEvidence).reverse()) };
+  expect(buildSessionSummary(reordered, assessment)).toEqual(summary);
+});

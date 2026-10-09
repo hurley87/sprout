@@ -1,3 +1,4 @@
+import { CATCHING_UNICORNS_FEEDBACK as feedback } from "../lib/lesson-runtime/catching-unicorns-feedback";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
@@ -221,3 +222,131 @@ it("preserves a recorded strength when content is demonstrated and review assist
   expect(html).toContain("assistance unclear");
   expect(summary.concepts[0].records[0].review?.assistance.abstained).toBe(true);
 });
+
+it("keeps a true basic-definition gap ahead of supported reasoning gaps and extensions", () => {
+  const current = {
+    ...state,
+    conceptEvidence: {
+      "why-exographics:memory-extension": { ...live("partial"), criterionId: "memory-extension" },
+      "exogram:exogram-non-biological": { ...live("partial"), criterionId: "exogram-non-biological" },
+    },
+  };
+  const summary = buildSessionSummary(current);
+  expect(summary.improvement.conceptId).toBe("exogram-non-biological");
+  expect(summary.exercise).toContain("where the information is kept");
+  expect(summary.exercise).toContain("clarify or change");
+});
+
+it("prefers a supported substantive gap over assistance-only uncertainty", () => {
+  const current = {
+    ...state,
+    conceptEvidence: {
+      "engram:engram-biological": live("demonstrated", null),
+      "why-exographics:discovery": { ...live("partial"), criterionId: "discovery" },
+    },
+  };
+  const summary = buildSessionSummary(current);
+  expect(summary.improvement.conceptId).toBe("discovery");
+  expect(summary.exercise).toContain("what you would clarify or change");
+  expect(summary.strengths[0].text).toContain("prompting unclear");
+});
+
+it("does not let unobserved advanced topics bypass missing prerequisites", () => {
+  const summary = buildSessionSummary({
+    ...state,
+    conceptEvidence: { "engram:engram-biological": live() },
+  });
+  expect(summary.improvement.conceptId).toBe("exogram-non-biological");
+  expect(summary.improvement.text).toContain("extension opportunity");
+  expect(summary.improvement.text).toContain("does not mean you got it wrong");
+});
+
+function allRecorded() {
+  return Object.fromEntries(
+    Object.values(lesson.nodes).flatMap(node =>
+      (node.concepts ?? []).map(c => [`${node.id}:${c.id}`, { ...live(), criterionId: c.id }]),
+    ),
+  );
+}
+
+it("extends substantive reasoning when every concept is independently recorded", () => {
+  const summary = buildSessionSummary({ ...state, conceptEvidence: allRecorded() });
+  expect(summary.strengths.map(s => s.conceptId)).toEqual(["memory-extension", "reification"]);
+  expect(summary.improvement.conceptId).toBe("memory-extension");
+  expect(summary.exercise).toContain("Extend your explanation");
+});
+
+it("covers every authored criterion and uses concept ID as the stable priority tie-break", () => {
+  const ids = [...new Set(Object.values(lesson.nodes).flatMap(n => (n.concepts ?? []).map(c => c.id)))];
+  expect(Object.keys(feedback).sort()).toEqual(ids.sort());
+  for (const metadata of Object.values(feedback)) {
+    expect(metadata.prerequisites.every(id => ids.includes(id))).toBe(true);
+    expect(metadata.task).not.toContain("Create a small diagram");
+  }
+  const original = feedback.reification.priority;
+  const originalNodes = lesson.nodes;
+  try {
+    feedback.reification.priority = feedback["memory-extension"].priority;
+    const records = allRecorded();
+    const first = buildSessionSummary({ ...state, conceptEvidence: records });
+    Object.defineProperty(lesson, "nodes", { value: Object.fromEntries(Object.entries(lesson.nodes).reverse()) });
+    const second = buildSessionSummary({
+      ...state,
+      conceptEvidence: Object.fromEntries(Object.entries(records).reverse()),
+    });
+    expect(first.strengths.map(s => s.conceptId)).toEqual(["memory-extension", "reification"]);
+    expect(second.strengths).toEqual(first.strengths);
+    expect(second.improvement).toEqual(first.improvement);
+    expect(second.exercise).toEqual(first.exercise);
+  } finally {
+    feedback.reification.priority = original;
+    Object.defineProperty(lesson, "nodes", { value: originalNodes });
+  }
+});
+
+it.each(["partial", "disagreement", "unobserved", "prompted", "unclear", "independent"] as const)(
+  "shares authored exercises and bounds context across all targets with %s evidence",
+  category => {
+    for (const id of Object.keys(feedback)) {
+      const records = allRecorded();
+      for (const key of Object.keys(records)) {
+        if (records[key].criterionId !== id) continue;
+        if (category === "unobserved") delete records[key];
+        else
+          records[key] = {
+            ...records[key],
+            status: category === "partial" ? "partial" : "demonstrated",
+            understanding: category === "prompted" ? "prompted" : category === "unclear" ? null : "independent",
+          };
+      }
+      const key = Object.keys(allRecorded()).find(k => k.endsWith(`:${id}`))!;
+      const assessment = category === "disagreement" ? review("partial", key) : undefined;
+      const current = { ...state, conceptEvidence: records };
+      const summary = buildSessionSummary(current, assessment);
+      // The independent case intentionally uses the all-demonstrated reasoning fallback.
+      expect(summary.improvement.conceptId).toBe(category === "independent" ? "memory-extension" : id);
+      expect(summary.exercise).toContain(feedback[summary.improvement.conceptId].task);
+      const instruction = sessionSummaryInstruction(summary);
+      const data = JSON.parse(instruction.split("\n")[1]);
+      expect(data.exercise).toBe(summary.exercise);
+      const html = renderToStaticMarkup(createElement(RecapPresentation, { state: current, summary }));
+      // Apostrophes may be escaped in HTML; exact shared data above is authoritative.
+      expect(html).toContain("Your next exercise");
+      expect(html).toContain(
+        category === "disagreement"
+          ? "differing explanations"
+          : category === "partial"
+            ? "clarify or change"
+            : category === "unobserved"
+              ? "without assuming a gap"
+              : category === "independent"
+                ? "Extend your explanation"
+                : "without a cue",
+      );
+      for (const update of [false, true])
+        expect(Buffer.byteLength(sessionSummaryInstruction(summary, update))).toBeLessThanOrEqual(2000);
+      if (summary.concepts.find(c => c.id === summary.improvement.conceptId)?.domain === "transfer")
+        expect(summary.exercise).toContain("not a manuscript fact about the CAF");
+    }
+  },
+);

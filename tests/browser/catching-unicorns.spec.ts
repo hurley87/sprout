@@ -610,7 +610,11 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
   const recap = page.locator('[data-scene="recap"]');
   await expect(recap.getByRole("heading", { name: "What you explained well" })).toBeVisible();
   await expect(recap).toContainText("independent live evidence");
-  await expect(recap).toContainText("with prompting");
+  // Instructional ranking now selects reasoning strengths; prompted definitions remain in provenance.
+  await expect(recap).toContainText("Recorded explanation: Memory extension purpose");
+  await expect(recap).toContainText("Recorded explanation: Reification purpose");
+  await expect(recap).toContainText("Try this without a cue");
+  await expect(recap).toContainText("live demonstrated (prompted)");
   await expect(recap.getByRole("heading", { name: "One area to deepen" })).toBeVisible();
   await expect(recap.getByRole("heading", { name: "Your next exercise" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Conversation assessment" })).toHaveCount(0);

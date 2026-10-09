@@ -1,3 +1,4 @@
+import { CATCHING_UNICORNS_FEEDBACK as feedback } from "./catching-unicorns-feedback";
 import { transcriptMessages } from "./tutor-observation";
 import { resolvedReviewEvidence, type ReviewReference, type ReviewSnapshot } from "./review-evidence";
 import { CATCHING_UNICORNS_LESSON, CATCHING_UNICORNS_PRESENTATION } from "./catching-unicorns-lesson";
@@ -170,37 +171,63 @@ export function buildSessionSummary(
       null;
     concept.reviewUncertain = reviews.includes("uncertain");
   }
+  // Only reconciled categories enter selection. No transcript/title heuristic supplies quality.
+  const strengthTiers = ["reasoning", "application", "explanation", "definition"];
+  const authoredOrder = (a: SummaryConcept, b: SummaryConcept) =>
+    feedback[a.id].priority - feedback[b.id].priority || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  const prerequisitesRecorded = (concept: SummaryConcept) =>
+    feedback[concept.id].prerequisites.every(id => byId.get(id)?.evidence === "recorded");
+  const focusTier = (concept: SummaryConcept) => {
+    if (concept.evidence === "partial" || concept.evidence === "disagreement")
+      return feedback[concept.id].foundational ? 0 : 1;
+    if (
+      concept.evidence === "unobserved" &&
+      !feedback[concept.id].foundational &&
+      feedback[concept.id].prerequisites.length > 0 &&
+      prerequisitesRecorded(concept)
+    )
+      return 2;
+    if (concept.evidence === "recorded" && concept.attribution !== "independent") return 3;
+    if (concept.evidence === "unobserved") return 4;
+    return prerequisitesRecorded(concept) ? 5 + strengthTiers.indexOf(feedback[concept.id].strength) : 9;
+  };
   const strengths = concepts
     .filter(concept => concept.evidence === "recorded")
+    .sort(
+      (a, b) =>
+        strengthTiers.indexOf(feedback[a.id].strength) - strengthTiers.indexOf(feedback[b.id].strength) ||
+        authoredOrder(a, b),
+    )
     .slice(0, 2)
     .map(concept => ({
       conceptId: concept.id,
       text: `${concept.domain === "transfer" ? "Transfer reasoning" : "Recorded explanation"}: ${concept.title}. ${concept.explanation} (${concept.attribution === "independent" ? (concept.records.some(record => record.live?.status === "demonstrated") ? "independent live evidence" : "independent review evidence") : concept.attribution === "prompted" ? "with prompting" : "prompting unclear"}${concept.reviewUncertain ? "; full review inconclusive" : ""}).`,
       quote: concept.quote,
     }));
-  const target =
-    concepts.find(concept => concept.evidence === "partial" || concept.evidence === "disagreement") ??
-    concepts.find(concept => concept.evidence === "recorded" && concept.attribution !== "independent") ??
-    concepts.find(concept => concept.evidence === "unobserved") ??
-    concepts[0];
+  const target = [...concepts].sort((a, b) => focusTier(a) - focusTier(b) || authoredOrder(a, b))[0];
   const reason =
     target.evidence === "partial"
       ? "The recorded explanation is tentative or incomplete."
       : target.evidence === "disagreement"
         ? "The evidence sources disagree, so this remains open."
         : target.evidence === "unobserved"
-          ? "There is not enough attributable evidence to judge this yet; that does not mean you got it wrong."
+          ? "This is an extension opportunity: there is not enough attributable evidence to judge it yet; that does not mean you got it wrong."
           : target.attribution === "prompted"
             ? "Try explaining this with a fresh example without a cue."
             : target.attribution === "unclear"
               ? "The explanation was recorded, but the amount of prompting is unclear."
               : "Extend your recorded explanation with a fresh example.";
-  const exercise =
-    target.domain === "transfer"
-      ? `Choose one Canadian Armed Forces example for ${target.title.toLowerCase()}. State your evidence, connect it to the culture framework, and explain one limit of the conclusion. This is transfer practice, not a fact asserted by the manuscript.`
-      : target.nodeId === "compare"
-        ? `Take a paper note as a new example of ${target.title.toLowerCase()}. Explain what you could do with that note and compare it with holding the same information in memory. Then check your explanation against the Introduction.`
-        : `Create a small diagram or written example to explore ${target.title.toLowerCase()}. Explain it in two or three sentences in your own words, and say how it connects to one other lesson idea. Then check it against the ${target.source.includes("Preface") ? "Preface" : "Introduction"}.`;
+  const practiceMode =
+    target.evidence === "disagreement"
+      ? "Compare the differing explanations, then test your account with this task."
+      : target.evidence === "partial"
+        ? "Revisit your earlier explanation with this task; say what you would clarify or change."
+        : target.evidence === "unobserved"
+          ? "Explore this topic without assuming a gap in understanding."
+          : target.attribution !== "independent"
+            ? "Try this without a cue; explain each choice yourself."
+            : "Extend your explanation with a fresh example.";
+  const exercise = `${practiceMode} ${feedback[target.id].task} ${target.domain === "transfer" ? "This is transfer practice, not a manuscript fact about the CAF." : `Then check your account against the ${target.source.includes("Preface") ? "Preface" : "Introduction"}.`}`;
   return {
     runtimeId: state.runtimeId,
     reviewStatus: assessment.status,
