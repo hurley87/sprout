@@ -589,13 +589,23 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
   await waitForScene("recap");
 
   const recap = page.locator('[data-scene="recap"]');
-  await expect(recap.getByRole("heading", { name: "Strengths from this session" })).toBeVisible();
+  await expect(recap.getByRole("heading", { name: "What you explained well" })).toBeVisible();
   await expect(recap).toContainText("independent live evidence");
   await expect(recap).toContainText("with prompting");
   await expect(recap.getByRole("heading", { name: "One area to deepen" })).toBeVisible();
-  await expect(recap.getByRole("heading", { name: "Try next" })).toBeVisible();
+  await expect(recap.getByRole("heading", { name: "Your next exercise" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Conversation assessment" })).toHaveCount(0);
   await expect(recap).not.toContainText(/extended cognition/i);
+  // The scene can paint before its two-frame confirmation appends tutor context.
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        (window as LessonObservationWindow)
+          .sproutLessonObservation!.read()!
+          .events.some(event => event.type === "gpt_live.steering_append" && event.nodeId === "recap"),
+      ),
+    )
+    .toBe(true);
   const shared = await page.evaluate(() => {
     const observation = (window as LessonObservationWindow).sproutLessonObservation!.read()!;
     const summary = observation.snapshot.summary!;
@@ -608,12 +618,33 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
   expect(shared.feedback.exercise).toBe(shared.summary.exercise);
   expect(shared.feedback.improvement).toBe(shared.summary.improvement.text);
   await expect(recap).toContainText(shared.summary.exercise);
+  await page.screenshot({ path: testInfo.outputPath("recap-desktop.png"), fullPage: true });
   await testInfo.attach("shared-session-recap", {
     body: await page.screenshot({ fullPage: true }),
     contentType: "image/png",
   });
   await recap.getByText("Evidence and review details", { exact: true }).click();
   await expect(recap).toContainText("Transfer/application reasoning");
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath("recap-mobile-evidence.png"), fullPage: true });
+  await recap.getByText("Evidence and review details", { exact: true }).click();
+  await page.screenshot({ path: testInfo.outputPath("recap-mobile.png"), fullPage: true });
+  const closesBeforeFinish = await page.evaluate(() => (window as unknown as LocalSessionWindow).appPeerCloseCount);
+  await page.getByRole("button", { name: "Finish discussion", exact: true }).click();
+  await expect(page.getByRole("status")).toHaveText("ended");
+  await expect(
+    page.getByText("Discussion ended. Your recap and evidence remain available until you start again."),
+  ).toBeVisible();
+  await expect(recap).toContainText(shared.summary.exercise);
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as LocalSessionWindow).appPeerCloseCount))
+    .toBeGreaterThan(closesBeforeFinish);
+  await expect
+    .poll(async () => (await microphone.state()).trackStates.filter(state => state === "live").length)
+    .toBe(1);
+  await recap.getByText("Evidence and review details", { exact: true }).click();
+  await expect(recap.getByText("Transfer/application reasoning", { exact: false }).first()).toBeVisible();
   await page.getByText("Session details", { exact: true }).click();
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export session", exact: true }).click();

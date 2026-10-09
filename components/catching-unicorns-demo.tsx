@@ -158,19 +158,32 @@ export default function CatchingUnicornsDemo() {
             </span>
             {snapshot?.error && <span role="alert">{snapshot.error}</span>}
           </div>
+          {nodeId === "recap" && (
+            <p className="text-sm text-slate-600">
+              {live
+                ? "Finish when you’re done. Your recap and evidence stay available here."
+                : "Discussion ended. Your recap and evidence remain available until you start again."}
+            </p>
+          )}
           <div className={styles.controls}>
             {!live && (
               <button className={styles.startButton} onClick={start}>
-                Start discussion
+                {nodeId === "recap" ? "Start new discussion" : "Start discussion"}
               </button>
             )}
             {snapshot?.status === "ended" ? (
-              <button className={styles.button} onClick={download}>
-                Download diagnostics
-              </button>
+              nodeId !== "recap" && (
+                <button className={styles.button} onClick={download}>
+                  Download diagnostics
+                </button>
+              )
             ) : (
-              <button className={styles.button} disabled={!live} onClick={() => runtime.current?.stop()}>
-                Stop
+              <button
+                className={nodeId === "recap" ? styles.startButton : styles.button}
+                disabled={!live}
+                onClick={() => runtime.current?.stop()}
+              >
+                {nodeId === "recap" ? "Finish discussion" : "Stop"}
               </button>
             )}
           </div>

@@ -417,3 +417,23 @@ describe("Catching Unicorns transcript fixtures and reducer reveal boundaries", 
     }
   });
 });
+
+it("orients CAF and synthesis without providing answers, and aligns spoken prompts with the screen", () => {
+  for (const id of ["caf-application", "synthesis"]) {
+    const node = CATCHING_UNICORNS_LESSON.nodes[id];
+    const context = currentNodeContext(CATCHING_UNICORNS_LESSON, id);
+    expect(context.scene).toHaveProperty("prompt", node.presentation.prompt);
+  }
+  expect(CATCHING_UNICORNS_LESSON.nodes["caf-application"].presentation.prompt).toContain(
+    "four-characteristic techno-literate-culture framework",
+  );
+  expect(CATCHING_UNICORNS_LESSON.nodes.synthesis.presentation.prompt).toContain(
+    "engrams, exograms, exographics, reasoning, discovery, and techno-literate culture",
+  );
+  expect(CATCHING_UNICORNS_LESSON.tutor.nodeInstruction).toContain(
+    "Do not ask whether the learner is ready to move on",
+  );
+  expect(CATCHING_UNICORNS_LESSON.tutor.nodeInstruction).toContain(
+    "If the learner asks a follow-up, answer it within this scene",
+  );
+});

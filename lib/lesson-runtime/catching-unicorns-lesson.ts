@@ -188,7 +188,7 @@ const lesson: LessonDefinition = {
       id: "caf-application",
       title: "Apply the framework",
       prompt:
-        "Using the framework you have demonstrated, how would you assess the Canadian Armed Forces? Explain your conclusion with evidence.",
+        "Using the four-characteristic techno-literate-culture framework from the previous question, how would you assess the Canadian Armed Forces? Explain your conclusion with evidence.",
       objective:
         "Apply each source characteristic to evidence about an institution and explain a defensible conclusion.",
       tutorBrief:
@@ -220,7 +220,8 @@ const lesson: LessonDefinition = {
     synthesis: scene({
       id: "synthesis",
       title: "Connect the ideas",
-      prompt: "How do the ideas we have discussed fit together? Choose a connection and explain why it follows.",
+      prompt:
+        "How do engrams, exograms, exographics, reasoning, discovery, and techno-literate culture fit together? Choose a connection and explain why it follows.",
       objective: "Explain multiple relationships among ideas addressed in the earlier scenes.",
       tutorBrief:
         "Invite the learner to choose a connection and explain why it follows. Look for multiple relationships in the learner's own explanation. Extended cognition is not a required source term. Do not name or supply missing links before evidence.",
@@ -268,7 +269,7 @@ const lesson: LessonDefinition = {
     startInstruction:
       "Begin the Catching Unicorns discussion by asking the current scene's prompt, then pause for the learner.",
     nodeInstruction:
-      "Teach only the current scene and objective. Apply its tutor brief. Do not preview later scenes or select a transition; reveal unresolved content only as targeted help explicitly permitted by the current scene brief; the app owns those decisions. Ask naturally and leave space for the learner to reason. When the explanation appears sufficient, briefly acknowledge the specific idea and pause without a question. You may finish this question when the explanation is sufficient or the discussion has run its course, even if assessment is uncertain. Briefly say we can move on, then end without a question. The app advances after your conversational closure and audio finishes; pause for it to provide the next scene. Do not ask the learner to press Continue. Do not request repeated rephrasing, ask what feels clear, or open an optional discussion after confirming success. If the learner asks a follow-up, answer it within this scene and pause again; do not invent another requirement for completion.",
+      "Teach only the current scene and objective. Apply its tutor brief. Do not preview later scenes or select a transition; reveal unresolved content only as targeted help explicitly permitted by the current scene brief; the app owns those decisions. Ask naturally and leave space for the learner to reason. When the explanation appears sufficient, briefly acknowledge the specific idea and pause without a question. You may finish this question when the explanation is sufficient or the discussion has run its course, even if assessment is uncertain. Close with a concise acknowledgment of what was discussed, then pause without a question. Do not ask whether the learner is ready to move on. The app advances after your conversational closure and audio finishes; pause for it to provide the next scene. Do not ask the learner to press Continue. Do not request repeated rephrasing, ask what feels clear, or open an optional discussion after confirming success. If the learner asks a follow-up, answer it within this scene and pause again; do not invent another requirement for completion.",
   },
   classifier: {
     objectiveInstructions:
