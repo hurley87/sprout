@@ -1,3 +1,4 @@
+import { buildSessionSummary, sessionSummaryInstruction, type SessionSummary } from "./session-summary";
 import { normalizeAssessment, type ConversationAssessment, type ConversationVisit } from "./conversation-assessment";
 import { BrowserTransport } from "../browser-transport";
 import type { ProviderEvent, TranscriptEvent } from "../events";
@@ -76,6 +77,7 @@ export type LessonSnapshot = {
   awaitingSteering: boolean;
   diagnostics: readonly LessonDiagnostic[];
   assessment?: ConversationAssessment;
+  summary?: SessionSummary;
 };
 
 function eventDiagnosticSource(event: LessonRuntimeEvent, before: LessonRuntimeState): ClassificationSource {
@@ -102,6 +104,9 @@ export class LessonRuntime {
   private assessment: ConversationAssessment = { status: "idle", results: {} };
   private assessedConversation = "";
   private assessmentGeneration = 0;
+  private summary?: SessionSummary;
+  private summaryContext = "";
+  private assessmentAbort?: AbortController;
   private order = 0;
   private providerFloorMs = 0;
   private lastChildEndMs = 0;
@@ -230,6 +235,7 @@ export class LessonRuntime {
       awaitingSteering: Boolean(this.steering),
       diagnostics: this.events.slice(-100),
       assessment: this.assessment,
+      summary: this.summary,
     };
   }
 
@@ -326,6 +332,7 @@ export class LessonRuntime {
           this.display = effect.identity;
           break;
         case "steering.ready":
+          if (effect.context.nodeId === "recap") this.refreshSummary();
           if (this.lessonDefinition.nodes[effect.context.nodeId].assessConversationOnEntry)
             void this.assessConversation();
           this.log("transcript.reset", { reason: "node_render_confirmed" });
@@ -492,6 +499,7 @@ export class LessonRuntime {
         this.steering = undefined;
         this.log("transcript.visit_boundary", { providerFloorMs: this.providerFloorMs });
         for (const fragment of queued) this.observeTranscript(fragment);
+        this.sendSummaryUpdate();
         this.scheduleClassification("steering_acknowledged");
         this.publish();
         return;
@@ -845,7 +853,11 @@ export class LessonRuntime {
   private appendSteering(context: CurrentNodeSteeringContext, renderToken: string, startLesson = false) {
     if (!this.state || this.status !== "live") return false;
     const eventId = `${this.runtimeId}:steer:${this.state.visitId}`;
-    const content = teachingInstruction(context, this.lessonDefinition, startLesson);
+    const content =
+      context.nodeId === "recap" && this.summary
+        ? sessionSummaryInstruction(this.summary)
+        : teachingInstruction(context, this.lessonDefinition, startLesson);
+    if (context.nodeId === "recap" && this.summary) this.summaryContext = JSON.stringify(this.summary);
     const source = runtimeSource(this.state);
     this.steering = {
       eventId,
@@ -925,15 +937,19 @@ export class LessonRuntime {
     const key = JSON.stringify(visits);
     if (key === this.assessedConversation) return;
     this.assessedConversation = key;
+    this.assessmentAbort?.abort();
+    const abort = new AbortController();
+    this.assessmentAbort = abort;
     const generation = ++this.assessmentGeneration;
     this.assessment = { status: "pending", results: {} };
+    this.refreshSummary();
     this.publish();
     try {
       const response = await fetch("/api/assess", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ lessonId: this.lessonDefinition.id, visits }),
-        signal: AbortSignal.timeout(35_000),
+        signal: AbortSignal.any([abort.signal, AbortSignal.timeout(35_000)]),
       });
       if (!response.ok) throw new Error("Assessment unavailable");
       const body = await response.json();
@@ -954,7 +970,33 @@ export class LessonRuntime {
       this.assessment = { status: "unavailable", results: {} };
       this.log("assessment.unavailable", { message: "Conversation preserved; assessment unavailable." });
     }
+    this.refreshSummary();
+    this.sendSummaryUpdate();
     this.publish();
+  }
+
+  private refreshSummary() {
+    if (
+      this.state &&
+      this.lessonDefinition.id === "catching-unicorns" &&
+      (this.state.nodeId === "recap" || this.status === "ended")
+    )
+      this.summary = buildSessionSummary(this.state, this.assessment);
+  }
+
+  private sendSummaryUpdate() {
+    if (!this.summary || this.status !== "live" || this.state?.nodeId !== "recap" || this.steering) return;
+    const key = JSON.stringify(this.summary);
+    if (key === this.summaryContext) return;
+    try {
+      const content = sessionSummaryInstruction(this.summary, true);
+      const eventId = `${this.runtimeId}:summary:${this.assessmentGeneration}`;
+      this.transport.send({ type: "session.instructions.append", event_id: eventId, delegation_id: null, content });
+      this.summaryContext = key;
+      this.log("gpt_live.summary_append", { eventId, content });
+    } catch {
+      this.log("summary.send_failed", { message: "Feedback context update unavailable." });
+    }
   }
 
   stop(reason = "parent_stop", disconnected = false) {
@@ -983,6 +1025,7 @@ export class LessonRuntime {
     }
     this.status = "ended";
     void this.assessConversation();
+    this.refreshSummary();
     this.log("lesson.ended", { reason, runtime: this.state });
     // Request provider close when possible, then release all local resources immediately.
     try {
@@ -1009,9 +1052,10 @@ export class LessonRuntime {
       events: [...this.events],
       conversation: [...this.conversationVisits.values()],
       assessment: this.assessment,
+      summary: this.summary,
     };
     // Additive fields remain optional for older exported-report consumers.
-    return report as Omit<typeof report, "conversation" | "assessment"> &
-      Partial<Pick<typeof report, "conversation" | "assessment">>;
+    return report as Omit<typeof report, "conversation" | "assessment" | "summary"> &
+      Partial<Pick<typeof report, "conversation" | "assessment" | "summary">>;
   }
 }

@@ -1,3 +1,4 @@
+import { assessmentQuestions, normalizeAssessment } from "../../lib/lesson-runtime/conversation-assessment";
 import { expect, test, type Page } from "@playwright/test";
 import { transcriptMessages, substantiveLearnerText } from "../../lib/lesson-runtime/tutor-observation";
 import { readFile } from "node:fs/promises";
@@ -67,7 +68,9 @@ async function installLocalSession(page: Page) {
           if (command.type === "session.instructions.append") {
             // Catch scene-context expansion before a live provider rejects it.
             if (new TextEncoder().encode(command.content).length > 2000) {
-              source.channel!.send(JSON.stringify({ type: "error", error: { code: "invalid_value", client_event_id: command.event_id } }));
+              source.channel!.send(
+                JSON.stringify({ type: "error", error: { code: "invalid_value", client_event_id: command.event_id } }),
+              );
               return;
             }
             source.channel!.send(
@@ -253,6 +256,34 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
   const microphone = await installSyntheticMicrophone(page);
   await installLocalSession(page);
 
+  await page.route("**/api/assess", route =>
+    route.fulfill({
+      json: {
+        assessment: normalizeAssessment(
+          {
+            answers: Object.fromEntries(
+              Object.keys(assessmentQuestions(CATCHING_UNICORNS_LESSON)).map(key => [
+                key,
+                {
+                  type: "choice",
+                  choice: "partial",
+                  confidence: 0.6,
+                  probabilities: {
+                    not_yet: 0.1,
+                    partial: 0.6,
+                    demonstrated_independent: 0.3,
+                    demonstrated_prompted: 0,
+                  },
+                },
+              ]),
+            ),
+          },
+          CATCHING_UNICORNS_LESSON,
+        ),
+      },
+    }),
+  );
+
   let holdFirstResponse!: () => void;
   const firstResponseGate = new Promise<void>(resolve => (holdFirstResponse = resolve));
   let firstRequestSeen!: () => void;
@@ -310,7 +341,11 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
           childActivity: "unknown",
           answerOutcome: "correct",
           supportState: "none",
-          tutorState: transcriptMessages(body.transcript)?.findLast(message => message.speaker === "Tutor")?.text.includes("?") ? "clarifying" : "acknowledging",
+          tutorState: transcriptMessages(body.transcript)
+            ?.findLast(message => message.speaker === "Tutor")
+            ?.text.includes("?")
+            ? "clarifying"
+            : "acknowledging",
           conceptObservations: observations,
         },
       },
@@ -553,21 +588,32 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
   );
   await waitForScene("recap");
 
-  await expect(page.locator('[data-scene="recap"]')).toContainText("Demonstrated independently");
-  await expect(page.locator('[data-scene="recap"]')).toContainText("Demonstrated after a prompt");
-  await expect(page.locator('[data-scene="recap"]')).toContainText("Partly explained");
-  await expect(page.locator('[data-scene="recap"]')).toContainText("Still unresolved or skipped");
-  const recapGroup = (heading: string) =>
-    page
-      .locator('[data-scene="recap"] section')
-      .filter({ has: page.getByRole("heading", { name: heading, exact: true }) });
-  await expect(recapGroup("Demonstrated independently").getByText("Engram", { exact: true })).toBeVisible();
-  await expect(recapGroup("Demonstrated after a prompt").getByText("Exogram", { exact: true })).toBeVisible();
-  await expect(recapGroup("Partly explained").locator("li")).toHaveCount(0);
-  await expect(recapGroup("Still unresolved or skipped")).toContainText(
-    "Every authored criterion has accepted evidence.",
-  );
-  await expect(page.locator('[data-scene="recap"]')).not.toContainText(/extended cognition/i);
+  const recap = page.locator('[data-scene="recap"]');
+  await expect(recap.getByRole("heading", { name: "Strengths from this session" })).toBeVisible();
+  await expect(recap).toContainText("independent live evidence");
+  await expect(recap).toContainText("with prompting");
+  await expect(recap.getByRole("heading", { name: "One area to deepen" })).toBeVisible();
+  await expect(recap.getByRole("heading", { name: "Try next" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Conversation assessment" })).toHaveCount(0);
+  await expect(recap).not.toContainText(/extended cognition/i);
+  const shared = await page.evaluate(() => {
+    const observation = (window as LessonObservationWindow).sproutLessonObservation!.read()!;
+    const summary = observation.snapshot.summary!;
+    const steering = observation.events.find(
+      event => event.type === "gpt_live.steering_append" && event.nodeId === "recap",
+    )!;
+    const content = (steering.detail as { content: string }).content;
+    return { summary, feedback: JSON.parse(content.split("\n")[1]) };
+  });
+  expect(shared.feedback.exercise).toBe(shared.summary.exercise);
+  expect(shared.feedback.improvement).toBe(shared.summary.improvement.text);
+  await expect(recap).toContainText(shared.summary.exercise);
+  await testInfo.attach("shared-session-recap", {
+    body: await page.screenshot({ fullPage: true }),
+    contentType: "image/png",
+  });
+  await recap.getByText("Evidence and review details", { exact: true }).click();
+  await expect(recap).toContainText("Transfer/application reasoning");
   await page.getByText("Session details", { exact: true }).click();
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export session", exact: true }).click();

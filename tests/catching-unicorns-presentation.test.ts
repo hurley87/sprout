@@ -117,13 +117,19 @@ describe("Catching Unicorns scene presentation", () => {
   it("leaves the final recap as the evidence summary", () => {
     const html = renderScene("recap", { "engram:engram-biological": evidence("engram-biological") });
     expect(html).toContain("What this conversation showed");
-    expect(html).toContain("Demonstrated independently");
+    expect(html).toContain("independent live evidence");
     expect(html).not.toContain("Learned so far");
   });
 
   it("keeps demonstrated evidence with uncertain prompting visible in the recap", () => {
-    const recap = renderScene("recap", { "engram:engram-biological": evidence("engram-biological", null, "A memory inside my brain, unlike an external note.") });
-    expect(recap).toContain("Demonstrated · prompting unclear");
+    const recap = renderScene("recap", {
+      "engram:engram-biological": evidence(
+        "engram-biological",
+        null,
+        "A memory inside my brain, unlike an external note.",
+      ),
+    });
+    expect(recap).toContain("prompting unclear");
     expect(recap).toContain("A memory inside my brain, unlike an external note.");
   });
 
@@ -245,15 +251,15 @@ describe("Catching Unicorns scene presentation", () => {
         "No, I cannot support that conclusion with the evidence here.",
       ),
     });
-    expect(recap).toContain("Demonstrated independently");
-    expect(recap).toContain("Demonstrated after a prompt");
-    expect(recap).toContain("Partly explained");
-    expect(recap).toContain("Still unresolved or skipped");
+    expect(recap).toContain("independent live evidence");
+    expect(recap).toContain("with prompting");
+    expect(recap).toContain("partial");
+    expect(recap).toContain("unobserved");
     expect(recap).toContain("Memory held in a biological mind.");
     expect(recap).toContain("No, I cannot support that conclusion with the evidence here.");
     expect(recap).toContain("Transfer/application reasoning");
     expect(recap).not.toContain("Supporting longer threads of reasoning");
     expect(recap).not.toContain("Substantial education</p>");
-    expect(recap).toContain("one unresolved item");
+    expect(recap).toContain("review idle");
   });
 });

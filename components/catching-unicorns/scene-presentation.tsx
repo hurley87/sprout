@@ -1,3 +1,4 @@
+import type { SessionSummary } from "@/lib/lesson-runtime/session-summary";
 import styles from "../catching-unicorns-demo.module.css";
 import { CATCHING_UNICORNS_LESSON } from "@/lib/lesson-runtime/catching-unicorns-lesson";
 import type { LessonRuntimeState } from "@/lib/lesson-runtime/lesson-runtime-reducer";
@@ -7,7 +8,13 @@ import { ExographicsPromptScene, ExographicsReasoningScene } from "./exographics
 import { CultureScene, ApplicationScene, SynthesisScene } from "./culture-scenes";
 import { RecapPresentation } from "./recap-presentation";
 
-export function ScenePresentation({ state }: { state: LessonRuntimeState | null | undefined }) {
+export function ScenePresentation({
+  state,
+  summary,
+}: {
+  state: LessonRuntimeState | null | undefined;
+  summary?: SessionSummary;
+}) {
   const nodeId = state?.nodeId ?? CATCHING_UNICORNS_LESSON.initialNodeId;
   const learned = sceneIds.slice(0, sceneIds.indexOf(nodeId)).flatMap(id =>
     sceneConcepts(state, id)
@@ -17,7 +24,7 @@ export function ScenePresentation({ state }: { state: LessonRuntimeState | null 
 
   return (
     <>
-      <CurrentScenePresentation state={state} />
+      <CurrentScenePresentation state={state} summary={summary} />
       {nodeId !== "recap" && learned.length > 0 && (
         <section className={styles.learned} aria-labelledby="learned-so-far-title">
           <h3 id="learned-so-far-title">Learned so far</h3>
@@ -38,11 +45,17 @@ export function ScenePresentation({ state }: { state: LessonRuntimeState | null 
   );
 }
 
-function CurrentScenePresentation({ state }: { state: LessonRuntimeState | null | undefined }) {
+function CurrentScenePresentation({
+  state,
+  summary,
+}: {
+  state: LessonRuntimeState | null | undefined;
+  summary?: SessionSummary;
+}) {
   const nodeId = state?.nodeId ?? CATCHING_UNICORNS_LESSON.initialNodeId;
   const node = CATCHING_UNICORNS_LESSON.nodes[nodeId];
 
-  if (nodeId === "recap") return <RecapPresentation state={state} />;
+  if (nodeId === "recap") return <RecapPresentation state={state} summary={summary} />;
 
   const revealCards = sceneConcepts(state, nodeId).filter(hasReveal);
 

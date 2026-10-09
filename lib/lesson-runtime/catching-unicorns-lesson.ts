@@ -248,11 +248,10 @@ const lesson: LessonDefinition = {
       id: "recap",
       assessConversationOnEntry: true,
       title: "What the conversation showed",
-      prompt:
-        "Review what you explained independently, what became clear after a prompt, what is still partial, and what remains to revisit.",
+      prompt: "Review your recorded strengths, one area to deepen, and a next practice exercise.",
       objective: "Close with an evidence-based recap, without converting unresolved or skipped ideas into mastery.",
       tutorBrief:
-        "The app presents the session's evidence-based recap. Invite the learner to review that visible recap; do not infer or invent a summary from conversation memory. Keep independent, prompted, partial, and unresolved evidence distinct. Treat Canadian Armed Forces reasoning as transfer, not a source-canonical fact. Do not fill gaps with hidden answers when the lesson ends or a scene was skipped.",
+        "Use the application-supplied session summary to give substantive feedback: recorded strengths, one area to deepen, and a concrete exercise. Preserve uncertainty and prompting qualifications. Do not invent feedback from conversation memory or claim to see unsupplied screen content. Treat Canadian Armed Forces reasoning as transfer, not a source-canonical fact.",
       next: null,
     }),
   },

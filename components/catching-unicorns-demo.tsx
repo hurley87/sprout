@@ -147,7 +147,7 @@ export default function CatchingUnicornsDemo() {
             data-node-id={identity.nodeId ?? "complete"}
             data-scene-id={identity.sceneId ?? "complete"}
           >
-            <ScenePresentation state={state} />
+            <ScenePresentation state={state} summary={snapshot?.summary} />
           </div>
         </section>
         <footer className={styles.footer}>
@@ -176,19 +176,6 @@ export default function CatchingUnicornsDemo() {
           </div>
         </footer>
       </div>
-      {(nodeId === "recap" || snapshot?.status === "ended") && snapshot?.assessment && snapshot.assessment.status !== "idle" && (
-        <section className="rounded border p-4" aria-label="Conversation assessment">
-          <h2 className="font-semibold">Conversation assessment</h2>
-          <p aria-live="polite">{snapshot.assessment.status === "pending" ? "Reviewing your full conversation…" : snapshot.assessment.status === "unavailable" ? "Assessment unavailable. Your conversation is saved in the export." : "Evidence across your answers; uncertain results remain open."}</p>
-          {snapshot.assessment.status === "complete" && (
-            <ul className="mt-3 space-y-1">
-              {Object.entries(snapshot.assessment.results).map(([key, result]) => (
-                <li key={key}>{String(CATCHING_UNICORNS_LESSON.nodes[result.nodeId].presentation.title)} · item {(CATCHING_UNICORNS_LESSON.nodes[result.nodeId].concepts ?? []).findIndex(concept => concept.id === result.criterionId) + 1}: {{ uncertain: "Uncertain", not_yet: "Not yet demonstrated", partial: "Partly explained", demonstrated_independent: "Explained independently", demonstrated_prompted: "Explained after a prompt" }[result.outcome]}</li>
-              ))}
-            </ul>
-          )}
-        </section>
-      )}
       <audio ref={audio} />
       <details className={styles.sessionDetails}>
         <summary>Session details</summary>
@@ -210,9 +197,7 @@ export default function CatchingUnicornsDemo() {
             <div className="mt-3 space-y-2 text-sm">
               {sceneConcepts(state, nodeId).map(concept => (
                 <div className="flex justify-between gap-3" key={concept.criterionId}>
-                  <span>
-                    {concept.demonstrated ? (concept.item?.title ?? "Concept") : "Unresolved concept"}
-                  </span>
+                  <span>{concept.demonstrated ? (concept.item?.title ?? "Concept") : "Unresolved concept"}</span>
                   <EvidenceState evidence={concept.evidence} />
                 </div>
               ))}
@@ -245,9 +230,9 @@ export default function CatchingUnicornsDemo() {
           </div>
         </details>
         <p className="text-xs text-slate-500">
-          The app advances after conversational closure or a request to move on, with quiet audio and confirmed screens. Assessment follows the conversation.
-          Timing thresholds are shared runtime safeguards, not mastery timers ({LESSON_TIMING.quietDrainMs} ms audio
-          drain).
+          The app advances after conversational closure or a request to move on, with quiet audio and confirmed screens.
+          Assessment follows the conversation. Timing thresholds are shared runtime safeguards, not mastery timers (
+          {LESSON_TIMING.quietDrainMs} ms audio drain).
         </p>
       </details>
     </main>
