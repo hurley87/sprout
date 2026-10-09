@@ -1,5 +1,7 @@
+import { transcriptMessages } from "./tutor-observation";
+import { resolvedReviewEvidence, type ReviewReference, type ReviewSnapshot } from "./review-evidence";
 import { CATCHING_UNICORNS_LESSON, CATCHING_UNICORNS_PRESENTATION } from "./catching-unicorns-lesson";
-import { ASSESSMENT_VERSION, type ConversationAssessment } from "./conversation-assessment";
+import { ASSESSMENT_VERSION, parseAssessment, type ConversationAssessment } from "./conversation-assessment";
 import type { ConceptEvidenceRecord, LessonRuntimeState } from "./lesson-runtime-reducer";
 
 export type SummaryConcept = {
@@ -9,7 +11,13 @@ export type SummaryConcept = {
   domain: "source" | "transfer";
   source: string;
   explanation: string;
-  records: { key: string; live?: ConceptEvidenceRecord; review?: ConversationAssessment["results"][string] }[];
+  records: {
+    key: string;
+    live?: ConceptEvidenceRecord;
+    review?: ConversationAssessment["results"][string];
+    reviewQuotes: ReviewReference[];
+    reconciliation: "live" | "later-clarification" | "review-only" | "conflict" | "unsupported";
+  }[];
   quote: string | null;
   attribution: "independent" | "prompted" | "unclear";
   evidence: "recorded" | "partial" | "unobserved" | "disagreement";
@@ -25,6 +33,11 @@ export type SessionSummary = {
   concepts: SummaryConcept[];
 };
 
+function resolvedSourceText(transcript: string, index: number) {
+  const message = transcriptMessages(transcript)?.[index];
+  return message?.speaker === "Child" ? message.text : null;
+}
+
 /** Feedback describes recorded explanations, never a numerical grade or an inference of failure.
  * Repeated scene criteria collapse by authored concept id; every original record is retained.
  * An uncertain review abstains. Confident contradictory observations prevent a strength claim.
@@ -32,7 +45,14 @@ export type SessionSummary = {
 export function buildSessionSummary(
   state: LessonRuntimeState,
   assessment: ConversationAssessment = { version: ASSESSMENT_VERSION, status: "idle", results: {} },
+  expectedSnapshot?: ReviewSnapshot,
 ): SessionSummary {
+  // New reference-bearing responses must revalidate before supplying quotations or judgments.
+  const validated =
+    assessment.evidenceContract && expectedSnapshot?.runtimeId === state.runtimeId
+      ? parseAssessment(assessment, CATCHING_UNICORNS_LESSON, expectedSnapshot)
+      : null;
+  const usableReview = assessment.evidenceContract ? validated : assessment;
   const byId = new Map<string, SummaryConcept>();
   for (const node of Object.values(CATCHING_UNICORNS_LESSON.nodes)) {
     for (const criterion of node.concepts ?? []) {
@@ -60,10 +80,15 @@ export function buildSessionSummary(
       const live = state.conceptEvidence[key];
       // Foreign runtime evidence must never leak into feedback.
       const owned = live && (!live.source || live.source.runtimeId === state.runtimeId) ? live : undefined;
+      const review = usableReview?.status === "complete" ? usableReview.results[key] : undefined;
+      const reviewQuotes =
+        validated?.snapshot && review?.evidence ? resolvedReviewEvidence(validated.snapshot, review.evidence) : [];
       concept.records.push({
         key,
         live: owned,
-        review: assessment.status === "complete" ? assessment.results[key] : undefined,
+        review,
+        reviewQuotes,
+        reconciliation: "unsupported",
       });
     }
   }
@@ -72,12 +97,56 @@ export function buildSessionSummary(
     const live = concept.records.flatMap(record => (record.live?.source?.childTranscript ? [record.live] : []));
     const demonstrations = live.filter(record => record.status === "demonstrated");
     const reviews = concept.records.flatMap(record => (record.review ? [record.review.understanding.outcome] : []));
-    const positiveReview = reviews.some(outcome => outcome === "demonstrated");
+    const supportedReviews = concept.records.filter(
+      record => record.reviewQuotes.length && record.review?.understanding.outcome === "demonstrated",
+    );
+    const positiveReview = supportedReviews.length > 0;
+    const snapshot = validated?.snapshot;
+    const laterThan = (reference: ReviewReference, source: NonNullable<ConceptEvidenceRecord["source"]>) => {
+      const sourceVisit =
+        snapshot?.visits.findIndex(visit => visit.visitId === source.visitId && visit.nodeId === source.nodeId) ?? -1;
+      const refVisit = snapshot?.visits.findIndex(visit => visit.visitId === reference.visitId) ?? -1;
+      // An unknown/mismatched earlier source cannot be treated as superseded.
+      const exact =
+        snapshot?.visits[sourceVisit] &&
+        resolvedSourceText(snapshot.visits[sourceVisit].transcript, source.childMessageIndex) ===
+          source.childTranscript;
+      return (
+        exact &&
+        (refVisit > sourceVisit || (refVisit === sourceVisit && reference.messageIndex > source.childMessageIndex))
+      );
+    };
+    const liveConflict =
+      positiveReview &&
+      live.some(
+        record =>
+          record.status !== "demonstrated" &&
+          (!record.tentative ||
+            !record.source ||
+            !supportedReviews.some(review => review.reviewQuotes.some(ref => laterThan(ref, record.source!)))),
+      );
+    for (const record of concept.records)
+      record.reconciliation =
+        record.reviewQuotes.length && record.review?.understanding.outcome === "demonstrated"
+          ? liveConflict
+            ? "conflict"
+            : live.some(l => l.status === "partial")
+              ? "later-clarification"
+              : demonstrations.length
+                ? "live"
+                : "review-only"
+          : record.live?.source
+            ? "live"
+            : "unsupported";
     const negativeReview = reviews.some(outcome => outcome === "partial" || outcome === "not_yet");
-    const disagreement = (demonstrations.length > 0 || positiveReview) && negativeReview;
+    const disagreement = ((demonstrations.length > 0 || positiveReview) && negativeReview) || !!liveConflict;
+    if (disagreement)
+      for (const record of concept.records) {
+        if (record.review || record.live?.source) record.reconciliation = "conflict";
+      }
     concept.evidence = disagreement
       ? "disagreement"
-      : demonstrations.length
+      : demonstrations.length || positiveReview
         ? "recorded"
         : live.some(record => record.status === "partial")
           ? "partial"
@@ -89,9 +158,16 @@ export function buildSessionSummary(
         ? "prompted"
         : demonstrations.length && demonstrations.every(record => record.understanding === "independent")
           ? "independent"
-          : "unclear";
+          : !demonstrations.length &&
+              positiveReview &&
+              supportedReviews.every(record => record.review?.assistance.outcome === "independent")
+            ? "independent"
+            : "unclear";
     concept.quote =
-      (demonstrations[0] ?? live.find(record => record.status === "partial"))?.source?.childTranscript ?? null;
+      demonstrations[0]?.source?.childTranscript ??
+      supportedReviews[0]?.reviewQuotes[0]?.text ??
+      live.find(record => record.status === "partial")?.source?.childTranscript ??
+      null;
     concept.reviewUncertain = reviews.includes("uncertain");
   }
   const strengths = concepts
@@ -99,7 +175,7 @@ export function buildSessionSummary(
     .slice(0, 2)
     .map(concept => ({
       conceptId: concept.id,
-      text: `${concept.domain === "transfer" ? "Transfer reasoning" : "Recorded explanation"}: ${concept.title}. ${concept.explanation} (${concept.attribution === "independent" ? "independent live evidence" : concept.attribution === "prompted" ? "with prompting" : "prompting unclear"}${concept.reviewUncertain ? "; full review inconclusive" : ""}).`,
+      text: `${concept.domain === "transfer" ? "Transfer reasoning" : "Recorded explanation"}: ${concept.title}. ${concept.explanation} (${concept.attribution === "independent" ? (concept.records.some(record => record.live?.status === "demonstrated") ? "independent live evidence" : "independent review evidence") : concept.attribution === "prompted" ? "with prompting" : "prompting unclear"}${concept.reviewUncertain ? "; full review inconclusive" : ""}).`,
       quote: concept.quote,
     }));
   const target =

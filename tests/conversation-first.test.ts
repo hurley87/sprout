@@ -231,9 +231,16 @@ it.each([
     // Assessment starts at render confirmation, without waiting for the steering acknowledgment.
     expect(fetchMock).toHaveBeenCalledTimes(configured ? 1 : 0);
     if (configured) {
-      expect(fetchMock).toHaveBeenCalledWith("/api/assess", expect.objectContaining({
-        body: JSON.stringify({ lessonId: lesson.id, visits: runtime.report().conversation }),
-      }));
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/assess",
+        expect.objectContaining({
+          body: JSON.stringify({
+            lessonId: lesson.id,
+            visits: runtime.report().conversation,
+            owner: { runtimeId: runtime.report().runtimeId, generation: 1 },
+          }),
+        }),
+      );
       runtime.confirmRendered(display);
       runtime.stop();
       await vi.advanceTimersByTimeAsync(0);

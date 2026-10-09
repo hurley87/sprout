@@ -24,32 +24,51 @@ const definition = {
   nodes: { ...lesson.nodes, engram: { ...lesson.nodes.engram, onSuccess: { kind: "node" as const, nodeId: "recap" } } },
 };
 let runtime: LessonRuntime;
-let requests: { resolve: (response: Response) => void; signal: AbortSignal }[];
-const response = () =>
+let requests: {
+  resolve: (response: Response) => void;
+  signal: AbortSignal;
+  input: {
+    owner: { runtimeId: string; generation: number };
+    visits: import("../lib/lesson-runtime/conversation-assessment").ConversationVisit[];
+  };
+}[];
+const response = (index = 0) =>
   Response.json({
     assessment: normalizeAssessment(
       {
         version: ASSESSMENT_VERSION,
         answers: Object.fromEntries(
-          Object.keys(assessmentQuestions(lesson)).map(key => [
+          Object.entries(
+            assessmentQuestions(lesson, { ...requests[index].input.owner, visits: requests[index].input.visits }),
+          ).map(([key, question]) => [
             key,
-            key.endsWith(":understanding")
+            key.includes(":evidence_")
               ? {
                   type: "choice",
-                  choice: "partial",
-                  confidence: 0.6,
-                  probabilities: { not_yet: 0.1, partial: 0.6, demonstrated: 0.3 },
-                }
-              : {
-                  type: "choice",
-                  choice: "unclear",
+                  choice: "none",
                   confidence: 1,
-                  probabilities: { independent: 0, prompted: 0, unclear: 1 },
-                },
+                  probabilities: Object.fromEntries(
+                    Object.keys(question.criteria).map(id => [id, id === "none" ? 1 : 0]),
+                  ),
+                }
+              : key.endsWith(":understanding")
+                ? {
+                    type: "choice",
+                    choice: "partial",
+                    confidence: 0.6,
+                    probabilities: { not_yet: 0.1, partial: 0.6, demonstrated: 0.3 },
+                  }
+                : {
+                    type: "choice",
+                    choice: "unclear",
+                    confidence: 1,
+                    probabilities: { independent: 0, prompted: 0, unclear: 1 },
+                  },
           ]),
         ),
       },
       lesson,
+      { ...requests[index].input.owner, visits: requests[index].input.visits },
     ),
   });
 const appends = () =>
@@ -67,7 +86,9 @@ beforeEach(() => {
     "fetch",
     vi.fn((url: string, init: RequestInit) =>
       url === "/api/assess"
-        ? new Promise<Response>(resolve => requests.push({ resolve, signal: init.signal as AbortSignal }))
+        ? new Promise<Response>(resolve =>
+            requests.push({ resolve, signal: init.signal as AbortSignal, input: JSON.parse(init.body as string) }),
+          )
         : Promise.resolve(Response.json({ proposal: null })),
     ),
   );
@@ -132,7 +153,7 @@ it("supersedes in-flight entry review on stop, ignores late completion, and send
   requests[0].resolve(response());
   await vi.advanceTimersByTimeAsync(0);
   expect(runtime.snapshot().summary?.reviewStatus).toBe("pending");
-  requests[1].resolve(response());
+  requests[1].resolve(response(1));
   await vi.advanceTimersByTimeAsync(0);
   expect(runtime.snapshot().summary?.reviewStatus).toBe("complete");
   expect(runtime.snapshot().status).toBe("ended");
@@ -153,4 +174,16 @@ it("keeps malformed successful API responses unavailable without changing accept
   expect(runtime.snapshot().assessment?.version).toBe(ASSESSMENT_VERSION);
   expect(runtime.snapshot().runtime?.conceptEvidence).toEqual(before);
   expect(runtime.snapshot().summary?.notice).toContain("unavailable");
+});
+
+it("rejects a foreign/superseded snapshot even when all reference scores are valid", async () => {
+  await enterRecap();
+  const before = JSON.stringify(runtime.snapshot().runtime);
+  const body = await response().json();
+  body.assessment.snapshot.generation++;
+  requests[0].resolve(Response.json(body));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(runtime.snapshot().assessment?.status).toBe("unavailable");
+  expect(JSON.stringify(runtime.snapshot().runtime)).toBe(before);
+  expect(runtime.snapshot().summary?.strengths).toEqual([]);
 });

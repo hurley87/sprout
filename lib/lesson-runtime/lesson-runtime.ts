@@ -1,3 +1,4 @@
+import type { ReviewSnapshot } from "./review-evidence";
 import { buildSessionSummary, sessionSummaryInstruction, type SessionSummary } from "./session-summary";
 import {
   ASSESSMENT_VERSION,
@@ -109,6 +110,7 @@ export class LessonRuntime {
   private assessment: ConversationAssessment = { version: ASSESSMENT_VERSION, status: "idle", results: {} };
   private assessedConversation = "";
   private assessmentGeneration = 0;
+  private assessmentSnapshot?: ReviewSnapshot;
   private summary?: SessionSummary;
   private summaryContext = "";
   private assessmentAbort?: AbortController;
@@ -946,6 +948,8 @@ export class LessonRuntime {
     const abort = new AbortController();
     this.assessmentAbort = abort;
     const generation = ++this.assessmentGeneration;
+    const snapshot = { runtimeId: this.runtimeId, generation, visits };
+    this.assessmentSnapshot = snapshot;
     this.assessment = { version: ASSESSMENT_VERSION, status: "pending", results: {} };
     this.refreshSummary();
     this.publish();
@@ -953,13 +957,17 @@ export class LessonRuntime {
       const response = await fetch("/api/assess", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lessonId: this.lessonDefinition.id, visits }),
+        body: JSON.stringify({
+          lessonId: this.lessonDefinition.id,
+          visits,
+          owner: { runtimeId: this.runtimeId, generation },
+        }),
         signal: AbortSignal.any([abort.signal, AbortSignal.timeout(35_000)]),
       });
       if (!response.ok) throw new Error("Assessment unavailable");
       const body = await response.json();
       // Revalidate the closed score schema; never trust provider text or let grading advance a scene.
-      const assessment = parseAssessment(body?.assessment, this.lessonDefinition);
+      const assessment = parseAssessment(body?.assessment, this.lessonDefinition, snapshot);
       if (!assessment) throw new Error("Invalid assessment");
       if (generation !== this.assessmentGeneration) return;
       this.assessment = assessment;
@@ -980,7 +988,7 @@ export class LessonRuntime {
       this.lessonDefinition.id === "catching-unicorns" &&
       (this.state.nodeId === "recap" || this.status === "ended")
     )
-      this.summary = buildSessionSummary(this.state, this.assessment);
+      this.summary = buildSessionSummary(this.state, this.assessment, this.assessmentSnapshot);
   }
 
   private sendSummaryUpdate() {

@@ -15,7 +15,11 @@ function EvidenceDetails({
   const quotations = new Map<string, SummaryConcept["records"]>();
   for (const record of concept.records) {
     const quote = record.live?.source?.childTranscript ?? "";
-    quotations.set(quote, [...(quotations.get(quote) ?? []), record]);
+    const texts = [...new Set([quote, ...record.reviewQuotes.map(reference => reference.text)])];
+    for (const text of texts) {
+      if (!text && texts.some(Boolean)) continue;
+      quotations.set(text, [...(quotations.get(text) ?? []), record]);
+    }
   }
   return (
     <li className="border-t border-slate-200 pt-4">
@@ -42,8 +46,22 @@ function EvidenceDetails({
                   </span>
                   : live {record.live?.status ?? "unobserved"} ({record.live?.understanding ?? "attribution unclear"});
                   review {record.review?.understanding.outcome.replaceAll("_", " ") ?? reviewStatus}
-                  {record.review && <> · assistance {record.review.assistance.outcome}</>}
-                  {source && (
+                  {record.review && (
+                    <>
+                      {" "}
+                      · assistance {record.review.assistance.outcome} · provenance{" "}
+                      {record.review.evidence?.status ?? "not recorded"} · {record.reconciliation}
+                    </>
+                  )}
+                  {record.reviewQuotes
+                    .filter(reference => reference.text === quote)
+                    .map(reference => (
+                      <div key={reference.id} className="mt-2">
+                        Review learner source · {reference.nodeId} · visit {reference.visitId} · message{" "}
+                        {reference.messageIndex}
+                      </div>
+                    ))}
+                  {source && source.childTranscript === quote && (
                     <span className="block">
                       Learner turn {source.childTurnId} ·{" "}
                       {CATCHING_UNICORNS_LESSON.nodes[source.nodeId]?.presentation.title ?? source.nodeId} · visit{" "}

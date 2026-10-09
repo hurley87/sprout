@@ -260,36 +260,48 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
   const microphone = await installSyntheticMicrophone(page);
   await installLocalSession(page);
 
-  await page.route("**/api/assess", route =>
-    route.fulfill({
+  await page.route("**/api/assess", route => {
+    const input = route.request().postDataJSON();
+    const snapshot = { ...input.owner, visits: input.visits };
+    return route.fulfill({
       json: {
         assessment: normalizeAssessment(
           {
             version: ASSESSMENT_VERSION,
             answers: Object.fromEntries(
-              Object.keys(assessmentQuestions(CATCHING_UNICORNS_LESSON)).map(key => [
+              Object.entries(assessmentQuestions(CATCHING_UNICORNS_LESSON, snapshot)).map(([key, question]) => [
                 key,
-                key.endsWith(":understanding")
+                key.includes(":evidence_")
                   ? {
                       type: "choice",
-                      choice: "partial",
-                      confidence: 0.6,
-                      probabilities: { not_yet: 0.1, partial: 0.6, demonstrated: 0.3 },
-                    }
-                  : {
-                      type: "choice",
-                      choice: "unclear",
+                      choice: "none",
                       confidence: 1,
-                      probabilities: { independent: 0, prompted: 0, unclear: 1 },
-                    },
+                      probabilities: Object.fromEntries(
+                        Object.keys(question.criteria).map(id => [id, id === "none" ? 1 : 0]),
+                      ),
+                    }
+                  : key.endsWith(":understanding")
+                    ? {
+                        type: "choice",
+                        choice: "partial",
+                        confidence: 0.6,
+                        probabilities: { not_yet: 0.1, partial: 0.6, demonstrated: 0.3 },
+                      }
+                    : {
+                        type: "choice",
+                        choice: "unclear",
+                        confidence: 1,
+                        probabilities: { independent: 0, prompted: 0, unclear: 1 },
+                      },
               ]),
             ),
           },
           CATCHING_UNICORNS_LESSON,
+          snapshot,
         ),
       },
-    }),
-  );
+    });
+  });
 
   let holdFirstResponse!: () => void;
   const firstResponseGate = new Promise<void>(resolve => (holdFirstResponse = resolve));
