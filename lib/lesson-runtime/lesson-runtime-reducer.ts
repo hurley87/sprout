@@ -1,6 +1,6 @@
 import type { OutputActivityEvent } from "../events";
 import { parseConversationStateProposal } from "./conversation-state-classifier";
-import { currentNodeContext, isLessonNodeId, type LessonDefinition } from "./lesson-definition";
+import { currentNodeContext, isLessonNodeId, satisfiesConceptCompletion, type LessonNodeDefinition, type LessonDefinition } from "./lesson-definition";
 import { transcriptMessages, substantiveLearnerText } from "./tutor-observation";
 
 /** App-owned identities, captured at the source/request boundary, never supplied by the classifier. */
@@ -24,7 +24,7 @@ export type CurrentNodeSteeringContext = {
   readonly learningObjective: string;
   readonly tutorBrief: string;
   readonly completionCriteria?: readonly { readonly id: string; readonly description: string }[];
-  readonly completionPolicy?: string;
+  readonly completionPolicy?: LessonNodeDefinition["completionPolicy"];
 };
 export type ConceptEvidenceReference = {
   readonly runtimeId: string;
@@ -238,10 +238,8 @@ function sameClassificationSource(state: LessonRuntimeState, source: Classificat
 
 export function meetsAuthoredCompletionPolicy(state: LessonRuntimeState, lesson: LessonDefinition) {
   const node = lesson.nodes[state.nodeId];
-  if (!node.concepts?.length || node.completionPolicy === "allow_unresolved") return true;
-  if (node.completionPolicy !== "all_demonstrated" && node.completionPolicy !== "all_independent") return false;
-  return node.concepts.every(concept => {
-    const evidence = state.conceptEvidence[conceptKey(node.id, concept.id)];
+  return satisfiesConceptCompletion(node, criterionId => {
+    const evidence = state.conceptEvidence[conceptKey(node.id, criterionId)];
     return (
       evidence?.status === "demonstrated" &&
       (node.completionPolicy !== "all_independent" || evidence.understanding === "independent")

@@ -258,9 +258,9 @@ describe("Catching Unicorns normal completion policy", () => {
     expect(decision.proposal?.answerOutcome).not.toBe("correct");
   });
 
-  it("requires all authored scene criteria and uses the prompted-permitted policy", () => {
+  it("requires authored scene criteria with a two-example culture exception", () => {
     for (const nodeId of CATCHING_UNICORNS_SCENE_IDS.slice(0, -1)) {
-      expect(CATCHING_UNICORNS_LESSON.nodes[nodeId].completionPolicy).toBe("all_demonstrated");
+      expect(CATCHING_UNICORNS_LESSON.nodes[nodeId].completionPolicy).toEqual(nodeId === "techno-literate-culture" ? { kind: "at_least_demonstrated", count: 2 } : "all_demonstrated");
     }
     expect(CATCHING_UNICORNS_LESSON.nodes.engram.completionPolicy).not.toBe("all_independent");
   });

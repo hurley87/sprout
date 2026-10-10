@@ -373,3 +373,42 @@ the delivery branch retained the demo. After removal, `npm run build`,
 generated `.next/dev/types` reference to the deleted route; after clearing only
 the disposable checkout's generated `.next` directory, fresh type generation
 and typecheck passed. No shared runtime redesign or counting change was needed.
+
+## Culture question: two examples, 10 October 2026
+
+The displayed and spoken prompt is now: “Give two examples of what makes a culture
+techno-literate.” Two distinct relevant characteristics from the Introduction
+satisfy the task, including natural paraphrases accumulated across replies.
+Repeated mentions of one characteristic count once. Two named cultures or
+institutions are not the task. Learners need neither a causal explanation nor an
+account of all four characteristics. One example permits a request for a second;
+unclear meaning permits at most one short, neutral clarification, without giving
+away missing answers. After two examples, the tutor briefly acknowledges and
+pauses for application-owned advancement, without opening an optional discussion.
+Recognized requests to move on continue to preserve unresolved evidence.
+
+The scene's count policy records each of the four source-backed criteria
+separately. Two accepted criteria never fabricate evidence for the other two.
+The full definitions and four-item CAF reference framework remain available in
+the lesson; only accepted evidence authorizes each reveal. Source evidence is
+still separate from transfer reasoning. Production remains conversation-first:
+this count defines sufficient task evidence, not a new mastery gate on voluntary
+navigation or conversational closure. Global confidence thresholds, render,
+steering acknowledgment and audio-drain behavior are unchanged.
+
+The bounded transcript inspection of export
+`8e0a754a-785b-4b2f-9ecb-f0587f47d450` confirmed that the tutor probed all four
+characteristics and opened another discussion after the learner had named them.
+The export and audio are not checked in. Missing-transcript recovery, “yep”
+navigation recognition and retrospective review failures remain separate work.
+
+`catching-unicorns-culture-scope.test.ts` exercises all six characteristic pairs,
+a single/repeated characteristic, accumulated paraphrases, evidence references,
+selective reveals, CAF provenance and invalid count policies with controlled
+observations. `conversation-first.test.ts` exercises actual runtime advancement
+with mocked classification and transport, including active/unavailable audio,
+fresh acknowledgment, quiet drain, rendering and steering acknowledgment. The
+browser walkthrough now supplies only two culture examples and checks that the
+other two remain unresolved in CAF. These deterministic tests and authored
+instruction assertions do not establish live provider recognition or tutor speech
+semantics; a fresh human voice walkthrough remains necessary.

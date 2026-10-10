@@ -99,14 +99,20 @@ context, not an assertion that the learner actually demonstrated those criteria;
 the reducer still checks the retained evidence.
 
 An uncertain global objective score can be settled by confident demonstrations
-of every current criterion that is not eligible for carry-forward, together
-with confident tutor confirmation. The authored `all_independent` policy still
-requires independent labels. A confidently negative global objective, uncertain
-tutor confirmation, or missing current criterion does not qualify. No threshold
-changes are made. The reducer remains responsible for requiring all authored
-criteria, including carried criteria, and for matching the current revision,
-learner turn, tutor response, and drained audio before advancing. Scenes without
-concepts retain their existing global objective/tutor gates.
+of every current criterion that is not eligible for carry-forward, together with
+confident tutor confirmation. The Culture and literacy scene instead accepts any
+two distinct demonstrated characteristics. Its scene-specific assessment
+guidance permits identification in natural paraphrases without requiring every
+source-definition detail or a causal explanation; the same guidance reaches live
+and retrospective source-reference questions. The four source-backed definitions
+remain separate. The authored `all_independent` policy still requires
+independent labels. A confidently negative global objective, uncertain tutor
+confirmation, or insufficient criteria under the authored policy does not
+qualify. No threshold changes are made. The reducer remains responsible for
+checking the authored policy against retained evidence, including carried
+criteria, and for matching the current revision, learner turn, tutor response,
+and drained audio before advancing. Scenes without concepts retain their
+existing global objective/tutor gates.
 
 Response validation checks the pinned model, closed option sets, finite scores,
 normalized distributions, and a selected maximum. The deterministic mapper

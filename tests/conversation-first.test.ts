@@ -518,15 +518,15 @@ it("retains partial evidence when a request advances with no current-turn transc
   expect(h.state.nodeId).toBe("why-exographics");
   expect(h.state.conceptEvidence).toEqual(evidence);
 });
-it("offers question-six help through all instruction layers while preserving provenance", () => {
+it("limits question-six help through all instruction layers while preserving provenance", () => {
   const context = currentNodeContext(lesson, "techno-literate-culture");
-  expect(lesson.nodes["techno-literate-culture"].presentation.prompt).toContain("four characteristics");
-  expect(context.tutorBrief).toContain("offer one targeted cue");
-  expect(context.tutorBrief).toContain("supported understanding, not independent recall");
+  expect(lesson.nodes["techno-literate-culture"].presentation.prompt).toBe("Give two examples of what makes a culture techno-literate.");
+  expect(context.tutorBrief).toContain("at most one short, neutral clarification");
+  expect(context.tutorBrief).toContain("Tutor words are not learner evidence");
   const config = createLiveSessionConfig(lesson);
   expect(config.instructions).toContain("only when explicitly permitted by the current scene tutor brief");
   expect(config.instructions).not.toContain("Never state hidden canonical answers");
-  expect(teachingInstruction(context, lesson)).toContain("offer one targeted cue");
+  expect(teachingInstruction(context, lesson)).toContain("at most one short, neutral clarification");
   const h = harness();
   expect(answerRecoveryInstruction(lesson, h.state)).toContain("targeted scaffolding");
   expect(assessmentQuestions(lesson)["techno-literate-culture:education-system:understanding"].instructions).toContain(
@@ -546,4 +546,85 @@ it("revokes pending navigation on actual new learner text, even without another 
   expect(h.state.conversationAdvanceRequested).toBe(false);
   h.send({ type: "clock.tick", source: runtimeSource(h.state) }, 1000);
   expect(h.state.nodeId).toBe("exographics");
+});
+
+it("advances two culture examples only after tutor acknowledgment and audio drain, then waits for CAF rendering and steering acknowledgment", async () => {
+  useRuntimeFakeTimers();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (url !== "/api/classify") return Response.json({}, { status: 503 });
+      const input = JSON.parse(init?.body as string);
+      const messages = transcriptMessages(input.transcript)!;
+      return Response.json({
+        proposal: classifierProposal(input, {
+          answerOutcome: "correct",
+          tutorState: messages.at(-1)?.speaker === "Tutor" ? "acknowledging" : "unknown",
+          conceptObservations: ["widespread-literacy", "idea-discoverers"].map(criterionId => ({
+            criterionId,
+            observation: "demonstrated_independent" as const,
+            childMessageIndex: messages.findIndex(message => message.speaker === "Child"),
+          })),
+        }),
+      });
+    }),
+  );
+  const runtime = new LessonRuntime({} as HTMLAudioElement, () => {}, {
+    ...lesson,
+    initialNodeId: "techno-literate-culture",
+  });
+  try {
+    runtime.confirmRendered(runtime.snapshot().display);
+    await vi.advanceTimersByTimeAsync(0);
+    const steering = transport.send.mock.calls[0][0];
+    if (steering.type !== "session.instructions.append") throw new Error("Expected steering");
+    expect(steering.content).toContain("Give two examples of what makes a culture techno-literate.");
+    events.acknowledgeSteering(steering.event_id, 0);
+    transport.receive!({ type: "output.activity", state: "quiet" });
+    events.childTurn("Most people can read and write; some specialize in finding new ideas.", 100);
+    await vi.advanceTimersByTimeAsync(300);
+    expect(runtime.snapshot().display.nodeId).toBe("techno-literate-culture");
+    const evidence = structuredClone(runtime.snapshot().runtime!.conceptEvidence);
+    expect(Object.keys(evidence)).toEqual([
+      "techno-literate-culture:widespread-literacy",
+      "techno-literate-culture:idea-discoverers",
+    ]);
+    transport.receive!({
+      type: "transcript",
+      speaker: "sprout",
+      delta: "Thank you for those two examples.",
+      startMs: 300,
+      endMs: 400,
+    });
+    transport.receive!({ type: "output.activity", state: "active" });
+    await vi.advanceTimersByTimeAsync(900);
+    expect(runtime.snapshot().display.nodeId).toBe("techno-literate-culture");
+    transport.receive!({ type: "output.activity", state: "unavailable" });
+    await vi.advanceTimersByTimeAsync(900);
+    expect(runtime.snapshot().display.nodeId).toBe("techno-literate-culture");
+    transport.receive!({ type: "output.activity", state: "quiet" });
+    await vi.advanceTimersByTimeAsync(100);
+    expect(runtime.snapshot().display.nodeId).toBe("techno-literate-culture");
+    await vi.advanceTimersByTimeAsync(500);
+    // Unavailable audio revokes the pending closure; restored quiet cannot revive it.
+    expect(runtime.snapshot().display.nodeId).toBe("techno-literate-culture");
+    events.tutorTurn("You gave two relevant examples.", 500);
+    await vi.advanceTimersByTimeAsync(600);
+    expect(runtime.snapshot().display.nodeId).toBe("caf-application");
+    expect(runtime.snapshot().runtime?.phase).toBe("rendering");
+    expect(runtime.snapshot().runtime?.conceptEvidence).toEqual(evidence);
+    expect(transport.send).toHaveBeenCalledTimes(1);
+    runtime.confirmRendered(runtime.snapshot().display);
+    await vi.advanceTimersByTimeAsync(0);
+    const nextSteering = transport.send.mock.calls[1][0];
+    if (nextSteering.type !== "session.instructions.append") throw new Error("Expected CAF steering");
+    expect(nextSteering.content).toContain("four-characteristic techno-literate-culture framework");
+    expect(runtime.snapshot().awaitingSteering).toBe(true);
+    events.acknowledgeSteering(nextSteering.event_id, 600);
+    expect(runtime.snapshot().awaitingSteering).toBe(false);
+    expect(runtime.snapshot().runtime?.phase).toBe("active");
+    expect(runtime.snapshot().runtime?.conceptEvidence).toEqual(evidence);
+  } finally {
+    runtime.stop();
+  }
 });

@@ -29,6 +29,8 @@ const scene = (definition: {
   tutorBrief: string;
   assessConversationOnEntry?: boolean;
   concepts?: readonly ConceptCriterionDefinition[];
+  completionPolicy?: LessonNodeDefinition["completionPolicy"];
+  conceptAssessmentGuidance?: string;
   next: string | null;
   carry?: readonly string[];
 }): LessonNodeDefinition => ({
@@ -37,7 +39,10 @@ const scene = (definition: {
   learningObjective: definition.objective,
   tutorBrief: definition.tutorBrief,
   ...(definition.assessConversationOnEntry ? { assessConversationOnEntry: true } : {}),
-  ...(definition.concepts ? { concepts: definition.concepts, completionPolicy: "all_demonstrated" as const } : {}),
+  ...(definition.concepts
+    ? { concepts: definition.concepts, completionPolicy: definition.completionPolicy ?? "all_demonstrated" }
+    : {}),
+  ...(definition.conceptAssessmentGuidance ? { conceptAssessmentGuidance: definition.conceptAssessmentGuidance } : {}),
   onSuccess: definition.next
     ? { kind: "node", nodeId: definition.next, ...(definition.carry ? { carryForwardCriteria: definition.carry } : {}) }
     : { kind: "complete" },
@@ -159,11 +164,13 @@ const lesson: LessonDefinition = {
     "techno-literate-culture": scene({
       id: "techno-literate-culture",
       title: "Culture and literacy",
-      prompt:
-        "The Introduction describes four characteristics of a techno-literate culture. What do you remember about them? Start with any one, and explain how it helps the culture develop.",
-      objective: "Explain each of the four characteristics presented in the Introduction.",
+      prompt: "Give two examples of what makes a culture techno-literate.",
+      objective: "Identify two distinct relevant characteristics from the Introduction, in your own words.",
       tutorBrief:
-        "Assess four separately; accept paraphrases. Start with any one. Rephrase around the framework and their example. Build on records, shared languages and schools; avoid repeated What else? After difficulty or a help request, offer one targeted cue: most people's basic skills, who discovers ideas, how strangers coordinate, or levels of education. If needed, explain that one characteristic and invite their own explanation of its role. Explain all four if requested; wait for an attempt first. Tutor words alone are not learner evidence; an explanation after help is supported understanding, not independent recall. Keep gaps unresolved; honor next requests.",
+        "Accept two distinct characteristics, in natural paraphrases across replies, not two named cultures or institutions. Naming a relevant characteristic suffices; no causal explanation or all-four account is needed. Repeating one counts once. If only one is given, ask for a second. Use at most one short, neutral clarification of unclear meaning; do not disclose missing answers. After two, briefly acknowledge and pause for app advancement; no optional discussion or further probes. Honor next requests; keep unshown concepts unresolved. Tutor words are not learner evidence.",
+      completionPolicy: { kind: "at_least_demonstrated", count: 2 },
+      conceptAssessmentGuidance:
+        "For this two-example question, identifying this characteristic in a natural paraphrase is sufficient; do not require every detail of its source definition or a causal explanation. Count distinct characteristics, not two named cultures or institutions or repeated mentions of one characteristic. Assess each separately across accumulated learner replies; two examples do not demonstrate the remaining characteristics. Tutor-only content is not learner evidence.",
       concepts: [
         criterion(
           "widespread-literacy",

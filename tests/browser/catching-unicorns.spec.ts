@@ -336,7 +336,9 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
     const concepts = CATCHING_UNICORNS_LESSON.nodes[body.nodeId]?.concepts ?? [];
     const observations = concepts.map(({ id }) => {
       const observation =
-        body.nodeId === "engram"
+        body.nodeId === "techno-literate-culture" && ["social-coordination", "education-system"].includes(id)
+          ? "not_yet"
+          : body.nodeId === "engram"
           ? "demonstrated_independent"
           : body.nodeId === "compare" &&
               ["exogram-shareability", "exogram-revisability"].includes(id) &&
@@ -598,11 +600,17 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
   );
   await waitForScene("techno-literate-culture");
 
+  await expect(page.getByRole("heading", { name: "Give two examples of what makes a culture techno-literate.", exact: true })).toBeVisible();
   await speakThenTutor(
-    "Most people need basic literacy, a few discover ideas, institutions coordinate strangers, and education develops knowledge.",
-    "That covers the framework.",
+    "Most people can read and write, and some people specialize in finding new ideas.",
+    "Thank you for those two examples.",
   );
   await waitForScene("caf-application");
+  await expectEvidence("techno-literate-culture:widespread-literacy", { status: "demonstrated", understanding: "independent" });
+  await expectEvidence("techno-literate-culture:idea-discoverers", { status: "demonstrated", understanding: "independent" });
+  await expectEvidence("techno-literate-culture:social-coordination", { status: "not_yet", understanding: null });
+  await expectEvidence("techno-literate-culture:education-system", { status: "not_yet", understanding: null });
+  await expect(page.locator('[data-scene="caf-application"]')).toContainText("Framework item 3 is not yet available from accepted evidence");
   await speakThenTutor(
     "My conclusion: yes, with qualifications, because training and coordination support several framework characteristics.",
     "That is a defensible case when tied to evidence.",

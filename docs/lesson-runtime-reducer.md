@@ -81,6 +81,10 @@ Concept nodes require an authored `completionPolicy`:
 
 - `all_demonstrated` requires every current criterion to be demonstrated.
 - `all_independent` also requires independent rather than prompted understanding.
+- `{ kind: "at_least_demonstrated", count: n }` requires `n` distinct authored
+  criteria to be demonstrated, preserving separate evidence for every criterion.
+  Culture and literacy uses `count: 2`; repetitions do not add a criterion, and
+  the other two characteristics remain unresolved unless separately demonstrated.
 - `allow_unresolved` permits the authored success edge with unresolved criteria;
   it does not change their evidence status or count them as mastery.
 

@@ -8,7 +8,13 @@ export type LessonNodeDefinition = {
   readonly assessConversationOnEntry?: boolean;
   readonly concepts?: readonly ConceptCriterionDefinition[];
   /** `allow_unresolved` is an explicit early-exit policy; unresolved concepts stay unresolved. */
-  readonly completionPolicy?: "all_demonstrated" | "all_independent" | "allow_unresolved";
+  readonly completionPolicy?:
+    | "all_demonstrated"
+    | "all_independent"
+    | "allow_unresolved"
+    | { readonly kind: "at_least_demonstrated"; readonly count: number };
+  /** Scene-specific interpretation of the retained source-backed criteria. */
+  readonly conceptAssessmentGuidance?: string;
   readonly onSuccess:
     | { readonly kind: "node"; readonly nodeId: string; readonly carryForwardCriteria?: readonly string[] }
     | { readonly kind: "complete"; readonly carryForwardCriteria?: readonly string[] };
@@ -65,7 +71,11 @@ export function validateLessonDefinition(value: LessonDefinition): LessonDefinit
       throw new Error(`Lesson node ${id} needs an authored concept completion policy`);
     if (
       node.completionPolicy &&
-      !["all_demonstrated", "all_independent", "allow_unresolved"].includes(node.completionPolicy)
+      !(typeof node.completionPolicy === "object"
+        ? node.completionPolicy.kind === "at_least_demonstrated" &&
+          Number.isSafeInteger(node.completionPolicy.count) && node.completionPolicy.count > 0 &&
+          node.completionPolicy.count <= (node.concepts?.length ?? 0)
+        : ["all_demonstrated", "all_independent", "allow_unresolved"].includes(node.completionPolicy))
     )
       throw new Error(`Lesson node ${id} has an unknown concept completion policy`);
     if (node.concepts && new Set(node.concepts.map(concept => concept.id)).size !== node.concepts.length)
@@ -114,4 +124,13 @@ export function currentNodeContext(lesson: LessonDefinition, nodeId: string) {
       completionPolicy: node.completionPolicy,
     } : {}),
   };
+}
+
+/** Count distinct authored criteria, never mentions or duplicate observations. */
+export function satisfiesConceptCompletion(node: LessonNodeDefinition, demonstrated: (criterionId: string) => boolean) {
+  if (!node.concepts?.length || node.completionPolicy === "allow_unresolved") return true;
+  if (typeof node.completionPolicy === "object")
+    return node.concepts.filter(concept => demonstrated(concept.id)).length >= node.completionPolicy.count;
+  return (node.completionPolicy === "all_demonstrated" || node.completionPolicy === "all_independent") &&
+    node.concepts.every(concept => demonstrated(concept.id));
 }

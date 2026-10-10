@@ -7,7 +7,7 @@ export const CONVERSATION_CLASSIFICATION_THRESHOLDS = {
 } as const;
 export const CLASSIFIER_VERSION = "conversation-state-v2" as const;
 import { tutorObservation, transcriptMessages, substantiveLearnerText } from "./tutor-observation";
-import { isLessonNodeId, OBJECTIVE_CRITERIA_IDS, TUTOR_CRITERIA_IDS } from "./lesson-definition";
+import { isLessonNodeId, satisfiesConceptCompletion, OBJECTIVE_CRITERIA_IDS, TUTOR_CRITERIA_IDS } from "./lesson-definition";
 import { CONCEPT_OBSERVATIONS, type ConversationStateClassifierInput, type ConversationStateProposal, type ProposedConceptObservation } from "./conversation-state-classifier";
 import type { LessonDefinition } from "./lesson-definition";
 
@@ -48,7 +48,7 @@ export function conversationStateQuestions(lesson: LessonDefinition, nodeId?: st
     for (const concept of node.concepts ?? []) {
       questions[`concept_${concept.id}`] = {
         type: "choice",
-        instructions: `${scope}${conceptScope} Judge only this authored concept criterion: ${concept.description}. Distinguish genuinely independent understanding from understanding reached after tutor help. A learner repeating or closely echoing tutor-supplied wording is not independent understanding. Cite no unseen or inferred content; propose only a state.`,
+        instructions: `${scope}${conceptScope} Judge only this authored concept criterion: ${concept.description}.${node.conceptAssessmentGuidance ? ` ${node.conceptAssessmentGuidance}` : ""} Distinguish genuinely independent understanding from understanding reached after tutor help. A learner repeating or closely echoing tutor-supplied wording is not independent understanding. Cite no unseen or inferred content; propose only a state.`,
         criteria: {
           not_yet: "No relevant learner evidence for this concept is present.",
           partial: "Relevant evidence is incomplete, ambiguous, or does not yet establish understanding.",
@@ -65,7 +65,7 @@ export function conversationStateQuestions(lesson: LessonDefinition, nodeId?: st
     for (const concept of currentNode?.concepts ?? []) {
       questions[`source_${concept.id}`] = {
         type: "choice",
-        instructions: `${scope} Select the learner utterance that best supports this criterion: ${concept.description}. Select the earlier explanation, not later assent or a different criterion's answer. If no single utterance supports relevant progress, select none. Indexes are application projections; never infer unseen content.`,
+        instructions: `${scope} Select the learner utterance that best supports this criterion: ${concept.description}.${currentNode?.conceptAssessmentGuidance ? ` ${currentNode.conceptAssessmentGuidance}` : ""} Select the earlier explanation, not later assent or a different criterion's answer. If no single utterance supports relevant progress, select none. Indexes are application projections; never infer unseen content.`,
         criteria: candidates,
       };
     }
@@ -261,13 +261,13 @@ export function interpretConversationOutputs(outputs: ConversationStateOutputs, 
   // current criteria and tutor confirmation can settle an uncertain summary,
   // but never override a confidently negative summary or invent carried evidence.
   const criterionCompletionEligible = hasConceptQuestions &&
-    (node?.completionPolicy === "all_demonstrated" || node?.completionPolicy === "all_independent") &&
+    node !== undefined && node.completionPolicy !== "allow_unresolved" &&
     currentCriteria.length > 0 &&
     (!objectiveConfident || outputs.objectiveState.choice === "completed") &&
     tutorConfident && outputs.tutorState.choice === "confirmed_completion" &&
-    currentCriteria.every(concept => conceptObservations.some(observation =>
-      observation.criterionId === concept.id &&
-      (observation.observation === "demonstrated_independent" || (node?.completionPolicy === "all_demonstrated" &&
+    satisfiesConceptCompletion({ ...node, concepts: currentCriteria }, criterionId => conceptObservations.some(observation =>
+      observation.criterionId === criterionId &&
+      (observation.observation === "demonstrated_independent" || (node.completionPolicy !== "all_independent" &&
         ["demonstrated_prompted", "demonstrated_unattributed"].includes(observation.observation))),
     ));
   const completionEligible = lesson?.conversationFirst

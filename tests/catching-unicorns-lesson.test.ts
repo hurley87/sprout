@@ -31,7 +31,7 @@ describe("isolated Catching Unicorns lesson content", () => {
     ]);
     expect(CATCHING_UNICORNS_LESSON.initialNodeId).toBe("engram");
     const nodes = Object.values(CATCHING_UNICORNS_LESSON.nodes);
-    expect(nodes.slice(0, -1).every(node => node.completionPolicy === "all_demonstrated")).toBe(true);
+    expect(nodes.slice(0, -1).filter(node => node.id !== "techno-literate-culture").every(node => node.completionPolicy === "all_demonstrated")).toBe(true);
     expect(nodes.at(-1)?.onSuccess).toEqual({ kind: "complete" });
     expect(nodes.slice(0, -1).every(node => node.concepts?.length)).toBe(true);
     expect(CATCHING_UNICORNS_LESSON.nodes.compare.concepts?.map(item => item.id)).toEqual([
