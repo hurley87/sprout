@@ -117,7 +117,7 @@ describe("Catching Unicorns scene presentation", () => {
   it("leaves the final recap as the evidence summary", () => {
     const html = renderScene("recap", { "engram:engram-biological": evidence("engram-biological") });
     expect(html).toContain("What this conversation showed");
-    expect(html).toContain("independent live evidence");
+    expect(html).toContain("You identified an engram as memory held inside the mind or brain.");
     expect(html).not.toContain("Learned so far");
   });
 
@@ -129,7 +129,7 @@ describe("Catching Unicorns scene presentation", () => {
         "A memory inside my brain, unlike an external note.",
       ),
     });
-    expect(recap).toContain("prompting unclear");
+    expect(recap).toContain("how much help you had");
     expect(recap).toContain("A memory inside my brain, unlike an external note.");
   });
 
@@ -251,8 +251,8 @@ describe("Catching Unicorns scene presentation", () => {
         "No, I cannot support that conclusion with the evidence here.",
       ),
     });
-    expect(recap).toContain("independent live evidence");
-    expect(recap).toContain("with prompting");
+    expect(recap).toContain("live demonstrated (independent)");
+    expect(recap).toContain("with help");
     expect(recap).toContain("partial");
     expect(recap).toContain("unobserved");
     expect(recap).toContain("Memory held in a biological mind.");

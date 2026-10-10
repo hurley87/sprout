@@ -107,15 +107,18 @@ it("permits a review-only strength with assistance uncertainty and no live quota
   const summary = buildSessionSummary({ ...state, conceptEvidence: {} }, assess());
   expect(concept(summary).evidence).toBe("recorded");
   expect(concept(summary).records.find(r => r.key === key)?.reconciliation).toBe("review-only");
-  expect(summary.strengths[0].text).toContain("prompting unclear");
+  expect(summary.strengths[0].text).toContain("how much help you had");
   const independent = buildSessionSummary(
     { ...state, conceptEvidence: {} },
     assess(undefined, undefined, "independent"),
   );
-  expect(independent.strengths[0].text).toContain("independent review evidence");
+  expect(independent.strengths[0].text).toBe(
+    "You described an exogram as a memory representation kept outside the brain.",
+  );
+  expect(independent.concepts.find(c => c.id === "exogram-non-biological")?.attribution).toBe("independent");
   expect(
     buildSessionSummary({ ...state, conceptEvidence: {} }, assess(undefined, undefined, "prompted")).strengths[0].text,
-  ).toContain("with prompting");
+  ).toContain("with help");
 });
 
 it("cannot turn the specialists answer into demonstration merely by locating it", () => {
@@ -282,7 +285,7 @@ it("uses a labeled synthetic reconciled scenario to prefer memory reasoning and 
   expect(concept(summary).evidence).toBe("recorded");
   expect(concept(summary).attribution).toBe("unclear");
   expect(summary.improvement.conceptId).toBe("discovery");
-  expect(summary.improvement.text).toContain("extension opportunity");
+  expect(summary.improvement.text).toContain("Explore this next");
   expect(summary.exercise).toContain("relationship easier to notice");
   expect(summary.exercise).toContain("why that helps reasoning");
   expect(summary.exercise).not.toContain("Einstein");

@@ -70,7 +70,8 @@ it("counts carried concepts once, retains provenance, and qualifies inconclusive
   };
   const summary = buildSessionSummary(current, review("uncertain"));
   expect(summary.strengths).toHaveLength(1);
-  expect(summary.strengths[0].text).toContain("full review inconclusive");
+  expect(summary.strengths[0].text).toBe(feedback["engram-biological"].explanation);
+  expect(summary.concepts[0].reviewUncertain).toBe(true);
   expect(summary.concepts.find(c => c.id === "engram-biological")?.records).toHaveLength(3);
   expect(summary.strengths[0].quote).toBe("It is memory inside my mind.");
 });
@@ -78,10 +79,10 @@ it("keeps confident disagreements open and prompting conservative", () => {
   const current = { ...state, conceptEvidence: { "engram:engram-biological": live() } };
   const disputed = buildSessionSummary(current, review("not_yet"));
   expect(disputed.strengths).toEqual([]);
-  expect(disputed.improvement.text).toContain("evidence sources disagree");
+  expect(disputed.improvement.text).toContain("recorded accounts differ");
   expect(disputed.concepts[0].records[0].review?.understanding.scores.confidence).toBe(0.5);
   const prompted = buildSessionSummary(current, review("demonstrated_prompted"));
-  expect(prompted.strengths[0].text).toContain("with prompting");
+  expect(prompted.strengths[0].text).toContain("with help");
   expect(prompted.strengths[0].text).not.toContain("independent");
 });
 it.each(["idle", "pending", "unavailable", "complete"] as const)(
@@ -148,7 +149,8 @@ it("labels CAF evidence as transfer and keeps manuscript answers out of missing-
       "caf-application:caf-defensible-conclusion": { ...live(), criterionId: "caf-defensible-conclusion" },
     },
   });
-  expect(summary.strengths[0].text).toContain("Transfer reasoning");
+  expect(summary.strengths[0].text).toContain("your application reasoning");
+  expect(summary.strengths[0].text).toContain("CAF facts have not been verified");
   expect(summary.concepts.find(c => c.id === "caf-defensible-conclusion")?.domain).toBe("transfer");
   expect(summary.exercise).not.toContain("Biological memory:");
 });
@@ -216,7 +218,7 @@ it("preserves a recorded strength when content is demonstrated and review assist
   const summary = buildSessionSummary(current, assessment);
   expect(summary.strengths).toHaveLength(1);
   expect(summary.strengths[0].text).not.toContain("full review inconclusive");
-  expect(summary.strengths[0].text).toContain("independent live evidence");
+  expect(summary.strengths[0].text).toBe(feedback["engram-biological"].explanation);
   const html = renderToStaticMarkup(createElement(RecapPresentation, { state: current, summary }));
   expect(html).toContain("review demonstrated");
   expect(html).toContain("assistance unclear");
@@ -248,7 +250,7 @@ it("prefers a supported substantive gap over assistance-only uncertainty", () =>
   const summary = buildSessionSummary(current);
   expect(summary.improvement.conceptId).toBe("discovery");
   expect(summary.exercise).toContain("what you would clarify or change");
-  expect(summary.strengths[0].text).toContain("prompting unclear");
+  expect(summary.strengths[0].text).toContain("how much help you had");
 });
 
 it("does not let unobserved advanced topics bypass missing prerequisites", () => {
@@ -257,7 +259,7 @@ it("does not let unobserved advanced topics bypass missing prerequisites", () =>
     conceptEvidence: { "engram:engram-biological": live() },
   });
   expect(summary.improvement.conceptId).toBe("exogram-non-biological");
-  expect(summary.improvement.text).toContain("extension opportunity");
+  expect(summary.improvement.text).toContain("Explore this next");
   expect(summary.improvement.text).toContain("does not mean you got it wrong");
 });
 
@@ -348,5 +350,55 @@ it.each(["partial", "disagreement", "unobserved", "prompted", "unclear", "indepe
       if (summary.concepts.find(c => c.id === summary.improvement.conceptId)?.domain === "transfer")
         expect(summary.exercise).toContain("not a manuscript fact about the CAF");
     }
+  },
+);
+
+it("limits authored strength descriptions to demonstrated ideas without inferring examples from quotations", () => {
+  for (const id of Object.keys(feedback)) {
+    const key = Object.keys(allRecorded()).find(key => key.endsWith(`:${id}`))!;
+    const current = {
+      ...state,
+      conceptEvidence: {
+        [key]: {
+          ...live(),
+          criterionId: id,
+          source: { ...live().source!, childTranscript: "A learner explanation accepted for this criterion." },
+        },
+      },
+    };
+    const summary = buildSessionSummary(current);
+    expect(summary.strengths[0].text).toContain(feedback[id].explanation);
+    expect(summary.strengths[0].text).not.toMatch(
+      /Recorded explanation|Transfer reasoning|independent.*evidence|prompting unclear|mastered|you gave an example/i,
+    );
+    const changedQuote = structuredClone(current);
+    changedQuote.conceptEvidence[key].source!.childTranscript =
+      "Tutor said to use paper, intermediate steps, a map and a university.";
+    // Copy depends on the accepted criterion, never keyword matching or quote paraphrasing.
+    expect(buildSessionSummary(changedQuote).strengths[0].text).toBe(summary.strengths[0].text);
+    const missingSource = structuredClone(current);
+    expect(
+      buildSessionSummary({
+        ...missingSource,
+        conceptEvidence: { [key]: { ...missingSource.conceptEvidence[key], source: null } },
+      }).strengths,
+    ).toEqual([]);
+  }
+  expect(feedback["memory-extension"].explanation).not.toMatch(/paper|intermediate|arithmetic/);
+  expect(feedback["exogram-durability"].explanation).not.toContain("biological memory can never");
+  expect(feedback["beyond-prose"].explanation).not.toMatch(/map|music|example/);
+});
+
+it.each(["pending", "unavailable"] as const)(
+  "keeps useful learner-facing live strengths while review is %s",
+  status => {
+    const current = { ...state, conceptEvidence: { "engram:engram-biological": live("demonstrated", "prompted") } };
+    const summary = buildSessionSummary(current, { version: ASSESSMENT_VERSION, status, results: {} });
+    expect(summary.strengths[0].text).toBe(
+      `${feedback["engram-biological"].explanation} You reached this explanation with help.`,
+    );
+    expect(summary.notice).toContain(status);
+    expect(summary.exercise).toContain(feedback[summary.improvement.conceptId].task);
+    expect(summary.strengths[0].text).not.toMatch(/recall|mastery|independent/);
   },
 );

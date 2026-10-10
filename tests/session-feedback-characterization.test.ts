@@ -40,8 +40,11 @@ describe("saved session feedback characterization", () => {
     }
     const { strengths, improvement, exercise } = summarize();
     // Preserve the historical recap and provider distributions in the source fixture.
-    expect(improvement).toEqual(fixture.recap.improvement);
-    expect(strengths[1]).toEqual(fixture.recap.strengths[1]);
+    expect(improvement.conceptId).toBe(fixture.recap.improvement.conceptId);
+    expect(improvement.text).toContain("earlier explanation leaves something to clarify");
+    expect(strengths[1].conceptId).toBe(fixture.recap.strengths[1].conceptId);
+    expect(strengths[1].quote).toBe(fixture.recap.strengths[1].quote);
+    expect(strengths[1].text).toBe("You explained that an external record can preserve information over time.");
     expect(strengths[0].conceptId).toBe("memory-extension");
     expect(exercise).toContain("Identify where the information is kept");
     expect(exercise).toContain("Revisit your earlier explanation");
@@ -68,6 +71,9 @@ describe("saved session feedback characterization", () => {
     const memory = summary.concepts.find(concept => concept.id === "memory-extension")!;
     expect(memory.evidence).toBe("recorded");
     expect(memory.attribution).toBe("independent");
+    expect(summary.strengths[0].text).toBe(
+      "You explained how external representations reduce what you need to hold in memory as you reason.",
+    );
     expect(memory.quote).toContain("middle steps that lead up to a final solution");
     expect(memory.quote).toContain("with pen and paper, I would be able to write those down");
     expect(memory.quote).toContain("without having to keep track of everything in my short term memory");

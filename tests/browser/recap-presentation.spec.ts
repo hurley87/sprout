@@ -25,7 +25,7 @@ for (const status of ["pending", "unavailable", "idle"] as const) {
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 1000 });
       await expect(recap.getByRole("heading", { name: "What you explained well" })).toBeVisible();
-      await expect(recap).toContainText("not enough attributable evidence");
+      await expect(recap).toContainText("too little of your explanation");
       await expect(recap).toContainText(summary.notice);
       await expect(recap.locator("blockquote")).toHaveCount(0);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -41,8 +41,12 @@ for (const status of ["pending", "unavailable", "idle"] as const) {
   });
 }
 
-test("grounded review-only recap keeps multiple learner quotations separate in the disclosure", async ({ page }) => {
+test("grounded review-only recap keeps multiple learner quotations separate in the disclosure", async ({
+  page,
+}, testInfo) => {
   const state = createLessonRuntime("review-recap", { lesson: CATCHING_UNICORNS_LESSON });
+  const secondQuote =
+    "Words written on a page can keep information outside my brain. I can return to the record later and read it again. If I write down what I want to remember about an event, the words are on the page even when I am thinking about something else. Remembering the event is something happening in my mind, while reading the note means looking at information I recorded outside it. The note and my memory can refer to the same event, but they are kept in different places.";
   const snapshot = {
     runtimeId: state.runtimeId,
     generation: 1,
@@ -50,8 +54,7 @@ test("grounded review-only recap keeps multiple learner quotations separate in t
       {
         nodeId: "exogram",
         visitId: 2,
-        transcript:
-          "Tutor: What is an exogram?\nChild: Information stored outside the brain.\nTutor: Give an example.\nChild: Words written on a page.",
+        transcript: `Tutor: What is an exogram?\nChild: Information stored outside the brain.\nTutor: Give an example.\nChild: ${secondQuote}`,
       },
     ],
   };
@@ -99,9 +102,27 @@ test("grounded review-only recap keeps multiple learner quotations separate in t
   await page.keyboard.press("Enter");
   await expect(recap.locator("blockquote")).toHaveCount(2);
   await expect(recap.locator("blockquote").nth(0)).toHaveText("“Information stored outside the brain.”");
-  await expect(recap.locator("blockquote").nth(1)).toHaveText("“Words written on a page.”");
+  await expect(recap.locator("blockquote").nth(1)).toHaveText(`“${secondQuote}”`);
   await expect(recap).toContainText("review-only");
   await expect(recap).toContainText("message 3");
-  await page.setViewportSize({ width: 390, height: 1000 });
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await expect(recap).toContainText("You described an exogram as a memory representation kept outside the brain.");
+  await expect(recap).toContainText("We cannot tell how much help you had.");
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    for (const open of [true, false]) {
+      if (((await recap.locator("details").getAttribute("open")) !== null) !== open) {
+        await recap.locator("summary").focus();
+        await page.keyboard.press("Enter");
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await page.screenshot({
+        path: testInfo.outputPath(`recap-multi-quote-${width}-${open ? "open" : "closed"}.png`),
+        fullPage: true,
+      });
+      if (open) {
+        await recap.getByRole("heading", { name: "Exogram · recorded", exact: true }).scrollIntoViewIfNeeded();
+        await page.screenshot({ path: testInfo.outputPath(`recap-quotes-${width}.png`) });
+      }
+    }
+  }
 });

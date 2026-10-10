@@ -201,22 +201,22 @@ export function buildSessionSummary(
     .slice(0, 2)
     .map(concept => ({
       conceptId: concept.id,
-      text: `${concept.domain === "transfer" ? "Transfer reasoning" : "Recorded explanation"}: ${concept.title}. ${concept.explanation} (${concept.attribution === "independent" ? (concept.records.some(record => record.live?.status === "demonstrated") ? "independent live evidence" : "independent review evidence") : concept.attribution === "prompted" ? "with prompting" : "prompting unclear"}${concept.reviewUncertain ? "; full review inconclusive" : ""}).`,
+      text: `${feedback[concept.id].explanation}${concept.attribution === "prompted" ? " You reached this explanation with help." : concept.attribution === "unclear" ? " We cannot tell how much help you had." : ""}${concept.domain === "transfer" ? " This describes your application reasoning; the CAF facts have not been verified." : ""}`,
       quote: concept.quote,
     }));
   const target = [...concepts].sort((a, b) => focusTier(a) - focusTier(b) || authoredOrder(a, b))[0];
   const reason =
     target.evidence === "partial"
-      ? "The recorded explanation is tentative or incomplete."
+      ? "Your earlier explanation leaves something to clarify."
       : target.evidence === "disagreement"
-        ? "The evidence sources disagree, so this remains open."
+        ? "The recorded accounts differ, so revisit this before drawing a conclusion."
         : target.evidence === "unobserved"
-          ? "This is an extension opportunity: there is not enough attributable evidence to judge it yet; that does not mean you got it wrong."
+          ? "Explore this next: we have too little of your explanation to judge it. That does not mean you got it wrong."
           : target.attribution === "prompted"
-            ? "Try explaining this with a fresh example without a cue."
+            ? "You explained this with help. Try it again without a cue."
             : target.attribution === "unclear"
-              ? "The explanation was recorded, but the amount of prompting is unclear."
-              : "Extend your recorded explanation with a fresh example.";
+              ? "We cannot tell how much help you had. Try explaining it without a cue."
+              : "Build on your explanation with a fresh example.";
   const practiceMode =
     target.evidence === "disagreement"
       ? "Compare the differing explanations, then test your account with this task."
@@ -233,14 +233,14 @@ export function buildSessionSummary(
     reviewStatus: assessment.status,
     notice:
       assessment.status === "pending"
-        ? "Full-conversation review is pending. Feedback uses recorded live evidence; uncertainty is not a failure."
+        ? "Your conversation review is pending. Here is feedback from your explanations so far."
         : assessment.status === "unavailable"
-          ? "Full-conversation review is unavailable. Feedback uses recorded live evidence; missing evidence is not a failure."
+          ? "Your conversation review is unavailable. Your explanations still give us a starting point."
           : assessment.status === "complete"
-            ? "Feedback describes recorded explanations, not a mastery grade. Inconclusive review results remain open."
-            : "Feedback uses recorded live evidence. Missing evidence is not a failure.",
+            ? "This feedback is about your explanations in this conversation."
+            : "This feedback is about your explanations so far.",
     strengths,
-    improvement: { conceptId: target.id, text: `Deepen ${target.title.toLowerCase()}. ${reason}` },
+    improvement: { conceptId: target.id, text: `Focus on ${feedback[target.id].topic}. ${reason}` },
     exercise,
     concepts,
   };

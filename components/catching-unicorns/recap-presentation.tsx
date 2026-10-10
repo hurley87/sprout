@@ -111,13 +111,13 @@ export function RecapPresentation({
                 </ul>
               ) : (
                 <p className="mt-3 text-sm">
-                  There is not enough attributable evidence to name a strength yet. This is not a judgment of your
-                  ability.
+                  We have too little of your explanation to name a strength yet. You can still explore the next
+                  exercise.
                 </p>
               )}
             </section>
             <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 sm:p-6">
-              <h3 className="font-semibold">One area to deepen</h3>
+              <h3 className="font-semibold">One next step</h3>
               <p className="mt-3">{feedback.improvement.text}</p>
             </section>
             <section className="rounded-2xl border bg-white p-5 sm:p-6">

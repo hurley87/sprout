@@ -116,6 +116,8 @@ it("steers immediately with actual fallback feedback, then queues a passive revi
   expect(runtime.snapshot().summary?.reviewStatus).toBe("pending");
   const feedback = runtime.snapshot().summary!;
   const supplied = JSON.parse(steering.content.split("\n")[1]);
+  expect(supplied.strengths).toEqual(feedback.strengths.map(strength => strength.text));
+  expect(supplied.notice).toBe(feedback.notice);
   expect(supplied.exercise).toBe(feedback.exercise);
   expect(supplied.improvement).toBe(feedback.improvement.text);
   expect(steering.content).toContain("Speak now");
@@ -127,6 +129,10 @@ it("steers immediately with actual fallback feedback, then queues a passive revi
   events.acknowledgeSteering(steering.event_id, 300);
   expect(appends()).toHaveLength(3);
   expect(appends()[2].content).toContain("do not initiate an extra turn");
+  expect(appends()[2].content).not.toContain("Speak now");
+  const updated = JSON.parse(appends()[2].content.split("\n")[1]);
+  expect(updated.strengths).toEqual(runtime.snapshot().summary!.strengths.map(strength => strength.text));
+  expect(updated.notice).toBe(runtime.snapshot().summary!.notice);
   expect(JSON.parse(appends()[2].content.split("\n")[1]).exercise).toBe(runtime.snapshot().summary?.exercise);
   events.acknowledgeSteering(steering.event_id, 300);
   await vi.advanceTimersByTimeAsync(0);
