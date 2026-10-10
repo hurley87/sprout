@@ -191,6 +191,11 @@ export class LessonRuntime {
       Object.values(this.lessonDefinition.nodes).some(node => node.concepts?.length),
       this.lessonDefinition.conversationFirst
         ? source => {
+            if (
+              this.state &&
+              (hasCurrentCompletionEvidence(this.state, this.lessonDefinition) || learnerRequestedNext(this.transcript))
+            )
+              return true;
             this.dispatch({ type: "conversation.recheck.requested", source, atMs: this.now() });
             if (!this.state?.interruptedExchange?.ready) return false;
             this.log("conversation.recheck.started", null, source);
@@ -659,7 +664,16 @@ export class LessonRuntime {
   }
 
   private syncTutorStabilization(trigger: string) {
-    if (this.state) this.answerRecovery.observe(this.state, this.status === "live" && !this.steering);
+    if (this.state)
+      this.answerRecovery.observe(
+        this.state,
+        this.status === "live" &&
+          !this.steering &&
+          !(
+            this.lessonDefinition.conversationFirst &&
+            (hasCurrentCompletionEvidence(this.state, this.lessonDefinition) || learnerRequestedNext(this.transcript))
+          ),
+      );
     if (this.state) this.supportClarification.observe(this.state, this.status === "live" && !this.steering);
     if (this.state) this.tutorStabilization.observe(this.state, this.status === "live" && !this.steering, trigger);
   }
@@ -829,9 +843,28 @@ export class LessonRuntime {
   }
 
   private sendAnswerRecovery(source: ClassificationSource) {
+    // Recheck at the transport boundary: neither a stale turn nor a settled
+    // navigation/closure may append a durable instruction to repeat an answer.
+    if (
+      !this.state ||
+      this.status !== "live" ||
+      this.steering ||
+      this.state.phase !== "active" ||
+      this.state.childSpeaking ||
+      this.state.childCandidate ||
+      this.state.outputActivity !== "quiet" ||
+      JSON.stringify({
+        ...runtimeSource(this.state),
+        nodeId: this.state.nodeId,
+        transcriptRevision: this.state.transcriptRevision,
+      }) !== JSON.stringify(source) ||
+      (this.lessonDefinition.conversationFirst &&
+        (hasCurrentCompletionEvidence(this.state, this.lessonDefinition) || learnerRequestedNext(this.transcript)))
+    )
+      return;
     const eventId = `${this.runtimeId}:answer-recovery:${source.visitId}:${source.childTurnId}:${source.transcriptRevision}`;
     const content = this.state
-      ? answerRecoveryInstruction(this.lessonDefinition, this.state)
+      ? answerRecoveryInstruction(this.lessonDefinition, this.state, this.transcript)
       : this.lessonDefinition.recovery.answerRecoveryInstruction;
     try {
       this.transport.send({

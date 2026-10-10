@@ -1,6 +1,7 @@
 import { meetsAuthoredCompletionPolicy } from "./lesson-runtime-reducer";
 import { currentNodeContext, type LessonDefinition } from "./lesson-definition";
 import type { CurrentNodeSteeringContext, LessonRuntimeState } from "./lesson-runtime-reducer";
+import { substantiveLearnerText, transcriptMessages } from "./tutor-observation";
 
 // Source provenance is retained in authored assessment data and diagnostics;
 // repeated spoken-turn appends only need the actual assessment target.
@@ -11,7 +12,7 @@ const completionGuidance =
 
 const targetText = (description: string) => description.replace(/^(?:Source-backed|Transfer rubric)[^:]*:\s*/, "");
 
-export function answerRecoveryInstruction(lesson: LessonDefinition, state: LessonRuntimeState) {
+export function answerRecoveryInstruction(lesson: LessonDefinition, state: LessonRuntimeState, transcript = "") {
   const node = lesson.nodes[state.nodeId];
   if (
     lesson.conversationFirst &&
@@ -23,6 +24,12 @@ export function answerRecoveryInstruction(lesson: LessonDefinition, state: Lesso
     return "Application recovery: the required learner evidence for this question is recorded. Speak now and finish your acknowledgment in one complete sentence, then pause for the app to advance. Do not ask for another confirmation or repeat a settled question. If your previous response was cut short, finish it now. If the learner has corrected or contradicted their answer, address that correction instead. Do not teach the next scene; the application owns advancement.";
   if (lesson.conversationFirst && state.hasChildTranscript)
     return "Application conversation guidance: assessment uncertainty must not hold this question. Use the learner’s accumulated answers. Follow the current scene tutor brief for targeted scaffolding when the learner struggles or asks for help; otherwise ask one useful, non-leading follow-up if meaning is unclear. Tutor-supplied content alone is not learner mastery. If the explanation is sufficient or the discussion has run its course, close with a concise acknowledgment and pause without a question. Do not ask whether the learner is ready to move on. Honor a request for the next question. Never ask for repetition to satisfy assessment attribution, claim uncertain concepts are mastered, or wait for an evaluation. The application owns question order and will supply the next rendered screen.";
+  if (lesson.conversationFirst && !state.hasChildTranscript && node.concepts?.length) {
+    const capturedAnswer = transcriptMessages(transcript)?.some(
+      message => message.speaker === "Child" && substantiveLearnerText(message.text),
+    );
+    return `Application recovery: the latest detected learner turn has no transcript. ${capturedAnswer ? "Earlier learner answers are captured in this question's conversation; preserve and use them." : "No learner answer is captured for this question yet."} This is a connection check, not evidence of misunderstanding or completion. Speak now: gently ask, 'Are you still there?' Then pause and listen. Presence alone does not require repeating an answer. If they say they already answered, use the captured conversation; do not demand repetition of demonstrated material. If the discussion already closed, acknowledge and pause without reopening it. Only invite a missing answer if the question remains unanswered. Honor a request for the next question and pause for the app. This request applies only to the missing turn and is superseded by new learner words. Do not supply an answer, infer mastery, repeat the check-in, or advance the scene yourself. If they ask to stop, stop teaching.`;
+  }
   if (!state.hasChildTranscript && node.concepts?.length)
     return "Application recovery: learner speech was detected, but no answer transcript is available. This is a connection check, not evidence of misunderstanding or completion. Speak now: gently ask, 'I didn't catch your answer. Are you still there?' Then pause and listen. If they confirm they are there, invite them to try their answer again in their own words. Do not supply an answer, claim the microphone is broken, repeat the check-in without a new application request, or advance the scene. If they ask to stop, stop teaching.";
   const missing =
@@ -36,7 +43,12 @@ export function answerRecoveryInstruction(lesson: LessonDefinition, state: Lesso
   if (!state.hasChildTranscript || !node.concepts?.length || node.completionPolicy === "allow_unresolved")
     return lesson.recovery.answerRecoveryInstruction;
   if (meetsAuthoredCompletionPolicy(state, lesson))
-    return `Application assessment: the required concept evidence is recorded for this scene. Accepted private targets: ${node.concepts.filter(concept => !missing.includes(concept)).map(concept => concept.id).join(", ")}. This supersedes earlier recovery focus. Do not ask the learner to repeat settled points or introduce extra requirements. Speak now: briefly confirm the learner's accepted explanation, then end your turn without a question. For example: Yes, that completes this question. If the latest learner statement contradicts accepted evidence, clarify it instead. Do not wait for another learner response. The application owns advancement and will provide the next screen context.`;
+    return `Application assessment: the required concept evidence is recorded for this scene. Accepted private targets: ${node.concepts
+      .filter(concept => !missing.includes(concept))
+      .map(concept => concept.id)
+      .join(
+        ", ",
+      )}. This supersedes earlier recovery focus. Do not ask the learner to repeat settled points or introduce extra requirements. Speak now: briefly confirm the learner's accepted explanation, then end your turn without a question. For example: Yes, that completes this question. If the latest learner statement contradicts accepted evidence, clarify it instead. Do not wait for another learner response. The application owns advancement and will provide the next screen context.`;
   const progress = missing.filter(
     concept => state.conceptEvidence[`${state.nodeId}:${concept.id}`]?.status === "partial",
   );
@@ -77,7 +89,7 @@ export function teachingInstruction(
     const targets =
       context.completionCriteria?.map(concept => `${concept.id}: ${targetText(concept.description)}`).join("\n") ??
       "none";
-    return `Application screen confirmation: ${context.nodeId} is now rendered.\nPrompt: ${context.scene.prompt ?? context.learningObjective}\nObjective: ${context.learningObjective}\nBrief: ${context.tutorBrief}${lesson.conversationFirst ? "\nClose or honor next-question requests; grading never holds conversation." : ""}\nPrivate targets (${typeof context.completionPolicy === "object" ? `any ${context.completionPolicy.count} distinct demonstrated criteria` : context.completionPolicy ?? "conversational"}):\n${targets}\nAsk the displayed question aloud now, then wait for the learner. Follow the session guidance; keep assessment targets private. If the learner has already started answering this new question, listen instead of interrupting.`;
+    return `Application screen confirmation: ${context.nodeId} is now rendered.\nPrompt: ${context.scene.prompt ?? context.learningObjective}\nObjective: ${context.learningObjective}\nBrief: ${context.tutorBrief}${lesson.conversationFirst ? "\nClose or honor next-question requests; grading never holds conversation." : ""}\nPrivate targets (${typeof context.completionPolicy === "object" ? `any ${context.completionPolicy.count} distinct demonstrated criteria` : (context.completionPolicy ?? "conversational")}):\n${targets}\nAsk the displayed question aloud now, then wait for the learner. Follow the session guidance; keep assessment targets private. If the learner has already started answering this new question, listen instead of interrupting.`;
   }
   const checklist = context.completionCriteria?.length
     ? "\nThe private completionCriteria are the assessment checklist. Check learner evidence for each, accepting natural paraphrases across answers. Probe one missing point at a time without supplying its answer. Do not confirm overall completion while any required point is missing. Keep the checklist private."
