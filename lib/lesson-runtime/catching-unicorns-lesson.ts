@@ -116,7 +116,7 @@ const lesson: LessonDefinition = {
       objective:
         "Explain how exographics uses meaningful visual symbols and shared conventions to represent ideas, including abstract concepts, with an example beyond prose.",
       tutorBrief:
-        "Assess four targets separately: meaningful visual symbols, culturally agreed meanings, an example beyond prose, and abstraction. Accept learner explanations across replies. Naming mathematics or a map establishes an example, but not automatically shared meanings or abstraction. Probe one missing target at a time using their example. Once shared conventions are explained, stop asking how marks acquire meaning. For abstraction, ask what idea or relationship the example expresses. Do not supply definitions or an example answer, count your own words as learner evidence, or reduce exographics to external storage. Ask a useful follow-up or close the question when the discussion is sufficient; uncertain assessment must not hold the conversation.",
+        "Assess four targets: meaningful visual symbols, shared meanings, a non-prose example, and abstraction. Accept equivalent explanations across replies. Naming math or a map alone does not establish shared meanings or abstraction. Visual symbols representing abstract ideas already establishes abstraction; do not require another relationship, example, or physical-object contrast. If shared meaning is the only gap, ask only how people understand their symbols the same way. Probe one missing or ambiguous target using their example; ask what idea it expresses only if abstraction is still unclear. When all four are explained, briefly acknowledge and pause without further elaboration or an invitation to add more. Do not supply answers, count tutor words as evidence, or reduce exographics to external storage. Uncertain assessment must not hold conversation.",
       concepts: [
         criterion(
           "visual-symbols",
@@ -144,7 +144,7 @@ const lesson: LessonDefinition = {
         "Try to reason through 84 + 1,045 + 693 + 719 without writing anything down. What changes when you can use paper and a pencil?",
       objective: "Explain what changes in reasoning when the source's numeric example is represented on paper.",
       tutorBrief:
-        "The arithmetic result is not the target. Assess the three ideas independently. Natural paraphrases count. Ask the learner to describe what changed in their own reasoning; do not name an un-demonstrated idea or provide an example answer.",
+        "Assess three ideas across replies; paraphrases count, not the arithmetic result. Working with numbers on paper can explain inspection and manipulation; keeping intermediate steps on paper instead of in the head can explain memory extension. Do not ask what paper does for tracking steps after that explanation. Those ideas alone do not establish discovery. If discovery is the remaining gap, ask whether working on paper helped them reach an idea or result they had not already worked out; do not supply the claim or an example answer. Ask one short question only about a missing or ambiguous idea in their reasoning. Once all three ideas are explained, briefly acknowledge and pause without further elaboration or an invitation to add more.",
       concepts: [
         criterion(
           "reification",
