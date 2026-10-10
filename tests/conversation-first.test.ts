@@ -423,12 +423,25 @@ it("revokes a next request when a new learner turn interrupts it", () => {
 
 it.each([
   questionSix.request,
+  "Yep, next question",
+  "yep next question",
+  "YEP, NEXT QUESTION!",
+  "Yep. Next question?",
+  "  Yep, \t next\nquestion.  ",
   "Yeah, I think next question. I think I have answered this.",
   "I am, I think next\nquestion. I think I've answered this",
 ])("recognizes conversational navigation: %s", request => {
   expect(learnerRequestedNext(`Child: ${request}\nTutor: Okay, we'll move on.`)).toBe(true);
 });
 it.each([
+  '"Yep, next question"',
+  'Yep, he said "next question".',
+  "Yep, don't move on.",
+  "Yep, if I say next question, will you move on?",
+  "Yep, what does the next question mean?",
+  "Yep, next question is about schools.",
+  "Yep, next question. Actually, don't move on.",
+  "Yep, next question, but first explain this.",
   "I don't think next question.",
   "I think we should not move on.",
   "Don't move on.",
@@ -624,6 +637,80 @@ it("advances two culture examples only after tutor acknowledgment and audio drai
     expect(runtime.snapshot().awaitingSteering).toBe(false);
     expect(runtime.snapshot().runtime?.phase).toBe("active");
     expect(runtime.snapshot().runtime?.conceptEvidence).toEqual(evidence);
+  } finally {
+    runtime.stop();
+  }
+});
+
+it("honors yep navigation through speech, audio drain and render gates while retaining partial evidence", async () => {
+  useRuntimeFakeTimers();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (url !== "/api/classify") return Response.json({}, { status: 503 });
+      const input = JSON.parse(init?.body as string);
+      return Response.json({
+        proposal: classifierProposal(input, {
+          answerOutcome: "unclear",
+          tutorState: "unknown",
+          conceptObservations: [
+            {
+              criterionId: "widespread-literacy",
+              observation: "partial",
+              childMessageIndex: 0,
+            },
+          ],
+        }),
+      });
+    }),
+  );
+  const runtime = new LessonRuntime({} as HTMLAudioElement, () => {}, {
+    ...lesson,
+    initialNodeId: "techno-literate-culture",
+  });
+  try {
+    const initialDisplay = runtime.snapshot().display;
+    runtime.confirmRendered(initialDisplay);
+    await vi.advanceTimersByTimeAsync(0);
+    const steering = transport.send.mock.calls[0][0];
+    if (steering.type !== "session.instructions.append") throw new Error("Expected steering");
+    events.acknowledgeSteering(steering.event_id, 0);
+    transport.receive!({ type: "output.activity", state: "quiet" });
+    events.childTurn("Some people can read.", 100);
+    await vi.advanceTimersByTimeAsync(300);
+    const evidence = structuredClone(runtime.snapshot().runtime!.conceptEvidence);
+    expect(evidence["techno-literate-culture:widespread-literacy"].status).toBe("partial");
+    events.tutorTurn("I didn't catch your answer. Are you still there?", 300);
+    transport.receive!({ type: "microphone.activity_started" });
+    transport.receive!({ type: "transcript", speaker: "child", delta: "Yep, next question", startMs: 500, endMs: 600 });
+    await vi.advanceTimersByTimeAsync(900);
+    expect(runtime.snapshot().display.nodeId).toBe("techno-literate-culture");
+    expect(runtime.snapshot().runtime?.conversationAdvanceRequested).toBe(false);
+    transport.receive!({ type: "output.activity", state: "active" });
+    transport.receive!({ type: "microphone.speech_stopped", quietMs: 900 });
+    await vi.advanceTimersByTimeAsync(900);
+    expect(runtime.snapshot().runtime?.conversationAdvanceRequested).toBe("learner");
+    expect(runtime.snapshot().display.nodeId).toBe("techno-literate-culture");
+    transport.receive!({ type: "output.activity", state: "quiet" });
+    await vi.advanceTimersByTimeAsync(100);
+    expect(runtime.snapshot().display.nodeId).toBe("techno-literate-culture");
+    await vi.advanceTimersByTimeAsync(500);
+    expect(runtime.snapshot().display.nodeId).toBe("caf-application");
+    expect(runtime.snapshot().runtime?.phase).toBe("rendering");
+    expect(runtime.snapshot().runtime?.conceptEvidence).toEqual(evidence);
+    runtime.confirmRendered(initialDisplay);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(runtime.snapshot().runtime?.phase).toBe("rendering");
+    expect(transport.send).toHaveBeenCalledTimes(1);
+    runtime.confirmRendered(runtime.snapshot().display);
+    await vi.advanceTimersByTimeAsync(0);
+    const nextSteering = transport.send.mock.calls[1][0];
+    if (nextSteering.type !== "session.instructions.append") throw new Error("Expected CAF steering");
+    expect(runtime.snapshot().awaitingSteering).toBe(true);
+    events.acknowledgeSteering(nextSteering.event_id, 700);
+    expect(runtime.snapshot().runtime?.phase).toBe("active");
+    expect(runtime.snapshot().runtime?.conceptEvidence).toEqual(evidence);
+    expect(runtime.observe().events.filter(event => event.type === "render.requested")).toHaveLength(1);
   } finally {
     runtime.stop();
   }

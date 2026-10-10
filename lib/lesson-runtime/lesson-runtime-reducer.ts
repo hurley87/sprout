@@ -202,7 +202,7 @@ export function learnerRequestedNext(transcript: string) {
   const request =
     /^(?:please[,.]?\s+)?(?:(?:let['’]s|can we|could we|i(?:['’]d| would) like to)\s+)?(?:(?:can|could) i (?:have|get) (?:the )?next question|i(?:['’]d| would) like (?:the )?next question|let['’]s do (?:the )?next question|next question(?:,? then)?|(?:go|move|skip)(?: on)? to (?:the )?next(?: question)?|move on|skip (?:this|the)(?: question)?)(?:[.!?]|,? please)?$/iu;
   const normalized = text
-    .replace(/^(?:(?:yes|yeah|okay|ok|well|um|i am)[,.]?\s+)+/iu, "")
+    .replace(/^(?:(?:yes|yeah|yep|okay|ok|well|um|i am)[,.]?\s+)+/iu, "")
     .replace(/^i think\s+/iu, "")
     .replace(/[.!]\s+i(?: think i)?(?: have|['’]ve) answered (?:this|that)(?: question)?[.!]?$/iu, "");
   return request.test(normalized);
