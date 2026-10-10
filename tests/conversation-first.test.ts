@@ -28,6 +28,8 @@ import {
   answerRecoveryInstruction,
 } from "../lib/lesson-runtime/live-context";
 import { currentNodeContext } from "../lib/lesson-runtime/lesson-definition";
+import { classifierProposal } from "./helpers/runtime-classifier";
+import { transcriptMessages } from "../lib/lesson-runtime/tutor-observation";
 
 const transport = vi.hoisted(() => ({
   receive: undefined as ((event: ProviderEvent) => void) | undefined,
@@ -39,6 +41,143 @@ vi.mock("../lib/browser-transport", async () => {
   return { BrowserTransport: mockBrowserTransport(transport) };
 });
 const events = providerEvents(event => transport.receive!(event));
+
+// Scripted observer decisions exercise the actual transport/reducer boundary.
+// Neither these transcripts nor the mock decisions evaluate a voice model.
+it.each([
+  {
+    name: "association-only synthesis followed by a neutral reasoning probe",
+    nodeId: "synthesis",
+    criterionId: "synthesis-culture",
+    answer: "Symbols, literacy and universities are connected.",
+    reply: "How does that connection work in your university example?",
+    act: "clarifying",
+    observation: "partial",
+  },
+  {
+    name: "sufficient causal explanation closes without requiring the other synthesis targets",
+    nodeId: "synthesis",
+    criterionId: "synthesis-reasoning",
+    answer:
+      "Writing the intermediate sums keeps them visible so I can check them and continue without remembering each one.",
+    reply: "You explained how the visible steps let you check and continue your reasoning.",
+    act: "acknowledging",
+    observation: "demonstrated_independent",
+  },
+  {
+    name: "explicit CAF clarification supplies a distinction but no learner demonstration",
+    nodeId: "caf-application",
+    criterionId: "caf-education-evidence",
+    answer: "I named a college. Is that what you are getting at?",
+    reply:
+      "I mean basic education for most people versus advanced study for some. Which part does your example support?",
+    act: "helping",
+    observation: "partial",
+  },
+  {
+    name: "CAF uncertainty closes with an unresolved application rather than a canonical conclusion",
+    nodeId: "caf-application",
+    criterionId: "caf-education-evidence",
+    answer:
+      "A college might support advanced study for some, but I do not know what basic education most members receive.",
+    reply: "You have proposed evidence for advanced study and left the broader education claim open.",
+    act: "acknowledging",
+    observation: "partial",
+  },
+] as const)("preserves conversation and evidence boundaries: $name", async scenario => {
+  useRuntimeFakeTimers();
+  let afterHelp = false;
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url !== "/api/classify") return Response.json({}, { status: 503 });
+    const input = JSON.parse(init?.body as string);
+    const messages = transcriptMessages(input.transcript)!;
+    const learnerIndex = afterHelp
+      ? messages.findLastIndex(message => message.speaker === "Child")
+      : messages.findIndex(message => message.speaker === "Child");
+    return Response.json({
+      proposal: classifierProposal(input, {
+        answerOutcome: "unclear",
+        tutorState: messages.at(-1)?.speaker === "Tutor" ? scenario.act : "unknown",
+        conceptObservations: [
+          {
+            criterionId: scenario.criterionId,
+            observation: afterHelp ? "demonstrated_prompted" : scenario.observation,
+            childMessageIndex: learnerIndex,
+          },
+        ],
+      }),
+    });
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  const runtime = new LessonRuntime({} as HTMLAudioElement, () => {}, { ...lesson, initialNodeId: scenario.nodeId });
+  const edge = lesson.nodes[scenario.nodeId].onSuccess;
+  if (edge.kind !== "node") throw new Error("Expected next scene");
+  try {
+    runtime.confirmRendered(runtime.snapshot().display);
+    await vi.advanceTimersByTimeAsync(0);
+    const steering = transport.send.mock.calls[0][0];
+    if (steering.type !== "session.instructions.append") throw new Error("Expected steering");
+    expect(steering.content).toContain(lesson.nodes[scenario.nodeId].tutorBrief);
+    events.acknowledgeSteering(steering.event_id, 0);
+    transport.receive!({ type: "output.activity", state: "quiet" });
+    events.childTurn(scenario.answer, 100);
+    await vi.advanceTimersByTimeAsync(300);
+    const evidenceKey = `${scenario.nodeId}:${scenario.criterionId}`;
+    const evidence = structuredClone(runtime.snapshot().runtime!.conceptEvidence[evidenceKey]);
+    expect(evidence).toMatchObject({
+      status: scenario.observation === "partial" ? "partial" : "demonstrated",
+      source: { childTranscript: scenario.answer },
+    });
+    // Tutor assistance/acknowledgment cannot create additional learner evidence.
+    transport.receive!({ type: "transcript", speaker: "sprout", delta: scenario.reply, startMs: 300, endMs: 400 });
+    transport.receive!({ type: "output.activity", state: "active" });
+    await vi.advanceTimersByTimeAsync(900);
+    expect(runtime.snapshot().runtime?.nodeId).toBe(scenario.nodeId);
+    expect(runtime.snapshot().runtime?.conceptEvidence[evidenceKey]).toEqual(evidence);
+    const closes = scenario.act === "acknowledging";
+    if (closes) {
+      // An actual learner follow-up cancels pending closure before audio drains.
+      events.childTurn("Could you clarify that?", 500);
+      await vi.advanceTimersByTimeAsync(300);
+      transport.receive!({ type: "output.activity", state: "quiet" });
+      await vi.advanceTimersByTimeAsync(600);
+      expect(runtime.snapshot().runtime?.nodeId).toBe(scenario.nodeId);
+      expect(runtime.snapshot().runtime?.conversationAdvanceRequested).toBe(false);
+      events.tutorTurn("I am acknowledging the part you explained and leaving the other claims open.", 700);
+    }
+    transport.receive!({ type: "output.activity", state: "quiet" });
+    await vi.advanceTimersByTimeAsync(600);
+    expect(runtime.snapshot().runtime?.nodeId).toBe(closes ? edge.nodeId : scenario.nodeId);
+    expect(runtime.snapshot().runtime?.conceptEvidence[evidenceKey]).toEqual(evidence);
+    expect(Object.keys(runtime.snapshot().runtime!.conceptEvidence)).toEqual([evidenceKey]);
+    if (!closes) {
+      if (scenario.act === "helping") {
+        afterHelp = true;
+        const explanation =
+          "In my example, basic reading, writing and arithmetic courses offered to all members would support broad basic education; degree programs would support advanced study for some. I still need to verify those claims.";
+        events.childTurn(explanation, 500);
+        await vi.advanceTimersByTimeAsync(300);
+        expect(runtime.snapshot().runtime?.conceptEvidence[evidenceKey]).toMatchObject({
+          status: "demonstrated",
+          understanding: "prompted",
+          source: { childTranscript: explanation },
+        });
+        expect(runtime.snapshot().runtime?.nodeId).toBe(scenario.nodeId);
+        events.tutorTurn("You have separated the scope of the college example from the evidence still needed.", 700);
+        await vi.advanceTimersByTimeAsync(600);
+      }
+      // Clarification is still available, and explicit navigation does not grant mastery.
+      const beforeNavigation = structuredClone(runtime.snapshot().runtime!.conceptEvidence);
+      events.childTurn("Please move on.", 900);
+      await vi.advanceTimersByTimeAsync(900);
+      expect(runtime.snapshot().runtime?.nodeId).toBe(edge.nodeId);
+      expect(runtime.snapshot().runtime?.conceptEvidence).toEqual(beforeNavigation);
+    }
+  } finally {
+    runtime.stop();
+    await vi.advanceTimersByTimeAsync(0);
+  }
+});
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
@@ -398,7 +537,11 @@ it("offers question-six help through all instruction layers while preserving pro
 it("revokes pending navigation on actual new learner text, even without another microphone onset", () => {
   const h = harness();
   h.send({ type: "output.activity", source: runtimeSource(h.state), state: "quiet" });
-  h.send({ type: "conversation.advance.requested", source: classificationSource(h.state), transcriptSnapshot: `Child: ${questionSix.request}` });
+  h.send({
+    type: "conversation.advance.requested",
+    source: classificationSource(h.state),
+    transcriptSnapshot: `Child: ${questionSix.request}`,
+  });
   h.send({ type: "transcript.updated", source: runtimeSource(h.state), revision: 2, speaker: "child" });
   expect(h.state.conversationAdvanceRequested).toBe(false);
   h.send({ type: "clock.tick", source: runtimeSource(h.state) }, 1000);

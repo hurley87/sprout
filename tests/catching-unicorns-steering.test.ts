@@ -39,6 +39,35 @@ it("keeps durable teaching and recovery guidance in startup instructions", () =>
   expect(JSON.stringify(setup.input)).not.toContain('"nodeId":"compare"');
 });
 
+// Authored-contract checks only: these cannot establish live model behavior.
+it("delivers bounded reasoning probes without turning hidden targets into a conversational checklist", () => {
+  const startup = createLiveSessionConfig(lesson).instructions;
+  expect(startup).toContain("two per scene, at most one per connection");
+  expect(startup).toContain("a limitation question spends a probe too");
+  expect(startup).toContain("Recovery reminders do not reset this budget");
+  expect(startup).toContain("Ask one question per turn");
+  expect(startup).toContain("they do not authorize a new probe sequence");
+  const instruction = teachingInstruction(currentNodeContext(lesson, "synthesis"), lesson);
+  expect(instruction).toContain("only names a connection");
+  expect(instruction).toContain("using their own example");
+  expect(instruction).toContain("without stating the causal answer or introducing unresolved concepts");
+  expect(instruction).toContain("already explain the mechanism adequately");
+  expect(instruction).toContain("close without redundant rephrasing");
+  expect(instruction).toContain("If asked what you mean");
+});
+
+it("delivers CAF clarification as limited assistance and keeps institutional claims tentative", () => {
+  const instruction = teachingInstruction(currentNodeContext(lesson, "caf-application"), lesson);
+  expect(instruction).toContain("learner-proposed evidence, not verified facts");
+  expect(instruction).toContain("Accept yes, no or qualified conclusions; none is canonical");
+  expect(instruction).toContain("education difficulty or a clarification request");
+  expect(instruction).toContain("basic education for most from advanced study for some");
+  expect(instruction).toContain("ask which their evidence supports");
+  expect(instruction).toContain("no institution facts or conclusion");
+  expect(instruction).toContain("Tutor words are assistance, not learner evidence");
+  expect(instruction).toContain("do not check every characteristic");
+});
+
 it("accepts internal memory without requiring a contrast that gives away Exogram", () => {
   const context = currentNodeContext(lesson, "engram");
   expect(context.learningObjective).toContain("inside the mind or brain");
