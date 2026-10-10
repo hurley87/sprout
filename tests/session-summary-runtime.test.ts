@@ -149,28 +149,43 @@ it("keeps usable feedback on review failure and never waits for it to acknowledg
   expect(runtime.snapshot().awaitingSteering).toBe(false);
   expect(runtime.snapshot().status).toBe("live");
 });
-it("supersedes in-flight entry review on stop, ignores late completion, and sends no feedback after close", async () => {
+it("supersedes entry review on stop and isolates late results while a restarted attempt is live", async () => {
   const steering = await enterRecap();
   events.acknowledgeSteering(steering.event_id, 300);
   events.childTurn("What should I study next?", 1000);
   runtime.stop();
   expect(requests).toHaveLength(2);
   expect(requests[0].signal.aborted).toBe(true);
-  requests[0].resolve(response());
-  await vi.advanceTimersByTimeAsync(0);
-  expect(runtime.snapshot().summary?.reviewStatus).toBe("pending");
-  requests[1].resolve(response(1));
-  await vi.advanceTimersByTimeAsync(0);
-  expect(runtime.snapshot().summary?.reviewStatus).toBe("complete");
-  expect(runtime.snapshot().status).toBe("ended");
-  expect(appends()).toHaveLength(2);
-  const previous = runtime.snapshot().summary!;
+  const oldId = runtime.report().runtimeId;
   const fresh = new LessonRuntime({} as HTMLAudioElement, () => {}, definition);
-  expect(fresh.snapshot().summary).toBeUndefined();
-  expect(fresh.snapshot().assessment?.status).toBe("idle");
-  expect(fresh.report().runtimeId).not.toBe(previous.runtimeId);
-  fresh.stop();
+  try {
+    fresh.confirmRendered(fresh.snapshot().display);
+    await vi.advanceTimersByTimeAsync(0);
+    events.acknowledgeSteering(appends().at(-1)!.event_id, 1200);
+    transport.receive!({ type: "output.activity", state: "quiet" });
+    expect(fresh.snapshot().status).toBe("live");
+    expect(fresh.snapshot().summary).toBeUndefined();
+    expect(fresh.snapshot().assessment?.status).toBe("idle");
+    expect(fresh.report().runtimeId).not.toBe(oldId);
+    const commands = transport.send.mock.calls.length;
+    const freshState = structuredClone(fresh.snapshot());
+    // Fetch deliberately ignores abort, exercising generation guards against an
+    // adversarial completion, even after the new transport is actively running.
+    requests[0].resolve(response());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(runtime.snapshot().summary?.reviewStatus).toBe("pending");
+    requests[1].resolve(response(1));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(runtime.snapshot().summary?.reviewStatus).toBe("complete");
+    expect(runtime.snapshot().status).toBe("ended");
+    expect(transport.send.mock.calls).toHaveLength(commands);
+    expect(fresh.snapshot()).toEqual(freshState);
+    expect(fresh.snapshot().runtime?.conceptEvidence).toEqual({});
+  } finally {
+    fresh.stop();
+  }
 });
+
 it("keeps malformed successful API responses unavailable without changing accepted live evidence", async () => {
   await enterRecap();
   const before = structuredClone(runtime.snapshot().runtime?.conceptEvidence);

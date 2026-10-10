@@ -1,0 +1,357 @@
+{
+  "revision": "050a06d46ae1c0d163634f7a9e52db64cdd2c038",
+  "productionDiff": "none; commit 7 changes tests and documentation only",
+  "server": "existing Next dev server on 127.0.0.1:3000; cwd verified as /Users/davidhurley/Desktop/sprout",
+  "dateLocal": "2026-10-09 America/Toronto",
+  "type": "provider-backed HTTP text replay, not audio or a human walkthrough",
+  "bounds": "4 requests total, sequential, no retry; client timeouts assess 45s, classify 15s; production provider timeouts assess 30s, classify 10s",
+  "fixture": "tests/fixtures/catching-unicorns-session-feedback.json",
+  "fixtureSHA256": "d72cfca88ce51a14485a7b93d0c49e1c88ab4eb6241f2983c19e233a9af790e0",
+  "limitations": "Assessment route returned only sanitized generic failures; upstream status/body and exact failure cause are not observable. No grounded provider review, probe generation, voice behavior or visual/spoken agreement is established. Classifier accepted describes normalized proposal validity, not learner mastery or lesson completion.",
+  "results": [
+    {
+      "id": "provider-assessment",
+      "startedUTC": "2026-10-10T01:20:49.482Z",
+      "endpoint": "/api/assess",
+      "inputType": "recorded compact fixture",
+      "status": 502,
+      "request": {
+        "lessonId": "catching-unicorns",
+        "owner": {
+          "runtimeId": "commit7-provider-replay",
+          "generation": 1
+        },
+        "visitsFromFixture": "conversation"
+      },
+      "error": "Assessment unavailable."
+    },
+    {
+      "id": "provider-neutral",
+      "startedUTC": "2026-10-10T01:22:14.173Z",
+      "endpoint": "/api/assess",
+      "inputType": "recorded exogram visit only",
+      "status": 502,
+      "request": {
+        "lessonId": "catching-unicorns",
+        "owner": {
+          "runtimeId": "commit7-neutral-clarification",
+          "generation": 1
+        },
+        "visits": [
+          {
+            "nodeId": "exogram",
+            "visitId": 2,
+            "transcript": "Tutor: What is an exogram?\nChild: [breath ]So this is information stored external to the brain\nTutor: Okay. Could you say a bit more about what you mean by that, like how that information is kept outside of you?\nChild: As an example, it could be say words written down on a page\nTutor: Sure, that makes sense as something stored outside of your head."
+          }
+        ]
+      },
+      "error": "Assessment unavailable."
+    },
+    {
+      "id": "provider-association",
+      "startedUTC": "2026-10-10T01:22:29.172Z",
+      "endpoint": "/api/classify",
+      "inputType": "synthetic association-only transcript",
+      "status": 200,
+      "request": {
+        "lessonId": "catching-unicorns",
+        "nodeId": "synthesis",
+        "transcriptRevision": 1,
+        "transcript": "Tutor: Choose a connection and explain why it follows.\nChild: Titles and symbols are connected with hierarchy.\nTutor: How does that connection work in your example?"
+      },
+      "proposal": {
+        "nodeId": "synthesis",
+        "transcriptRevision": 1,
+        "childActivity": "unknown",
+        "answerOutcome": "unclear",
+        "supportState": "none",
+        "tutorState": "clarifying",
+        "conceptObservations": [
+          {
+            "criterionId": "synthesis-reasoning",
+            "observation": "partial_uncertain",
+            "childMessageIndex": null
+          },
+          {
+            "criterionId": "synthesis-discovery-eclass",
+            "observation": "not_yet",
+            "childMessageIndex": null
+          },
+          {
+            "criterionId": "synthesis-culture",
+            "observation": "not_yet",
+            "childMessageIndex": null
+          }
+        ]
+      },
+      "diagnostic": {
+        "classifierVersion": "conversation-state-v2",
+        "decision": "accepted",
+        "outputs": {
+          "objectiveState": {
+            "choice": "unclear_or_incomplete",
+            "confidence": 0.97,
+            "probabilities": {
+              "completed": 0,
+              "incorrect": 0.01,
+              "unclear_or_incomplete": 0.98,
+              "unresolved_help": 0.01,
+              "no_attempt": 0
+            }
+          },
+          "tutorState": {
+            "choice": "clarifying",
+            "confidence": 0.95,
+            "probabilities": {
+              "confirmed_completion": 0,
+              "clarifying": 0.96,
+              "helping": 0,
+              "asking": 0.04,
+              "other": 0
+            }
+          },
+          "concepts": {
+            "concept_synthesis-memory-symbols": {
+              "choice": "not_yet",
+              "confidence": 0.52,
+              "probabilities": {
+                "not_yet": 0.64,
+                "partial": 0.36,
+                "demonstrated_independent": 0,
+                "demonstrated_prompted": 0
+              }
+            },
+            "concept_synthesis-reasoning": {
+              "choice": "partial",
+              "confidence": 0.39,
+              "probabilities": {
+                "not_yet": 0.46,
+                "partial": 0.54,
+                "demonstrated_independent": 0,
+                "demonstrated_prompted": 0
+              }
+            },
+            "concept_synthesis-discovery-eclass": {
+              "choice": "not_yet",
+              "confidence": 0.97,
+              "probabilities": {
+                "not_yet": 0.98,
+                "partial": 0.02,
+                "demonstrated_independent": 0,
+                "demonstrated_prompted": 0
+              }
+            },
+            "concept_synthesis-culture": {
+              "choice": "not_yet",
+              "confidence": 0.95,
+              "probabilities": {
+                "not_yet": 0.96,
+                "partial": 0.04,
+                "demonstrated_independent": 0,
+                "demonstrated_prompted": 0
+              }
+            }
+          },
+          "sources": {
+            "source_synthesis-memory-symbols": {
+              "choice": "none",
+              "confidence": 0.82,
+              "probabilities": {
+                "none": 0.91,
+                "message_1": 0.09
+              }
+            },
+            "source_synthesis-reasoning": {
+              "choice": "none",
+              "confidence": 0.36,
+              "probabilities": {
+                "none": 0.68,
+                "message_1": 0.32
+              }
+            },
+            "source_synthesis-discovery-eclass": {
+              "choice": "none",
+              "confidence": 0.98,
+              "probabilities": {
+                "none": 0.99,
+                "message_1": 0.01
+              }
+            },
+            "source_synthesis-culture": {
+              "choice": "none",
+              "confidence": 0.98,
+              "probabilities": {
+                "none": 0.99,
+                "message_1": 0.01
+              }
+            }
+          }
+        },
+        "outcome": "hold_scene",
+        "labelCompletionEligible": false,
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        },
+        "nodeId": "synthesis",
+        "transcriptRevision": 1,
+        "elapsedMs": 261.97812500037253
+      }
+    },
+    {
+      "id": "provider-mechanism",
+      "startedUTC": "2026-10-10T01:22:46.552Z",
+      "endpoint": "/api/classify",
+      "inputType": "synthetic mechanism transcript",
+      "status": 200,
+      "request": {
+        "lessonId": "catching-unicorns",
+        "nodeId": "synthesis",
+        "transcriptRevision": 1,
+        "transcript": "Tutor: Choose a connection and explain why it follows.\nChild: A rank badge is a shared symbol. People recognize its meaning, so strangers can tell who is responsible and coordinate decisions. That connects meaningful visual representations to social structures.\nTutor: You explained how shared meanings help people coordinate. Thank you."
+      },
+      "proposal": {
+        "nodeId": "synthesis",
+        "transcriptRevision": 1,
+        "childActivity": "unknown",
+        "answerOutcome": "unclear",
+        "supportState": "none",
+        "tutorState": "acknowledging",
+        "conceptObservations": [
+          {
+            "criterionId": "synthesis-memory-symbols",
+            "observation": "partial_uncertain",
+            "childMessageIndex": null
+          },
+          {
+            "criterionId": "synthesis-reasoning",
+            "observation": "partial_uncertain",
+            "childMessageIndex": null
+          },
+          {
+            "criterionId": "synthesis-discovery-eclass",
+            "observation": "not_yet",
+            "childMessageIndex": null
+          }
+        ]
+      },
+      "diagnostic": {
+        "classifierVersion": "conversation-state-v2",
+        "decision": "accepted",
+        "outputs": {
+          "objectiveState": {
+            "choice": "unclear_or_incomplete",
+            "confidence": 0.34,
+            "probabilities": {
+              "completed": 0.47,
+              "incorrect": 0.06,
+              "unclear_or_incomplete": 0.47,
+              "unresolved_help": 0,
+              "no_attempt": 0
+            }
+          },
+          "tutorState": {
+            "choice": "confirmed_completion",
+            "confidence": 0.99,
+            "probabilities": {
+              "confirmed_completion": 0.99,
+              "clarifying": 0,
+              "helping": 0,
+              "asking": 0,
+              "other": 0.01
+            }
+          },
+          "concepts": {
+            "concept_synthesis-memory-symbols": {
+              "choice": "partial",
+              "confidence": 0.45,
+              "probabilities": {
+                "not_yet": 0.18,
+                "partial": 0.59,
+                "demonstrated_independent": 0.22,
+                "demonstrated_prompted": 0.01
+              }
+            },
+            "concept_synthesis-reasoning": {
+              "choice": "partial",
+              "confidence": 0.51,
+              "probabilities": {
+                "not_yet": 0.21,
+                "partial": 0.63,
+                "demonstrated_independent": 0.15,
+                "demonstrated_prompted": 0.01
+              }
+            },
+            "concept_synthesis-discovery-eclass": {
+              "choice": "not_yet",
+              "confidence": 0.99,
+              "probabilities": {
+                "not_yet": 0.99,
+                "partial": 0.01,
+                "demonstrated_independent": 0,
+                "demonstrated_prompted": 0
+              }
+            },
+            "concept_synthesis-culture": {
+              "choice": "not_yet",
+              "confidence": 0.81,
+              "probabilities": {
+                "not_yet": 0.86,
+                "partial": 0.13,
+                "demonstrated_independent": 0.01,
+                "demonstrated_prompted": 0
+              }
+            }
+          },
+          "sources": {
+            "source_synthesis-memory-symbols": {
+              "choice": "message_1",
+              "confidence": 0.22,
+              "probabilities": {
+                "none": 0.39,
+                "message_1": 0.61
+              }
+            },
+            "source_synthesis-reasoning": {
+              "choice": "message_1",
+              "confidence": 0.2,
+              "probabilities": {
+                "none": 0.4,
+                "message_1": 0.6
+              }
+            },
+            "source_synthesis-discovery-eclass": {
+              "choice": "none",
+              "confidence": 0.98,
+              "probabilities": {
+                "none": 0.99,
+                "message_1": 0.01
+              }
+            },
+            "source_synthesis-culture": {
+              "choice": "none",
+              "confidence": 0.84,
+              "probabilities": {
+                "none": 0.92,
+                "message_1": 0.08
+              }
+            }
+          }
+        },
+        "outcome": "allow_semantic_completion_evidence",
+        "labelCompletionEligible": false,
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        },
+        "nodeId": "synthesis",
+        "transcriptRevision": 1,
+        "elapsedMs": 224.316499998793
+      }
+    }
+  ]
+}
