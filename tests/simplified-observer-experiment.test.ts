@@ -16,17 +16,18 @@ import {
   CONVERSATION_QUESTIONS,
   classifyConversationStateWithDiagnostics,
 } from "../lib/experiments/issue-57/legacy/jev-conversation-state-classifier";
-import { isCountingNodeId } from "../lib/lesson-runtime/counting-lesson";
+import { COUNTING_LESSON, isCountingNodeId } from "../lib/lesson-runtime/counting-lesson";
 import {
   classificationSource,
   createLessonRuntime,
   reduceLessonRuntime,
   runtimeSource,
   type LessonRuntimeEvent,
-} from "../lib/lesson-runtime/lesson-runtime-reducer";
+} from "./helpers/counting-runtime";
 import { conversationProviderBody } from "./fixtures/conversation-classification";
 
 const input = {
+  lesson: COUNTING_LESSON,
   nodeId: "count-1-duck" as const,
   transcriptRevision: 2,
   transcript: "Child: One\nTutor: Yes, one duck.",

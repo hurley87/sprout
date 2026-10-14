@@ -1,0 +1,250 @@
+{
+  "sessionId": "508d2143-11c3-48cc-843b-5187678a41a3",
+  "note": "Recorded data only. Source selections in tests are controlled, manually reviewed inputs for the new locator contract, not recorded provider outputs.",
+  "checkpoints": [
+    {
+      "nodeId": "exogram",
+      "transcriptRevision": 104,
+      "transcript": "Tutor: Okay, next one. What is an exogram?\nChild: So this is an idea that's- Lives outside of the mind. Can be externally represented on, say writing on a piece of paper, music\nTutor: When you mention writing on paper or music, are you thinking of those as things that keep information available outside of you?",
+      "outputs": {
+        "objectiveState": {
+          "choice": "unclear_or_incomplete",
+          "confidence": 0.42,
+          "probabilities": {
+            "completed": 0.46,
+            "incorrect": 0,
+            "unclear_or_incomplete": 0.54,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "clarifying",
+          "confidence": 0.81,
+          "probabilities": {
+            "confirmed_completion": 0.01,
+            "clarifying": 0.85,
+            "helping": 0.08,
+            "asking": 0.06,
+            "other": 0
+          }
+        },
+        "concepts": {
+          "concept_engram-biological": {
+            "choice": "not_yet",
+            "confidence": 0.52,
+            "probabilities": {
+              "not_yet": 0.64,
+              "partial": 0.19,
+              "demonstrated_independent": 0.15,
+              "demonstrated_prompted": 0.02
+            }
+          },
+          "concept_exogram-non-biological": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.85,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.08,
+              "demonstrated_independent": 0.89,
+              "demonstrated_prompted": 0.03
+            }
+          }
+        }
+      }
+    },
+    {
+      "nodeId": "exogram",
+      "transcriptRevision": 115,
+      "transcript": "Tutor: Okay, next one. What is an exogram?\nChild: So this is an idea that's- Lives outside of the mind. Can be externally represented on, say writing on a piece of paper, music\nTutor: When you mention writing on paper or music, are you thinking of those as things that keep information available outside of you?\nChild: Yes\nTutor: Nice. That makes sense and fits what we're aiming for.",
+      "outputs": {
+        "objectiveState": {
+          "choice": "completed",
+          "confidence": 0.51,
+          "probabilities": {
+            "completed": 0.61,
+            "incorrect": 0,
+            "unclear_or_incomplete": 0.39,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "confirmed_completion",
+          "confidence": 1,
+          "probabilities": {
+            "confirmed_completion": 1,
+            "clarifying": 0,
+            "helping": 0,
+            "asking": 0,
+            "other": 0
+          }
+        },
+        "concepts": {
+          "concept_engram-biological": {
+            "choice": "not_yet",
+            "confidence": 0.52,
+            "probabilities": {
+              "not_yet": 0.64,
+              "partial": 0.11,
+              "demonstrated_independent": 0.23,
+              "demonstrated_prompted": 0.02
+            }
+          },
+          "concept_exogram-non-biological": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.91,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.04,
+              "demonstrated_independent": 0.93,
+              "demonstrated_prompted": 0.03
+            }
+          }
+        }
+      }
+    },
+    {
+      "nodeId": "exographics",
+      "transcriptRevision": 265,
+      "transcript": "Tutor: Alright, let's look at this one. What does exographics mean?\nChild: So exographics, Um\nChild: . [clear\nChild: throat\nChild: ] It's the practice of using visual symbols to represent ideas. [clear throat\nChild: ] And that- that can include writing equations, maps, diagrams\nChild: Taking any abstract idea and putting it into- into physical form\nTutor: And in those things you mentioned, what makes those marks actually stand for the idea to other people?\nChild: [lip smack] Well, they work because people have a shared understanding of what the symbols actually mean\nTutor: Got it. And with something\nTutor: like an equation or a diagram, what kind of idea or relationship is it expressing?\nChild: Ah, it could be the relationship between\nChild: - Different quantities. Um. Music mo-notation represents sound and pitch",
+      "outputs": {
+        "objectiveState": {
+          "choice": "completed",
+          "confidence": 0.74,
+          "probabilities": {
+            "completed": 0.79,
+            "incorrect": 0,
+            "unclear_or_incomplete": 0.21,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "clarifying",
+          "confidence": 0.41,
+          "probabilities": {
+            "confirmed_completion": 0.02,
+            "clarifying": 0.53,
+            "helping": 0.03,
+            "asking": 0.38,
+            "other": 0.04
+          }
+        },
+        "concepts": {
+          "concept_visual-symbols": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.91,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.02,
+              "demonstrated_independent": 0.93,
+              "demonstrated_prompted": 0.05
+            }
+          },
+          "concept_cultural-agreement": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.49,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.01,
+              "demonstrated_independent": 0.62,
+              "demonstrated_prompted": 0.37
+            }
+          },
+          "concept_beyond-prose": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.72,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.01,
+              "demonstrated_independent": 0.79,
+              "demonstrated_prompted": 0.2
+            }
+          },
+          "concept_abstract-concepts": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.85,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.04,
+              "demonstrated_independent": 0.89,
+              "demonstrated_prompted": 0.07
+            }
+          }
+        }
+      }
+    },
+    {
+      "nodeId": "techno-literate-culture",
+      "transcriptRevision": 593,
+      "transcript": "Tutor: Okay, next question. What makes a culture\nTutor: able to develop and share knowledge across many people?\nChild: [clear throat\nChild: ] [lip smack] Well, we've written our ideas down, first of all, in books\nChild: . And other mediums\nChild: . We have a shared language for, say, music or math\nChild: . Um\nChild: . And those ideas are easier- easier to share\nTutor: Could you say a little more about who is able to use those written or symbol systems?\nChild: Just any humans are able to... Use that shared language if you understand it\nTutor: I see. So what kind of background or learning do people need in order to actually use that shared language?\nChild: Well\nChild: ... Say if you wanted to use math, you'd have to be\nChild: Say understand numbers. If you want to read, you have to be literate\nChild: . [sniff\nTutor: And in a culture, how widely do those basic skills need to be spread for knowledge to move around among lots of people?",
+      "outputs": {
+        "objectiveState": {
+          "choice": "unclear_or_incomplete",
+          "confidence": 0.95,
+          "probabilities": {
+            "completed": 0.02,
+            "incorrect": 0,
+            "unclear_or_incomplete": 0.96,
+            "unresolved_help": 0.02,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "asking",
+          "confidence": 0.46,
+          "probabilities": {
+            "confirmed_completion": 0,
+            "clarifying": 0.4,
+            "helping": 0.03,
+            "asking": 0.57,
+            "other": 0
+          }
+        },
+        "concepts": {
+          "concept_widespread-literacy": {
+            "choice": "partial",
+            "confidence": 0.57,
+            "probabilities": {
+              "not_yet": 0.08,
+              "partial": 0.68,
+              "demonstrated_independent": 0.03,
+              "demonstrated_prompted": 0.21
+            }
+          },
+          "concept_idea-discoverers": {
+            "choice": "not_yet",
+            "confidence": 0.92,
+            "probabilities": {
+              "not_yet": 0.94,
+              "partial": 0.06,
+              "demonstrated_independent": 0,
+              "demonstrated_prompted": 0
+            }
+          },
+          "concept_social-coordination": {
+            "choice": "not_yet",
+            "confidence": 0.99,
+            "probabilities": {
+              "not_yet": 0.99,
+              "partial": 0.01,
+              "demonstrated_independent": 0,
+              "demonstrated_prompted": 0
+            }
+          },
+          "concept_education-system": {
+            "choice": "partial",
+            "confidence": 0.81,
+            "probabilities": {
+              "not_yet": 0.11,
+              "partial": 0.86,
+              "demonstrated_independent": 0,
+              "demonstrated_prompted": 0.03
+            }
+          }
+        }
+      }
+    }
+  ]
+}

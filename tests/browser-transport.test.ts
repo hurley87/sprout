@@ -78,7 +78,7 @@ it("joins provider start, remote description, and channel readiness exactly once
 it("opens provider microphone only after the runtime fence, and sends bounded commands", async () => {
   const { channel, inputTrack } = liveConnection();
   const transport = new BrowserTransport(audioElement() as unknown as HTMLAudioElement, false);
-  await transport.start(vi.fn(), vi.fn());
+  await transport.start(vi.fn(), vi.fn(), "test-patterns");
   expect(inputTrack.enabled).toBe(false);
   const fence = vi.fn(() => expect(inputTrack.enabled).toBe(false));
   expect(transport.openInput(fence)).toBe(true);
@@ -96,6 +96,7 @@ it("opens provider microphone only after the runtime fence, and sends bounded co
   expect(channel.send).toHaveBeenCalledWith(JSON.stringify(command));
   expect(JSON.parse(vi.mocked(fetch).mock.calls[0][1]!.body as string)).toEqual({
     sdp: "offer",
+    lessonId: "test-patterns",
   });
   transport.close();
   expect(transport.openInput(fence)).toBe(false);

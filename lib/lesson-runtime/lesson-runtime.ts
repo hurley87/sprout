@@ -1,17 +1,21 @@
+import { normalizeAssessment, type ConversationAssessment, type ConversationVisit } from "./conversation-assessment";
 import { BrowserTransport } from "../browser-transport";
 import type { ProviderEvent, TranscriptEvent } from "../events";
 import { MICROPHONE_ONSET_MS, MICROPHONE_ONSET_QUIET_MS, MICROPHONE_QUIET_MS } from "../microphone-turn";
 import { parseConversationStateProposal } from "./conversation-state-classifier";
-import { COUNTING_LESSON_GRAPH, INITIAL_COUNTING_NODE_ID } from "./counting-lesson";
-import { initialTeachingContext, teachingInstruction } from "./live-context";
-import { SupportClarification, SUPPORT_CLARIFICATION_INSTRUCTION } from "./support-clarification";
-import { AnswerRecovery, ANSWER_RECOVERY_INSTRUCTION } from "./answer-recovery";
+import { currentNodeContext, type LessonDefinition } from "./lesson-definition";
+import { answerRecoveryInstruction, initialTeachingContext, teachingInstruction } from "./live-context";
+import { SupportClarification } from "./support-clarification";
+import { AnswerRecovery } from "./answer-recovery";
 import { TutorStabilizationGate } from "./tutor-stabilization";
 import { parseClassifierEndpointCode } from "./classifier-failure";
 import { CLASSIFIER_VERSION } from "./conversation-observer-contract";
 import { parseLiveClassificationDiagnostic } from "./live-classification-diagnostic";
 import {
   classificationSource,
+  learnerRequestedNext,
+  hasCurrentCompletionEvidence,
+  meetsAuthoredCompletionPolicy,
   createLessonRuntime,
   reduceLessonRuntime,
   runtimeSource,
@@ -71,6 +75,7 @@ export type LessonSnapshot = {
   error: string | null;
   awaitingSteering: boolean;
   diagnostics: readonly LessonDiagnostic[];
+  assessment?: ConversationAssessment;
 };
 
 function eventDiagnosticSource(event: LessonRuntimeEvent, before: LessonRuntimeState): ClassificationSource {
@@ -88,15 +93,15 @@ export class LessonRuntime {
   private readonly transport: BrowserTransport;
   private state: LessonRuntimeState | null = null;
   private status: LessonSnapshot["status"] = "prepared";
-  private display: RenderIdentity = {
-    token: `${this.runtimeId}:initial`,
-    nodeId: INITIAL_COUNTING_NODE_ID,
-    sceneId: COUNTING_LESSON_GRAPH[INITIAL_COUNTING_NODE_ID].sceneId,
-  };
+  private display: RenderIdentity;
   private error: string | null = null;
   private fragments: Fragment[] = [];
   private transcript = "";
   private revision = 0;
+  private readonly conversationVisits = new Map<number, ConversationVisit>();
+  private assessment: ConversationAssessment = { status: "idle", results: {} };
+  private assessedConversation = "";
+  private assessmentGeneration = 0;
   private order = 0;
   private providerFloorMs = 0;
   private lastChildEndMs = 0;
@@ -122,7 +127,16 @@ export class LessonRuntime {
   constructor(
     audio: HTMLAudioElement,
     private readonly changed: (snapshot: LessonSnapshot) => void,
+    private readonly lessonDefinition: LessonDefinition,
   ) {
+    this.display = {
+      token: `${this.runtimeId}:initial`,
+      nodeId: this.lessonDefinition.initialNodeId,
+      sceneId: String(
+        this.lessonDefinition.nodes[this.lessonDefinition.initialNodeId].presentation.sceneId ??
+          this.lessonDefinition.initialNodeId,
+      ),
+    };
     this.tutorStabilization = new TutorStabilizationGate(
       {
         tutorTranscriptStableMs: LESSON_TIMING.tutorTranscriptStableMs,
@@ -144,9 +158,13 @@ export class LessonRuntime {
             type: "session.instructions.append",
             event_id: eventId,
             delegation_id: null,
-            content: SUPPORT_CLARIFICATION_INSTRUCTION,
+            content: this.lessonDefinition.recovery.supportClarificationInstruction,
           });
-          this.log("gpt_live.clarification_append", { eventId, content: SUPPORT_CLARIFICATION_INSTRUCTION }, source);
+          this.log(
+            "gpt_live.clarification_append",
+            { eventId, content: this.lessonDefinition.recovery.supportClarificationInstruction },
+            source,
+          );
         } catch {
           this.supportClarification.cancel("send_failed");
           this.log("clarification.send_failed", { message: "Scene held; request budget spent." }, source);
@@ -156,22 +174,18 @@ export class LessonRuntime {
       (type, source, detail) => this.log(type, detail, source),
     );
     this.answerRecovery = new AnswerRecovery(
-      source => {
-        const eventId = `${this.runtimeId}:answer-recovery:${source.visitId}:${source.childTurnId}`;
-        try {
-          this.transport.send({
-            type: "session.instructions.append",
-            event_id: eventId,
-            delegation_id: null,
-            content: ANSWER_RECOVERY_INSTRUCTION,
-          });
-          this.log("gpt_live.answer_recovery_append", { eventId, content: ANSWER_RECOVERY_INSTRUCTION }, source);
-        } catch {
-          this.log("answer_recovery.send_failed", { message: "Scene held; request budget spent." }, source);
-        }
-        this.publish();
-      },
+      source => this.sendAnswerRecovery(source),
       (type, source, detail) => this.log(type, detail, source),
+      Object.values(this.lessonDefinition.nodes).some(node => node.concepts?.length),
+      this.lessonDefinition.conversationFirst
+        ? source => {
+            this.dispatch({ type: "conversation.recheck.requested", source, atMs: this.now() });
+            if (!this.state?.interruptedExchange?.ready) return false;
+            this.log("conversation.recheck.started", null, source);
+            this.scheduleClassification("missing_transcript_recheck");
+            return true;
+          }
+        : undefined,
     );
     this.transport = new BrowserTransport(audio, true);
     this.transport.setMicrophoneDiagnosticSink(event => {
@@ -194,7 +208,8 @@ export class LessonRuntime {
       runtimeId: source?.runtimeId ?? this.runtimeId,
       visitId: source?.visitId ?? this.state?.visitId ?? null,
       childTurnId: source?.childTurnId ?? this.state?.childTurnId ?? null,
-      nodeId: source && "nodeId" in source ? source.nodeId : (this.state?.nodeId ?? INITIAL_COUNTING_NODE_ID),
+      nodeId:
+        source && "nodeId" in source ? source.nodeId : (this.state?.nodeId ?? this.lessonDefinition.initialNodeId),
       transcriptRevision: source && "transcriptRevision" in source ? source.transcriptRevision : this.revision,
       transcriptSpeaker: speaker ?? this.state?.transcriptSource ?? "unknown",
       detail,
@@ -214,6 +229,7 @@ export class LessonRuntime {
       error: this.error,
       awaitingSteering: Boolean(this.steering),
       diagnostics: this.events.slice(-100),
+      assessment: this.assessment,
     };
   }
 
@@ -246,8 +262,13 @@ export class LessonRuntime {
       return;
     if (this.status === "prepared") {
       this.state = createLessonRuntime(this.runtimeId, {
-        quietDrainMs: LESSON_TIMING.quietDrainMs,
+        // Conversation closure can have short gaps between audio chunks. Use
+        // the same sustained quiet boundary as tutor classification.
+        quietDrainMs: this.lessonDefinition.conversationFirst
+          ? Math.max(LESSON_TIMING.quietDrainMs, LESSON_TIMING.tutorClassificationQuietMs)
+          : LESSON_TIMING.quietDrainMs,
         atMs: this.now(),
+        lesson: this.lessonDefinition,
       });
       this.status = "connecting";
       this.log("render.confirmed", { identity, initial: true });
@@ -255,7 +276,11 @@ export class LessonRuntime {
       this.publish();
       this.startupTimer = setTimeout(() => this.fail("GPT-Live startup timed out."), LESSON_TIMING.startupTimeoutMs);
       void this.transport
-        .start(this.receive, () => this.fail("The voice connection or microphone became unavailable."))
+        .start(
+          this.receive,
+          () => this.fail("The voice connection or microphone became unavailable."),
+          this.lessonDefinition.id,
+        )
         .catch(() => this.fail("Could not start GPT-Live. Check microphone access and local server configuration."));
       return;
     }
@@ -267,7 +292,7 @@ export class LessonRuntime {
   private dispatch(event: LessonRuntimeEvent) {
     if (!this.state || this.status === "ended") return;
     const before = this.state;
-    const result = reduceLessonRuntime(before, event);
+    const result = reduceLessonRuntime(before, event, this.lessonDefinition);
     this.state = result.state;
     if (event.type !== "clock.tick")
       this.log(
@@ -287,19 +312,36 @@ export class LessonRuntime {
     }
     for (const effect of result.effects) {
       this.log(effect.type, effect);
-      if (effect.type === "render.requested") {
-        this.cancelClassification("node_visit_changed");
-        // Install the visit boundary synchronously, before React's render/confirmation.
-        this.providerFloorMs = Math.max(this.providerFloorMs, ...this.fragments.map(fragment => fragment.event.endMs));
-        this.fragments = [];
-        this.transcript = "";
-        this.log("transcript.reset", { reason: "node_visit_committed", providerFloorMs: this.providerFloorMs });
-        this.display = effect.identity;
-      } else if (effect.type === "steering.ready") {
-        this.log("transcript.reset", { reason: "node_render_confirmed" });
-        this.appendSteering(effect.context, effect.renderToken);
-      } else {
-        this.stop("lesson_completed");
+      switch (effect.type) {
+        case "render.requested":
+          this.cancelClassification("node_visit_changed");
+          // Install the visit boundary synchronously, before React's render/confirmation.
+          this.providerFloorMs = Math.max(
+            this.providerFloorMs,
+            ...this.fragments.map(fragment => fragment.event.endMs),
+          );
+          this.fragments = [];
+          this.transcript = "";
+          this.log("transcript.reset", { reason: "node_visit_committed", providerFloorMs: this.providerFloorMs });
+          this.display = effect.identity;
+          break;
+        case "steering.ready":
+          if (this.lessonDefinition.nodes[effect.context.nodeId].assessConversationOnEntry)
+            void this.assessConversation();
+          this.log("transcript.reset", { reason: "node_render_confirmed" });
+          this.appendSteering(effect.context, effect.renderToken);
+          break;
+        case "concept.revealed":
+          // The reducer has already accepted this evidence into the current visit.
+          // Reveal effects publish that state but do not authorize a scene transition.
+          break;
+        case "lesson.completed":
+          this.stop("lesson_completed");
+          break;
+        default: {
+          const exhaustive: never = effect;
+          throw new Error(`Unhandled lesson runtime effect: ${JSON.stringify(exhaustive)}`);
+        }
       }
     }
     this.syncTutorStabilization(event.type);
@@ -314,7 +356,7 @@ export class LessonRuntime {
       this.status === "ended" ||
       this.state.phase !== "active" ||
       this.state.outputActivity !== "quiet" ||
-      !this.state.tutorOutputObserved ||
+      (!this.state.tutorOutputObserved && this.state.conversationAdvanceRequested !== "learner") ||
       this.state.tutorOutputDrained ||
       this.state.childSpeaking
     )
@@ -337,7 +379,7 @@ export class LessonRuntime {
         clearTimeout(this.startupTimer);
         this.status = "live";
         this.log("session.started", { sourceId: event.sourceId });
-        if (!this.appendSteering(initialTeachingContext(), this.display.token, true)) return;
+        if (!this.appendSteering(initialTeachingContext(this.lessonDefinition), this.display.token, true)) return;
         if (!this.transport.openInput(() => this.log("microphone.input_opened")))
           this.fail("Could not open GPT-Live microphone input.");
         this.publish();
@@ -349,7 +391,7 @@ export class LessonRuntime {
         if (!this.state.childSpeaking) {
           this.cancelClassification("child_turn_started");
           this.childTurnFloorMs = this.lastChildEndMs;
-          // Block progression immediately; only a discarded candidate can revalidate prior eligibility.
+          // Block progression immediately; missing-text recovery can later recheck conversational closure.
           this.dispatch({
             type: event.type === "microphone.activity_started" ? "child.candidate.started" : "child.turn.started",
             source,
@@ -390,7 +432,11 @@ export class LessonRuntime {
                 ? { source: latestChild.source, startMs: latestChild.event.startMs, endMs: latestChild.event.endMs }
                 : null,
             });
-            this.answerRecovery.arm(this.state, !this.steering);
+            // Navigation uses the latest learner message in this visit, independently
+            // of microphone segmentation. Missing current-turn text still cannot
+            // authorize mastery classification or answer recovery for that request.
+            if (!this.lessonDefinition.conversationFirst || !learnerRequestedNext(this.transcript))
+              this.answerRecovery.arm(this.state, !this.steering);
           }
           this.scheduleClassification(event.type);
         }
@@ -527,6 +573,12 @@ export class LessonRuntime {
     if (text === this.transcript) return;
     this.cancelClassification("newer_transcript_snapshot");
     this.transcript = text;
+    if (this.lessonDefinition.conversationFirst)
+      this.conversationVisits.set(source.visitId, {
+        nodeId: this.state!.nodeId,
+        visitId: source.visitId,
+        transcript: text,
+      });
     this.revision++;
     this.log(
       "transcript.snapshot",
@@ -546,6 +598,39 @@ export class LessonRuntime {
 
   private scheduleClassification(trigger: string) {
     clearTimeout(this.stabilizationTimer);
+    if (this.lessonDefinition.conversationFirst && this.state && !this.steering) {
+      const source =
+        this.state.phase === "active" && !this.state.childSpeaking
+          ? {
+              ...runtimeSource(this.state),
+              nodeId: this.state.nodeId,
+              transcriptRevision: this.state.transcriptRevision,
+            }
+          : null;
+      if (source && learnerRequestedNext(this.transcript)) {
+        // Debounce navigation too: an immediately following microphone segment
+        // must get a chance to revoke it before any quiet-drain transition.
+        this.stabilizationTimer = setTimeout(() => {
+          if (
+            !this.state ||
+            this.status !== "live" ||
+            this.steering ||
+            this.state.childSpeaking ||
+            this.state.phase !== "active" ||
+            this.state.visitId !== source.visitId ||
+            this.state.transcriptRevision !== source.transcriptRevision
+          )
+            return;
+          this.dispatch({
+            type: "conversation.advance.requested",
+            source,
+            transcriptSnapshot: this.transcript,
+            atMs: this.now(),
+          });
+        }, LESSON_TIMING.childSnapshotDebounceMs);
+        return;
+      }
+    }
     if (!this.state || this.status !== "live" || this.steering) return;
     if (this.state.transcriptSource === "tutor") {
       this.syncTutorStabilization(trigger);
@@ -589,6 +674,7 @@ export class LessonRuntime {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          lessonId: this.lessonDefinition.id,
           nodeId: source.nodeId,
           transcriptRevision: source.transcriptRevision,
           transcript,
@@ -611,7 +697,13 @@ export class LessonRuntime {
       if (!body || typeof body !== "object" || !("proposal" in body)) throw new Error("Invalid classifier response");
       const proposal = body.proposal === null ? null : parseConversationStateProposal(body.proposal);
       if (body.proposal !== null && !proposal) throw new Error("Invalid classifier proposal");
-      const diagnostic = parseLiveClassificationDiagnostic("diagnostic" in body ? body.diagnostic : undefined);
+      if (proposal && !Object.hasOwn(this.lessonDefinition.nodes, proposal.nodeId))
+        throw new Error("Invalid classifier node");
+      const diagnostic = parseLiveClassificationDiagnostic(
+        "diagnostic" in body ? body.diagnostic : undefined,
+        this.lessonDefinition,
+        source.nodeId,
+      );
       this.log(
         diagnostic ? "classifier.mapping" : "classifier.mapping_unavailable",
         diagnostic ?? { reason: "diagnostic_missing_or_invalid" },
@@ -630,13 +722,25 @@ export class LessonRuntime {
       );
       if (proposal) {
         this.supportClarification.cancel("proposal_received");
-        this.dispatch({ type: "proposal.received", source, proposal, atMs: this.now() });
-      } else if (
+        this.dispatch({
+          type: "proposal.received",
+          source,
+          proposal,
+          transcriptSnapshot: transcript,
+          atMs: this.now(),
+        });
+      }
+      // Usable evidence does not rule out a hold: a concept proposal may be
+      // partial, or learner speech may have interrupted tutor confirmation.
+      if (
         diagnostic?.outputs &&
         this.state &&
         diagnostic.nodeId === source.nodeId &&
         diagnostic.transcriptRevision === source.transcriptRevision &&
         (diagnostic.outcome === "hold_scene" ||
+          (diagnostic.outcome === "allow_semantic_completion_evidence" &&
+            this.state.phase === "active" &&
+            !hasCurrentCompletionEvidence(this.state, this.lessonDefinition)) ||
           (diagnostic.decision === "abstained" &&
             [
               "objectiveState_no_winner",
@@ -644,9 +748,17 @@ export class LessonRuntime {
               "objectiveState_competing_options",
               "tutorState_competing_options",
               "confirmation_without_completion",
+              "no_confident_concept_observation",
             ].includes(diagnostic.reason ?? "")))
       ) {
-        this.answerRecovery.armSemanticHold(this.state, this.status === "live" && !this.steering, source);
+        this.answerRecovery.armSemanticHold(
+          this.state,
+          this.status === "live" && !this.steering,
+          source,
+          !!this.lessonDefinition.nodes[source.nodeId].concepts?.length &&
+            this.lessonDefinition.nodes[source.nodeId].completionPolicy !== "allow_unresolved" &&
+            meetsAuthoredCompletionPolicy(this.state, this.lessonDefinition),
+        );
       }
     } catch {
       if (!abort.signal.aborted && this.status === "live")
@@ -664,8 +776,38 @@ export class LessonRuntime {
         );
     } finally {
       if (this.classification?.abort === abort) this.classification = undefined;
+      // A failed/held recheck must still recover conversationally. Cancelled or
+      // superseded responses may neither advance nor issue a stale recovery prompt.
+      if (
+        !abort.signal.aborted &&
+        this.status === "live" &&
+        this.state?.interruptedExchange?.ready &&
+        JSON.stringify(classificationSource(this.state)) === JSON.stringify(source) &&
+        !hasCurrentCompletionEvidence(this.state, this.lessonDefinition)
+      ) {
+        this.answerRecovery.armMissingFallback(this.state, !this.steering);
+      }
       this.publish();
     }
+  }
+
+  private sendAnswerRecovery(source: ClassificationSource) {
+    const eventId = `${this.runtimeId}:answer-recovery:${source.visitId}:${source.childTurnId}:${source.transcriptRevision}`;
+    const content = this.state
+      ? answerRecoveryInstruction(this.lessonDefinition, this.state)
+      : this.lessonDefinition.recovery.answerRecoveryInstruction;
+    try {
+      this.transport.send({
+        type: "session.instructions.append",
+        event_id: eventId,
+        delegation_id: null,
+        content,
+      });
+      this.log("gpt_live.answer_recovery_append", { eventId, content }, source);
+    } catch {
+      this.log("answer_recovery.send_failed", { message: "Scene held; request budget spent." }, source);
+    }
+    this.publish();
   }
 
   private cancelClassification(reason: string) {
@@ -681,7 +823,7 @@ export class LessonRuntime {
   private appendSteering(context: CurrentNodeSteeringContext, renderToken: string, startLesson = false) {
     if (!this.state || this.status !== "live") return false;
     const eventId = `${this.runtimeId}:steer:${this.state.visitId}`;
-    const content = teachingInstruction(context, startLesson);
+    const content = teachingInstruction(context, this.lessonDefinition, startLesson);
     const source = runtimeSource(this.state);
     this.steering = {
       eventId,
@@ -709,6 +851,90 @@ export class LessonRuntime {
     this.stop("failure", true);
   }
 
+  /** Advance along the authored edge without turning a skip into understanding evidence. */
+  skipScene() {
+    if (
+      !this.state ||
+      this.status !== "live" ||
+      this.state.phase !== "active" ||
+      this.state.childSpeaking ||
+      this.state.childCandidate !== null ||
+      this.steering !== undefined
+    )
+      return;
+    // A skip is still an authored render/steering transition. Require the same
+    // locally observed sustained quiet used by the normal transition path;
+    // unavailable media cannot establish it.
+    if (
+      this.state.outputActivity !== "quiet" ||
+      this.state.quietSinceMs === null ||
+      this.now() - this.state.quietSinceMs < this.state.quietDrainMs
+    )
+      return;
+    const source = runtimeSource(this.state);
+    this.cancelClassification("scene_skipped");
+    this.answerRecovery.cancel("scene_skipped");
+    this.dispatch({ type: "scene.skipped", source, atMs: this.now() });
+  }
+
+  /** Continue after an accepted reveal has been committed to the application presentation. */
+  continueAfterPresentation() {
+    const source = this.state ? classificationSource(this.state) : null;
+    if (
+      !this.state ||
+      this.status !== "live" ||
+      this.steering !== undefined ||
+      !this.state.transitionReady ||
+      source === null ||
+      this.state.childSpeaking ||
+      this.state.childCandidate !== null ||
+      this.state.outputActivity !== "quiet" ||
+      !this.state.tutorOutputDrained ||
+      this.state.quietSinceMs === null ||
+      this.now() - this.state.quietSinceMs < this.state.quietDrainMs
+    )
+      return;
+    this.dispatch({ type: "presentation.continued", source, atMs: this.now() });
+  }
+
+  private async assessConversation() {
+    if (!this.lessonDefinition.conversationFirst || !this.conversationVisits.size) return;
+    const visits = [...this.conversationVisits.values()];
+    const key = JSON.stringify(visits);
+    if (key === this.assessedConversation) return;
+    this.assessedConversation = key;
+    const generation = ++this.assessmentGeneration;
+    this.assessment = { status: "pending", results: {} };
+    this.publish();
+    try {
+      const response = await fetch("/api/assess", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lessonId: this.lessonDefinition.id, visits }),
+        signal: AbortSignal.timeout(35_000),
+      });
+      if (!response.ok) throw new Error("Assessment unavailable");
+      const body = await response.json();
+      // Revalidate the closed score schema; never trust provider text or let grading advance a scene.
+      const answers = Object.fromEntries(
+        Object.entries(body?.assessment?.results ?? {}).map(([id, value]) => [
+          id,
+          { type: "choice", ...(value as { scores?: object }).scores },
+        ]),
+      );
+      const assessment = normalizeAssessment({ answers }, this.lessonDefinition);
+      if (!assessment) throw new Error("Invalid assessment");
+      if (generation !== this.assessmentGeneration) return;
+      this.assessment = assessment;
+      this.log("assessment.completed", { assessment, visitCount: visits.length });
+    } catch {
+      if (generation !== this.assessmentGeneration) return;
+      this.assessment = { status: "unavailable", results: {} };
+      this.log("assessment.unavailable", { message: "Conversation preserved; assessment unavailable." });
+    }
+    this.publish();
+  }
+
   stop(reason = "parent_stop", disconnected = false) {
     if (this.status === "ended") return;
     this.cancelClassification(reason);
@@ -718,18 +944,23 @@ export class LessonRuntime {
     if (this.steering) clearTimeout(this.steering.timer);
     this.steering = undefined;
     if (this.state && this.state.phase !== "complete") {
-      this.state = reduceLessonRuntime(this.state, {
-        type: disconnected ? "disconnect" : "stop",
-        runtimeId: this.runtimeId,
-        atMs: this.now(),
-      }).state;
+      this.state = reduceLessonRuntime(
+        this.state,
+        {
+          type: disconnected ? "disconnect" : "stop",
+          runtimeId: this.runtimeId,
+          atMs: this.now(),
+        },
+        this.lessonDefinition,
+      ).state;
       this.display = {
         token: `${this.runtimeId}:stopped`,
         nodeId: this.state.nodeId,
-        sceneId: COUNTING_LESSON_GRAPH[this.state.nodeId].sceneId,
+        sceneId: currentNodeContext(this.lessonDefinition, this.state.nodeId).scene.id,
       };
     }
     this.status = "ended";
+    void this.assessConversation();
     this.log("lesson.ended", { reason, runtime: this.state });
     // Request provider close when possible, then release all local resources immediately.
     try {
@@ -742,7 +973,7 @@ export class LessonRuntime {
   }
 
   report() {
-    return {
+    const report = {
       product: "sprout",
       classifierVersion: CLASSIFIER_VERSION,
       version: 1,
@@ -754,6 +985,11 @@ export class LessonRuntime {
       error: this.error,
       transcript: this.transcript,
       events: [...this.events],
+      conversation: [...this.conversationVisits.values()],
+      assessment: this.assessment,
     };
+    // Additive fields remain optional for older exported-report consumers.
+    return report as Omit<typeof report, "conversation" | "assessment"> &
+      Partial<Pick<typeof report, "conversation" | "assessment">>;
   }
 }

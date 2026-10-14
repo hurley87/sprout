@@ -1,0 +1,805 @@
+{
+  "source": "7 October Engram stall with acceptance plus added vocabulary. Transcript from original report; normalized scores from a live replay with disjoint tutor-act criteria.",
+  "transcript": "Tutor: What is an engram?\nChild: Biological\nChild: me-memory, so information stored in your mind or brain\nTutor: Yeah, that's right! It's a memory trace in a brain, not something outside of us like a note on paper.",
+  "outputs": {
+    "objectiveState": {
+      "choice": "completed",
+      "confidence": 0.85,
+      "probabilities": {
+        "completed": 0.88,
+        "incorrect": 0,
+        "unclear_or_incomplete": 0.12,
+        "unresolved_help": 0,
+        "no_attempt": 0
+      }
+    },
+    "tutorState": {
+      "choice": "confirmed_completion",
+      "confidence": 1,
+      "probabilities": {
+        "confirmed_completion": 1,
+        "clarifying": 0,
+        "helping": 0,
+        "asking": 0,
+        "other": 0
+      }
+    },
+    "concepts": {
+      "concept_engram-biological": {
+        "choice": "demonstrated_independent",
+        "confidence": 0.88,
+        "probabilities": {
+          "not_yet": 0,
+          "partial": 0.03,
+          "demonstrated_independent": 0.91,
+          "demonstrated_prompted": 0.06
+        }
+      }
+    }
+  },
+  "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+  "reducerEvents": [
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 0
+      },
+      "state": "unavailable",
+      "atMs": 132.39999997615814
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 0
+      },
+      "state": "unavailable",
+      "atMs": 931.5
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 0
+      },
+      "state": "unavailable",
+      "atMs": 932.3000000119209
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 0
+      },
+      "state": "quiet",
+      "atMs": 1983
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 0
+      },
+      "revision": 1,
+      "speaker": "tutor",
+      "atMs": 3397.399999976158
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 0
+      },
+      "revision": 2,
+      "speaker": "tutor",
+      "atMs": 3544.199999988079
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 0
+      },
+      "state": "active",
+      "atMs": 3633.100000023842
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 0
+      },
+      "revision": 3,
+      "speaker": "tutor",
+      "atMs": 3715.899999976158
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 0
+      },
+      "state": "quiet",
+      "atMs": 4283
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 0
+      },
+      "state": "active",
+      "atMs": 4383.300000011921
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 0
+      },
+      "state": "quiet",
+      "atMs": 4633.100000023842
+    },
+    {
+      "type": "child.candidate.started",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 0
+      },
+      "atMs": 5794.899999976158
+    },
+    {
+      "type": "child.candidate.discarded",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 1
+      },
+      "atMs": 5962
+    },
+    {
+      "type": "child.candidate.started",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 1
+      },
+      "atMs": 6336.800000011921
+    },
+    {
+      "type": "child.candidate.discarded",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 2
+      },
+      "atMs": 6570.100000023842
+    },
+    {
+      "type": "child.candidate.started",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 2
+      },
+      "atMs": 6620.300000011921
+    },
+    {
+      "type": "child.candidate.discarded",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 3
+      },
+      "atMs": 6853.699999988079
+    },
+    {
+      "type": "child.candidate.started",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 3
+      },
+      "atMs": 6861.699999988079
+    },
+    {
+      "type": "child.candidate.discarded",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 4
+      },
+      "atMs": 7036.899999976158
+    },
+    {
+      "type": "child.candidate.started",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 4
+      },
+      "atMs": 7286.699999988079
+    },
+    {
+      "type": "child.turn.confirmed",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 5
+      },
+      "atMs": 7371.199999988079
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 5
+      },
+      "revision": 4,
+      "speaker": "child",
+      "atMs": 10595.100000023842
+    },
+    {
+      "type": "child.turn.ended",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 5
+      },
+      "atMs": 11270.100000023842
+    },
+    {
+      "type": "child.candidate.started",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 5
+      },
+      "atMs": 11286.800000011921
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "revision": 5,
+      "speaker": "child",
+      "atMs": 11395.699999988079
+    },
+    {
+      "type": "child.turn.confirmed",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "atMs": 11420
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "revision": 6,
+      "speaker": "child",
+      "atMs": 12391.5
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "revision": 7,
+      "speaker": "child",
+      "atMs": 12790.699999988079
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "revision": 8,
+      "speaker": "child",
+      "atMs": 13236.600000023842
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "revision": 9,
+      "speaker": "child",
+      "atMs": 13407
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "revision": 10,
+      "speaker": "child",
+      "atMs": 13796.600000023842
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "revision": 11,
+      "speaker": "child",
+      "atMs": 14193.800000011921
+    },
+    {
+      "type": "child.turn.ended",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "atMs": 14836.899999976158
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "revision": 12,
+      "speaker": "tutor",
+      "atMs": 15303.800000011921
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "revision": 13,
+      "speaker": "tutor",
+      "atMs": 15492.600000023842
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "revision": 14,
+      "speaker": "tutor",
+      "atMs": 15644.899999976158
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "state": "active",
+      "atMs": 15733.199999988079
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "state": "quiet",
+      "atMs": 15933.199999988079
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "revision": 15,
+      "speaker": "tutor",
+      "atMs": 16096
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "state": "active",
+      "atMs": 16132.899999976158
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "revision": 16,
+      "speaker": "tutor",
+      "atMs": 16310.399999976158
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "revision": 17,
+      "speaker": "tutor",
+      "atMs": 16554.19999998808
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "state": "quiet",
+      "atMs": 16633
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "state": "active",
+      "atMs": 16882.899999976158
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "revision": 18,
+      "speaker": "tutor",
+      "atMs": 16920
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "revision": 19,
+      "speaker": "tutor",
+      "atMs": 17025.600000023842
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "revision": 20,
+      "speaker": "tutor",
+      "atMs": 17318.5
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "revision": 21,
+      "speaker": "tutor",
+      "atMs": 17475.399999976158
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "revision": 22,
+      "speaker": "tutor",
+      "atMs": 17648.899999976158
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "revision": 23,
+      "speaker": "tutor",
+      "atMs": 17862.19999998808
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "state": "quiet",
+      "atMs": 17933.19999998808
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "state": "active",
+      "atMs": 17983
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "revision": 24,
+      "speaker": "tutor",
+      "atMs": 18193.30000001192
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "state": "quiet",
+      "atMs": 18332.899999976158
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "state": "active",
+      "atMs": 18433.100000023842
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "revision": 25,
+      "speaker": "tutor",
+      "atMs": 18596.899999976158
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "revision": 26,
+      "speaker": "tutor",
+      "atMs": 18794.69999998808
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "state": "quiet",
+      "atMs": 18833
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "state": "active",
+      "atMs": 18882.899999976158
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "revision": 27,
+      "speaker": "tutor",
+      "atMs": 19007.899999976158
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "revision": 28,
+      "speaker": "tutor",
+      "atMs": 19191
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "revision": 29,
+      "speaker": "tutor",
+      "atMs": 19433.899999976158
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "state": "quiet",
+      "atMs": 19633.100000023842
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "revision": 30,
+      "speaker": "tutor",
+      "atMs": 19659.600000023842
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "state": "active",
+      "atMs": 19682.899999976158
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "state": "quiet",
+      "atMs": 19733
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "state": "active",
+      "atMs": 19783
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "state": "quiet",
+      "atMs": 20183.100000023842
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "state": "active",
+      "atMs": 20232.80000001192
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "state": "quiet",
+      "atMs": 20333.30000001192
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "state": "active",
+      "atMs": 20382.80000001192
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6
+      },
+      "state": "quiet",
+      "atMs": 20583.100000023842
+    },
+    {
+      "type": "proposal.received",
+      "source": {
+        "runtimeId": "ebb51c41-c0ba-46e5-bff4-9fa40d2622e5",
+        "visitId": 1,
+        "childTurnId": 6,
+        "nodeId": "engram",
+        "transcriptRevision": 30
+      },
+      "proposal": {
+        "nodeId": "engram",
+        "transcriptRevision": 30,
+        "childActivity": "unknown",
+        "answerOutcome": "correct",
+        "supportState": "none",
+        "tutorState": "acknowledging",
+        "conceptObservations": [
+          {
+            "criterionId": "engram-biological",
+            "observation": "demonstrated_independent"
+          }
+        ]
+      },
+      "transcriptSnapshot": "Tutor: What is an engram?\nChild: Biological\nChild: me-memory, so information stored in your mind or brain\nTutor: Yeah, that's right! It's a memory trace in a brain, not something outside of us like a note on paper.",
+      "atMs": 21342
+    }
+  ]
+}

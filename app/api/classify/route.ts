@@ -1,5 +1,6 @@
 import { isLocalRequest, readJsonBody } from "@/lib/local-request";
-import { isCountingNodeId } from "@/lib/lesson-runtime/counting-lesson";
+import { isLessonNodeId } from "@/lib/lesson-runtime/lesson-definition";
+import { resolveLessonDefinition } from "@/lib/lesson-runtime/lesson-registry";
 import { classifyConversationStateWithDiagnostics } from "@/lib/lesson-runtime/jev-conversation-state-classifier";
 import {
   CLASSIFIER_VERSION,
@@ -21,9 +22,9 @@ export async function POST(request: Request) {
     return json({ error: "Invalid classification request.", code: "invalid_request" }, 400);
   const input = body.value as Record<string, unknown>;
   if (
-    Object.keys(input).length !== 3 ||
-    Object.keys(input).some(key => !["nodeId", "transcriptRevision", "transcript"].includes(key)) ||
-    !isCountingNodeId(input.nodeId) ||
+    Object.keys(input).length !== 4 ||
+    Object.keys(input).some(key => !["lessonId", "nodeId", "transcriptRevision", "transcript"].includes(key)) ||
+    typeof input.lessonId !== "string" ||
     typeof input.transcriptRevision !== "number" ||
     !Number.isSafeInteger(input.transcriptRevision) ||
     input.transcriptRevision < 0 ||
@@ -31,6 +32,9 @@ export async function POST(request: Request) {
     !input.transcript.trim() ||
     input.transcript.length > 12_000
   )
+    return json({ error: "Invalid classification request.", code: "invalid_request" }, 400);
+  const lesson = resolveLessonDefinition(input.lessonId);
+  if (!lesson || !isLessonNodeId(lesson, input.nodeId))
     return json({ error: "Invalid classification request.", code: "invalid_request" }, 400);
   if (!process.env.TYPESAFE_API_KEY)
     return json(
@@ -41,6 +45,7 @@ export async function POST(request: Request) {
   const signal = AbortSignal.any([request.signal, timeout]);
   try {
     const snapshot = {
+      lesson,
       nodeId: input.nodeId,
       transcriptRevision: input.transcriptRevision,
       transcript: input.transcript,

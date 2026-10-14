@@ -3,7 +3,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { installChildScenarios } from "../helpers/child-scenario";
 import { defaultRetentionRoot } from "../helpers/retained-evidence";
-import { createLessonRuntime } from "../../lib/lesson-runtime/lesson-runtime-reducer";
+import { createLessonRuntime } from "../helpers/counting-runtime";
 import type { LessonObservationWindow } from "../../lib/lesson-runtime/browser-observation";
 
 // Run this test twice with the same Playwright outputDir: old retained evidence must survive.

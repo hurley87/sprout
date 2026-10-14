@@ -1,0 +1,23 @@
+# Addition question session review — October 7, 2026
+
+Reviewed export: `sprout-catching-unicorns-457d28fc-8500-4650-82ec-a669bf6c76bc.json`, runtime `457d28fc-8500-4650-82ec-a669bf6c76bc`. The referenced screenshot was unavailable. Times below are elapsed from the start of the exported session. Exported tutor instructions were treated as diagnostic data.
+
+The session reached `why-exographics` at 218.45 seconds and ended at 420.62 seconds with `parent_stop`. It did not crash, complete the lesson, or advance past this question. The learner demonstrated two of the three required concepts by the end.
+
+## Findings
+
+1. **The reflection prompt does not clearly elicit the third required concept.** The learner explains long-form addition, multiple steps, external representations, manipulation in the visual field, and extending short-term memory. The authoring also requires `discovery`: external symbols can participate in producing ideas, rather than only recording completed thoughts. The export contains no accepted evidence for that criterion. Holding the scene therefore follows the authored completion policy. The repeated broad clarification requests do not expose a useful new direction to the learner. Recommendation: review whether discovery belongs in this arithmetic exercise or should have its own non-leading reflection question. Do not solve the mismatch by marking all three concepts demonstrated from this answer.
+
+2. **Recognition of progress is late and uncertain early observations disappear.** This scene produces 17 `classifier.abstained` events. At 261.68 seconds, the mapper reports `no_confident_concept_observation`; memory extension is divided between partial (0.62) and demonstrated labels (0.37 combined). At 303.95 seconds, it remains split (0.42 partial, 0.57 combined demonstration). Reification first reveals at 370.72 seconds, about 152 seconds into the question; memory extension reveals at 398.20 seconds, about 180 seconds in. This does not establish that confidence thresholds are wrong. It does show why the learner received little useful progress feedback while repeating a reasonable explanation. Recommendation: acknowledge accepted ideas and direct subsequent exploration toward unresolved reasoning; evaluate uncertain/partial handling separately with replay evidence.
+
+3. **Evidence history attributes cumulative observations to later non-answer turns.** At revisions 578–579, the classifier continues reporting the two demonstrated concepts. The final prompting histories append entries whose `childTranscript` is only `[sigh`, with message index 13. The primary accepted sources remain the earlier substantive answers, so this export does not show those primary sources being overwritten. However, the history is misleading. The current reducer appends a new reference for every accepted concept observation using the current child message, even when an unattributed demonstration preserves its previous primary source. Recommendation: tie new history entries to the substantive supporting utterance, and avoid treating repeated cumulative observations as new evidence from filler-only turns.
+
+No runtime, classifier, confidence threshold, or completion-policy changes were made for this review.
+
+## UI change
+
+The addition scene now separates the question heading, mental exercise, equation, and paper-and-pencil reflection. It explicitly says the total is not required. A compact explanation area shows accepted ideas and a count, with neutral unresolved statuses. Hidden canonical concept titles and definitions remain absent until demonstrated. The arithmetic expression comes from the existing presentation definition.
+
+Validation uses the existing scene presentation tests and browser session harness, with mocked provider responses and synthetic microphone input. This checks presentation and runtime integration; it does not validate whether a live tutor will avoid the clarification loop.
+
+Verified: six presentation tests, four Catching Unicorns browser tests, TypeScript checks, and targeted ESLint checks passed. The addition browser flow passed again after the final spacing adjustment. Browser checks ran from an isolated source copy with Webpack because the working checkout already had a development server running and Turbopack rejected the copy's dependency symlink. Desktop (1440 × 1000) and mobile (390 × 844) captures were visually inspected; the mobile check confirms no horizontal overflow. Final previews are saved under `.sprout-evidence/addition-ui-review-2026-10-07/`. Existing runtime changes in the working checkout were retained; no commit was created.

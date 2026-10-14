@@ -3,6 +3,7 @@ import type { Page } from "@playwright/test";
 import type { MicrophoneDiagnostic } from "../lib/browser-transport";
 import type { ProviderEvent } from "../lib/events";
 import { LessonRuntime } from "../lib/lesson-runtime/lesson-runtime";
+import { COUNTING_LESSON } from "../lib/lesson-runtime/counting-lesson";
 import { attachLessonObservation, type LessonObservationWindow } from "../lib/lesson-runtime/browser-observation";
 import { LessonObserver } from "./helpers/lesson-observer";
 
@@ -29,7 +30,7 @@ vi.mock("../lib/browser-transport", () => ({
 }));
 const runtimes: LessonRuntime[] = [];
 function runtime(changed = vi.fn()) {
-  const lesson = new LessonRuntime({} as HTMLAudioElement, changed);
+  const lesson = new LessonRuntime({} as HTMLAudioElement, changed, COUNTING_LESSON);
   runtimes.push(lesson);
   return lesson;
 }

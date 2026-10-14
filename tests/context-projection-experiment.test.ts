@@ -19,11 +19,12 @@ import {
   simplifiedObserverState,
   type SimplifiedOutputs,
 } from "../lib/experiments/issue-57/simplified-observer";
-import { isCountingNodeId } from "../lib/lesson-runtime/counting-lesson";
+import { COUNTING_LESSON, isCountingNodeId } from "../lib/lesson-runtime/counting-lesson";
 import { CONVERSATION_CLASSIFICATION_THRESHOLDS } from "../lib/experiments/issue-57/legacy/classification-decision";
 
 const hash = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).digest("hex");
 const input = {
+  lesson: COUNTING_LESSON,
   nodeId: "count-1-duck" as const,
   transcriptRevision: 2,
   transcript: "Child: One\nTutor: Yes, one duck.",

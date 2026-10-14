@@ -1,0 +1,50 @@
+{
+  "source": "2026-10-07 user demo, exogram tutor boundary revision 109. Normalized scores from one post-instruction-change classifier replay; controlled regression inputs, not a provider accuracy guarantee.",
+  "transcript": "Tutor: Alright, next one. What is an exogram?\nChild: So an exogram is... a piece of information that's stored\nChild: outside of the brain. Something that can\nChild: be externally represented ... like on like\nChild: drawings on paper or... You know... Um... say typing on a computer\nTutor: Yeah, that's right. You're describing an exogram as information that lives outside your head, like\nTutor: on paper or a screen. So that's a different kinda memory than the one in your mind.",
+  "outputs": {
+    "objectiveState": {
+      "choice": "completed",
+      "confidence": 0.8,
+      "probabilities": {
+        "completed": 0.84,
+        "incorrect": 0,
+        "unclear_or_incomplete": 0.16,
+        "unresolved_help": 0,
+        "no_attempt": 0
+      }
+    },
+    "tutorState": {
+      "choice": "confirmed_completion",
+      "confidence": 0.9,
+      "probabilities": {
+        "confirmed_completion": 0.92,
+        "clarifying": 0,
+        "helping": 0.07,
+        "asking": 0.01,
+        "other": 0
+      }
+    },
+    "concepts": {
+      "concept_engram-biological": {
+        "choice": "demonstrated_independent",
+        "confidence": 0.36,
+        "probabilities": {
+          "not_yet": 0.31,
+          "partial": 0.14,
+          "demonstrated_independent": 0.52,
+          "demonstrated_prompted": 0.03
+        }
+      },
+      "concept_exogram-non-biological": {
+        "choice": "demonstrated_independent",
+        "confidence": 0.93,
+        "probabilities": {
+          "not_yet": 0,
+          "partial": 0.02,
+          "demonstrated_independent": 0.95,
+          "demonstrated_prompted": 0.03
+        }
+      }
+    }
+  }
+}

@@ -1,7 +1,8 @@
 # Browser test suites
 
 `npm run test:browser` selects only the `browser` project. It covers the existing
-lesson smoke tests and local WebRTC/Web Audio transport tests. Files under
+lesson smoke tests, the provider-free Catching Unicorns route/runtime scenarios,
+and local WebRTC/Web Audio transport tests. Files under
 `tests/browser/live/` are excluded, even when passed as a file filter. The server
 starts with empty `OPENAI_API_KEY` and `TYPESAFE_API_KEY` overrides, so these tests
 cannot use configured provider credentials. Existing local transport peers and
@@ -132,3 +133,13 @@ not recognition accuracy, GPT-Live/Jev behavior, child voice realism, acoustic
 room noise, device processing, or lesson progression. Live scenarios reuse the read-only observation bridge and child helper;
 [acceptance and pending provider coverage](issue-30-harness-acceptance.md) remain
 explicit.
+
+The Catching Unicorns browser suite, `tests/browser/catching-unicorns.spec.ts`,
+uses the production lesson runtime with a local WebRTC peer and mocked
+`/api/classify` responses. It verifies the dedicated route, hidden initial
+answers, independent reveal rows, carry-forward, scene handoffs, skip/early end,
+recap, diagnostic export and media cleanup. These controlled responses prove
+that accepted evidence is rendered safely; they do not measure GPT-Live tutor
+behavior or Jev's judgment of learner speech. See the
+[Catching Unicorns validation record](catching-unicorns-demo-validation.md) for
+the live acceptance status and source-fidelity cases.

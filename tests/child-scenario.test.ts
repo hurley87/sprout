@@ -10,7 +10,7 @@ import {
 import { LessonObserver } from "./helpers/lesson-observer";
 import type { LessonDiagnostic, LessonObservation } from "../lib/lesson-runtime/lesson-runtime";
 import type { installSyntheticMicrophone } from "./helpers/synthetic-microphone";
-import { createLessonRuntime } from "../lib/lesson-runtime/lesson-runtime-reducer";
+import { createLessonRuntime } from "./helpers/counting-runtime";
 import manifest from "./fixtures/speech/manifest.json";
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";

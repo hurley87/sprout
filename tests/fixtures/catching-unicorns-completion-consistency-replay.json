@@ -1,0 +1,342 @@
+{
+  "source": "Recorded classifier snapshots and scores from session 508d2143-11c3-48cc-843b-5187678a41a3; no new provider scores. Replay establishes mapping and speech instructions, not provider compliance.",
+  "checkpoints": {
+    "engramInitial": {
+      "nodeId": "engram",
+      "atMs": 18528.600000023842,
+      "transcript": "Tutor: jump in. What is an engram?\nChild: An engram is a biological… Idea. Um, stored in your mind\nTutor: Yeah, you got it. that's exactly what we're after.",
+      "outputs": {
+        "objectiveState": {
+          "choice": "completed",
+          "confidence": 0.52,
+          "probabilities": {
+            "completed": 0.62,
+            "incorrect": 0.02,
+            "unclear_or_incomplete": 0.36,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "confirmed_completion",
+          "confidence": 1,
+          "probabilities": {
+            "confirmed_completion": 1,
+            "clarifying": 0,
+            "helping": 0,
+            "asking": 0,
+            "other": 0
+          }
+        },
+        "concepts": {
+          "concept_engram-biological": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.77,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.11,
+              "demonstrated_independent": 0.83,
+              "demonstrated_prompted": 0.06
+            }
+          }
+        },
+        "sources": {
+          "source_engram-biological": {
+            "choice": "message_1",
+            "confidence": 1,
+            "probabilities": {
+              "none": 0,
+              "message_1": 1
+            }
+          }
+        }
+      }
+    },
+    "prematureCompletion": {
+      "nodeId": "why-exographics",
+      "atMs": 265972.3000000119,
+      "transcript": "Tutor: that Alright, let's think about this scenario. Try to reason through eighty four plus one thousand forty five plus six ninety three plus seven nineteen without writing anything down.\nTutor: What changes when you can use paper and a pencil?\nChild: [lip smack] Well, I can put the numbers in a column s- and do long form addition. Um, I can solve the problem in multiple steps. By going one column at a time\nChild: . [lip smack\nTutor: When you say multiple steps, what's different about how you're handling the numbers using the paper?\nChild: Well, I'm externally representing the numbers. I'm playing around with the\nChild: numbers. Um- Outside of my\nChild: head. It's easier for\nChild: - You know, I don't have to store anything in - everything in my short-term memory\nTutor: And what else changes in how you work through it when the numbers are written in front of you?\nChild: Well, I can discover new ideas. I\nChild: mean\nTutor: Yes.\nTutor: That completes this\nChild: I\nTutor: question.\nChild: can",
+      "outputs": {
+        "objectiveState": {
+          "choice": "unclear_or_incomplete",
+          "confidence": 0.52,
+          "probabilities": {
+            "completed": 0.38,
+            "incorrect": 0,
+            "unclear_or_incomplete": 0.62,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "confirmed_completion",
+          "confidence": 0.89,
+          "probabilities": {
+            "confirmed_completion": 0.91,
+            "clarifying": 0.03,
+            "helping": 0.01,
+            "asking": 0.02,
+            "other": 0.03
+          }
+        },
+        "concepts": {
+          "concept_reification": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.71,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.08,
+              "demonstrated_independent": 0.78,
+              "demonstrated_prompted": 0.14
+            }
+          },
+          "concept_memory-extension": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.76,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.03,
+              "demonstrated_independent": 0.8200000000000001,
+              "demonstrated_prompted": 0.15
+            }
+          },
+          "concept_discovery": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.4,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.2,
+              "demonstrated_independent": 0.55,
+              "demonstrated_prompted": 0.25
+            }
+          }
+        },
+        "sources": {
+          "source_reification": {
+            "choice": "message_3",
+            "confidence": 1,
+            "probabilities": {
+              "none": 0,
+              "message_1": 0,
+              "message_3": 1,
+              "message_5": 0
+            }
+          },
+          "source_memory-extension": {
+            "choice": "message_3",
+            "confidence": 1,
+            "probabilities": {
+              "none": 0,
+              "message_1": 0,
+              "message_3": 1,
+              "message_5": 0
+            }
+          },
+          "source_discovery": {
+            "choice": "message_5",
+            "confidence": 1,
+            "probabilities": {
+              "none": 0,
+              "message_1": 0,
+              "message_3": 0,
+              "message_5": 1
+            }
+          }
+        }
+      }
+    },
+    "acceptedDiscovery": {
+      "nodeId": "why-exographics",
+      "atMs": 303421.60000002384,
+      "transcript": "Tutor: that Alright, let's think about this scenario. Try to reason through eighty four plus one thousand forty five plus six ninety three plus seven nineteen without writing anything down.\nTutor: What changes when you can use paper and a pencil?\nChild: [lip smack] Well, I can put the numbers in a column s- and do long form addition. Um, I can solve the problem in multiple steps. By going one column at a time\nChild: . [lip smack\nTutor: When you say multiple steps, what's different about how you're handling the numbers using the paper?\nChild: Well, I'm externally representing the numbers. I'm playing around with the\nChild: numbers. Um- Outside of my\nChild: head. It's easier for\nChild: - You know, I don't have to store anything in - everything in my short-term memory\nTutor: And what else changes in how you work through it when the numbers are written in front of you?\nChild: Well, I can discover new ideas. I\nChild: mean\nTutor: Yes.\nTutor: That completes this\nChild: I\nTutor: question.\nChild: can\nTutor: Quick follow-up. With your numbers-on-paper example, how does that setup do more than just record your thinking after it's done? especially when you're working through the addition.\nChild: [lip smack\nChild: ] [exhale\nChild: ] [lip\nChild: smack] Uh, it allows me to use a written representations to arrive at a new idea or solution. Beyond the recorded thoughts that I already had",
+      "outputs": {
+        "objectiveState": {
+          "choice": "completed",
+          "confidence": 0.75,
+          "probabilities": {
+            "completed": 0.8,
+            "incorrect": 0,
+            "unclear_or_incomplete": 0.2,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "asking",
+          "confidence": 0.16,
+          "probabilities": {
+            "confirmed_completion": 0.28,
+            "clarifying": 0.3,
+            "helping": 0.05,
+            "asking": 0.33,
+            "other": 0.04
+          }
+        },
+        "concepts": {
+          "concept_reification": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.48,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.04,
+              "demonstrated_independent": 0.61,
+              "demonstrated_prompted": 0.35
+            }
+          },
+          "concept_memory-extension": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.81,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.03,
+              "demonstrated_independent": 0.86,
+              "demonstrated_prompted": 0.11
+            }
+          },
+          "concept_discovery": {
+            "choice": "demonstrated_prompted",
+            "confidence": 0.53,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.04,
+              "demonstrated_independent": 0.31,
+              "demonstrated_prompted": 0.65
+            }
+          }
+        },
+        "sources": {
+          "source_reification": {
+            "choice": "message_3",
+            "confidence": 1,
+            "probabilities": {
+              "none": 0,
+              "message_1": 0,
+              "message_3": 1,
+              "message_5": 0,
+              "message_11": 0
+            }
+          },
+          "source_memory-extension": {
+            "choice": "message_3",
+            "confidence": 1,
+            "probabilities": {
+              "none": 0,
+              "message_1": 0,
+              "message_3": 1,
+              "message_5": 0,
+              "message_11": 0
+            }
+          },
+          "source_discovery": {
+            "choice": "message_11",
+            "confidence": 1,
+            "probabilities": {
+              "none": 0,
+              "message_1": 0,
+              "message_3": 0,
+              "message_5": 0,
+              "message_11": 1
+            }
+          }
+        }
+      }
+    },
+    "validCompletion": {
+      "nodeId": "why-exographics",
+      "atMs": 308680.1999999881,
+      "transcript": "Tutor: that Alright, let's think about this scenario. Try to reason through eighty four plus one thousand forty five plus six ninety three plus seven nineteen without writing anything down.\nTutor: What changes when you can use paper and a pencil?\nChild: [lip smack] Well, I can put the numbers in a column s- and do long form addition. Um, I can solve the problem in multiple steps. By going one column at a time\nChild: . [lip smack\nTutor: When you say multiple steps, what's different about how you're handling the numbers using the paper?\nChild: Well, I'm externally representing the numbers. I'm playing around with the\nChild: numbers. Um- Outside of my\nChild: head. It's easier for\nChild: - You know, I don't have to store anything in - everything in my short-term memory\nTutor: And what else changes in how you work through it when the numbers are written in front of you?\nChild: Well, I can discover new ideas. I\nChild: mean\nTutor: Yes.\nTutor: That completes this\nChild: I\nTutor: question.\nChild: can\nTutor: Quick follow-up. With your numbers-on-paper example, how does that setup do more than just record your thinking after it's done? especially when you're working through the addition.\nChild: [lip smack\nChild: ] [exhale\nChild: ] [lip\nChild: smack] Uh, it allows me to use a written representations to arrive at a new idea or solution. Beyond the recorded thoughts that I already had\nTutor: Right, Yes, that completes this question.",
+      "outputs": {
+        "objectiveState": {
+          "choice": "completed",
+          "confidence": 0.87,
+          "probabilities": {
+            "completed": 0.9,
+            "incorrect": 0,
+            "unclear_or_incomplete": 0.1,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "confirmed_completion",
+          "confidence": 0.99,
+          "probabilities": {
+            "confirmed_completion": 0.99,
+            "clarifying": 0.01,
+            "helping": 0,
+            "asking": 0,
+            "other": 0
+          }
+        },
+        "concepts": {
+          "concept_reification": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.65,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.03,
+              "demonstrated_independent": 0.74,
+              "demonstrated_prompted": 0.23
+            }
+          },
+          "concept_memory-extension": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.79,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.04,
+              "demonstrated_independent": 0.84,
+              "demonstrated_prompted": 0.12
+            }
+          },
+          "concept_discovery": {
+            "choice": "demonstrated_prompted",
+            "confidence": 0.49,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.04,
+              "demonstrated_independent": 0.34,
+              "demonstrated_prompted": 0.62
+            }
+          }
+        },
+        "sources": {
+          "source_reification": {
+            "choice": "message_3",
+            "confidence": 1,
+            "probabilities": {
+              "none": 0,
+              "message_1": 0,
+              "message_3": 1,
+              "message_5": 0,
+              "message_11": 0
+            }
+          },
+          "source_memory-extension": {
+            "choice": "message_3",
+            "confidence": 1,
+            "probabilities": {
+              "none": 0,
+              "message_1": 0,
+              "message_3": 1,
+              "message_5": 0,
+              "message_11": 0
+            }
+          },
+          "source_discovery": {
+            "choice": "message_11",
+            "confidence": 1,
+            "probabilities": {
+              "none": 0,
+              "message_1": 0,
+              "message_3": 0,
+              "message_5": 0,
+              "message_11": 1
+            }
+          }
+        }
+      }
+    }
+  },
+  "provenanceAnnotation": "Source selections are controlled, manually reviewed regression inputs added for utterance attribution; they were not returned by the recorded provider. Original concept/objective/tutor scores are unchanged."
+}

@@ -1,14 +1,15 @@
 /** Offline projection-A adapter. Semantic criteria and validation live in the canonical classifier. */
 import {
   conversationObserverState,
-  CONVERSATION_STATE_QUESTIONS,
 } from "../../lesson-runtime/conversation-observer-contract";
+import { CONVERSATION_STATE_QUESTIONS } from "./counting-classifier-contract";
+import { COUNTING_LESSON } from "../../lesson-runtime/counting-lesson";
 import { tutorObservation } from "../../lesson-runtime/tutor-observation";
 import { supportEvidence } from "../../lesson-runtime/support-evidence";
+import { mapConversationObservation } from "../../lesson-runtime/conversation-observer-contract";
 import type { ConversationStateClassifierInput } from "../../lesson-runtime/conversation-state-classifier";
 export {
   normalizeConversationOutputs as normalizeSimplifiedOutputs,
-  mapConversationObservation as mapSimplifiedObservation,
   abstain,
   type ObjectiveState,
   type ObservedTutorState as ExperimentalTutorState,
@@ -27,7 +28,7 @@ export const SIMPLIFIED_QUESTIONS = {
   },
 } as const;
 export function simplifiedObserverState(input: ConversationStateClassifierInput) {
-  const state = conversationObserverState(input);
+  const state = conversationObserverState({ ...input, lesson: input.lesson ?? COUNTING_LESSON });
   const observation = tutorObservation(input.transcript);
   if (!state || !observation) return null;
   const { transcriptRevision, ...context } = state;
@@ -37,4 +38,8 @@ export function simplifiedObserverState(input: ConversationStateClassifierInput)
     supportEvidence: supportEvidence(input.transcript),
     transcriptRevision,
   };
+}
+
+export function mapSimplifiedObservation(input: ConversationStateClassifierInput, outputs: Parameters<typeof mapConversationObservation>[1]) {
+  return mapConversationObservation({ ...input, lesson: input.lesson ?? COUNTING_LESSON }, outputs);
 }

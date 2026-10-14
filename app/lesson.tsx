@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { COUNTING_LESSON_GRAPH, INITIAL_COUNTING_NODE_ID } from "@/lib/lesson-runtime/counting-lesson";
+import { COUNTING_LESSON_GRAPH, INITIAL_COUNTING_NODE_ID, isCountingNodeId } from "@/lib/lesson-runtime/counting-lesson";
+import type { LessonDefinition } from "@/lib/lesson-runtime/lesson-definition";
 import { LESSON_TIMING, LessonRuntime, type LessonSnapshot } from "@/lib/lesson-runtime/lesson-runtime";
 import { attachLessonObservation, type LessonObservationWindow } from "@/lib/lesson-runtime/browser-observation";
 
-export default function Lesson() {
+export default function Lesson({ lessonDefinition }: { lessonDefinition: LessonDefinition }) {
   const audio = useRef<HTMLAudioElement>(null);
   const scene = useRef<HTMLDivElement>(null);
   const lesson = useRef<LessonRuntime | null>(null);
@@ -13,7 +14,7 @@ export default function Lesson() {
   const display = snapshot?.display;
   const status = snapshot?.status;
   const nodeId = display ? display.nodeId : INITIAL_COUNTING_NODE_ID;
-  const node = nodeId ? COUNTING_LESSON_GRAPH[nodeId] : null;
+  const node = nodeId && isCountingNodeId(nodeId) ? COUNTING_LESSON_GRAPH[nodeId] : null;
   const state = snapshot?.runtime;
   const live = snapshot !== null && status !== "ended";
 
@@ -60,7 +61,7 @@ export default function Lesson() {
     lesson.current?.stop("restarted");
     const current = new LessonRuntime(audio.current, value => {
       if (lesson.current === current) setSnapshot(value);
-    });
+    }, lessonDefinition);
     lesson.current = current;
     setSnapshot(current.snapshot());
   }

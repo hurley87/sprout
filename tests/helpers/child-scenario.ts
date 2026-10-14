@@ -3,7 +3,7 @@ import { defaultRetentionRoot, newAttemptId, retainAttempt, retainedLocation } f
 import type { Page, TestInfo } from "@playwright/test";
 import { setTimeout as delay } from "node:timers/promises";
 import { writeFile } from "node:fs/promises";
-import { COUNTING_LESSON_GRAPH, type CountingNodeId } from "../../lib/lesson-runtime/counting-lesson";
+import { COUNTING_LESSON_GRAPH, isCountingNodeId, type CountingNodeId } from "../../lib/lesson-runtime/counting-lesson";
 import type { LessonDiagnostic, LessonObservation } from "../../lib/lesson-runtime/lesson-runtime";
 import { installLessonObserver, type LessonObserver, type LessonEventScope } from "./lesson-observer";
 import { installSyntheticMicrophone, type NoiseOptions, type SpeechFixture } from "./synthetic-microphone";
@@ -218,14 +218,18 @@ export class ChildScenario {
     // AudioContext startedAt is deliberately excluded: it has a different epoch.
     return this.microphone.waitForPlayback(playback.id);
   }
+  private async currentCountingNode(): Promise<CountingNodeId | null> {
+    const id = (await this.observation()).snapshot.display.nodeId;
+    return isCountingNodeId(id) ? id : null;
+  }
   correctAnswer() {
     return this.action("correctAnswer", "authored quantity", async () =>
-      this.speak(countingAnswer((await this.observation()).snapshot.display.nodeId, true)),
+      this.speak(countingAnswer(await this.currentCountingNode(), true)),
     );
   }
   wrongAnswer() {
     return this.action("wrongAnswer", "next authored quantity modulo three", async () =>
-      this.speak(countingAnswer((await this.observation()).snapshot.display.nodeId, false)),
+      this.speak(countingAnswer(await this.currentCountingNode(), false)),
     );
   }
   dontKnow() {

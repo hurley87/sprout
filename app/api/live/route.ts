@@ -1,5 +1,6 @@
 import { isLocalRequest, readJsonBody } from "@/lib/local-request";
-import { SPROUT_LIVE_CONFIG } from "@/lib/lesson-runtime/live-context";
+import { createLiveSessionConfig } from "@/lib/lesson-runtime/live-context";
+import { resolveLessonDefinition } from "@/lib/lesson-runtime/lesson-registry";
 
 export const runtime = "nodejs";
 const LIMIT = 65_536;
@@ -21,11 +22,12 @@ export async function POST(request: Request) {
     !payload ||
     typeof payload !== "object" ||
     Array.isArray(payload) ||
-    Object.keys(payload).some(key => key !== "sdp")
+    Object.keys(payload).some(key => key !== "sdp" && key !== "lessonId")
   )
     return json({ error: "Invalid session request." }, 400);
-  const { sdp } = payload as { sdp?: unknown };
-  if (typeof sdp !== "string" || !sdp.startsWith("v=0") || sdp.length > LIMIT)
+  const { sdp, lessonId } = payload as { sdp?: unknown; lessonId?: unknown };
+  const lesson = resolveLessonDefinition(lessonId);
+  if (!lesson || typeof sdp !== "string" || !sdp.startsWith("v=0") || sdp.length > LIMIT)
     return json({ error: "Invalid microphone connection offer." }, 400);
   if (!process.env.OPENAI_API_KEY)
     return json(
@@ -40,7 +42,7 @@ export async function POST(request: Request) {
       method: "POST",
       headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        session: SPROUT_LIVE_CONFIG,
+        session: createLiveSessionConfig(lesson),
         transport: { type: "webrtc", sdp },
       }),
       signal: AbortSignal.any([request.signal, AbortSignal.timeout(20_000)]),

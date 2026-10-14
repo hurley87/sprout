@@ -2,24 +2,23 @@
 import { JEV_MODEL } from "../../jev";
 import type { ConversationStateClassifierInput } from "../../lesson-runtime/conversation-state-classifier";
 import { SIMPLIFIED_QUESTIONS, simplifiedObserverState, type SimplifiedDecision } from "./simplified-observer-contract";
+import { COUNTING_LESSON } from "../../lesson-runtime/counting-lesson";
 
 export type ProjectionArm = "A" | "B";
 
 /** Only the evidence locator changes, identically in both arms. All semantic criteria stay frozen. */
-export {
-  CONVERSATION_STATE_QUESTIONS as CONTEXT_PROJECTION_QUESTIONS,
-  conversationObserverState as fullTranscriptObserverState,
-} from "../../lesson-runtime/conversation-observer-contract";
-import {
-  CONVERSATION_STATE_QUESTIONS as CONTEXT_PROJECTION_QUESTIONS,
-  conversationObserverState as fullTranscriptObserverState,
-} from "../../lesson-runtime/conversation-observer-contract";
+import { conversationObserverState } from "../../lesson-runtime/conversation-observer-contract";
+import { CONVERSATION_STATE_QUESTIONS as CONTEXT_PROJECTION_QUESTIONS } from "./counting-classifier-contract";
+export { CONTEXT_PROJECTION_QUESTIONS };
+export function fullTranscriptObserverState(input: ConversationStateClassifierInput) {
+  return conversationObserverState({ ...input, lesson: input.lesson ?? COUNTING_LESSON });
+}
 
 /** Explicit closed request plan only. This function cannot make provider calls. */
 export function contextProjectionRequest(input: ConversationStateClassifierInput, arm: ProjectionArm) {
   if (arm !== "A" && arm !== "B") return null;
   // Capture identity and transcript, dropping any caller-supplied graph or future context.
-  const snapshot = { nodeId: input.nodeId, transcriptRevision: input.transcriptRevision, transcript: input.transcript };
+  const snapshot = { lesson: input.lesson ?? COUNTING_LESSON, nodeId: input.nodeId, transcriptRevision: input.transcriptRevision, transcript: input.transcript };
   const state = arm === "A" ? simplifiedObserverState(snapshot) : fullTranscriptObserverState(snapshot);
   return state ? ({ model: JEV_MODEL, state, questions: CONTEXT_PROJECTION_QUESTIONS } as const) : null;
 }

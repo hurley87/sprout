@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { installSyntheticMicrophone } from "../helpers/synthetic-microphone";
 import { attemptWindowInjection } from "../helpers/injection-window";
-import { createLessonRuntime } from "../../lib/lesson-runtime/lesson-runtime-reducer";
+import { createLessonRuntime } from "../helpers/counting-runtime";
 import type { LessonObservation } from "../../lib/lesson-runtime/lesson-runtime";
 import type { LessonObservationWindow } from "../../lib/lesson-runtime/browser-observation";
 

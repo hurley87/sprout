@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createLessonRuntime, type LessonRuntimeState } from "../lib/lesson-runtime/lesson-runtime-reducer";
+import { createLessonRuntime, type LessonRuntimeState } from "./helpers/counting-runtime";
 import {
   TutorStabilizationGate,
   type TutorStabilizationDiagnostic,

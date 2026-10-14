@@ -1,0 +1,243 @@
+{
+  "source": "Normalized final classified snapshots from the 7 October 2026 questions 3 and 4 session.",
+  "scenes": {
+    "compare": {
+      "transcript": "Tutor: Let’s compare engrams and exograms. According to the manuscript, what differences stand out to you?\nChild: [click ]Well, [sigh ]an exogram is more durable\nChild: . Um, it's easier to share with others\nChild: ... And it's easier for me to work with, the information when... it's... external to my mind\nTutor: Yeah, you’re naming those key contrasts. Engrams are inside you, while exograms live outside the mind, which makes them easier to share and work with.\nChild: [click ]Right, and I guess the third one I mentioned\nChild: ... was, that it's easier\nChild: ... to revise or edit\nChild: ... The idea\nChild: . when it's stored externally\nTutor: Exactly. That matches the manuscript’s point. External records can be more readily revised than internal memory. You’ve drawn the right distinctions.",
+      "outputs": {
+        "objectiveState": {
+          "choice": "completed",
+          "confidence": 0.84,
+          "probabilities": {
+            "completed": 0.87,
+            "incorrect": 0,
+            "unclear_or_incomplete": 0.13,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "confirmed_completion",
+          "confidence": 0.96,
+          "probabilities": {
+            "confirmed_completion": 0.97,
+            "clarifying": 0,
+            "helping": 0.03,
+            "asking": 0,
+            "other": 0
+          }
+        },
+        "concepts": {
+          "concept_engram-biological": {
+            "choice": "partial",
+            "confidence": 0.11,
+            "probabilities": {
+              "not_yet": 0.08,
+              "partial": 0.33,
+              "demonstrated_independent": 0.31,
+              "demonstrated_prompted": 0.28
+            }
+          },
+          "concept_exogram-non-biological": {
+            "choice": "partial",
+            "confidence": 0.25,
+            "probabilities": {
+              "not_yet": 0.03,
+              "partial": 0.44,
+              "demonstrated_independent": 0.43,
+              "demonstrated_prompted": 0.1
+            }
+          },
+          "concept_exogram-durability": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.91,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.04,
+              "demonstrated_independent": 0.93,
+              "demonstrated_prompted": 0.03
+            }
+          },
+          "concept_exogram-shareability": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.91,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.01,
+              "demonstrated_independent": 0.93,
+              "demonstrated_prompted": 0.06
+            }
+          },
+          "concept_exogram-revisability": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.79,
+            "probabilities": {
+              "not_yet": 0.01,
+              "partial": 0.03,
+              "demonstrated_independent": 0.84,
+              "demonstrated_prompted": 0.12
+            }
+          }
+        },
+        "sources": {
+          "source_engram-biological": {
+            "choice": "none",
+            "confidence": 1,
+            "probabilities": {
+              "none": 1,
+              "message_1": 0,
+              "message_3": 0
+            }
+          },
+          "source_exogram-non-biological": {
+            "choice": "none",
+            "confidence": 1,
+            "probabilities": {
+              "none": 1,
+              "message_1": 0,
+              "message_3": 0
+            }
+          },
+          "source_exogram-durability": {
+            "choice": "message_1",
+            "confidence": 1,
+            "probabilities": {
+              "none": 0,
+              "message_1": 1,
+              "message_3": 0
+            }
+          },
+          "source_exogram-shareability": {
+            "choice": "message_1",
+            "confidence": 1,
+            "probabilities": {
+              "none": 0,
+              "message_1": 1,
+              "message_3": 0
+            }
+          },
+          "source_exogram-revisability": {
+            "choice": "message_3",
+            "confidence": 1,
+            "probabilities": {
+              "none": 0,
+              "message_1": 0,
+              "message_3": 1
+            }
+          }
+        }
+      }
+    },
+    "exographics": {
+      "transcript": "Tutor: Okay, thinking broadly, what larger practice do you think is at work when people put ideas into visual forms? And how could that be different from just one stored item?\nChild: Well, I- I guess that's how culture would develop\nChild: ... that's how\nChild: we're able to... share and progress in ideas when they're all stored externally to us\nTutor: Right, I get that.\nChild: as a society, we're all- we're all able to work on them together\nTutor: I see what you're getting at. When you say that, are you thinking of things like diagrams or maybe graphs, like not just prose.\nChild: Correct. Yeah, it could be computer code, it could be drawings... could be art\nChild: ... Um... many different ways... to externalize ideas\nTutor: Yeah, that's it. You're describing a shared visual practice, using symbols people recognize, and how it's wider than a single saved memory. That works.",
+      "outputs": {
+        "objectiveState": {
+          "choice": "completed",
+          "confidence": 0.51,
+          "probabilities": {
+            "completed": 0.61,
+            "incorrect": 0.04,
+            "unclear_or_incomplete": 0.35,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "confirmed_completion",
+          "confidence": 0.64,
+          "probabilities": {
+            "confirmed_completion": 0.71,
+            "clarifying": 0.03,
+            "helping": 0.25,
+            "asking": 0.01,
+            "other": 0
+          }
+        },
+        "concepts": {
+          "concept_visual-symbols": {
+            "choice": "demonstrated_prompted",
+            "confidence": 0.33,
+            "probabilities": {
+              "not_yet": 0.03,
+              "partial": 0.17,
+              "demonstrated_independent": 0.3,
+              "demonstrated_prompted": 0.5
+            }
+          },
+          "concept_cultural-agreement": {
+            "choice": "partial",
+            "confidence": 0.47,
+            "probabilities": {
+              "not_yet": 0.27,
+              "partial": 0.6,
+              "demonstrated_independent": 0.03,
+              "demonstrated_prompted": 0.1
+            }
+          },
+          "concept_beyond-prose": {
+            "choice": "demonstrated_prompted",
+            "confidence": 0.69,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.01,
+              "demonstrated_independent": 0.22,
+              "demonstrated_prompted": 0.77
+            }
+          },
+          "concept_abstract-concepts": {
+            "choice": "partial",
+            "confidence": 0.29,
+            "probabilities": {
+              "not_yet": 0.39,
+              "partial": 0.47,
+              "demonstrated_independent": 0.06,
+              "demonstrated_prompted": 0.08
+            }
+          }
+        },
+        "sources": {
+          "source_visual-symbols": {
+            "choice": "message_5",
+            "confidence": 1,
+            "probabilities": {
+              "none": 0,
+              "message_1": 0,
+              "message_3": 0,
+              "message_5": 1
+            }
+          },
+          "source_cultural-agreement": {
+            "choice": "none",
+            "confidence": 1,
+            "probabilities": {
+              "none": 1,
+              "message_1": 0,
+              "message_3": 0,
+              "message_5": 0
+            }
+          },
+          "source_beyond-prose": {
+            "choice": "message_5",
+            "confidence": 1,
+            "probabilities": {
+              "none": 0,
+              "message_1": 0,
+              "message_3": 0,
+              "message_5": 1
+            }
+          },
+          "source_abstract-concepts": {
+            "choice": "none",
+            "confidence": 1,
+            "probabilities": {
+              "none": 1,
+              "message_1": 0,
+              "message_3": 0,
+              "message_5": 0
+            }
+          }
+        }
+      }
+    }
+  },
+  "provenanceAnnotation": "Source selections are controlled, manually reviewed regression inputs added for utterance attribution; they were not returned by the recorded provider. Original concept/objective/tutor scores are unchanged."
+}

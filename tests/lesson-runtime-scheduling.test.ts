@@ -1,7 +1,9 @@
+import { useRuntimeFakeTimers } from "./helpers/runtime-harness";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ClientCommand, ProviderEvent } from "../lib/events";
 import { LessonRuntime } from "../lib/lesson-runtime/lesson-runtime";
-import { LESSON_START_INSTRUCTION } from "../lib/lesson-runtime/live-context";
+import { COUNTING_LESSON } from "../lib/lesson-runtime/counting-lesson";
+import { LESSON_START_INSTRUCTION } from "./helpers/counting-live-context";
 import { ANSWER_RECOVERY_INSTRUCTION } from "../lib/lesson-runtime/answer-recovery";
 import fillerTrace from "./fixtures/butterfly-filler-confirmation.json";
 
@@ -10,25 +12,14 @@ const transport = vi.hoisted(() => ({
   send: vi.fn<(command: ClientCommand) => void>(),
   close: vi.fn(),
 }));
-vi.mock("../lib/browser-transport", () => ({
-  BrowserTransport: class {
-    activeSourceId = 1;
-    setMicrophoneDiagnosticSink() {}
-    async start(receive: (event: ProviderEvent) => void) {
-      transport.receive = receive;
-      receive({ type: "session.started", sourceId: 1 });
-    }
-    openInput() {
-      return true;
-    }
-    send = transport.send;
-    close = transport.close;
-  },
-}));
+vi.mock("../lib/browser-transport", async () => {
+  const { mockBrowserTransport } = await import("./helpers/runtime-harness");
+  return { BrowserTransport: mockBrowserTransport(transport) };
+});
 
 let lesson: LessonRuntime;
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance", "Date"] });
+  useRuntimeFakeTimers();
   vi.clearAllMocks();
   transport.receive = undefined;
 });
@@ -43,7 +34,7 @@ function emit(event: ProviderEvent) {
   transport.receive?.(event);
 }
 function start(childAnswer = "One.") {
-  lesson = new LessonRuntime({} as HTMLAudioElement, () => {});
+  lesson = new LessonRuntime({} as HTMLAudioElement, () => {}, COUNTING_LESSON);
   lesson.confirmRendered(lesson.snapshot().display);
   const command = transport.send.mock.calls[0][0];
   emit({
@@ -257,7 +248,7 @@ it("holds and spends the missing-transcript request budget when transport send f
 it("sends an explicit parent start after initial render, once, without treating its acknowledgment as a tutor prompt", () => {
   const fetch = vi.fn();
   vi.stubGlobal("fetch", fetch);
-  lesson = new LessonRuntime({} as HTMLAudioElement, () => {});
+  lesson = new LessonRuntime({} as HTMLAudioElement, () => {}, COUNTING_LESSON);
   expect(transport.send).not.toHaveBeenCalled();
   const identity = lesson.snapshot().display;
   lesson.confirmRendered(identity);
@@ -835,7 +826,7 @@ it("replays the second-scene timing: discarded candidates recover eligibility bu
 it("binds a first child transcript delivered after its candidate was discarded, without granting prior completion", async () => {
   const fetch = vi.fn((_url: string, init: RequestInit) => Promise.resolve(correctResponse(init)));
   vi.stubGlobal("fetch", fetch);
-  lesson = new LessonRuntime({} as HTMLAudioElement, () => {});
+  lesson = new LessonRuntime({} as HTMLAudioElement, () => {}, COUNTING_LESSON);
   lesson.confirmRendered(lesson.snapshot().display);
   const command = transport.send.mock.calls[0][0];
   emit({
@@ -997,7 +988,7 @@ it("holds an untranscribed turn through stale child delivery, then requires fres
 it("reports null child provenance when a confirmed first turn ends without any child transcript", async () => {
   const fetch = vi.fn(async () => Response.json({ proposal: null }));
   vi.stubGlobal("fetch", fetch);
-  lesson = new LessonRuntime({} as HTMLAudioElement, () => {});
+  lesson = new LessonRuntime({} as HTMLAudioElement, () => {}, COUNTING_LESSON);
   lesson.confirmRendered(lesson.snapshot().display);
   emit({
     type: "context.appended",
@@ -1026,6 +1017,7 @@ it("exports the canonical classifier version and held-scene diagnostics", async 
   start();
   await vi.advanceTimersByTimeAsync(300);
   expect(Object.keys(JSON.parse(fetch.mock.calls[0][1]?.body as string))).toEqual([
+    "lessonId",
     "nodeId",
     "transcriptRevision",
     "transcript",
@@ -1066,7 +1058,7 @@ it("correlates real parser-to-runtime snapshots, rejection and pending-steering 
   const { describeTranscriptWire, transcriptDeliveryEvidence } = await import("./helpers/transcript-wire");
   const { parseProviderEvent } = await import("../lib/events");
   const records: import("./helpers/transcript-wire").WireRecord[] = [];
-  lesson = new LessonRuntime({} as HTMLAudioElement, () => {});
+  lesson = new LessonRuntime({} as HTMLAudioElement, () => {}, COUNTING_LESSON);
   lesson.confirmRendered(lesson.snapshot().display);
   const deliver = (delta: unknown, start_ms: unknown, end_ms: unknown) => {
     const raw = { type: "session.input_transcript.delta", delta, start_ms, end_ms };

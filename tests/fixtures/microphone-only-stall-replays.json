@@ -1,0 +1,2175 @@
+[
+  {
+    "recordingId": "8a7ce888-1608-4a75-8d5f-cfb766ec38a8",
+    "nodeId": "engram",
+    "recordedVisitId": 1,
+    "offsetMs": 3734.5,
+    "events": [
+      {
+        "atMs": 0.1,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": "Okay,",
+          "startMs": 1600,
+          "endMs": 1800
+        }
+      },
+      {
+        "atMs": 250.2,
+        "event": {
+          "type": "output.activity",
+          "state": "active"
+        }
+      },
+      {
+        "atMs": 355.9,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": " What",
+          "startMs": 2200,
+          "endMs": 2400
+        }
+      },
+      {
+        "atMs": 500.0,
+        "event": {
+          "type": "output.activity",
+          "state": "quiet"
+        }
+      },
+      {
+        "atMs": 800.1,
+        "event": {
+          "type": "output.activity",
+          "state": "active"
+        }
+      },
+      {
+        "atMs": 850.0,
+        "event": {
+          "type": "output.activity",
+          "state": "quiet"
+        }
+      },
+      {
+        "atMs": 870.5,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": " is",
+          "startMs": 2600,
+          "endMs": 2800
+        }
+      },
+      {
+        "atMs": 1027.7,
+        "event": {
+          "type": "microphone.activity_started"
+        }
+      },
+      {
+        "atMs": 1036.2,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": "an",
+          "startMs": 2800,
+          "endMs": 3000
+        }
+      },
+      {
+        "atMs": 1209.2,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": " engram",
+          "startMs": 3000,
+          "endMs": 3200
+        }
+      },
+      {
+        "atMs": 1252.6,
+        "event": {
+          "type": "microphone.activity_discarded"
+        }
+      },
+      {
+        "atMs": 1301.0,
+        "event": {
+          "type": "output.activity",
+          "state": "active"
+        }
+      },
+      {
+        "atMs": 1387.2,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": "?",
+          "startMs": 3200,
+          "endMs": 3400
+        }
+      },
+      {
+        "atMs": 2400.3,
+        "event": {
+          "type": "output.activity",
+          "state": "quiet"
+        }
+      },
+      {
+        "atMs": 3323.4,
+        "event": {
+          "type": "microphone.activity_started"
+        }
+      },
+      {
+        "atMs": 3406.6,
+        "event": {
+          "type": "microphone.speech_started"
+        }
+      },
+      {
+        "atMs": 4323.9,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": "The",
+          "startMs": 6400,
+          "endMs": 6600
+        }
+      },
+      {
+        "atMs": 4514.2,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " engram",
+          "startMs": 6600,
+          "endMs": 6800
+        }
+      },
+      {
+        "atMs": 4713.3,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " is",
+          "startMs": 6800,
+          "endMs": 7000
+        }
+      },
+      {
+        "atMs": 4917.1,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " a",
+          "startMs": 7000,
+          "endMs": 7200
+        }
+      },
+      {
+        "atMs": 5729.6,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " biological",
+          "startMs": 7800,
+          "endMs": 8000
+        }
+      },
+      {
+        "atMs": 6434.7,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " memory",
+          "startMs": 8400,
+          "endMs": 8600
+        }
+      },
+      {
+        "atMs": 6807.7,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": "Uh-h",
+          "startMs": 8600,
+          "endMs": 8800
+        }
+      },
+      {
+        "atMs": 6876.1,
+        "event": {
+          "type": "microphone.speech_stopped",
+          "quietMs": 905.6000000000004
+        }
+      },
+      {
+        "atMs": 6986.5,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": "uh.",
+          "startMs": 8800,
+          "endMs": 9000
+        }
+      },
+      {
+        "atMs": 7050.3,
+        "event": {
+          "type": "output.activity",
+          "state": "active"
+        }
+      },
+      {
+        "atMs": 7300.0,
+        "event": {
+          "type": "output.activity",
+          "state": "quiet"
+        }
+      },
+      {
+        "atMs": 7391.5,
+        "event": {
+          "type": "microphone.activity_started"
+        }
+      },
+      {
+        "atMs": 7475.4,
+        "event": {
+          "type": "microphone.speech_started"
+        }
+      },
+      {
+        "atMs": 8069.5,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": "It's a",
+          "startMs": 10200,
+          "endMs": 10400
+        }
+      },
+      {
+        "atMs": 8425.2,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " piece of",
+          "startMs": 10600,
+          "endMs": 10800
+        }
+      },
+      {
+        "atMs": 9571.1,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " Information",
+          "startMs": 11800,
+          "endMs": 12000
+        }
+      },
+      {
+        "atMs": 9930.7,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " we can",
+          "startMs": 12200,
+          "endMs": 12400
+        }
+      },
+      {
+        "atMs": 10357.7,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " store in",
+          "startMs": 12600,
+          "endMs": 12800
+        }
+      },
+      {
+        "atMs": 10516.9,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " our",
+          "startMs": 12800,
+          "endMs": 13000
+        }
+      },
+      {
+        "atMs": 10911.3,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " brain",
+          "startMs": 13200,
+          "endMs": 13400
+        }
+      },
+      {
+        "atMs": 11002.6,
+        "event": {
+          "type": "microphone.speech_stopped",
+          "quietMs": 900.8999999999996
+        }
+      },
+      {
+        "atMs": 11637.1,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": "Nicely",
+          "startMs": 13800,
+          "endMs": 14000
+        }
+      },
+      {
+        "atMs": 11649.6,
+        "event": {
+          "type": "microphone.activity_started"
+        }
+      },
+      {
+        "atMs": 11725.8,
+        "event": {
+          "type": "microphone.speech_started"
+        }
+      },
+      {
+        "atMs": 12001.2,
+        "event": {
+          "type": "output.activity",
+          "state": "active"
+        }
+      },
+      {
+        "atMs": 12050.0,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": "put.",
+          "startMs": 14200,
+          "endMs": 14400
+        }
+      },
+      {
+        "atMs": 12503.5,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": " That",
+          "startMs": 14600,
+          "endMs": 14800
+        }
+      },
+      {
+        "atMs": 12650.3,
+        "event": {
+          "type": "output.activity",
+          "state": "quiet"
+        }
+      },
+      {
+        "atMs": 12681.9,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": " captures",
+          "startMs": 14800,
+          "endMs": 15000
+        }
+      },
+      {
+        "atMs": 12693.0,
+        "event": {
+          "type": "microphone.speech_stopped",
+          "quietMs": 900.6000000000022
+        }
+      },
+      {
+        "atMs": 12750.9,
+        "event": {
+          "type": "output.activity",
+          "state": "active"
+        }
+      },
+      {
+        "atMs": 13082.6,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": " it.",
+          "startMs": 15200,
+          "endMs": 15400
+        }
+      },
+      {
+        "atMs": 13450.5,
+        "event": {
+          "type": "output.activity",
+          "state": "quiet"
+        }
+      },
+      {
+        "atMs": 13468.2,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": " We",
+          "startMs": 15600,
+          "endMs": 15800
+        }
+      },
+      {
+        "atMs": 13500.1,
+        "event": {
+          "type": "output.activity",
+          "state": "active"
+        }
+      },
+      {
+        "atMs": 13679.9,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": " can",
+          "startMs": 15800,
+          "endMs": 16000
+        }
+      },
+      {
+        "atMs": 13849.9,
+        "event": {
+          "type": "output.activity",
+          "state": "quiet"
+        }
+      },
+      {
+        "atMs": 13874.1,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": " move",
+          "startMs": 16000,
+          "endMs": 16200
+        }
+      },
+      {
+        "atMs": 14035.0,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": " on.",
+          "startMs": 16200,
+          "endMs": 16400
+        }
+      },
+      {
+        "atMs": 14250.4,
+        "event": {
+          "type": "output.activity",
+          "state": "active"
+        }
+      },
+      {
+        "atMs": 14451.0,
+        "event": {
+          "type": "output.activity",
+          "state": "quiet"
+        }
+      },
+      {
+        "atMs": 14501.2,
+        "event": {
+          "type": "output.activity",
+          "state": "active"
+        }
+      },
+      {
+        "atMs": 14950.5,
+        "event": {
+          "type": "output.activity",
+          "state": "quiet"
+        }
+      },
+      {
+        "atMs": 17484.4,
+        "event": {
+          "type": "microphone.activity_started"
+        }
+      },
+      {
+        "atMs": 17567.7,
+        "event": {
+          "type": "microphone.speech_started"
+        }
+      },
+      {
+        "atMs": 18484.4,
+        "event": {
+          "type": "microphone.speech_stopped",
+          "quietMs": 900.0999999999985
+        }
+      }
+    ],
+    "transcript": "Tutor: Okay, What is\nTutor: an engram?\nChild: The engram is a biological memory\nTutor: Uh-huh.\nChild: It's a piece of Information we can store in our brain\nTutor: Nicely\nTutor: put. That captures it. We can move on."
+  },
+  {
+    "recordingId": "6ce696bb-625f-498a-8784-16f7e64e556e",
+    "nodeId": "exographics",
+    "recordedVisitId": 4,
+    "offsetMs": 85375.10000002384,
+    "events": [
+      {
+        "atMs": 1357.3,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": "What does",
+          "startMs": 84600,
+          "endMs": 84800
+        }
+      },
+      {
+        "atMs": 1730.8,
+        "event": {
+          "type": "output.activity",
+          "state": "active"
+        }
+      },
+      {
+        "atMs": 1745.9,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": " exographics",
+          "startMs": 85000,
+          "endMs": 85200
+        }
+      },
+      {
+        "atMs": 1830.6,
+        "event": {
+          "type": "output.activity",
+          "state": "quiet"
+        }
+      },
+      {
+        "atMs": 1880.5,
+        "event": {
+          "type": "output.activity",
+          "state": "active"
+        }
+      },
+      {
+        "atMs": 1981.1,
+        "event": {
+          "type": "output.activity",
+          "state": "quiet"
+        }
+      },
+      {
+        "atMs": 2080.8,
+        "event": {
+          "type": "output.activity",
+          "state": "active"
+        }
+      },
+      {
+        "atMs": 2281.1,
+        "event": {
+          "type": "output.activity",
+          "state": "quiet"
+        }
+      },
+      {
+        "atMs": 2330.7,
+        "event": {
+          "type": "output.activity",
+          "state": "active"
+        }
+      },
+      {
+        "atMs": 2430.8,
+        "event": {
+          "type": "output.activity",
+          "state": "quiet"
+        }
+      },
+      {
+        "atMs": 2480.6,
+        "event": {
+          "type": "output.activity",
+          "state": "active"
+        }
+      },
+      {
+        "atMs": 2490.4,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": " mean?",
+          "startMs": 85800,
+          "endMs": 86000
+        }
+      },
+      {
+        "atMs": 2880.0,
+        "event": {
+          "type": "output.activity",
+          "state": "quiet"
+        }
+      },
+      {
+        "atMs": 2931.1,
+        "event": {
+          "type": "output.activity",
+          "state": "active"
+        }
+      },
+      {
+        "atMs": 3031.2,
+        "event": {
+          "type": "output.activity",
+          "state": "quiet"
+        }
+      },
+      {
+        "atMs": 3081.0,
+        "event": {
+          "type": "output.activity",
+          "state": "active"
+        }
+      },
+      {
+        "atMs": 3530.7,
+        "event": {
+          "type": "output.activity",
+          "state": "quiet"
+        }
+      },
+      {
+        "atMs": 4751.8,
+        "event": {
+          "type": "microphone.activity_started"
+        }
+      },
+      {
+        "atMs": 4835.0,
+        "event": {
+          "type": "microphone.speech_started"
+        }
+      },
+      {
+        "atMs": 5030.2,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": "[tongue",
+          "startMs": 88400,
+          "endMs": 88600
+        }
+      },
+      {
+        "atMs": 5195.0,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " click",
+          "startMs": 88600,
+          "endMs": 88800
+        }
+      },
+      {
+        "atMs": 5998.8,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": "] So",
+          "startMs": 89400,
+          "endMs": 89600
+        }
+      },
+      {
+        "atMs": 7390.3,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " exographics",
+          "startMs": 90800,
+          "endMs": 91000
+        }
+      },
+      {
+        "atMs": 8633.4,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": "... [sn",
+          "startMs": 92000,
+          "endMs": 92200
+        }
+      },
+      {
+        "atMs": 8791.5,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": "iff",
+          "startMs": 92200,
+          "endMs": 92400
+        }
+      },
+      {
+        "atMs": 9195.1,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " ]are",
+          "startMs": 92600,
+          "endMs": 92800
+        }
+      },
+      {
+        "atMs": 10194.1,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": "... the",
+          "startMs": 93600,
+          "endMs": 93800
+        }
+      },
+      {
+        "atMs": 10592.6,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " visual",
+          "startMs": 94000,
+          "endMs": 94200
+        }
+      },
+      {
+        "atMs": 11686.8,
+        "event": {
+          "type": "microphone.speech_stopped",
+          "quietMs": 900.5
+        }
+      },
+      {
+        "atMs": 11810.9,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " representation",
+          "startMs": 95200,
+          "endMs": 95400
+        }
+      },
+      {
+        "atMs": 12628.4,
+        "event": {
+          "type": "microphone.activity_started"
+        }
+      },
+      {
+        "atMs": 12710.6,
+        "event": {
+          "type": "microphone.speech_started"
+        }
+      },
+      {
+        "atMs": 13961.2,
+        "event": {
+          "type": "microphone.speech_stopped",
+          "quietMs": 901.7000000000116
+        }
+      },
+      {
+        "atMs": 14199.1,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": "... of",
+          "startMs": 97600,
+          "endMs": 97800
+        }
+      },
+      {
+        "atMs": 15236.5,
+        "event": {
+          "type": "microphone.activity_started"
+        }
+      },
+      {
+        "atMs": 15319.9,
+        "event": {
+          "type": "microphone.speech_started"
+        }
+      },
+      {
+        "atMs": 16806.7,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": "... ideas",
+          "startMs": 100200,
+          "endMs": 100400
+        }
+      },
+      {
+        "atMs": 17429.0,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " external",
+          "startMs": 100800,
+          "endMs": 101000
+        }
+      },
+      {
+        "atMs": 17609.4,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " to",
+          "startMs": 101000,
+          "endMs": 101200
+        }
+      },
+      {
+        "atMs": 17977.3,
+        "event": {
+          "type": "microphone.speech_stopped",
+          "quietMs": 907.8000000000029
+        }
+      },
+      {
+        "atMs": 18002.1,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " us",
+          "startMs": 101400,
+          "endMs": 101600
+        }
+      },
+      {
+        "atMs": 18077.0,
+        "event": {
+          "type": "microphone.activity_started"
+        }
+      },
+      {
+        "atMs": 18244.8,
+        "event": {
+          "type": "microphone.speech_started"
+        }
+      },
+      {
+        "atMs": 19191.9,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": "... to our",
+          "startMs": 102600,
+          "endMs": 102800
+        }
+      },
+      {
+        "atMs": 19760.9,
+        "event": {
+          "type": "microphone.speech_stopped",
+          "quietMs": 900.3000000000029
+        }
+      },
+      {
+        "atMs": 19990.2,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " minds",
+          "startMs": 103400,
+          "endMs": 103600
+        }
+      },
+      {
+        "atMs": 20635.9,
+        "event": {
+          "type": "microphone.activity_started"
+        }
+      },
+      {
+        "atMs": 20718.5,
+        "event": {
+          "type": "microphone.speech_started"
+        }
+      },
+      {
+        "atMs": 22165.9,
+        "event": {
+          "type": "microphone.speech_stopped",
+          "quietMs": 906.5
+        }
+      },
+      {
+        "atMs": 22413.9,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": ". Um",
+          "startMs": 105800,
+          "endMs": 106000
+        }
+      },
+      {
+        "atMs": 23072.4,
+        "event": {
+          "type": "microphone.activity_started"
+        }
+      },
+      {
+        "atMs": 23155.6,
+        "event": {
+          "type": "microphone.speech_started"
+        }
+      },
+      {
+        "atMs": 24221.8,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": "... I can",
+          "startMs": 107600,
+          "endMs": 107800
+        }
+      },
+      {
+        "atMs": 24391.1,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " think",
+          "startMs": 107800,
+          "endMs": 108000
+        }
+      },
+      {
+        "atMs": 24817.0,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " of",
+          "startMs": 108200,
+          "endMs": 108400
+        }
+      },
+      {
+        "atMs": 25287.2,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " something",
+          "startMs": 108600,
+          "endMs": 108800
+        }
+      },
+      {
+        "atMs": 25418.6,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " like",
+          "startMs": 108800,
+          "endMs": 109000
+        }
+      },
+      {
+        "atMs": 25612.9,
+        "event": {
+          "type": "microphone.speech_stopped",
+          "quietMs": 907.3999999999942
+        }
+      },
+      {
+        "atMs": 26108.0,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " math",
+          "startMs": 109400,
+          "endMs": 109600
+        }
+      },
+      {
+        "atMs": 27048.0,
+        "event": {
+          "type": "microphone.activity_started"
+        }
+      },
+      {
+        "atMs": 27131.6,
+        "event": {
+          "type": "microphone.speech_started"
+        }
+      },
+      {
+        "atMs": 27550.7,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": "Okay.",
+          "startMs": 110800,
+          "endMs": 111000
+        }
+      },
+      {
+        "atMs": 27880.6,
+        "event": {
+          "type": "output.activity",
+          "state": "active"
+        }
+      },
+      {
+        "atMs": 28280.8,
+        "event": {
+          "type": "output.activity",
+          "state": "quiet"
+        }
+      },
+      {
+        "atMs": 28612.6,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": "Um",
+          "startMs": 112000,
+          "endMs": 112200
+        }
+      },
+      {
+        "atMs": 29069.0,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": ", where",
+          "startMs": 112400,
+          "endMs": 112600
+        }
+      },
+      {
+        "atMs": 29201.6,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " we use",
+          "startMs": 112600,
+          "endMs": 112800
+        }
+      },
+      {
+        "atMs": 29598.7,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " symbols",
+          "startMs": 113000,
+          "endMs": 113200
+        }
+      },
+      {
+        "atMs": 30036.2,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": ", written",
+          "startMs": 113400,
+          "endMs": 113600
+        }
+      },
+      {
+        "atMs": 30259.2,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " down",
+          "startMs": 113600,
+          "endMs": 113800
+        }
+      },
+      {
+        "atMs": 30389.8,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " on a",
+          "startMs": 113800,
+          "endMs": 114000
+        }
+      },
+      {
+        "atMs": 31189.2,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " page",
+          "startMs": 114600,
+          "endMs": 114800
+        }
+      },
+      {
+        "atMs": 32021.3,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": ". That's a",
+          "startMs": 115400,
+          "endMs": 115600
+        }
+      },
+      {
+        "atMs": 32180.9,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " good",
+          "startMs": 115600,
+          "endMs": 115800
+        }
+      },
+      {
+        "atMs": 32822.7,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " example of",
+          "startMs": 116200,
+          "endMs": 116400
+        }
+      },
+      {
+        "atMs": 32978.2,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " a",
+          "startMs": 116400,
+          "endMs": 116600
+        }
+      },
+      {
+        "atMs": 33591.9,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": ", exo",
+          "startMs": 117000,
+          "endMs": 117200
+        }
+      },
+      {
+        "atMs": 33888.0,
+        "event": {
+          "type": "microphone.speech_stopped",
+          "quietMs": 906.8000000000029
+        }
+      },
+      {
+        "atMs": 34003.9,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": "-graphic",
+          "startMs": 117400,
+          "endMs": 117600
+        }
+      },
+      {
+        "atMs": 35475.8,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": "And",
+          "startMs": 118800,
+          "endMs": 119000
+        }
+      },
+      {
+        "atMs": 35891.7,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": " how",
+          "startMs": 119200,
+          "endMs": 119400
+        }
+      },
+      {
+        "atMs": 36104.3,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": " do",
+          "startMs": 119400,
+          "endMs": 119600
+        }
+      },
+      {
+        "atMs": 36129.8,
+        "event": {
+          "type": "output.activity",
+          "state": "active"
+        }
+      },
+      {
+        "atMs": 36481.2,
+        "event": {
+          "type": "output.activity",
+          "state": "quiet"
+        }
+      },
+      {
+        "atMs": 36580.8,
+        "event": {
+          "type": "output.activity",
+          "state": "active"
+        }
+      },
+      {
+        "atMs": 36610.4,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": " those",
+          "startMs": 119800,
+          "endMs": 120000
+        }
+      },
+      {
+        "atMs": 36679.9,
+        "event": {
+          "type": "output.activity",
+          "state": "quiet"
+        }
+      },
+      {
+        "atMs": 36721.2,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": " marks",
+          "startMs": 120000,
+          "endMs": 120200
+        }
+      },
+      {
+        "atMs": 36729.8,
+        "event": {
+          "type": "output.activity",
+          "state": "active"
+        }
+      },
+      {
+        "atMs": 37073.8,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": " get",
+          "startMs": 120400,
+          "endMs": 120600
+        }
+      },
+      {
+        "atMs": 37301.4,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": " their",
+          "startMs": 120600,
+          "endMs": 120800
+        }
+      },
+      {
+        "atMs": 37473.1,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": " meaning?",
+          "startMs": 120800,
+          "endMs": 121000
+        }
+      },
+      {
+        "atMs": 37580.9,
+        "event": {
+          "type": "output.activity",
+          "state": "quiet"
+        }
+      },
+      {
+        "atMs": 37630.7,
+        "event": {
+          "type": "output.activity",
+          "state": "active"
+        }
+      },
+      {
+        "atMs": 37730.9,
+        "event": {
+          "type": "output.activity",
+          "state": "quiet"
+        }
+      },
+      {
+        "atMs": 37781.2,
+        "event": {
+          "type": "output.activity",
+          "state": "active"
+        }
+      },
+      {
+        "atMs": 37881.0,
+        "event": {
+          "type": "output.activity",
+          "state": "quiet"
+        }
+      },
+      {
+        "atMs": 37930.6,
+        "event": {
+          "type": "output.activity",
+          "state": "active"
+        }
+      },
+      {
+        "atMs": 38430.9,
+        "event": {
+          "type": "output.activity",
+          "state": "quiet"
+        }
+      },
+      {
+        "atMs": 40124.5,
+        "event": {
+          "type": "microphone.activity_started"
+        }
+      },
+      {
+        "atMs": 40281.9,
+        "event": {
+          "type": "microphone.activity_discarded"
+        }
+      },
+      {
+        "atMs": 40414.6,
+        "event": {
+          "type": "microphone.activity_started"
+        }
+      },
+      {
+        "atMs": 40605.8,
+        "event": {
+          "type": "microphone.activity_discarded"
+        }
+      },
+      {
+        "atMs": 40738.4,
+        "event": {
+          "type": "microphone.activity_started"
+        }
+      },
+      {
+        "atMs": 40971.2,
+        "event": {
+          "type": "microphone.speech_started"
+        }
+      },
+      {
+        "atMs": 41869.1,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": "[tongue",
+          "startMs": 125200,
+          "endMs": 125400
+        }
+      },
+      {
+        "atMs": 42057.1,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " click ]Well",
+          "startMs": 125400,
+          "endMs": 125600
+        }
+      },
+      {
+        "atMs": 42211.9,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": ", we have",
+          "startMs": 125600,
+          "endMs": 125800
+        }
+      },
+      {
+        "atMs": 42437.5,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " a",
+          "startMs": 125800,
+          "endMs": 126000
+        }
+      },
+      {
+        "atMs": 42582.7,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " shared",
+          "startMs": 126000,
+          "endMs": 126200
+        }
+      },
+      {
+        "atMs": 43228.4,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " understanding of",
+          "startMs": 126600,
+          "endMs": 126800
+        }
+      },
+      {
+        "atMs": 43389.6,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " what",
+          "startMs": 126800,
+          "endMs": 127000
+        }
+      },
+      {
+        "atMs": 43788.7,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " those",
+          "startMs": 127200,
+          "endMs": 127400
+        }
+      },
+      {
+        "atMs": 44381.1,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " symbols",
+          "startMs": 127800,
+          "endMs": 128000
+        }
+      },
+      {
+        "atMs": 44980.7,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " mean",
+          "startMs": 128400,
+          "endMs": 128600
+        }
+      },
+      {
+        "atMs": 45990.3,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": "... Like",
+          "startMs": 129400,
+          "endMs": 129600
+        }
+      },
+      {
+        "atMs": 46459.3,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " numbers",
+          "startMs": 129800,
+          "endMs": 130000
+        }
+      },
+      {
+        "atMs": 46588.6,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": ", for",
+          "startMs": 130000,
+          "endMs": 130200
+        }
+      },
+      {
+        "atMs": 47191.9,
+        "event": {
+          "type": "microphone.speech_stopped",
+          "quietMs": 905.1999999999825
+        }
+      },
+      {
+        "atMs": 47371.8,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " example",
+          "startMs": 130800,
+          "endMs": 131000
+        }
+      },
+      {
+        "atMs": 47980.0,
+        "event": {
+          "type": "microphone.activity_started"
+        }
+      },
+      {
+        "atMs": 48063.6,
+        "event": {
+          "type": "microphone.speech_started"
+        }
+      },
+      {
+        "atMs": 49253.2,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": ". We all",
+          "startMs": 132600,
+          "endMs": 132800
+        }
+      },
+      {
+        "atMs": 49411.4,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " have a",
+          "startMs": 132800,
+          "endMs": 133000
+        }
+      },
+      {
+        "atMs": 49977.5,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " common",
+          "startMs": 133400,
+          "endMs": 133600
+        }
+      },
+      {
+        "atMs": 50809.5,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " understanding of",
+          "startMs": 134200,
+          "endMs": 134400
+        }
+      },
+      {
+        "atMs": 50987.4,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " what",
+          "startMs": 134400,
+          "endMs": 134600
+        }
+      },
+      {
+        "atMs": 51389.1,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " 1",
+          "startMs": 134800,
+          "endMs": 135000
+        }
+      },
+      {
+        "atMs": 51899.3,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": ", 2",
+          "startMs": 135200,
+          "endMs": 135400
+        }
+      },
+      {
+        "atMs": 52009.4,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": ", and",
+          "startMs": 135400,
+          "endMs": 135600
+        }
+      },
+      {
+        "atMs": 52298.4,
+        "event": {
+          "type": "microphone.speech_stopped",
+          "quietMs": 900.7999999999884
+        }
+      },
+      {
+        "atMs": 52418.9,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " 3",
+          "startMs": 135800,
+          "endMs": 136000
+        }
+      },
+      {
+        "atMs": 52581.2,
+        "event": {
+          "type": "microphone.activity_started"
+        }
+      },
+      {
+        "atMs": 52663.2,
+        "event": {
+          "type": "microphone.speech_started"
+        }
+      },
+      {
+        "atMs": 53811.6,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": "... mean",
+          "startMs": 137200,
+          "endMs": 137400
+        }
+      },
+      {
+        "atMs": 54582.7,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": ". They're",
+          "startMs": 138000,
+          "endMs": 138200
+        }
+      },
+      {
+        "atMs": 54985.6,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " abstract",
+          "startMs": 138400,
+          "endMs": 138600
+        }
+      },
+      {
+        "atMs": 55611.2,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " ideas",
+          "startMs": 139000,
+          "endMs": 139200
+        }
+      },
+      {
+        "atMs": 56389.0,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": ", but",
+          "startMs": 139800,
+          "endMs": 140000
+        }
+      },
+      {
+        "atMs": 57194.8,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": "... we",
+          "startMs": 140600,
+          "endMs": 140800
+        }
+      },
+      {
+        "atMs": 57586.4,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " create",
+          "startMs": 141000,
+          "endMs": 141200
+        }
+      },
+      {
+        "atMs": 57989.4,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " these",
+          "startMs": 141400,
+          "endMs": 141600
+        }
+      },
+      {
+        "atMs": 58643.6,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " shared",
+          "startMs": 142000,
+          "endMs": 142200
+        }
+      },
+      {
+        "atMs": 58782.6,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": "... a",
+          "startMs": 142200,
+          "endMs": 142400
+        }
+      },
+      {
+        "atMs": 59190.2,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " shared",
+          "startMs": 142600,
+          "endMs": 142800
+        }
+      },
+      {
+        "atMs": 59616.7,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " understanding",
+          "startMs": 143000,
+          "endMs": 143200
+        }
+      },
+      {
+        "atMs": 59830.0,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " of",
+          "startMs": 143200,
+          "endMs": 143400
+        }
+      },
+      {
+        "atMs": 60030.3,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " these",
+          "startMs": 143400,
+          "endMs": 143600
+        }
+      },
+      {
+        "atMs": 60230.2,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " symbols",
+          "startMs": 143600,
+          "endMs": 143800
+        }
+      },
+      {
+        "atMs": 60426.3,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " to",
+          "startMs": 143800,
+          "endMs": 144000
+        }
+      },
+      {
+        "atMs": 60643.9,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " make",
+          "startMs": 144000,
+          "endMs": 144200
+        }
+      },
+      {
+        "atMs": 60823.5,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " sense of",
+          "startMs": 144200,
+          "endMs": 144400
+        }
+      },
+      {
+        "atMs": 60911.1,
+        "event": {
+          "type": "microphone.speech_stopped",
+          "quietMs": 905
+        }
+      },
+      {
+        "atMs": 60990.3,
+        "event": {
+          "type": "transcript",
+          "speaker": "child",
+          "delta": " them",
+          "startMs": 144400,
+          "endMs": 144600
+        }
+      },
+      {
+        "atMs": 62369.5,
+        "event": {
+          "type": "microphone.activity_started"
+        }
+      },
+      {
+        "atMs": 62452.9,
+        "event": {
+          "type": "microphone.speech_started"
+        }
+      },
+      {
+        "atMs": 63406.3,
+        "event": {
+          "type": "microphone.speech_stopped",
+          "quietMs": 903.6999999999825
+        }
+      },
+      {
+        "atMs": 63502.1,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": "Yeah,",
+          "startMs": 146800,
+          "endMs": 147000
+        }
+      },
+      {
+        "atMs": 63683.0,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": " that",
+          "startMs": 147000,
+          "endMs": 147200
+        }
+      },
+      {
+        "atMs": 63887.8,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": " gets",
+          "startMs": 147200,
+          "endMs": 147400
+        }
+      },
+      {
+        "atMs": 63930.7,
+        "event": {
+          "type": "output.activity",
+          "state": "active"
+        }
+      },
+      {
+        "atMs": 64108.1,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": " the",
+          "startMs": 147400,
+          "endMs": 147600
+        }
+      },
+      {
+        "atMs": 64270.9,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": " idea",
+          "startMs": 147600,
+          "endMs": 147800
+        }
+      },
+      {
+        "atMs": 64288.0,
+        "event": {
+          "type": "output.activity",
+          "state": "quiet"
+        }
+      },
+      {
+        "atMs": 64380.4,
+        "event": {
+          "type": "output.activity",
+          "state": "active"
+        }
+      },
+      {
+        "atMs": 64531.0,
+        "event": {
+          "type": "output.activity",
+          "state": "quiet"
+        }
+      },
+      {
+        "atMs": 64580.5,
+        "event": {
+          "type": "output.activity",
+          "state": "active"
+        }
+      },
+      {
+        "atMs": 64670.6,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": " across",
+          "startMs": 148000,
+          "endMs": 148200
+        }
+      },
+      {
+        "atMs": 64682.5,
+        "event": {
+          "type": "output.activity",
+          "state": "quiet"
+        }
+      },
+      {
+        "atMs": 64729.8,
+        "event": {
+          "type": "output.activity",
+          "state": "active"
+        }
+      },
+      {
+        "atMs": 64779.7,
+        "event": {
+          "type": "output.activity",
+          "state": "quiet"
+        }
+      },
+      {
+        "atMs": 64830.7,
+        "event": {
+          "type": "output.activity",
+          "state": "active"
+        }
+      },
+      {
+        "atMs": 65030.3,
+        "event": {
+          "type": "output.activity",
+          "state": "quiet"
+        }
+      },
+      {
+        "atMs": 65080.6,
+        "event": {
+          "type": "output.activity",
+          "state": "active"
+        }
+      },
+      {
+        "atMs": 65270.7,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": " nicely.",
+          "startMs": 148400,
+          "endMs": 148600
+        }
+      },
+      {
+        "atMs": 65287.6,
+        "event": {
+          "type": "output.activity",
+          "state": "quiet"
+        }
+      },
+      {
+        "atMs": 65330.1,
+        "event": {
+          "type": "output.activity",
+          "state": "active"
+        }
+      },
+      {
+        "atMs": 65942.0,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": " We",
+          "startMs": 149200,
+          "endMs": 149400
+        }
+      },
+      {
+        "atMs": 66104.1,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": " don't",
+          "startMs": 149400,
+          "endMs": 149600
+        }
+      },
+      {
+        "atMs": 66130.1,
+        "event": {
+          "type": "output.activity",
+          "state": "quiet"
+        }
+      },
+      {
+        "atMs": 66512.3,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": " need",
+          "startMs": 149800,
+          "endMs": 150000
+        }
+      },
+      {
+        "atMs": 66680.2,
+        "event": {
+          "type": "output.activity",
+          "state": "active"
+        }
+      },
+      {
+        "atMs": 66697.3,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": " to push",
+          "startMs": 150000,
+          "endMs": 150200
+        }
+      },
+      {
+        "atMs": 66877.3,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": " this",
+          "startMs": 150200,
+          "endMs": 150400
+        }
+      },
+      {
+        "atMs": 66895.1,
+        "event": {
+          "type": "output.activity",
+          "state": "quiet"
+        }
+      },
+      {
+        "atMs": 66930.0,
+        "event": {
+          "type": "output.activity",
+          "state": "active"
+        }
+      },
+      {
+        "atMs": 67062.9,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": " any",
+          "startMs": 150400,
+          "endMs": 150600
+        }
+      },
+      {
+        "atMs": 67483.6,
+        "event": {
+          "type": "transcript",
+          "speaker": "sprout",
+          "delta": " further.",
+          "startMs": 150800,
+          "endMs": 151000
+        }
+      },
+      {
+        "atMs": 67681.2,
+        "event": {
+          "type": "output.activity",
+          "state": "quiet"
+        }
+      },
+      {
+        "atMs": 67730.7,
+        "event": {
+          "type": "output.activity",
+          "state": "active"
+        }
+      },
+      {
+        "atMs": 68530.5,
+        "event": {
+          "type": "output.activity",
+          "state": "quiet"
+        }
+      },
+      {
+        "atMs": 69539.6,
+        "event": {
+          "type": "microphone.activity_started"
+        }
+      },
+      {
+        "atMs": 69772.9,
+        "event": {
+          "type": "microphone.activity_discarded"
+        }
+      }
+    ],
+    "transcript": "Tutor: What does exographics mean?\nChild: [tongue click] So exographics... [sniff ]are... the visual representation\nChild: ... of\nChild: ... ideas external to us\nChild: ... to our minds\nChild: . Um\nChild: ... I can think of something like math\nTutor: Okay.\nChild: Um, where we use symbols, written down on a page. That's a good example of a, exo-graphic\nTutor: And how do those marks get their meaning?\nChild: [tongue click ]Well, we have a shared understanding of what those symbols mean... Like numbers, for example\nChild: . We all have a common understanding of what 1, 2, and 3\nChild: ... mean. They're abstract ideas, but... we create these shared... a shared understanding of these symbols to make sense of them\nTutor: Yeah, that gets the idea across nicely. We don't need to push this any further."
+  }
+]

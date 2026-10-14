@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import type { LessonObservation } from "../../../lib/lesson-runtime/lesson-runtime";
 import { COUNTING_LESSON_GRAPH, type CountingNodeId } from "../../../lib/lesson-runtime/counting-lesson";
-import { runtimeSource } from "../../../lib/lesson-runtime/lesson-runtime-reducer";
+import { runtimeSource } from "../../helpers/counting-runtime";
 import type { ChildScenario, Checkpoint } from "../../helpers/child-scenario";
 import { matchesLessonEvent, type LessonObserver } from "../../helpers/lesson-observer";
 import { classifierEvidence, currentChildText, detail } from "./evidence";
@@ -85,7 +85,7 @@ export function prerequisiteDecision(value: LessonObservation, from: Checkpoint,
     "confirmed_completion",
     "prerequisite lacks tutor confirmation classification",
   );
-  const quantity = COUNTING_LESSON_GRAPH[state.nodeId].quantity;
+  const quantity = COUNTING_LESSON_GRAPH[state.nodeId as CountingNodeId].quantity;
   const word = ["one", "two", "three"][quantity - 1];
   assert(
     new RegExp(`\\b(?:${word}|${quantity})\\b`, "i").test(currentChildText(value.events, request)),

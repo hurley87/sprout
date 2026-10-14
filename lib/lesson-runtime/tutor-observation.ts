@@ -35,3 +35,15 @@ export function tutorObservation(transcript: string): TutorObservation | null {
     precedingChildAttempt: index > 0 ? messages[index - 1].text : null,
   };
 }
+
+/** Exclude non-answers before assigning a concept source. This is a provenance
+ * guard, not a semantic classifier: a substantive utterance still needs model evidence. */
+export function substantiveLearnerText(text: string) {
+  const words = text.replace(/\[[^\]]*(?:\]|$)/gu, " ").toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+  const phrase = words.join(" ");
+  if (/^(?:that s |that is )?right(?: that s right)?$/u.test(phrase)) return false;
+  if (/^(?:can|could|would|mean)$/u.test(phrase)) return false;
+  if (/^(?:i|it|we|they|you)(?: can| mean| could| would| do| think| guess)?$/u.test(phrase)) return false;
+  if (!phrase || /^(?:i )?(?:don t know|do not know|not sure|no idea)(?: yet)?$/u.test(phrase)) return false;
+  return words.some(word => !["yes", "yeah", "yep", "yup", "no", "nope", "okay", "ok", "right", "sure", "correct", "thanks", "thank", "you", "uh", "um", "hmm", "well", "ah", "oh", "mhm", "so"].includes(word));
+}

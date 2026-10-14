@@ -68,6 +68,7 @@ export class BrowserTransport {
   private mic?: MediaStream;
   private initialMediaReady = false;
   private initialStartedEmitted = false;
+  private lessonId = "counting";
   private turnDetector?: MicrophoneTurnDetector;
   // The single record of "this attempt is over", set by close(). Late
   // callbacks and resolved awaits check it instead of tracking their own flags.
@@ -105,7 +106,8 @@ export class BrowserTransport {
     return this.abort.signal.aborted;
   }
 
-  async start(onEvent: (event: ProviderEvent) => void, onFailure: (message: string) => void) {
+  async start(onEvent: (event: ProviderEvent) => void, onFailure: (message: string) => void, lessonId = "counting") {
+    this.lessonId = lessonId;
     if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection)
       throw new Error("Use a MacBook browser with microphone support, on localhost.");
     if (this.mic || this.onEvent || this.cancelled) throw new Error("Transport already started or ended");
@@ -312,7 +314,7 @@ export class BrowserTransport {
     const response = await fetch("/api/live", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sdp }),
+      body: JSON.stringify({ sdp, lessonId: this.lessonId }),
       signal: source.abort.signal,
     });
     if (!this.live(source)) return;

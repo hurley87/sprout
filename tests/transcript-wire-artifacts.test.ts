@@ -6,7 +6,7 @@ import path from "node:path";
 import { installChildScenarios } from "./helpers/child-scenario";
 import { LessonObserver } from "./helpers/lesson-observer";
 import { describeTranscriptWire, type WireCapture } from "./helpers/transcript-wire";
-import { createLessonRuntime } from "../lib/lesson-runtime/lesson-runtime-reducer";
+import { createLessonRuntime } from "./helpers/counting-runtime";
 import type { LessonObservation } from "../lib/lesson-runtime/lesson-runtime";
 
 it("retains bounded wire metadata and delivery layers in failure artifacts before cleanup", async () => {

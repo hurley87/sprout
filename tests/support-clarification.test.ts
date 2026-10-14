@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { SupportClarification } from "../lib/lesson-runtime/support-clarification";
-import { classificationSource, createLessonRuntime } from "../lib/lesson-runtime/lesson-runtime-reducer";
+import { classificationSource, createLessonRuntime } from "./helpers/counting-runtime";
 
 const state = () => ({
   ...createLessonRuntime("runtime"),

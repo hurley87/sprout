@@ -1,0 +1,71 @@
+{
+  "source": "7 October question-2 stall: original transcript and normalized scores from a bounded live replay after decoupling tutor confirmation from mastery.",
+  "transcript": "Tutor: What is an exogram?\nChild: So this is an idea I've stored outside of your brain\nChild: . Like you know, writing down a note on a piece of paper\nTutor: Mm-hmm. Yeah. You're pointing to something outside your head. Could a note or a sketch keep some information safe even if you weren't holding it in your mind right now?\nChild: That's right. It's more durable\nChild: . I'm able to\nChild: ... store information outside of my brain or external to my mind\nChild: . And a good example is something written down on a piece of paper\nTutor: Mm-hmm. Yeah, that fits. You've described it as memory kept in something like a note, rather than in your brain.",
+  "outputs": {
+    "objectiveState": {
+      "choice": "completed",
+      "confidence": 0.66,
+      "probabilities": {
+        "completed": 0.73,
+        "incorrect": 0.01,
+        "unclear_or_incomplete": 0.26,
+        "unresolved_help": 0,
+        "no_attempt": 0
+      }
+    },
+    "tutorState": {
+      "choice": "confirmed_completion",
+      "confidence": 1,
+      "probabilities": {
+        "confirmed_completion": 1,
+        "clarifying": 0,
+        "helping": 0,
+        "asking": 0,
+        "other": 0
+      }
+    },
+    "concepts": {
+      "concept_engram-biological": {
+        "choice": "not_yet",
+        "confidence": 0.16,
+        "probabilities": {
+          "not_yet": 0.37,
+          "partial": 0.18,
+          "demonstrated_independent": 0.22,
+          "demonstrated_prompted": 0.23
+        }
+      },
+      "concept_exogram-non-biological": {
+        "choice": "demonstrated_independent",
+        "confidence": 0.48,
+        "probabilities": {
+          "not_yet": 0,
+          "partial": 0.03,
+          "demonstrated_independent": 0.61,
+          "demonstrated_prompted": 0.36
+        }
+      }
+    },
+    "sources": {
+      "source_engram-biological": {
+        "choice": "none",
+        "confidence": 1,
+        "probabilities": {
+          "none": 1,
+          "message_1": 0,
+          "message_3": 0
+        }
+      },
+      "source_exogram-non-biological": {
+        "choice": "message_1",
+        "confidence": 1,
+        "probabilities": {
+          "none": 0,
+          "message_1": 1,
+          "message_3": 0
+        }
+      }
+    }
+  },
+  "provenanceAnnotation": "Source selections are controlled, manually reviewed regression inputs added for utterance attribution; they were not returned by the recorded provider. Original concept/objective/tutor scores are unchanged."
+}
