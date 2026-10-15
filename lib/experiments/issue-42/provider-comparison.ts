@@ -404,8 +404,8 @@ export async function runComparison(benchmark: Benchmark, plan: Plan, options: R
     if (plan.version === 2) attempt.calls = calls;
     const bounded: Transport = async (arm, request, adapterSignal) => {
       if (signal.aborted || adapterSignal.aborted) {
-        attempt.failure = "cancelled";
-        throw new Error("cancelled");
+        attempt.failure = signal.aborted ? "cancelled" : "timeout";
+        throw new Error("request stopped");
       }
       if (requestCount >= plan.maxRequests) {
         attempt.failure = "budget_exhausted";
@@ -442,16 +442,18 @@ export async function runComparison(benchmark: Benchmark, plan: Plan, options: R
       calls.push(call);
       const start = now();
       const controller = new AbortController();
-      const cancel = () => {
-        attempt.failure = "cancelled";
+      const stop = (reason: "cancelled" | "timeout") => {
+        if (controller.signal.aborted) return;
+        attempt.failure = reason;
         controller.abort();
       };
+      const cancel = () => stop("cancelled");
+      // The adapter aborts for its total deadline as well as caller cancellation.
+      // Only the caller signal establishes explicit cancellation.
+      const adapterStopped = () => stop(signal.aborted ? "cancelled" : "timeout");
       signal.addEventListener("abort", cancel, { once: true });
-      adapterSignal.addEventListener("abort", cancel, { once: true });
-      const timer = setTimeout(() => {
-        attempt.failure = "timeout";
-        controller.abort();
-      }, plan.timeoutMs);
+      adapterSignal.addEventListener("abort", adapterStopped, { once: true });
+      const timer = setTimeout(() => stop("timeout"), plan.timeoutMs);
       let stopped!: () => void;
       const aborted = new Promise<never>((_, reject) => {
         stopped = () => reject(new Error("request stopped"));
@@ -483,7 +485,7 @@ export async function runComparison(benchmark: Benchmark, plan: Plan, options: R
         attempt.latencyMs = Number.isFinite(elapsed) && elapsed >= 0 ? (attempt.latencyMs ?? 0) + elapsed : null;
         clearTimeout(timer);
         signal.removeEventListener("abort", cancel);
-        adapterSignal.removeEventListener("abort", cancel);
+        adapterSignal.removeEventListener("abort", adapterStopped);
         controller.signal.removeEventListener("abort", stopped);
       }
     };

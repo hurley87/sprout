@@ -17,6 +17,8 @@ import {
 } from "../lib/experiments/issue-42/provider-comparison";
 import { executeConversationObserver } from "../lib/lesson-runtime/jev-conversation-state-classifier";
 import type { ConversationStateProposal } from "../lib/lesson-runtime/conversation-state-classifier";
+import { body as factoredBody, policy } from "./helpers/factored-controls";
+import type { DecisionsRequest } from "../lib/experiments/issue-42/decisions-classifier";
 
 let benchmark: artifacts.Benchmark;
 beforeAll(() => {
@@ -327,6 +329,113 @@ describe("reproducible provider comparison (all transports synthetic)", () => {
     expect(r.results[0].category).toBe("timeout");
     expect(r.results[0].normalized).toBeNull();
     expect(transport).toHaveBeenCalledOnce();
+  });
+  it.each([
+    { stage: 1, failure: "timeout" },
+    { stage: 2, failure: "timeout" },
+    { stage: 1, failure: "cancelled" },
+    { stage: 2, failure: "cancelled" },
+    { stage: 2, failure: "provider_unreachable" },
+  ])("reports factored stage $stage $failure in diagnostics and measurements", async ({ stage, failure }) => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const p = artifacts.makePlan(benchmark, {
+      caseIds: ["oct14-engram-final"],
+      variant: "factored-concepts-v1",
+      mappingPolicy: policy,
+      timeoutMs: 20,
+    });
+    let calls = 0;
+    let activeSignal: AbortSignal | undefined;
+    const transport = vi.fn<Transport>(async (arm, request, signal) => {
+      if (arm === "jev") return syntheticTransport()(arm, request, signal);
+      calls++;
+      if (calls === stage) {
+        activeSignal = signal;
+        if (failure === "provider_unreachable") throw new Error("private failure");
+        if (failure === "cancelled") setTimeout(() => controller.abort(), 1);
+        // Deliberately ignores abort: the harness must settle without transport cooperation.
+        return new Promise(() => {});
+      }
+      // Spend part of the total deadline on stage one; stage two's own timer is later.
+      await new Promise(resolve => setTimeout(resolve, 12));
+      return {
+        ok: true,
+        body: {
+          ...factoredBody(request as DecisionsRequest),
+          usage: { input_tokens: 7, output_tokens: 0, total_tokens: 7 },
+        },
+      };
+    });
+    const pending = runComparison(benchmark, p, { mode: "offline", transport, signal: controller.signal });
+    await vi.advanceTimersByTimeAsync(0);
+    if (stage === 2) await vi.advanceTimersByTimeAsync(12);
+    expect(calls).toBe(stage);
+    expect(activeSignal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(failure === "cancelled" ? 1 : stage === 2 ? 8 : 20);
+    const r = await pending;
+    const d = r.results.find(row => row.arm === "decisions")!;
+    const category = failure === "provider_unreachable" ? "provider_error" : failure;
+    expect(d.category).toBe(category);
+    expect(d.mapped.reason).toBe(failure);
+    expect(d.mapped.proposal).toBeNull();
+    expect(d.factored).toBeNull();
+    expect(d.measurement.failure).toBe(failure);
+    expect(d.measurement.calls?.map(call => call.failure)).toEqual(stage === 2 ? [null, failure] : [failure]);
+    expect(d.measurement.calls?.map(call => call.latencyMs)).toEqual(
+      stage === 2
+        ? [12, failure === "cancelled" ? 1 : failure === "timeout" ? 8 : 0]
+        : [failure === "cancelled" ? 1 : 20],
+    );
+    expect(d.measurement.calls?.[0].usage).toEqual(
+      stage === 2 ? { inputTokens: 7, outputTokens: 0, totalTokens: 7 } : null,
+    );
+    expect(r.summary.decisions.categories).toEqual({ [category]: 1 });
+    expect(r.summary.decisions.requestsStarted).toBe(stage);
+    expect(r.summary.decisions.observedProviderClassifications).toBe(0);
+    expect(r.requestCount).toBe(stage + 1);
+    expect(transport).toHaveBeenCalledTimes(stage + 1);
+    if (failure !== "provider_unreachable") expect(activeSignal?.aborted).toBe(true);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(transport).toHaveBeenCalledTimes(stage + 1);
+  });
+  it("retains the direct Decisions per-call timeout classification", async () => {
+    vi.useFakeTimers();
+    const p = artifacts.makePlan(benchmark, { caseIds: ["oct14-engram-final"], timeoutMs: 20 });
+    const transport = vi.fn<Transport>((arm, request, signal) =>
+      arm === "jev" ? syntheticTransport()(arm, request, signal) : new Promise(() => {}),
+    );
+    const pending = runComparison(benchmark, p, { mode: "offline", transport });
+    await vi.advanceTimersByTimeAsync(20);
+    const r = await pending;
+    const d = r.results.find(row => row.arm === "decisions")!;
+    expect(d.category).toBe("timeout");
+    expect(d.mapped.reason).toBe("timeout");
+    expect(d.measurement.failure).toBe("timeout");
+    expect(r.summary.decisions.categories).toEqual({ timeout: 1 });
+    expect(r.requestCount).toBe(2);
+    expect(transport).toHaveBeenCalledTimes(2);
+  });
+  it("keeps conditional-call budget exhaustion separate from a successful first call", async () => {
+    const p = artifacts.makePlan(benchmark, {
+      caseIds: ["oct14-engram-final"],
+      variant: "factored-concepts-v1",
+      mappingPolicy: policy,
+      maxRequests: 2,
+    });
+    const transport = vi.fn<Transport>(async (arm, request, signal) =>
+      arm === "jev"
+        ? syntheticTransport()(arm, request, signal)
+        : { ok: true, body: factoredBody(request as DecisionsRequest) },
+    );
+    const r = await runComparison(benchmark, p, { mode: "offline", transport });
+    const d = r.results.find(row => row.arm === "decisions")!;
+    expect(d.mapped.reason).toBe("budget_exhausted");
+    expect(d.measurement.failure).toBe("budget_exhausted");
+    expect(d.measurement.calls?.map(call => call.failure)).toEqual([null]);
+    expect(r.summary.decisions.categories).toEqual({ budget_exhausted: 1 });
+    expect(r.requestCount).toBe(2);
+    expect(transport).toHaveBeenCalledTimes(2);
   });
   it.each(["throw", "http", "refusal", "unreadable"])("categorizes %s safely and never retries", async kind => {
     const p = artifacts.makePlan(benchmark, { ...options, repetitions: 1 });
