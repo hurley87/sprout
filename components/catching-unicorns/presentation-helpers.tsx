@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import styles from "../catching-unicorns-demo.module.css";
 import {
   CATCHING_UNICORNS_LESSON,
@@ -53,36 +52,6 @@ export type SceneProps = {
   revealCards: RevealPresentation[];
 };
 
-/** Keep canonical card content behind the same evidence gate in every card layout. */
-export function EvidenceCard({ concept, children }: { concept: ConceptPresentation; children: ReactNode }) {
-  return concept.demonstrated && concept.item ? <Revealed item={concept.item} /> : children;
-}
-
-export function UnresolvedCard({
-  title,
-  evidence,
-  className,
-  statusClassName,
-}: {
-  title: string;
-  evidence?: ConceptEvidenceRecord;
-  className: string;
-  statusClassName?: string;
-}) {
-  return (
-    <article className={className}>
-      <h3 className="font-medium">{title}</h3>
-      {statusClassName ? (
-        <div className={statusClassName}>
-          <EvidenceState evidence={evidence} />
-        </div>
-      ) : (
-        <EvidenceState evidence={evidence} />
-      )}
-    </article>
-  );
-}
-
 export function ExplanationList({ concepts }: { concepts: RevealPresentation[] }) {
   return (
     <ul className={styles.differenceList}>
@@ -103,16 +72,6 @@ export function ExplanationList({ concepts }: { concepts: RevealPresentation[] }
   );
 }
 
-export function Revealed({ item }: { item: RevealItem }) {
-  return (
-    <article className="rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm">
-      <h3 className="font-semibold text-emerald-950">{item.title}</h3>
-      <p className="mt-2 text-slate-700">{item.text}</p>
-      <p className="mt-3 text-xs text-slate-500">Source: {item.source}</p>
-    </article>
-  );
-}
-
 export function EvidenceState({ evidence }: { evidence?: ConceptEvidenceRecord }) {
   if (evidence?.status === "demonstrated")
     return (
@@ -124,28 +83,5 @@ export function EvidenceState({ evidence }: { evidence?: ConceptEvidenceRecord }
     <span className="text-xs text-slate-500">
       {evidence?.status === "partial" ? "Partly explained" : "Not yet demonstrated"}
     </span>
-  );
-}
-
-export function SceneHeader({
-  node,
-  nodeId,
-  state,
-}: {
-  node: (typeof CATCHING_UNICORNS_LESSON.nodes)[string];
-  nodeId: string;
-  state: LessonRuntimeState | null | undefined;
-}) {
-  const title =
-    nodeId === "techno-literate-culture"
-      ? sceneConcepts(state, nodeId).every(concept => concept.demonstrated)
-        ? "Techno-literate culture"
-        : "Culture and literacy"
-      : String(node.presentation.title);
-  return (
-    <header className={styles.sceneHeader}>
-      <p className={styles.sceneTitle}>{title}</p>
-      <h2 className={styles.question}>{String(node.presentation.prompt)}</h2>
-    </header>
   );
 }

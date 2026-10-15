@@ -6,50 +6,44 @@ session endpoint and semantic classifier endpoint. The authored content and
 presentation are demo-specific; the lesson definition, reducer and runtime stay
 shared with the counting lesson.
 
-## Scope and evidence
+## Current scope (issue #71)
 
-`tests/catching-unicorns-lesson.test.ts` exercises reviewed transcript shapes
-through the deterministic reducer. Its observations are controlled inputs, not
-claims about provider accuracy. The fixtures cover paraphrase, incomplete and
-misconception answers, self-correction, non-leading prompts, tutor-supplied
-wording echoed by the learner, mixed evidence, both justified Canadian Armed
-Forces conclusions, and weak transfer reasoning. The source-fidelity regression
-also checks that:
+The existing lesson is permanently shortened to four questions:
+`engram → exogram → compare → exographics → recap → complete`. There is no
+full-length application variant. This supersedes issue #71's original request to
+preserve one. Arithmetic, culture/literacy, CAF transfer and synthesis nodes,
+criteria, reveal payloads, components and exclusive regressions are removed.
 
-- biological-memory paraphrases demonstrate Engram while an external-record
-  answer does not; non-biological/external-memory paraphrases demonstrate
-  Exogram;
-- durability, shareability and revisability remain separate criteria;
-- “writing things down” remains partial for Exographics until broader symbolic
-  representation is shown;
-- `84 + 1,045 + 693 + 719` prompts reification and memory extension, while the
-  arithmetic result is explicitly outside the mastery rubric;
-- technology use alone leaves the four techno-literate characteristics
-  undemonstrated; and
-- recap categories report recorded evidence and do not require “extended
-  cognition” as a source-defined term.
+The retained transcript fixtures cover paraphrases, partial answers, misconceptions,
+self-correction, prompts, tutor echoes and mixed evidence. Shared runtime,
+classifier, carry-forward evidence, diagnostic exports and cumulative assessment
+remain. The recap grades no new question: its render starts cumulative assessment,
+its steering asks for one brief close, and observed tutor audio must drain before
+terminal render confirmation completes the session. Silence alone and unavailable
+audio cannot finish it; assessment failure does not hold completion.
 
-`tests/browser/catching-unicorns.spec.ts` mounts the route and shared runtime
-with local transport and controlled classifier responses. It checks hidden
-answers, individual within-scene reveals, carried evidence, scene handoffs,
-skip/early ending, evidence-grouped recap, export and cleanup. This is
-provider-free integration coverage. A mocked accepted proposal is not evidence
-that GPT-Live will prompt correctly or that Jev will judge a live paraphrase,
-correction or tutor echo correctly.
+Provider-free browser coverage follows the four questions in order, checks accepted
+and prompted evidence, enters recap, then verifies completion after output audio.
+Runtime coverage also follows explicit next requests through all four questions
+without granting mastery. UI/debug gating and a personalized visual/spoken recap
+remain later slices of issue #71.
 
-On the final demo implementation, `npm test` passed (45 files, 887 tests),
-`npm run typecheck`, `npm run lint`, and `npm run build` passed, and
-`npm run test:browser` passed all 22 provider-free browser tests. Existing
-counting coverage is included in the full unit and browser suites. The browser
-suite ran from the disposable checkout because the primary checkout already had
-a Next.js development server holding the shared `.next` lock; its configured
-server reuse is disabled.
+The frozen issue #42 benchmark remains historical classifier evidence, including
+its original lesson snapshot and recorded transcripts. It is never registered as
+an application lesson or offered as a full-length lesson variant. Its source
+hash compatibility list records the shortened active lesson and terminal contract;
+its frozen corpus, manifests and replay bytes remain unchanged.
 
-The authored source inventory points to *Catching Unicorns*, Preface
-pp. xi–xiii and Introduction pp. 3–6. The referenced `CU to Dave.pdf` was not
-available in the workspace during #65; its page claims are inherited from that
-inventory and have not been independently checked against the PDF. The demo
-does not make claims from the later body chapters.
+Source claims for the retained concepts come from the reviewed issue #65 inventory
+for *Catching Unicorns*, Introduction pp. 3–6. `CU to Dave.pdf` was not available
+during that review, so these page claims remain inherited rather than independently
+verified.
+
+## Historical validation record
+
+The records below describe earlier lesson versions, including the former nine-scene
+flow and now-deleted arithmetic/culture/application/synthesis UI. They are historical
+session evidence, not the current lesson contract or a promise of current test counts.
 
 ## Live acceptance status
 
@@ -85,7 +79,7 @@ provider bodies are excluded.
 
 When the demo voice connection is available, rerun only the bounded Catching
 Unicorns walkthrough: one incomplete/ambiguous Engram answer followed by a
-learner recovery, then the complete nine-scene lesson. Record the prompt,
+learner recovery, then the current four-question lesson and terminal recap. Record the prompt,
 learner evidence, tutor probe, classification, reveal/hold, final recap and
 resource cleanup from the observation export. Keep the run small and opt-in
 because it can make billed GPT-Live and Jev calls; use `docs/browser-tests.md`

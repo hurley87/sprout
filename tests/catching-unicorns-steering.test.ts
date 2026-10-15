@@ -10,6 +10,12 @@ it.each(Object.keys(lesson.nodes))("bounds scene and recovery updates and explic
   // Regression budget for the authored English text, independently measured
   // below 350 tokens with two tokenizers. This is not a provider token counter.
   expect(Buffer.byteLength(instruction)).toBeLessThanOrEqual(2000);
+  if (nodeId === "recap") {
+    expect(instruction).toContain("terminal recap, not a question");
+    expect(instruction).toContain("application ends the session after audio drains");
+    expect(instruction).not.toContain("Ask the displayed question");
+    return;
+  }
   expect(instruction).toContain(String(lesson.nodes[nodeId].presentation.prompt));
   expect(instruction).toContain("Ask the displayed question aloud now, then wait for the learner");
   expect(instruction).toContain("listen instead of interrupting");

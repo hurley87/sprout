@@ -28,6 +28,14 @@ pending learner speech, stale sources, stopped sessions, and unconfirmed renderi
 cannot authorize advancement. Render confirmation still precedes next-question
 steering. Optional presentation confirmation remains supported.
 
+A node may explicitly set `completeAfterTutorOutput` for a terminal presentation
+with no concept criteria and a `complete` edge. Catching Unicorns uses it for recap.
+It needs no learner turn or classifier proposal: a fresh tutor audio onset in that
+visit must be observed, then sustained quiet, before the authored terminal render
+is requested. Unavailable audio revokes that observation; learner speech blocks
+the drain. Completion still requires exact terminal render confirmation. The
+option is rejected on question nodes and is absent from the counting lesson.
+
 Post-conversation grading lives in the browser runtime and `/api/assess`, outside
 this reducer. It cannot reveal concepts, change live mastery, or choose a scene.
 

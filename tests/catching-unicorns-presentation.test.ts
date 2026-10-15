@@ -81,7 +81,7 @@ describe("Catching Unicorns scene presentation", () => {
   });
 
   it("hides prior partial, uncertain, skipped, and unresolved concepts", () => {
-    const html = renderScene("techno-literate-culture", {
+    const html = renderScene("exographics", {
       "engram:engram-biological": { ...evidence("engram-biological"), status: "partial" },
       "exogram:exogram-non-biological": { ...evidence("exogram-non-biological"), status: "not_yet" },
       "compare:exogram-durability": evidence("exogram-durability", null),
@@ -104,13 +104,13 @@ describe("Catching Unicorns scene presentation", () => {
       "exogram:exogram-non-biological": evidence("exogram-non-biological", "prompted"),
       "compare:exogram-non-biological": evidence("exogram-non-biological", "prompted"),
       "exographics:visual-symbols": evidence("visual-symbols"),
-      "techno-literate-culture:widespread-literacy": evidence("widespread-literacy"),
+      "removed-scene:removed-criterion": evidence("removed-criterion"),
     });
     const learned = html.slice(html.indexOf('aria-labelledby="learned-so-far-title"'));
     expect(learned.match(/<summary>Engram<\/summary>/g)).toHaveLength(1);
     expect(learned.match(/<summary>Exogram<\/summary>/g)).toHaveLength(1);
     expect(learned).not.toContain("Meaningful symbols on visual media");
-    expect(learned).not.toContain("Widespread basic literacy");
+    expect(learned).not.toContain("removed-criterion");
     expect(html).toContain("Explore the definition");
   });
 
@@ -122,7 +122,13 @@ describe("Catching Unicorns scene presentation", () => {
   });
 
   it("keeps demonstrated evidence with uncertain prompting visible in the recap", () => {
-    const recap = renderScene("recap", { "engram:engram-biological": evidence("engram-biological", null, "A memory inside my brain, unlike an external note.") });
+    const recap = renderScene("recap", {
+      "engram:engram-biological": evidence(
+        "engram-biological",
+        null,
+        "A memory inside my brain, unlike an external note.",
+      ),
+    });
     expect(recap).toContain("Demonstrated · prompting unclear");
     expect(recap).toContain("A memory inside my brain, unlike an external note.");
   });
@@ -168,18 +174,9 @@ describe("Catching Unicorns scene presentation", () => {
     expect(comparison).not.toContain("Awaiting evidence");
     expect(comparison).toContain("How are they different?");
     expect(comparison).not.toContain("Shareable</h4>");
-
-    const culture = renderScene("techno-literate-culture", {
-      "techno-literate-culture:idea-discoverers": evidence("idea-discoverers"),
-    });
-    expect(culture).toContain("A smaller group discovers ideas");
-    expect(culture).toContain("Characteristic 1");
-    expect(culture).toContain("Characteristic 3");
-    expect(culture).toContain("Characteristic 4");
-    expect(culture).not.toContain("Widespread basic literacy");
   });
 
-  it("shows multiple visual forms only after exographics evidence and keeps CAF rows distinct", () => {
+  it("shows multiple visual forms only after exographics evidence", () => {
     const hiddenForms = renderScene("exographics");
     expect(hiddenForms).not.toContain("Exographics</h2>");
     expect(hiddenForms).toContain("What does exographics mean?");
@@ -201,57 +198,20 @@ describe("Catching Unicorns scene presentation", () => {
     expect(namedPractice.match(/class="([^"]+)" data-scene/)?.[1]).toBe(
       renderScene("engram").match(/class="([^"]+)" data-scene/)?.[1],
     );
-
-    const culture = renderScene("techno-literate-culture");
-    expect(culture).toMatch(/>Culture and literacy<\//);
-    expect(culture).not.toMatch(/>Techno-literate culture<\//);
-
-    const application = renderScene("caf-application", {
-      "techno-literate-culture:widespread-literacy": evidence("widespread-literacy"),
-      "caf-application:caf-defensible-conclusion": evidence(
-        "caf-defensible-conclusion",
-        "prompted",
-        "A qualified yes fits the evidence I gave, with limits.",
-      ),
-    });
-    expect(application).toContain("Transfer prompt · not a source-canonical answer");
-    expect(application).toContain("Previously demonstrated framework");
-    expect(application).toContain("Widespread basic literacy");
-    expect(application).toContain("Your conclusion");
-    expect(application).toContain("Application evidence 1");
   });
 
   it("projects actual independent, prompted, partial, and unresolved evidence into recap", () => {
     const recap = renderScene("recap", {
       "engram:engram-biological": evidence("engram-biological", "independent", "Memory held in a biological mind."),
-      "why-exographics:reification": evidence(
-        "reification",
-        "prompted",
-        "Paper lets me look at the idea and move the symbols around.",
-      ),
-      "why-exographics:memory-extension": {
-        ...evidence("memory-extension"),
-        status: "partial",
-        understanding: null,
-      },
-      "techno-literate-culture:education-system": {
-        ...evidence("education-system"),
-        status: "partial",
-        understanding: null,
-      },
-      "caf-application:caf-defensible-conclusion": evidence(
-        "caf-defensible-conclusion",
-        "independent",
-        "No, I cannot support that conclusion with the evidence here.",
-      ),
+      "exogram:exogram-non-biological": evidence("exogram-non-biological", "prompted", "A note outside my brain."),
+      "exographics:visual-symbols": { ...evidence("visual-symbols"), status: "partial", understanding: null },
     });
     expect(recap).toContain("Demonstrated independently");
     expect(recap).toContain("Demonstrated after a prompt");
     expect(recap).toContain("Partly explained");
     expect(recap).toContain("Still unresolved or skipped");
     expect(recap).toContain("Memory held in a biological mind.");
-    expect(recap).toContain("No, I cannot support that conclusion with the evidence here.");
-    expect(recap).toContain("Transfer/application reasoning");
+    expect(recap).toContain("A note outside my brain.");
     expect(recap).not.toContain("Supporting longer threads of reasoning");
     expect(recap).not.toContain("Substantial education</p>");
     expect(recap).toContain("one unresolved item");

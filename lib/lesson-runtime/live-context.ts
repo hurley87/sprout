@@ -62,6 +62,8 @@ export function teachingInstruction(
   lesson: LessonDefinition,
   startLesson = false,
 ) {
+  if (lesson.nodes[context.nodeId].completeAfterTutorOutput)
+    return `Application screen confirmation: ${context.nodeId} is now rendered. ${context.tutorBrief} This is the terminal recap, not a question. Do not ask for an answer, introduce an exercise or announce another question. Give one brief close, then stop speaking; the application ends the session after audio drains.`;
   if (Object.values(lesson.nodes).some(node => node.concepts?.length)) {
     const targets =
       context.completionCriteria?.map(concept => `${concept.id}: ${targetText(concept.description)}`).join("\n") ??

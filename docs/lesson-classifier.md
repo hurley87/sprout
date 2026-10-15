@@ -16,7 +16,10 @@ Catching Unicorns opts into `LessonDefinition.conversationFirst`. For that lesso
 confident tutor closure is a conversational observation, independent of the
 objective and concept scores. It permits the app to follow its authored edge
 once tutor audio drains; it does not accept an answer or upgrade concept evidence.
-A useful follow-up still holds the question. A revised tutor snapshot revokes the
+The four questions are engram, exogram, compare and exographics, followed directly
+by a terminal recap. Recap uses `completeAfterTutorOutput`, so it requires no
+learner answer or classifier closure; observed output drains before completion.
+A useful follow-up still holds a question. A revised tutor snapshot revokes the
 previous closure until the current snapshot is classified again.
 
 A standalone latest learner request such as “Next question, then” takes a separate

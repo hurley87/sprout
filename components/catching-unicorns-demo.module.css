@@ -139,11 +139,6 @@
   margin-bottom: 12px;
 }
 
-.sceneHeader {
-  text-align: center;
-  margin-bottom: 36px;
-}
-
 .sceneTitle {
   color: var(--lesson-muted);
   font-size: 16px;
@@ -153,109 +148,6 @@
 .comparison {
   max-width: 880px;
   margin: 0 auto;
-}
-
-.reasoning {
-  width: min(100%, 880px);
-  margin: 0 auto;
-}
-
-.scene:has(.reasoning) {
-  padding: 32px 0;
-}
-
-.reasoningHeader {
-  text-align: center;
-  margin-bottom: 32px;
-}
-
-.reasoningQuestion {
-  max-width: 22ch;
-  margin: 0 auto;
-  font-size: clamp(32px, 3.7vw, 52px);
-  line-height: 1.15;
-  font-weight: 400;
-  letter-spacing: -0.04em;
-  text-wrap: balance;
-}
-
-.reasoningHeader .comparisonIntro {
-  max-width: 52ch;
-  margin: 16px auto 0;
-}
-
-.reasoningExercise {
-  padding: clamp(20px, 3vw, 32px);
-  border: 1px solid #d9e6df;
-  border-radius: 20px;
-  background: #f1f6f2;
-  text-align: center;
-}
-
-.exerciseLabel {
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 1.5;
-  color: #376361;
-}
-
-.exerciseInstruction {
-  margin-top: 8px;
-  font-size: 15px;
-  line-height: 1.5;
-  color: var(--lesson-muted);
-}
-
-.arithmetic {
-  margin-top: 24px;
-  font-size: clamp(23px, 4vw, 44px);
-  line-height: 1.4;
-  font-weight: 500;
-  font-variant-numeric: lining-nums tabular-nums;
-  letter-spacing: -0.035em;
-  white-space: nowrap;
-}
-
-.reasoningReflection {
-  margin-top: 24px;
-  padding: 0 12px;
-  text-align: center;
-}
-
-.reasoningReflection p {
-  max-width: 48ch;
-  margin: 10px auto 0;
-  font-size: clamp(18px, 2vw, 22px);
-  line-height: 1.5;
-  text-wrap: balance;
-}
-
-.reasoning .comparisonEvidence {
-  padding-top: 24px;
-  border-top: 1px solid #e1e9e6;
-}
-
-.reasoningPending {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px 24px;
-  margin-top: 20px;
-}
-
-.reasoningPendingItem {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--lesson-muted);
-}
-
-@media (max-width: 380px) {
-  .arithmetic {
-    font-size: 19px;
-    letter-spacing: -0.05em;
-  }
 }
 
 .comparisonHeader {

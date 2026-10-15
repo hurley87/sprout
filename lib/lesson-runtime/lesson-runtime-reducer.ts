@@ -250,6 +250,7 @@ export function meetsAuthoredCompletionPolicy(state: LessonRuntimeState, lesson:
 }
 
 export function hasCurrentCompletionEvidence(state: LessonRuntimeState, lesson: LessonDefinition) {
+  if (lesson.nodes[state.nodeId].completeAfterTutorOutput) return state.tutorOutputObserved;
   if (lesson.conversationFirst)
     return (
       state.conversationAdvanceRequested === "learner" ||
@@ -780,7 +781,9 @@ export function reduceLessonRuntime(
           tutorOutputObserved:
             state.tutorOutputObserved ||
             (state.outputActivity !== "active" &&
-              (state.hasChildTranscript || state.interruptedExchange?.ready === true) &&
+              (state.hasChildTranscript ||
+                state.interruptedExchange?.ready === true ||
+                lesson.nodes[state.nodeId].completeAfterTutorOutput === true) &&
               !state.childSpeaking),
           quietSinceMs: null,
         };

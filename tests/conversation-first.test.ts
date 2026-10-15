@@ -10,8 +10,6 @@ import {
   type LessonRuntimeEvent,
 } from "../lib/lesson-runtime/lesson-runtime-reducer";
 import {
-  CLASSIFIER_VERSION,
-  CONVERSATION_CLASSIFICATION_THRESHOLDS,
   mapConversationObservation,
   type ConversationStateOutputs,
 } from "../lib/lesson-runtime/conversation-observer-contract";
@@ -19,13 +17,7 @@ import { assessmentQuestions, normalizeAssessment } from "../lib/lesson-runtime/
 import { LessonRuntime } from "../lib/lesson-runtime/lesson-runtime";
 import type { ClientCommand, ProviderEvent } from "../lib/events";
 import replay from "./fixtures/catching-unicorns-stall-replay.json";
-import questionSix from "./fixtures/catching-unicorns-question-six-replay.json";
-import {
-  createLiveSessionConfig,
-  teachingInstruction,
-  answerRecoveryInstruction,
-} from "../lib/lesson-runtime/live-context";
-import { currentNodeContext } from "../lib/lesson-runtime/lesson-definition";
+const nextRequest = "Yeah, I think next question. I think I have answered this.";
 
 const transport = vi.hoisted(() => ({
   receive: undefined as ((event: ProviderEvent) => void) | undefined,
@@ -82,7 +74,7 @@ it("advances the recorded split-source stall while retaining three concepts and 
   h.send({ type: "output.activity", source: runtimeSource(h.state), state: "quiet" });
   expect(h.state.nodeId).toBe("exographics");
   const result = h.send({ type: "clock.tick", source: runtimeSource(h.state) }, 51);
-  expect(result.state).toMatchObject({ nodeId: "why-exographics", phase: "rendering" });
+  expect(result.state).toMatchObject({ nodeId: "recap", phase: "rendering" });
 });
 it("ignores stale closure and revoked completion after a tutor follow-up", () => {
   const h = harness();
@@ -116,7 +108,7 @@ it.each(["Next question, then", "Please move on", "Can we go to the next questio
       transcriptSnapshot: `Child: ${text}`,
     });
     h.send({ type: "clock.tick", source: runtimeSource(h.state) }, 51);
-    expect(h.state.nodeId).toBe("why-exographics");
+    expect(h.state.nodeId).toBe("recap");
     expect(h.state.conceptEvidence).toEqual({});
   },
 );
@@ -173,7 +165,7 @@ it("advances explicit next in the real runtime even with classifier outage, and 
   transport.receive!({ type: "output.activity", state: "quiet" });
   events.childTurn("Next question, then", 100);
   await vi.advanceTimersByTimeAsync(900);
-  expect(runtime.snapshot().display.nodeId).toBe("why-exographics");
+  expect(runtime.snapshot().display.nodeId).toBe("recap");
   expect(fetchMock.mock.calls.some(([url]) => url === "/api/classify")).toBe(false);
   runtime.confirmRendered(runtime.snapshot().display);
   runtime.stop();
@@ -196,10 +188,10 @@ it.each([
   expect(assessConversationOnEntry).toBe(true);
   const definition = {
     ...lesson,
-    initialNodeId: "synthesis",
+    initialNodeId: "exographics",
     nodes: {
       ...lesson.nodes,
-      synthesis: { ...lesson.nodes.synthesis, onSuccess: { kind: "node" as const, nodeId } },
+      exographics: { ...lesson.nodes.exographics, onSuccess: { kind: "node" as const, nodeId } },
       [nodeId]: { ...ordinaryScene, id: nodeId, ...(configured ? { assessConversationOnEntry: true } : {}) },
     },
   };
@@ -221,9 +213,12 @@ it.each([
     // Assessment starts at render confirmation, without waiting for the steering acknowledgment.
     expect(fetchMock).toHaveBeenCalledTimes(configured ? 1 : 0);
     if (configured) {
-      expect(fetchMock).toHaveBeenCalledWith("/api/assess", expect.objectContaining({
-        body: JSON.stringify({ lessonId: lesson.id, visits: runtime.report().conversation }),
-      }));
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/assess",
+        expect.objectContaining({
+          body: JSON.stringify({ lessonId: lesson.id, visits: runtime.report().conversation }),
+        }),
+      );
       runtime.confirmRendered(display);
       runtime.stop();
       await vi.advanceTimersByTimeAsync(0);
@@ -249,7 +244,7 @@ it.each(["active", "unavailable"] as const)("holds a next request while audio is
   expect(h.state.nodeId).toBe("exographics");
   h.send({ type: "output.activity", source: runtimeSource(h.state), state: "quiet" });
   h.send({ type: "clock.tick", source: runtimeSource(h.state) }, 51);
-  expect(h.state.nodeId).toBe("why-exographics");
+  expect(h.state.nodeId).toBe("recap");
 });
 it("revokes a next request when a new learner turn interrupts it", () => {
   const h = harness();
@@ -266,7 +261,7 @@ it("revokes a next request when a new learner turn interrupts it", () => {
 });
 
 it.each([
-  questionSix.request,
+  nextRequest,
   "Yeah, I think next question. I think I have answered this.",
   "I am, I think next\nquestion. I think I've answered this",
 ])("recognizes conversational navigation: %s", request => {
@@ -285,130 +280,6 @@ it.each([
   "I think next question. Actually, don't move on.",
 ])("rejects negative, quoted, hypothetical and answer intent: %s", request => {
   expect(learnerRequestedNext(`Child: ${request}`)).toBe(false);
-});
-it("replays question six empty turn, split tutor closure and audio gaps without granting mastery or advancing twice", async () => {
-  useRuntimeFakeTimers();
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async () => Response.json({}, { status: 503 })),
-  );
-  const runtime = new LessonRuntime({} as HTMLAudioElement, () => {}, {
-    ...lesson,
-    initialNodeId: "techno-literate-culture",
-  });
-  runtime.confirmRendered(runtime.snapshot().display);
-  await vi.advanceTimersByTimeAsync(0);
-  const steering = transport.send.mock.calls[0][0];
-  if (steering.type !== "session.instructions.append") throw new Error("Expected steering");
-  const receive = transport.receive!;
-  events.acknowledgeSteering(steering.event_id, 0);
-  receive({ type: "output.activity", state: "quiet" });
-  receive({ type: "microphone.activity_started" });
-  receive({ type: "transcript", speaker: "child", delta: questionSix.request, ...questionSix.requestInterval });
-  let elapsed = 0;
-  for (const item of questionSix.events) {
-    await vi.advanceTimersByTimeAsync(item.atMs - elapsed);
-    elapsed = item.atMs;
-    receive(item.event as ProviderEvent);
-    expect(runtime.snapshot().display.nodeId).toBe("techno-literate-culture");
-  }
-  expect(runtime.snapshot().runtime?.hasChildTranscript).toBe(false);
-  expect(classificationSource(runtime.snapshot().runtime!)).toBeNull();
-  await vi.advanceTimersByTimeAsync(600);
-  expect(runtime.snapshot().display.nodeId).toBe("caf-application");
-  expect(runtime.snapshot().runtime?.conceptEvidence).toEqual({});
-  const journal = runtime.observe().events;
-  expect(journal.filter(e => e.type === "render.requested")).toHaveLength(1);
-  expect(journal.some(e => e.type === "classifier.started")).toBe(false);
-  expect(journal.some(e => e.type === "gpt_live.answer_recovery_append")).toBe(false);
-  expect(runtime.report().conversation?.[0].transcript).toContain("Okay, we'll move on.");
-  runtime.stop();
-});
-it("recovers a culture answer after a connection check without granting mastery or repeating recovery", async () => {
-  useRuntimeFakeTimers();
-  const definition = { ...lesson, initialNodeId: "techno-literate-culture" };
-  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
-    if (url !== "/api/classify") return Response.json({});
-    const input = { ...JSON.parse(init!.body as string), lesson: definition };
-    const choice = (selected: string, probabilities: Record<string, number>) => ({
-      choice: selected, confidence: 0.6, probabilities,
-    });
-    const outputs = {
-      objectiveState: choice("unclear_or_incomplete", {
-        completed: 0.03, incorrect: 0, unclear_or_incomplete: 0.97, unresolved_help: 0, no_attempt: 0,
-      }),
-      tutorState: choice("other", { confirmed_completion: 0, clarifying: 0, helping: 0, asking: 0, other: 1 }),
-      concepts: Object.fromEntries(definition.nodes[input.nodeId].concepts!.map(c => [
-        `concept_${c.id}`, choice("partial", {
-          not_yet: 0.1, partial: 0.6, demonstrated_independent: 0.2, demonstrated_prompted: 0.1,
-        }),
-      ])),
-      sources: Object.fromEntries(definition.nodes[input.nodeId].concepts!.map(c => [
-        `source_${c.id}`, choice("message_1", { none: 0, message_1: 1 }),
-      ])),
-    } as ConversationStateOutputs;
-    const decision = mapConversationObservation(input, outputs);
-    return Response.json({
-      proposal: decision.proposal,
-      diagnostic: {
-        classifierVersion: CLASSIFIER_VERSION,
-        thresholds: CONVERSATION_CLASSIFICATION_THRESHOLDS,
-        elapsedMs: 0,
-        labelCompletionEligible: decision.labelCompletionEligible,
-        decision: decision.status, outcome: decision.outcome, outputs,
-        nodeId: input.nodeId, transcriptRevision: input.transcriptRevision,
-      },
-    });
-  });
-  vi.stubGlobal("fetch", fetchMock);
-  const runtime = new LessonRuntime({} as HTMLAudioElement, () => {}, definition);
-  try {
-    runtime.confirmRendered(runtime.snapshot().display);
-    await vi.advanceTimersByTimeAsync(0);
-    const steering = transport.send.mock.calls[0][0];
-    events.acknowledgeSteering(steering.event_id, 0);
-    transport.receive!({ type: "output.activity", state: "quiet" });
-    events.tutorTurn("What characteristics help a culture develop?", 50);
-    transport.receive!({ type: "microphone.activity_started" });
-    transport.receive!({ type: "microphone.speech_started" });
-    transport.receive!({ type: "microphone.speech_stopped", quietMs: 900 });
-    await vi.advanceTimersByTimeAsync(4000);
-    const appends = () => runtime.report().events.filter(e => e.type === "gpt_live.answer_recovery_append");
-    expect(appends()).toHaveLength(1);
-    expect(appends()[0].detail).toMatchObject({ content: expect.stringContaining("connection check") });
-
-    events.childTurn("Schools teach people shared knowledge.", 5000);
-    await vi.advanceTimersByTimeAsync(300);
-    events.tutorTurn("I'm still putting that together.", 5200);
-    await vi.advanceTimersByTimeAsync(4700);
-    expect(appends()).toHaveLength(2);
-    expect(appends()[1].detail).toMatchObject({
-      content: expect.stringContaining("assessment uncertainty must not hold this question"),
-    });
-    expect(runtime.snapshot().runtime).toMatchObject({
-      nodeId: "techno-literate-culture", phase: "active", answerAccepted: false,
-    });
-    expect(Object.values(runtime.snapshot().runtime!.conceptEvidence).map(e => e.status)).toEqual([
-      "partial", "partial", "partial", "partial",
-    ]);
-
-    events.childTurn("I mean learning things together at school.", 10000);
-    await vi.advanceTimersByTimeAsync(5000);
-    expect(appends()).toHaveLength(2);
-    expect(runtime.report().events.filter(e => e.type === "answer_recovery.requested" &&
-      (e.detail as { reason?: string }).reason === "semantic_hold")).toHaveLength(1);
-
-    events.tutorTurn("Would you like to continue?", 15500);
-    events.childTurn("Next question, then", 16000);
-    await vi.advanceTimersByTimeAsync(900);
-    expect(runtime.snapshot().display.nodeId).toBe("caf-application");
-    expect(Object.values(runtime.snapshot().runtime!.conceptEvidence).map(e => e.status)).toEqual([
-      "partial", "partial", "partial", "partial",
-    ]);
-  } finally {
-    runtime.stop();
-    await vi.advanceTimersByTimeAsync(0);
-  }
 });
 it("retains partial evidence when a request advances with no current-turn transcript", () => {
   const h = harness();
@@ -442,34 +313,80 @@ it("retains partial evidence when a request advances with no current-turn transc
   h.send({
     type: "conversation.advance.requested",
     source: { ...runtimeSource(h.state), nodeId: h.state.nodeId, transcriptRevision: h.state.transcriptRevision },
-    transcriptSnapshot: `Child: ${questionSix.request}\nTutor: Okay, we'll move on.`,
+    transcriptSnapshot: `Child: ${nextRequest}\nTutor: Okay, we'll move on.`,
   });
   h.send({ type: "clock.tick", source: runtimeSource(h.state) }, 51);
-  expect(h.state.nodeId).toBe("why-exographics");
+  expect(h.state.nodeId).toBe("recap");
   expect(h.state.conceptEvidence).toEqual(evidence);
-});
-it("offers question-six help through all instruction layers while preserving provenance", () => {
-  const context = currentNodeContext(lesson, "techno-literate-culture");
-  expect(lesson.nodes["techno-literate-culture"].presentation.prompt).toContain("four characteristics");
-  expect(context.tutorBrief).toContain("offer one targeted cue");
-  expect(context.tutorBrief).toContain("supported understanding, not independent recall");
-  const config = createLiveSessionConfig(lesson);
-  expect(config.instructions).toContain("only when explicitly permitted by the current scene tutor brief");
-  expect(config.instructions).not.toContain("Never state hidden canonical answers");
-  expect(teachingInstruction(context, lesson)).toContain("offer one targeted cue");
-  const h = harness();
-  expect(answerRecoveryInstruction(lesson, h.state)).toContain("targeted scaffolding");
-  expect(assessmentQuestions(lesson)["techno-literate-culture:education-system"].instructions).toContain(
-    "Tutor words alone",
-  );
 });
 
 it("revokes pending navigation on actual new learner text, even without another microphone onset", () => {
   const h = harness();
   h.send({ type: "output.activity", source: runtimeSource(h.state), state: "quiet" });
-  h.send({ type: "conversation.advance.requested", source: classificationSource(h.state), transcriptSnapshot: `Child: ${questionSix.request}` });
+  h.send({
+    type: "conversation.advance.requested",
+    source: classificationSource(h.state),
+    transcriptSnapshot: `Child: ${nextRequest}`,
+  });
   h.send({ type: "transcript.updated", source: runtimeSource(h.state), revision: 2, speaker: "child" });
   expect(h.state.conversationAdvanceRequested).toBe(false);
   h.send({ type: "clock.tick", source: runtimeSource(h.state) }, 1000);
   expect(h.state.nodeId).toBe("exographics");
+});
+
+it("follows the four-question path through recap and completes without another learner answer", async () => {
+  useRuntimeFakeTimers();
+  const fetchMock = vi.fn(async (url: string) => {
+    expect(url).toBe("/api/assess");
+    return Response.json({}, { status: 503 });
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  const runtime = new LessonRuntime({} as HTMLAudioElement, () => {}, lesson);
+  try {
+    runtime.confirmRendered(runtime.snapshot().display);
+    await vi.advanceTimersByTimeAsync(0);
+    let providerTime = 0;
+    for (const nodeId of ["engram", "exogram", "compare", "exographics"]) {
+      expect(runtime.snapshot().runtime?.nodeId).toBe(nodeId);
+      const steering = transport.send.mock.calls.at(-1)![0];
+      if (steering.type !== "session.instructions.append") throw new Error("Expected scene steering");
+      events.acknowledgeSteering(steering.event_id, providerTime);
+      transport.receive!({ type: "output.activity", state: "quiet" });
+      events.childTurn("Next question, then", providerTime + 100);
+      await vi.advanceTimersByTimeAsync(900);
+      runtime.confirmRendered(runtime.snapshot().display);
+      providerTime += 1000;
+    }
+    expect(runtime.snapshot().runtime).toMatchObject({ nodeId: "recap", phase: "active", hasChildTranscript: false });
+    expect(runtime.snapshot().runtime?.conceptEvidence).toEqual({});
+    const close = transport.send.mock.calls.at(-1)![0];
+    if (close.type !== "session.instructions.append") throw new Error("Expected recap steering");
+    expect(close.content).toContain("terminal recap, not a question");
+    events.acknowledgeSteering(close.event_id, providerTime);
+    await vi.advanceTimersByTimeAsync(900);
+    expect(runtime.snapshot().status).toBe("live"); // Silence alone cannot complete recap.
+    transport.receive!({ type: "output.activity", state: "active" });
+    await vi.advanceTimersByTimeAsync(900);
+    expect(runtime.snapshot().status).toBe("live");
+    transport.receive!({ type: "output.activity", state: "unavailable" });
+    transport.receive!({ type: "output.activity", state: "quiet" });
+    await vi.advanceTimersByTimeAsync(900);
+    expect(runtime.snapshot().status).toBe("live"); // Unavailable output revokes observed audio.
+    events.tutorTurn("The discussion is finished. Review the recap on screen.", providerTime + 100);
+    await vi.advanceTimersByTimeAsync(900);
+    expect(runtime.snapshot().runtime?.phase).toBe("rendering");
+    const terminal = runtime.snapshot().display;
+    expect(terminal.nodeId).toBeNull();
+    runtime.confirmRendered(terminal);
+    expect(runtime.snapshot()).toMatchObject({ status: "ended", runtime: { nodeId: "recap", phase: "complete" } });
+    expect(transport.close).toHaveBeenCalledOnce();
+    const appends = transport.send.mock.calls.filter(([command]) => command.type === "session.instructions.append");
+    expect(appends).toHaveLength(5);
+    runtime.confirmRendered(terminal);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(transport.close).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls.every(([url]) => url === "/api/assess")).toBe(true);
+  } finally {
+    runtime.stop();
+  }
 });

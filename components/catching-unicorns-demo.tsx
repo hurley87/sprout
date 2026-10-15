@@ -153,7 +153,7 @@ export default function CatchingUnicornsDemo() {
         <footer className={styles.footer}>
           <div className={styles.sessionStatus}>
             <span role="status" className={live && !snapshot?.error ? "sr-only" : undefined}>
-              {snapshot?.status ?? "Ready"}
+              {state?.phase === "complete" ? "Session complete" : (snapshot?.status ?? "Ready")}
               {snapshot?.awaitingSteering ? " · applying the next scene" : ""}
             </span>
             {snapshot?.error && <span role="alert">{snapshot.error}</span>}

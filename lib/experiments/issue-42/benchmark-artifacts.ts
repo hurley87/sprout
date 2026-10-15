@@ -35,6 +35,13 @@ export const RECOVERY_SOURCE_COMPATIBILITY = {
   "lib/lesson-runtime/answer-recovery.ts": "4e3159932c3ad5beed9ed9786118910fac5d38ea1b8d725acbdb536729554a8c",
   "lib/lesson-runtime/lesson-runtime.ts": "b8e09c305de67b006d2fdb96934ba57e7717b4aa4a4fc49d42c38c99525385a4",
 };
+// Issue #71 changes the active lesson and terminal gate. Frozen v1 inputs stay historical.
+export const SHORT_LESSON_COMPATIBILITY = {
+  "lib/lesson-runtime/catching-unicorns-lesson.ts": "1923b45d800cad8d2c66336588289205d72a4acf17199559e88c573b099ab957",
+  "lib/lesson-runtime/lesson-definition.ts": "f9d046c170ff620d249ab5380354da713c3d6cec1a70d6018b4cbb3b43999924",
+  "lib/lesson-runtime/lesson-runtime-reducer.ts": "502bebd02e97bf8ff0185ca4c4dccb03756be6e91b90d7f68024aa092ea7fe3f",
+  "lib/lesson-runtime/live-context.ts": "58890cb4f6a792e0d5d869830399aa316182c1171e534bc7b61fd321377710f5",
+};
 const toolPaths = [
   ADAPTER_PATH,
   "lib/experiments/issue-42/factored-decisions.ts",
@@ -69,7 +76,8 @@ export function loadBenchmark() {
   for (const [path, hash] of Object.entries(manifest.baselineSources)) {
     const activeHash =
       ACTIVE_MODEL_COMPATIBILITY[path as keyof typeof ACTIVE_MODEL_COMPATIBILITY] ??
-      RECOVERY_SOURCE_COMPATIBILITY[path as keyof typeof RECOVERY_SOURCE_COMPATIBILITY];
+      RECOVERY_SOURCE_COMPATIBILITY[path as keyof typeof RECOVERY_SOURCE_COMPATIBILITY] ??
+      SHORT_LESSON_COMPATIBILITY[path as keyof typeof SHORT_LESSON_COMPATIBILITY];
     assert.equal(bytesHash(path), activeHash ?? hash, `baseline incompatibility: ${path}`);
     assert.equal(
       sha256(execFileSync("git", ["show", `${manifest.baselineSha}:${path}`])),
@@ -135,6 +143,7 @@ export function loadBenchmark() {
       model: JEV_MODEL,
       sourceHashes: { ...ACTIVE_MODEL_COMPATIBILITY },
       recoverySourceHashes: { ...RECOVERY_SOURCE_COMPATIBILITY },
+      shortLessonSourceHashes: { ...SHORT_LESSON_COMPATIBILITY },
     },
     executingCommit: git("rev-parse", "HEAD"),
     executingParent: git("rev-parse", "HEAD^"),

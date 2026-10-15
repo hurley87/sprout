@@ -8,15 +8,13 @@ import {
 /**
  * Standalone, removable Catching Unicorns lesson content.
  *
- * Source basis: the reviewed inventory for the quiet-revision manuscript's Preface
- * pp. xi–xiii and Introduction pp. 3–6 in issue #65. The referenced `CU to Dave.pdf`
+ * Source basis: the reviewed inventory for the quiet-revision manuscript's
+ * Introduction pp. 3–6 in issue #65. The referenced `CU to Dave.pdf`
  * was not present in the searched workspace, so page claims are inherited from that
  * reviewed inventory and have not been independently checked against the PDF here.
  */
 const SOURCE = {
-  preface: "Catching Unicorns, Preface, pp. xi–xiii (source inventory in issue #65)",
   introduction: "Catching Unicorns, Introduction, pp. 3–6 (source inventory in issue #65)",
-  transfer: "Application prompt only; not a canonical claim from the supplied excerpt",
 } as const;
 
 const criterion = (id: string, description: string): ConceptCriterionDefinition => ({ id, description });
@@ -28,6 +26,7 @@ const scene = (definition: {
   objective: string;
   tutorBrief: string;
   assessConversationOnEntry?: boolean;
+  completeAfterTutorOutput?: boolean;
   concepts?: readonly ConceptCriterionDefinition[];
   next: string | null;
   carry?: readonly string[];
@@ -36,6 +35,7 @@ const scene = (definition: {
   presentation: { sceneId: definition.id, title: definition.title, prompt: definition.prompt },
   learningObjective: definition.objective,
   tutorBrief: definition.tutorBrief,
+  ...(definition.completeAfterTutorOutput ? { completeAfterTutorOutput: true } : {}),
   ...(definition.assessConversationOnEntry ? { assessConversationOnEntry: true } : {}),
   ...(definition.concepts ? { concepts: definition.concepts, completionPolicy: "all_demonstrated" as const } : {}),
   onSuccess: definition.next
@@ -130,129 +130,18 @@ const lesson: LessonDefinition = {
           `Source-backed (${SOURCE.introduction}): explains that these representations can stand for abstract ideas that are not concrete objects in the world.`,
         ),
       ],
-      next: "why-exographics",
-    }),
-    "why-exographics": scene({
-      id: "why-exographics",
-      title: "Why external symbols matter",
-      prompt:
-        "Try to reason through 84 + 1,045 + 693 + 719 without writing anything down. What changes when you can use paper and a pencil?",
-      objective: "Explain what changes in reasoning when the source's numeric example is represented on paper.",
-      tutorBrief:
-        "The arithmetic result is not the target. Assess the three ideas independently. Natural paraphrases count. Ask the learner to describe what changed in their own reasoning; do not name an un-demonstrated idea or provide an example answer.",
-      concepts: [
-        criterion(
-          "reification",
-          `Source-backed (${SOURCE.preface}): explains that symbols bring representations of abstract concepts into the visual field so they can be inspected or manipulated. A paraphrase is sufficient; do not require the word reification.`,
-        ),
-        criterion(
-          "memory-extension",
-          `Source-backed (${SOURCE.preface}): explains that external representations can carry information through a longer chain of reasoning, reducing what must remain in unaided biological memory. A paraphrase is sufficient; do not require the phrase memory extension.`,
-        ),
-        criterion(
-          "discovery",
-          `Source-backed (${SOURCE.preface}): recognizes the stronger claim that exographics can participate in producing or discovering ideas, rather than only recording an idea already completed.`,
-        ),
-      ],
-      next: "techno-literate-culture",
-    }),
-    "techno-literate-culture": scene({
-      id: "techno-literate-culture",
-      title: "Culture and literacy",
-      prompt:
-        "The Introduction describes four characteristics of a techno-literate culture. What do you remember about them? Start with any one, and explain how it helps the culture develop.",
-      objective: "Explain each of the four characteristics presented in the Introduction.",
-      tutorBrief:
-        "Assess four separately; accept paraphrases. Start with any one. Rephrase around the framework and their example. Build on records, shared languages and schools; avoid repeated What else? After difficulty or a help request, offer one targeted cue: most people's basic skills, who discovers ideas, how strangers coordinate, or levels of education. If needed, explain that one characteristic and invite their own explanation of its role. Explain all four if requested; wait for an attempt first. Tutor words alone are not learner evidence; an explanation after help is supported understanding, not independent recall. Keep gaps unresolved; honor next requests.",
-      concepts: [
-        criterion(
-          "widespread-literacy",
-          `Source-backed (${SOURCE.introduction}): says most people have a minimal level of literacy, including reading, writing, and arithmetic.`,
-        ),
-        criterion(
-          "idea-discoverers",
-          `Source-backed (${SOURCE.introduction}): says a relatively small set of people can discover ideas that move the culture forward; it is not necessary for everyone to be an inventor.`,
-        ),
-        criterion(
-          "social-coordination",
-          `Source-backed (${SOURCE.introduction}): explains that social/economic structures and behaviors help large populations of strangers coexist in relative harmony; a concrete example such as laws, markets, cities, or institutions is sufficient.`,
-        ),
-        criterion(
-          "education-system",
-          `Source-backed (${SOURCE.introduction}): describes substantial education that teaches basic literacy broadly and advanced knowledge to some people so they can arrive at new ideas.`,
-        ),
-      ],
-      next: "caf-application",
-    }),
-    "caf-application": scene({
-      id: "caf-application",
-      title: "Apply the framework",
-      prompt:
-        "Using the framework you have demonstrated, how would you assess the Canadian Armed Forces? Explain your conclusion with evidence.",
-      objective:
-        "Apply each source characteristic to evidence about an institution and explain a defensible conclusion.",
-      tutorBrief:
-        "This is transfer reasoning, not a source-canonical fact. Accept either conclusion, including a qualified one, when evidence is connected thoughtfully to the framework. Ask about evidence for each characteristic and what remains uncertain. Never steer toward a predetermined yes/no or treat the model's preferred conclusion as a book fact.",
-      concepts: [
-        criterion(
-          "caf-literacy-evidence",
-          `Transfer rubric (${SOURCE.transfer}): connects relevant evidence about the Canadian Armed Forces to widespread reading, writing, and arithmetic literacy.`,
-        ),
-        criterion(
-          "caf-discovery-evidence",
-          `Transfer rubric (${SOURCE.transfer}): connects relevant evidence to whether a relatively small group can develop ideas that move the institution or its wider culture forward.`,
-        ),
-        criterion(
-          "caf-coordination-evidence",
-          `Transfer rubric (${SOURCE.transfer}): connects relevant evidence to structures and behaviors that let many people coordinate or coexist.`,
-        ),
-        criterion(
-          "caf-education-evidence",
-          `Transfer rubric (${SOURCE.transfer}): connects relevant evidence to broad basic education and advanced education for some.`,
-        ),
-        criterion(
-          "caf-defensible-conclusion",
-          `Transfer rubric (${SOURCE.transfer}): offers a conclusion (yes, no, or qualified) that follows from cited framework evidence and acknowledges material limits or uncertainty. No particular conclusion is canonical.`,
-        ),
-      ],
-      next: "synthesis",
-    }),
-    synthesis: scene({
-      id: "synthesis",
-      title: "Connect the ideas",
-      prompt: "How do the ideas we have discussed fit together? Choose a connection and explain why it follows.",
-      objective: "Explain multiple relationships among ideas addressed in the earlier scenes.",
-      tutorBrief:
-        "Invite the learner to choose a connection and explain why it follows. Look for multiple relationships in the learner's own explanation. Extended cognition is not a required source term. Do not name or supply missing links before evidence.",
-      concepts: [
-        criterion(
-          "synthesis-memory-symbols",
-          `Source-backed (${SOURCE.preface}; ${SOURCE.introduction}): connects external/non-biological memory with exographics as meaningful visual symbolic representation, while keeping the ideas distinct.`,
-        ),
-        criterion(
-          "synthesis-reasoning",
-          `Source-backed (${SOURCE.preface}): explains how visual symbolic representations can make abstract ideas inspectable and extend a reasoning thread.`,
-        ),
-        criterion(
-          "synthesis-discovery-eclass",
-          `Source-backed (${SOURCE.preface}): relates exographics' role in discovery to the book's e-Class, ideas that could not otherwise be discovered.`,
-        ),
-        criterion(
-          "synthesis-culture",
-          `Source-backed (${SOURCE.introduction}): connects the growth/use of exographic ideas with the rise of techno-literate culture, without treating the relationship as a rigid one-step chain.`,
-        ),
-      ],
       next: "recap",
     }),
     recap: scene({
       id: "recap",
       assessConversationOnEntry: true,
+      completeAfterTutorOutput: true,
       title: "What the conversation showed",
       prompt:
         "Review what you explained independently, what became clear after a prompt, what is still partial, and what remains to revisit.",
       objective: "Close with an evidence-based recap, without converting unresolved or skipped ideas into mastery.",
       tutorBrief:
-        "The app presents the session's evidence-based recap. Invite the learner to review that visible recap; do not infer or invent a summary from conversation memory. Keep independent, prompted, partial, and unresolved evidence distinct. Treat Canadian Armed Forces reasoning as transfer, not a source-canonical fact. Do not fill gaps with hidden answers when the lesson ends or a scene was skipped.",
+        "The app presents the session's evidence-based recap. Briefly acknowledge that the discussion is finished and invite the learner to review the visible recap. End without a question; do not infer or invent a summary from conversation memory. Keep independent, prompted, partial, and unresolved evidence distinct. Do not fill gaps with hidden answers when the lesson ends or a scene was skipped.",
       next: null,
     }),
   },
@@ -265,7 +154,7 @@ const lesson: LessonDefinition = {
   tutor: {
     persona:
       "You are a curious, respectful discussion partner helping an adult learner think through Catching Unicorns.",
-    sessionGuidance: `Use only claims grounded in ${SOURCE.preface} and ${SOURCE.introduction}. The app, not you, controls scene changes and visual reveals. Let the learner answer before teaching. Keep unresolved canonical answers private except when the current scene tutor brief explicitly permits targeted scaffolding after difficulty or a request. Tutor-supplied content alone never establishes learner mastery. Natural paraphrases count. A probe must clarify the learner's meaning without putting an answer in their mouth. Honor a request to stop or skip without treating it as evidence. Google/AI/memorization may be discussed only as optional transfer conversation and cannot gate mastery.`,
+    sessionGuidance: `Use only claims grounded in ${SOURCE.introduction}. The app, not you, controls scene changes and visual reveals. Let the learner answer before teaching. Keep unresolved canonical answers private except when the current scene tutor brief explicitly permits targeted scaffolding after difficulty or a request. Tutor-supplied content alone never establishes learner mastery. Natural paraphrases count. A probe must clarify the learner's meaning without putting an answer in their mouth. Honor a request to stop or skip without treating it as evidence.`,
     startInstruction:
       "Begin the Catching Unicorns discussion by asking the current scene's prompt, then pause for the learner.",
     nodeInstruction:
@@ -273,7 +162,7 @@ const lesson: LessonDefinition = {
   },
   classifier: {
     objectiveInstructions:
-      "Classify the learner's understanding of the current scene objective only. Treat source-backed claims as paraphrasable evidence; the Canadian Armed Forces scene is transfer reasoning, not a canonical book fact. A request to stop or skip is not evidence of understanding.",
+      "Classify the learner's understanding of the current scene objective only. Treat source-backed claims as paraphrasable evidence. A request to stop or skip is not evidence of understanding.",
     objectiveCriteria: {
       completed:
         "The learner has settled the current conversational objective and demonstrated every authored necessary concept criterion. A generic correct response or acknowledgment is not enough when any criterion is missing or partial. A demonstrated concept may be prompted where the scene's authored completion policy permits it; do not require independent-only evidence unless that policy says so. Unresolved concepts remain unresolved and cannot be counted as completed.",
@@ -362,110 +251,6 @@ export const CATCHING_UNICORNS_PRESENTATION = {
       },
     },
   },
-  "why-exographics": {
-    promptVisual: { arithmetic: "84 + 1,045 + 693 + 719", note: "The arithmetic result is not a mastery criterion." },
-    reveals: {
-      reification: {
-        title: "Reification purpose",
-        text: "Bringing representations of abstract concepts into the visual field so they can be inspected and manipulated.",
-        source: SOURCE.preface,
-      },
-      "memory-extension": {
-        title: "Memory extension purpose",
-        text: "Supporting longer threads of reasoning by placing representations in the visual field rather than holding every step in biological memory.",
-        source: SOURCE.preface,
-      },
-      discovery: {
-        title: "Discovery",
-        text: "Exographics can participate in discovering ideas, not only record completed thought. The Preface also points to Einstein's work on special relativity as an example.",
-        source: SOURCE.preface,
-      },
-    },
-  },
-  "techno-literate-culture": {
-    reveals: {
-      "widespread-literacy": {
-        title: "Widespread basic literacy",
-        text: "Most of the population has minimal reading, writing, and arithmetic literacy.",
-        source: SOURCE.introduction,
-      },
-      "idea-discoverers": {
-        title: "A smaller group discovers ideas",
-        text: "A relatively small set of people can discover ideas that move the culture forward.",
-        source: SOURCE.introduction,
-      },
-      "social-coordination": {
-        title: "Structures support coexistence",
-        text: "Social and economic structures and behaviors help large populations of strangers coexist in relative harmony.",
-        source: SOURCE.introduction,
-      },
-      "education-system": {
-        title: "Substantial education",
-        text: "Education teaches basic literacy broadly and advanced knowledge to some, enabling new ideas.",
-        source: SOURCE.introduction,
-      },
-    },
-  },
-  "caf-application": {
-    transfer: true,
-    framework: [
-      { sourceNodeId: "techno-literate-culture", criterionId: "widespread-literacy", revealIf: "demonstrated" },
-      { sourceNodeId: "techno-literate-culture", criterionId: "idea-discoverers", revealIf: "demonstrated" },
-      { sourceNodeId: "techno-literate-culture", criterionId: "social-coordination", revealIf: "demonstrated" },
-      { sourceNodeId: "techno-literate-culture", criterionId: "education-system", revealIf: "demonstrated" },
-    ],
-    reveals: {
-      "caf-literacy-evidence": {
-        title: "Literacy evidence",
-        text: "Evidence connected to widespread reading, writing, and arithmetic literacy.",
-        source: SOURCE.transfer,
-      },
-      "caf-discovery-evidence": {
-        title: "Discovery evidence",
-        text: "Evidence connected to people developing ideas that move the institution or wider culture forward.",
-        source: SOURCE.transfer,
-      },
-      "caf-coordination-evidence": {
-        title: "Coordination evidence",
-        text: "Evidence connected to structures and behaviors that support coordination among many people.",
-        source: SOURCE.transfer,
-      },
-      "caf-education-evidence": {
-        title: "Education evidence",
-        text: "Evidence connected to broad basic education and advanced education for some.",
-        source: SOURCE.transfer,
-      },
-      "caf-defensible-conclusion": {
-        title: "Your conclusion",
-        text: "A conclusion supported by framework evidence. Yes, no, and qualified conclusions can all be defensible; this is transfer reasoning, not a canonical fact from the excerpt.",
-        source: SOURCE.transfer,
-      },
-    },
-  },
-  synthesis: {
-    reveals: {
-      "synthesis-memory-symbols": {
-        title: "Memory and symbolic representation",
-        text: "Engrams and exograms distinguish biological from non-biological memory; exographics is the broader practice of meaningful visual symbols.",
-        source: `${SOURCE.introduction}; ${SOURCE.preface}`,
-      },
-      "synthesis-reasoning": {
-        title: "Reasoning with representations",
-        text: "Visual symbols can make abstract ideas inspectable and extend a thread of reasoning.",
-        source: SOURCE.preface,
-      },
-      "synthesis-discovery-eclass": {
-        title: "Discovery and the e-Class",
-        text: "The book connects exographics with discovering ideas that otherwise could not be discovered, called the e-Class.",
-        source: SOURCE.preface,
-      },
-      "synthesis-culture": {
-        title: "Techno-literate culture",
-        text: "The book connects exographic ideas with the rise of techno-literate culture.",
-        source: SOURCE.introduction,
-      },
-    },
-  },
   recap: {
     groups: [
       { id: "independent", title: "Demonstrated independently", evidence: "demonstrated-independent" },
@@ -473,13 +258,6 @@ export const CATCHING_UNICORNS_PRESENTATION = {
       { id: "unattributed", title: "Demonstrated · prompting unclear", evidence: "demonstrated-unattributed" },
       { id: "partial", title: "Partly explained", evidence: "partial" },
       { id: "missing", title: "Still unresolved or skipped", evidence: "not-yet-or-absent" },
-    ],
-    transferCriterionIds: [
-      "caf-literacy-evidence",
-      "caf-discovery-evidence",
-      "caf-coordination-evidence",
-      "caf-education-evidence",
-      "caf-defensible-conclusion",
     ],
     policy:
       "Recap labels describe recorded evidence only. A skipped or unresolved criterion remains unresolved; do not append the hidden reveal text to explain it.",

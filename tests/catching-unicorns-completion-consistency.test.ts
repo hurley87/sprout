@@ -61,32 +61,6 @@ function harness(nodeId: string) {
 }
 
 describe("recorded completion consistency", () => {
-  it("holds premature tutor completion until discovery is accepted, then advances after valid confirmation", () => {
-    const h = harness("why-exographics");
-    // Establish a learner turn before replaying the recorded tutor snapshot.
-    h.assess(replay.checkpoints.prematureCompletion, "child");
-    expect(h.assess(replay.checkpoints.prematureCompletion, "tutor").outcome).toBe("hold_scene");
-    h.drain();
-    expect(h.state).toMatchObject({ nodeId: "why-exographics", phase: "active" });
-    expect(meetsAuthoredCompletionPolicy(h.state, h.definition)).toBe(false);
-    const held = answerRecoveryInstruction(h.definition, h.state);
-    expect(held).toContain("completion is not authorized");
-    expect(held).toContain("Private focus: discovery:");
-    expect(held).not.toContain("Yes, that completes this question");
-
-    expect(h.assess(replay.checkpoints.acceptedDiscovery, "child").outcome).toBe("hold_scene");
-    expect(meetsAuthoredCompletionPolicy(h.state, h.definition)).toBe(true);
-    const accepted = answerRecoveryInstruction(h.definition, h.state);
-    expect(accepted).toContain("the required concept evidence is recorded");
-    expect(accepted).toContain("end your turn without a question");
-    expect(accepted).toContain("Do not ask the learner to repeat settled points");
-    h.drain();
-    expect(h.state.nodeId).toBe("why-exographics");
-    expect(h.assess(replay.checkpoints.validCompletion, "tutor").outcome).toBe("allow_semantic_completion_evidence");
-    h.drain();
-    expect(h.state).toMatchObject({ nodeId: "techno-literate-culture", phase: "rendering" });
-  });
-
   it("keeps recorded Engram uncertainty held while avoiding a second location question", () => {
     const h = harness("engram");
     h.assess(replay.checkpoints.engramInitial, "child");
@@ -120,27 +94,6 @@ describe("recorded completion consistency", () => {
     h.assess(accepted, "tutor");
     h.drain();
     expect(h.state).toMatchObject({ nodeId: "exogram", phase: "rendering" });
-  });
-
-  it("preserves a genuinely incomplete discovery hold without rechecking accepted targets", () => {
-    const h = harness("why-exographics");
-    const incomplete = structuredClone(replay.checkpoints.acceptedDiscovery);
-    incomplete.outputs.concepts["concept_discovery"] = {
-      choice: "partial",
-      confidence: 0.99,
-      probabilities: { not_yet: 0, partial: 0.99, demonstrated_independent: 0.01, demonstrated_prompted: 0 },
-    };
-    h.assess(incomplete, "child");
-    h.assess(incomplete, "tutor");
-    h.drain();
-    expect(h.state).toMatchObject({ nodeId: "why-exographics", phase: "active", transitionReady: false });
-    expect(h.state.conceptEvidence["why-exographics:discovery"]?.status).toBe("partial");
-    expect(meetsAuthoredCompletionPolicy(h.state, h.definition)).toBe(false);
-    const recovery = answerRecoveryInstruction(h.definition, h.state);
-    expect(recovery).toContain("Private focus: discovery:");
-    expect(recovery).toContain("Other outstanding targets: none");
-    expect(recovery).toContain("Preserve accepted explanations");
-    expect(recovery).not.toContain("the required concept evidence is recorded");
   });
 
   it("reserves overall completion for application authorization while permitting acknowledgment of a sufficient answer", () => {

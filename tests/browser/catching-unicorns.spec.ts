@@ -67,7 +67,9 @@ async function installLocalSession(page: Page) {
           if (command.type === "session.instructions.append") {
             // Catch scene-context expansion before a live provider rejects it.
             if (new TextEncoder().encode(command.content).length > 2000) {
-              source.channel!.send(JSON.stringify({ type: "error", error: { code: "invalid_value", client_event_id: command.event_id } }));
+              source.channel!.send(
+                JSON.stringify({ type: "error", error: { code: "invalid_value", client_event_id: command.event_id } }),
+              );
               return;
             }
             source.channel!.send(
@@ -140,7 +142,7 @@ test("direct Catching Unicorns route renders hidden concepts and fits a narrow s
   await expect(page.getByText("Explain it in your own words.", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /skip/i })).toHaveCount(0);
   await expect(page.getByRole("navigation", { name: "Lesson scenes" }).locator('[aria-current="step"]')).toHaveCount(1);
-  await expect(page.getByLabel("Scene 1 of 9", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Scene 1 of 5", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Conversation so far" })).not.toBeVisible();
   const body = await page.locator("body").innerText();
   expect(body).not.toContain("Biological memory: memory held within a biological mind.");
@@ -285,15 +287,7 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
               ? "demonstrated_prompted"
               : body.nodeId === "exographics" && id === "visual-symbols"
                 ? "demonstrated_prompted"
-                : body.nodeId === "why-exographics" &&
-                    id === "reification" &&
-                    !body.transcript.includes("inspect, remember, and discover")
-                  ? "partial"
-                  : body.nodeId === "why-exographics" &&
-                      id === "memory-extension" &&
-                      !body.transcript.includes("inspect, remember, and discover")
-                    ? "not_yet"
-                    : "demonstrated_independent";
+                : "demonstrated_independent";
       return {
         criterionId: id,
         observation,
@@ -310,7 +304,11 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
           childActivity: "unknown",
           answerOutcome: "correct",
           supportState: "none",
-          tutorState: transcriptMessages(body.transcript)?.findLast(message => message.speaker === "Tutor")?.text.includes("?") ? "clarifying" : "acknowledging",
+          tutorState: transcriptMessages(body.transcript)
+            ?.findLast(message => message.speaker === "Tutor")
+            ?.text.includes("?")
+            ? "clarifying"
+            : "acknowledging",
           conceptObservations: observations,
         },
       },
@@ -513,44 +511,6 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
     "A map can do that too.",
   );
   await expectEvidence("exographics:visual-symbols", { status: "demonstrated", understanding: "prompted" });
-  await waitForScene("why-exographics");
-  await page.screenshot({ path: testInfo.outputPath("addition-question-desktop.png") });
-  await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.locator('[aria-label="Arithmetic example"]')).toBeInViewport();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  await page.screenshot({ path: testInfo.outputPath("addition-question-mobile.png") });
-  await page.setViewportSize({ width: 1440, height: 1000 });
-  await speakThenTutor(
-    "Paper helps me inspect the marks and keep a longer chain in mind.",
-    "What else can that make possible?",
-  );
-  await expect(page.locator('[data-scene="why-exographics"]')).toContainText("Partly explained");
-  await expect(page.locator('[data-scene="why-exographics"]')).toContainText("Not yet demonstrated");
-  await expect(page.getByRole("button", { name: "Continue", exact: true })).toHaveCount(0);
-  await speakThenTutor(
-    "External symbols help us inspect, remember, and discover ideas.",
-    "That explains all three purposes.",
-  );
-  await waitForScene("techno-literate-culture");
-
-  await speakThenTutor(
-    "Most people need basic literacy, a few discover ideas, institutions coordinate strangers, and education develops knowledge.",
-    "That covers the framework.",
-  );
-  await waitForScene("caf-application");
-  await speakThenTutor(
-    "My conclusion: yes, with qualifications, because training and coordination support several framework characteristics.",
-    "That is a defensible case when tied to evidence.",
-  );
-  await expectEvidence("caf-application:caf-defensible-conclusion", {
-    status: "demonstrated",
-    understanding: "independent",
-  });
-  await waitForScene("synthesis");
-  await speakThenTutor(
-    "External representations support reasoning, discovery, and shared knowledge.",
-    "Those connections bring the ideas together.",
-  );
   await waitForScene("recap");
 
   await expect(page.locator('[data-scene="recap"]')).toContainText("Demonstrated independently");
@@ -568,6 +528,22 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
     "Every authored criterion has accepted evidence.",
   );
   await expect(page.locator('[data-scene="recap"]')).not.toContainText(/extended cognition/i);
+  await page.evaluate(() => {
+    (window as unknown as LocalSessionWindow).currentPeer.level.gain.value = 0.15;
+  });
+  await sendWire("session.output_transcript.delta", "The discussion is finished. Review the recap on screen.");
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => (window as LessonObservationWindow).sproutLessonObservation?.read()?.snapshot.runtime?.outputActivity,
+      ),
+    )
+    .toBe("active");
+  await expect(page.getByRole("status")).toHaveText("live");
+  await page.evaluate(() => {
+    (window as unknown as LocalSessionWindow).currentPeer.level.gain.value = 0;
+  });
+  await expect(page.getByRole("status")).toHaveText("Session complete");
   await page.getByText("Session details", { exact: true }).click();
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export session", exact: true }).click();
@@ -581,6 +557,6 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
   expect(exported.lesson).toEqual({ id: "catching-unicorns", sceneId: "recap" });
   expect(exported.acceptedEvidence).toHaveProperty("engram:engram-biological");
   expect(exported.revealContext.engram).toContain("engram-biological");
-  expect(exported.revealContext["why-exographics"]).toEqual(["reification", "memory-extension", "discovery"]);
+  expect(Object.keys(exported.revealContext)).toEqual(["engram", "exogram", "compare", "exographics", "recap"]);
   expect(exportText).not.toMatch(/OPENAI_API_KEY|TYPESAFE_API_KEY|authorization|access_token|"sdp"/i);
 });

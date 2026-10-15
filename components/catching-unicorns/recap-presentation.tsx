@@ -7,10 +7,6 @@ const recapSceneLabel = (id: string) =>
     exogram: "Exogram prompt",
     compare: "Comparison scene",
     exographics: "Visual practice scene",
-    "why-exographics": "Arithmetic example",
-    "techno-literate-culture": "Culture framework",
-    "caf-application": "Transfer scene",
-    synthesis: "Connections scene",
     recap: "Recap",
   })[id] ?? "Lesson scene";
 
@@ -46,10 +42,7 @@ export function RecapPresentation({ state }: { state: LessonRuntimeState | null 
       <header>
         <p className="text-sm uppercase tracking-[0.2em] text-emerald-800">Catching Unicorns · recap</p>
         <h2 className="mt-2 text-3xl font-semibold">What this conversation showed</h2>
-        <p className="mt-3 max-w-3xl text-slate-600">
-          A record of accepted evidence from this session. Transfer reasoning is kept separate from source-backed
-          concepts.
-        </p>
+        <p className="mt-3 max-w-3xl text-slate-600">A record of accepted evidence from this session.</p>
       </header>
       <div className="grid gap-4 md:grid-cols-2">
         {groups.map(group => (
@@ -69,9 +62,6 @@ export function RecapPresentation({ state }: { state: LessonRuntimeState | null 
                         ? `“${item.evidence.source.childTranscript}”`
                         : "Accepted evidence recorded."}
                     </p>
-                    {item.nodeId === "caf-application" && (
-                      <p className="mt-1 text-xs font-medium text-indigo-800">Transfer/application reasoning</p>
-                    )}
                   </li>
                 ))}
               </ul>

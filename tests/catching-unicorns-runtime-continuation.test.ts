@@ -357,7 +357,7 @@ it("recovers the recorded Exographics hold without counting the tutor's supplied
   expect(runtime.snapshot().runtime?.nodeId).toBe("exographics");
   tutorTranscript("That completes this question.", timestamp + 200);
   await vi.advanceTimersByTimeAsync(600);
-  expect(runtime.snapshot().runtime?.nodeId).toBe("why-exographics");
+  expect(runtime.snapshot().runtime?.nodeId).toBe("recap");
 });
 
 it("recovers an interrupted confirmation followed by learner acknowledgments without requiring the answer again", async () => {
@@ -462,7 +462,7 @@ it("replays Exographics progress and requests completion after the earlier suppo
   }
   tutorTranscript("Yes, that completes this question.", timestamp);
   await vi.advanceTimersByTimeAsync(600);
-  expect(runtime.snapshot().runtime).toMatchObject({ nodeId: "why-exographics", phase: "rendering" });
+  expect(runtime.snapshot().runtime).toMatchObject({ nodeId: "recap", phase: "rendering" });
 });
 
 it("replays the first-question microphone starvation, recovers, and requires fresh learner evidence before advancing", async () => {

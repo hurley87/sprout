@@ -1,8 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import { COUNTING_LESSON } from "../lib/lesson-runtime/counting-lesson";
-import { CATCHING_UNICORNS_LESSON } from "../lib/lesson-runtime/catching-unicorns-lesson";
+import type { CATCHING_UNICORNS_LESSON } from "../lib/lesson-runtime/catching-unicorns-lesson";
 import {
   conversationObserverState,
   conversationStateQuestions,
@@ -18,7 +17,8 @@ import {
   valueHash,
 } from "./helpers/classifier-benchmark";
 
-const lessons = [COUNTING_LESSON, CATCHING_UNICORNS_LESSON];
+// Benchmark v1 is historical evidence; its hashes must not follow the active lesson.
+const lessons = readJson(dir + "lessons.json") as (typeof CATCHING_UNICORNS_LESSON)[];
 const corpus = readJson(dir + "corpus.json");
 validateBenchmarkCorpus(corpus, lessons);
 const manifest = JSON.parse(readFileSync(dir + "manifest.json", "utf8"));
