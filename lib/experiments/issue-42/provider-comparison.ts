@@ -651,6 +651,10 @@ export function latencySummary(values: number[]) {
     convention: "nearest-rank; <20 samples do not establish tail latency",
   };
 }
+/** Preserve question/stage presence and selected labels; scores are not label changes. */
+function selectedChoices(answers: Readonly<Record<string, { choice: string }>>) {
+  return Object.fromEntries(Object.entries(answers).map(([key, answer]) => [key, answer.choice]));
+}
 export function aggregateResults(
   results: {
     arm: Arm;
@@ -672,14 +676,18 @@ export function aggregateResults(
         const samples = observed.filter(r => r.caseId === caseId);
         const labels = samples.map(r =>
           r.factored
-            ? valueHash(r.factored)
+            ? valueHash({
+                objective: r.factored.objectiveState.choice,
+                tutor: r.factored.tutorState.choice,
+                demonstration: selectedChoices(r.factored.demonstration),
+                prompting: selectedChoices(r.factored.prompting),
+                sources: selectedChoices(r.factored.sources),
+              })
             : valueHash({
                 objective: r.normalized!.objectiveState.choice,
                 tutor: r.normalized!.tutorState.choice,
-                concepts: Object.fromEntries(
-                  Object.entries(r.normalized!.concepts ?? {}).map(([k, a]) => [k, a.choice]),
-                ),
-                sources: Object.fromEntries(Object.entries(r.normalized!.sources ?? {}).map(([k, a]) => [k, a.choice])),
+                concepts: selectedChoices(r.normalized!.concepts ?? {}),
+                sources: selectedChoices(r.normalized!.sources ?? {}),
               }),
         );
         return {

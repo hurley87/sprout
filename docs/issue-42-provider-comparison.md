@@ -166,7 +166,18 @@ revision rejection. A valid normalized response rejected by mapping remains a
 valid **raw** observation; neither proposal acceptance nor HTTP success is an
 accuracy score. Incomplete, refused, malformed and locally unsupported cases do
 not count as valid observations. Stability compares normalized label/source
-selections across valid fresh repetitions; fewer than two observations is null.
+selections across valid fresh repetitions of the same case within each arm; fewer
+than two observations is null. Both variants exclude confidence and probability
+distributions from this label-stability signature. Direct signatures include
+objective, tutor, concept and source choices. Factored signatures include
+objective, tutor, demonstration/attempt, conditional prompting and source choices,
+with question keys and stage structure retained. An empty prompting map stays
+empty, distinct from a populated conditional stage. `incorrect` and
+`not_attempted` stay distinct even though both map to `not_yet`; no direct concept
+Choice is manufactured. Score changes alone are stable when selections and stage
+structure stay the same. This metric does not measure score stability or mapping
+acceptance; score-dependent gating that changes which conditional answers exist
+changes the signature.
 
 Latency is monotonic time around the actual transport, including body parsing.
 All attempts and valid normalized observations have separate fresh-provider
