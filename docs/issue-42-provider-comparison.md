@@ -63,7 +63,11 @@ app uses **`jev-1.14.0`**. Plans record `activeRuntime.model` and the exact hash
 `lib/jev.ts` and the executor separately from `providers.jev.model`. The loader
 accepts only the two exact source hashes in `ACTIVE_MODEL_COMPATIBILITY` for
 those files; it still verifies their original Git blobs against the frozen
-manifest. Every other baseline source must match v1 exactly. No corpus, historical
+manifest. A separately pinned `RECOVERY_SOURCE_COMPATIBILITY` covers the two later
+recovery/orchestration files, which isolated reducer replay does not execute.
+Their original baseline Git blobs are still checked, and their exact active
+hashes are reported in `activeRuntime.recoverySourceHashes`. Every other baseline
+source must match v1 exactly. No corpus, historical
 observation or frozen hash changes. This changes plan identities, so old run
 authorizations do not apply to a newly generated plan. See
 [the upgrade boundary](issue-42-jev-1.14-upgrade.md).

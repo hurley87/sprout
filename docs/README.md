@@ -27,3 +27,6 @@ proposals and owns every scene transition.
 Historical prototype data is disposable; compatibility and migrations are out of
 scope. Repository docs describe the surviving system. Broader behavioral evaluation
 belongs to [#57](https://github.com/hurley87/sprout/issues/57).
+
+The [issue #42 decision](issue-42-decision.md) retains active Jev 1.14 after a
+limited reviewed comparison; the experimental Decisions tooling stays isolated.

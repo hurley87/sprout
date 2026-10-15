@@ -1,5 +1,10 @@
 # Issue #42: benchmark readiness and recommendation
 
+This is the historical audit at commit `7262930`. See the later
+[retain-Jev decision and six-snapshot diagnostic](issue-42-decision.md) for the
+subsequent evidence and user decision. The inventory below is not a current
+zero-observation claim.
+
 As of October 15, 2026, **the empirical comparison is incomplete**. Recommend
 **another bounded test**, beginning with the six-case diagnostic proposed below.
 There is no measured basis to replace Jev, select Decisions thresholds, or claim

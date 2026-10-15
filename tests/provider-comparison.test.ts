@@ -145,6 +145,7 @@ describe("reproducible provider comparison (all transports synthetic)", () => {
     expect(p.activeRuntime.model).toBe("jev-1.14.0");
     expect(p.providers.jev.model).toBe("jev-1.13.0");
     expect(p.activeRuntime.sourceHashes).toEqual(artifacts.ACTIVE_MODEL_COMPATIBILITY);
+    expect(p.activeRuntime.recoverySourceHashes).toEqual(artifacts.RECOVERY_SOURCE_COMPATIBILITY);
     expect(p.mappingPolicyHash).not.toBe(
       artifacts.makePlan(benchmark, { mappingPolicy: { minProbability: 0.7, minConfidence: 0.6, minMargin: 0.3 } })
         .mappingPolicyHash,
@@ -185,6 +186,8 @@ describe("reproducible provider comparison (all transports synthetic)", () => {
       "tests/fixtures/classifier-benchmark-v1/corpus.json",
       artifacts.ADAPTER_PATH,
       "lib/jev.ts",
+      "lib/lesson-runtime/answer-recovery.ts",
+      "lib/lesson-runtime/lesson-runtime.ts",
       "lib/lesson-runtime/jev-conversation-state-classifier.ts",
       "lib/lesson-runtime/conversation-observer-contract.ts",
     ]) {

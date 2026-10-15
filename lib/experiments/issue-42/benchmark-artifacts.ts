@@ -29,6 +29,12 @@ export const ACTIVE_MODEL_COMPATIBILITY = {
   "lib/lesson-runtime/jev-conversation-state-classifier.ts":
     "c0ad13bb7f5202c625d9ae3ff2ebc55c39bce195de750db8adc8f8467f38ac9f",
 };
+// Exact recovery fix from 4b3c268; these orchestration modules are not executed
+// by isolated reducer replay. Their frozen baseline Git blobs remain mandatory.
+export const RECOVERY_SOURCE_COMPATIBILITY = {
+  "lib/lesson-runtime/answer-recovery.ts": "4e3159932c3ad5beed9ed9786118910fac5d38ea1b8d725acbdb536729554a8c",
+  "lib/lesson-runtime/lesson-runtime.ts": "b8e09c305de67b006d2fdb96934ba57e7717b4aa4a4fc49d42c38c99525385a4",
+};
 const toolPaths = [
   ADAPTER_PATH,
   "lib/experiments/issue-42/factored-decisions.ts",
@@ -61,7 +67,9 @@ export function loadBenchmark() {
   for (const [path, hash] of Object.entries({ ...manifest.files, ...manifest.replaySources }))
     assert.equal(bytesHash(path), hash, `frozen file mismatch: ${path}`);
   for (const [path, hash] of Object.entries(manifest.baselineSources)) {
-    const activeHash = ACTIVE_MODEL_COMPATIBILITY[path as keyof typeof ACTIVE_MODEL_COMPATIBILITY];
+    const activeHash =
+      ACTIVE_MODEL_COMPATIBILITY[path as keyof typeof ACTIVE_MODEL_COMPATIBILITY] ??
+      RECOVERY_SOURCE_COMPATIBILITY[path as keyof typeof RECOVERY_SOURCE_COMPATIBILITY];
     assert.equal(bytesHash(path), activeHash ?? hash, `baseline incompatibility: ${path}`);
     assert.equal(
       sha256(execFileSync("git", ["show", `${manifest.baselineSha}:${path}`])),
@@ -123,7 +131,11 @@ export function loadBenchmark() {
     corpusHash: bytesHash(dir + "corpus.json"),
     lessonsHash: bytesHash(dir + "lessons.json"),
     sourceHashes: Object.fromEntries(toolPaths.map(path => [path, bytesHash(path)])),
-    activeRuntime: { model: JEV_MODEL, sourceHashes: { ...ACTIVE_MODEL_COMPATIBILITY } },
+    activeRuntime: {
+      model: JEV_MODEL,
+      sourceHashes: { ...ACTIVE_MODEL_COMPATIBILITY },
+      recoverySourceHashes: { ...RECOVERY_SOURCE_COMPATIBILITY },
+    },
     executingCommit: git("rev-parse", "HEAD"),
     executingParent: git("rev-parse", "HEAD^"),
     workingTreeDirty:
