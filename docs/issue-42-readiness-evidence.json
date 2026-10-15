@@ -1,0 +1,188 @@
+{
+  "version": 1,
+  "kind": "issue-42-readiness-evidence-inventory",
+  "asOf": "2026-10-15",
+  "empiricalBenchmarkComplete": false,
+  "recommendation": "run_another_bounded_test",
+  "auditCommit": "72629301122125b82f3280a39901cf954e319812",
+  "auditParent": "d4571f27a2299b3880900794e935b2311341b32f",
+  "baselineCommit": "fd40c9bc631770ab1220f85767ee2f6cdd56ab9a",
+  "implementationBaseline": "1223826b3708627bbc5326ec249e05e3a827cf9c",
+  "activeRuntime": {
+    "model": "jev-1.14.0",
+    "sourceHashes": {
+      "lib/jev.ts": "733168e1333903a53eb891e9eb7800d20c3a397b30bf50a45ab19d9415b9f3a9",
+      "lib/lesson-runtime/jev-conversation-state-classifier.ts": "c0ad13bb7f5202c625d9ae3ff2ebc55c39bce195de750db8adc8f8467f38ac9f"
+    }
+  },
+  "comparisonProviders": {
+    "jev": {
+      "model": "jev-1.13.0",
+      "endpoint": "https://api.typesafe.ai/v1/systemone"
+    },
+    "decisions": {
+      "model": "gpt-6-luna",
+      "endpoint": "https://api.openai.com/v1/decisions"
+    }
+  },
+  "frozenArtifacts": {
+    "tests/fixtures/classifier-benchmark-v1/manifest.json": "ceba27f934ad67b96c8ec0381f2e98156151660c5542c6cfdf3adc332e863c1c",
+    "tests/fixtures/classifier-benchmark-v1/manifest.sha256": "6a7cda200183b804ff564f85c0dd7418d971d0904b1139e5d0fbf83ab4f89355",
+    "tests/fixtures/classifier-benchmark-v1/corpus.json": "fb0e1cad8940cd96722d7912d5f368494ea6a6336ab612fca8066a5330214ad6",
+    "tests/fixtures/classifier-benchmark-v1/lessons.json": "50977f6032a281b861b387c75937bf2de2b77404b4929aaf89947ed9e9d92128"
+  },
+  "sourceHashes": {
+    "lib/experiments/issue-42/decisions-classifier.ts": "d8e8b94221d82c9c69ff3886b546ff8e64ede71ee5dbfa483399f0c8000bba09",
+    "lib/experiments/issue-42/factored-decisions.ts": "d909077c21a021dc4b32277042f85a37c6e3e7b9ad73390f0d56c931aa3ff604",
+    "lib/experiments/issue-42/decisions-calibration.ts": "a98d475bd65362a50fc3b2aac5791a40b0b3b78b1d5f79b216709aae7a6be218",
+    "tests/helpers/classifier-benchmark.ts": "b291c47ffba1298980ae418bfaaf36543fa97939137116b8b5b17e9a3a70f75a",
+    "lib/experiments/issue-42/benchmark-artifacts.ts": "97a5d393ff7d8ab838d5d3ee3cae7a2d2d21a50d1bc64e3de6180865652aa5fb",
+    "lib/experiments/issue-42/provider-comparison.ts": "d9a214f7183a11041da63b7b5d2d1cb7af9a96ac889adfa98829361d45efd2ab",
+    "scripts/issue-42-provider-comparison.mjs": "c33c7957b4985e42e5c1672b509e9f20798ca026943cfd70bc7625cd95382a04",
+    "scripts/issue-42-calibrate-decisions.mjs": "358720b0e58099d2983460e0902d4ad6da48ee0558253525b1074a167ea20bd2"
+  },
+  "coverage": {
+    "snapshots": 71,
+    "calibration": 61,
+    "provisionalSyntheticHeldOut": 10,
+    "recoveredHistoricalCounting": 29,
+    "issueClaimedHistoricalCounting": 30,
+    "limitedHumanReviewedFinalSnapshots": 6,
+    "remainingSnapshotsPendingReview": 65,
+    "groupingApproved": false
+  },
+  "humanReview": {
+    "localUntrackedPath": "docs/issue-42-human-label-review-2026-10-15.json",
+    "sha256": "d655a9ae604f61b4f709ebff3ea95f419afede84441199f9bb9b19f3b80bae2f",
+    "providerRunsAllowed": false,
+    "completeRunLabelReview": false
+  },
+  "availableEvidence": {
+    "freshProviderObservations": 0,
+    "eligibleCalibrationObservations": 0,
+    "empiricalCandidates": 0,
+    "compatibleLockedPolicies": 0,
+    "authorizedRunArtifacts": 0,
+    "priorLocalPlanOrSyntheticArtifacts": [
+      "test-results/issue-42/commit3-all-offline-final.json",
+      "test-results/issue-42/commit3-all-plan-final.json",
+      "test-results/issue-42/commit3-committed-offline.json",
+      "test-results/issue-42/commit3-committed-plan.json",
+      "test-results/issue-42/commit3-offline.json",
+      "test-results/issue-42/commit3-partial-review-plan.json",
+      "test-results/issue-42/commit3-plan-initial.json",
+      "test-results/issue-42/commit4-600e8dc-direct-offline.json",
+      "test-results/issue-42/commit4-600e8dc-factored-offline.json",
+      "test-results/issue-42/commit4-direct-offline.json",
+      "test-results/issue-42/commit4-factored-offline.json"
+    ]
+  },
+  "offlineVerification": [
+    {
+      "variant": "direct",
+      "localArtifact": "test-results/issue-42/commit5-7262930-direct-offline.json",
+      "planHash": "84bcbe06f021dd7d8b522007f45dade59e5a0981747a248594d3b2d4628b3da8",
+      "caseCount": 71,
+      "repetitions": 2,
+      "syntheticArmSlots": 284,
+      "freshProviderObservations": 0
+    },
+    {
+      "variant": "factored",
+      "localArtifact": "test-results/issue-42/commit5-7262930-factored-offline.json",
+      "planHash": "37302cb475b906dc1802a86005273808229ed6f2f207858d6689a2d84b945e4b",
+      "caseCount": 71,
+      "repetitions": 2,
+      "syntheticArmSlots": 284,
+      "freshProviderObservations": 0
+    }
+  ],
+  "calibrationCheck": {
+    "localArtifact": "test-results/issue-42/commit5-7262930-calibration-unavailable.json",
+    "sha256": "84b4cebf3fcc594e7985da15fe1d43cf50856bf793ef827a2175b552039a0325",
+    "status": "calibration_unavailable",
+    "reason": "eligible normalized observations and independently human-reviewed calibration labels required"
+  },
+  "proposedDiagnostic": {
+    "authorizationStatus": "not_authorized",
+    "variant": "factored-concepts-v1",
+    "designHash": "158965720043151674308add1486a8bff1c4acefba86a9227d692151564f8663",
+    "groupingHash": "c55a31ca66f3607b5d10e55fcefbad87daf75f5faddbe137df3997a3968a47cd",
+    "selectedCases": [
+      {
+        "id": "oct14-engram-final",
+        "inputSha256": "706674cfc78c51110b686648a57e3a292a75090ba36e66d87c20ca3864c275b9",
+        "questionsSha256": "8d823fee8721a0aefa3e91f0f9c8c4eecd11141ff38a769800d813fc229c2190",
+        "projectionSha256": "fc85f6729acc0b8aeec884d480d253187c69a43c74452127951a905c14ec2ce8",
+        "jevRequestHash": "86c33075db391b6735bb4fe3fe9462135f2f6d590aa16e3e12758879083eaf8b",
+        "decisionsRequestHash": "b453ef275f5ccc9783b01502a5476a31edf5dba6d9af4ce98e781d58ee93d23a",
+        "promptingTemplateHash": "d4e8a3bc5620f8bf61bcb0d4b00d15ac338ff6bb477e9a764e826d916baab852",
+        "decisionsUnsupported": null
+      },
+      {
+        "id": "oct14-exogram-final",
+        "inputSha256": "a05e5d22b9a0b33a9c6ef288b55804cb3e71c6ca5a73196c922c5b15d66770c0",
+        "questionsSha256": "7c5f1bc699da00675ddf4b589f35b52af188734f0c181c7d8c6a9d1650bdd594",
+        "projectionSha256": "f71a87c571f7a6369ca2596420a42f18c73d170b8421c02db6b8abd39541a108",
+        "jevRequestHash": "a5c9b1d77e247391bd77649bf278df95f69c833418841fb2df2b8bc646e04570",
+        "decisionsRequestHash": "83bd890cf53c1a54226b4a16e3110daf93689d4f824d05d5a9e7eac5eba76c9d",
+        "promptingTemplateHash": "b5acfc2d8d8f602ab9c04a23862baf3f009d8aecaee129b3df6d56ce1c8f33b7",
+        "decisionsUnsupported": null
+      },
+      {
+        "id": "oct14-compare-final",
+        "inputSha256": "61946f3ee22c68416dba32a718db8a4ed783a1375134110d02bac2bda4c538ef",
+        "questionsSha256": "706f90527cf31faf698f89ee3295f99df9a5dcec11184534485242339bc14b79",
+        "projectionSha256": "68746333d631a1e3df02fbb133f9390b5399ca7652a5f2b61d3ae29c78c39de4",
+        "jevRequestHash": "c052ac71ef8a0c079bb116f89b0c5f9ac2834c1a9ee7eeb78f873566f8df681e",
+        "decisionsRequestHash": "0f1bb0bad3d634b815d9050334784201cd05f5a6716dbe5240fa97ca46c150da",
+        "promptingTemplateHash": "5a8ccb9c1e43b236d4127c3a0524d9bca1a24a2dc6c015fb4f5677640f642b30",
+        "decisionsUnsupported": null
+      },
+      {
+        "id": "oct14-exographics-final",
+        "inputSha256": "bef0aa6fb883c4d0b634c8babbb08d6392229a4ca9e7fe5f7b18ce913d7b3548",
+        "questionsSha256": "1458abaac1dfcc385c2942807900c35f68817dd75b167f57db718aef7ec3b08f",
+        "projectionSha256": "0c8d8272dc4df7e0e716a64a178ad2d5ed9cb1dbfd4e924b1da8efa4d1c35819",
+        "jevRequestHash": "51fca8c26879006ef809234cc33cf99e420623a88f57b80729bc658003a4d945",
+        "decisionsRequestHash": "d64ffe204bdfa64576c38fc4740c59ff22346855de9c8a834019e0ad4b93562e",
+        "promptingTemplateHash": "6fa56f3876f9be0e72e8d7ec5d02e874d9b6ca3b42ce802d599add1db5a481bf",
+        "decisionsUnsupported": null
+      },
+      {
+        "id": "oct14-why-exographics-final",
+        "inputSha256": "1563767ad6f739c27ee4fa7c4ca56e9ca65658c1578e622b482a0de7ffe810c1",
+        "questionsSha256": "54417381787288ebe5aaabed668ef23306def6bacb364d72ce52941fc23ca52e",
+        "projectionSha256": "82cf098339f30c4a10ecf2ff5c57e3a21fd62844dfad75cb5218232a44e67b03",
+        "jevRequestHash": "977849c40a73ad3c84d62ef9ac017acc8482f84c01b5e26024cb5c78aae351c5",
+        "decisionsRequestHash": "f7d90e8f8bb2e58bde1c8ab2ead2348fa293e0bded6b00057ee0abf7240ce2e7",
+        "promptingTemplateHash": "acea291448522579046a1d3215213b934a1549697494775e380515fda33149ff",
+        "decisionsUnsupported": null
+      },
+      {
+        "id": "oct14-techno-literate-culture-final",
+        "inputSha256": "ee564d0e00691e8e656e9114a194c2e455cb22603b25df2b7ef2628df794d762",
+        "questionsSha256": "260e0ef982665f3257f47027885b5265d896bb411a4c6a8ec303333009b9a7e4",
+        "projectionSha256": "2408c272b1fb3115573ccafb42ab5f42685520f6e4291a7d5c913bbc13697154",
+        "jevRequestHash": "1fb1fb11330d2d4ed9dc3e4c4150782e3e9a365f479170082c6ef628eda43980",
+        "decisionsRequestHash": "317e07790d7063f21de8d5bcc5f3e65bf2a1c9e483b3d11e5286059622f42924",
+        "promptingTemplateHash": "b4f50e345ee61b54c28b14563f711fbb41437758fef8d772e4011331cf9e6946",
+        "decisionsUnsupported": null
+      }
+    ],
+    "repetitions": 3,
+    "maxRequests": 36,
+    "timeoutMs": 10000,
+    "mappingPolicy": null,
+    "conditionalPromptingCalls": 0,
+    "purpose": "raw first-stage diagnostic only; not fitting or held-out evaluation",
+    "auditPlanHash": "18c4edfefe9bde7bf50b8e4a297abc99ac736897b65592c900264fbc69131ff2",
+    "auditPlanLocalArtifact": "test-results/issue-42/commit5-7262930-next-plan.json",
+    "auditPlanSha256": "dc3230197f81f3160691e6e31f348af7457d239ee9044a4d448f21c0fb67310d",
+    "reviewGate": {
+      "ready": false,
+      "reason": "missing_or_incompatible_hash_bound_label_grouping_and_run_authorization"
+    },
+    "regenerateAfterCommit": true
+  }
+}

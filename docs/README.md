@@ -12,6 +12,7 @@ The production prototype is the realtime counting lesson at `/`, backed by
 | [Browser evaluation guide](lesson-browser-guide.md) | Reproduction steps, timing, diagnostic interpretation and limitations |
 | [Browser test suites](browser-tests.md) | Provider-free versus live selection, configuration and costs |
 | [Catching Unicorns demo validation](catching-unicorns-demo-validation.md) | Demo coverage, source limits, live acceptance status and removal rehearsal |
+| [Issue #42 benchmark readiness](issue-42-benchmark-readiness.md) | Evidence gaps, measurement status and a bounded next-test proposal; empirical comparison remains incomplete |
 
 The standalone adult-learning demonstration is available at
 `/demos/catching-unicorns`. It is registered as an application lesson alongside
