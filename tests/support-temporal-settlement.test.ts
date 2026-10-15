@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { JEV_MODEL } from "../lib/jev";
 import review from "../docs/issue-57-support-temporal-review-set.json";
 import {
   CONVERSATION_QUESTIONS,
@@ -43,7 +44,9 @@ it.each(review.cases)("delivers literal $id evidence and the full question contr
   );
   expect(fetch).toHaveBeenCalledOnce();
   const wire = JSON.parse(fetch.mock.calls[0][1].body as string);
-  expect(wire.model).toBe(review.contracts.model);
+  // Exercise current transport on historical text; do not relabel the saved 1.13 review.
+  expect(review.contracts.model).toBe("jev-1.13.0");
+  expect(wire.model).toBe(JEV_MODEL);
   expect(wire.state).toEqual(entry.expectedState);
   expect(wire.questions).toEqual(CONVERSATION_QUESTIONS);
   // Mock success scores test delivery only, never the semantic expectation in entry.review.

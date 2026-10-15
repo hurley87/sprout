@@ -4,9 +4,9 @@
 const ENDPOINT = "https://api.typesafe.ai/v1/systemone";
 /**
  * Pinned rather than `jev-latest`, so the tuned threshold cannot shift when a
- * new release ships. `jev-latest` resolved to this version on 2026-09-23.
+ * new release ships. `jev-latest` resolved to the historical 1.13 baseline on 2026-09-23.
  */
-export const JEV_MODEL = "jev-1.13.0";
+export const JEV_MODEL = "jev-1.14.0";
 
 type JevFailure = { ok: false; reason: "unconfigured" | "rejected" | "unreadable" | "unreachable" | "cancelled" };
 

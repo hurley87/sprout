@@ -1,0 +1,538 @@
+{
+  "version": 1,
+  "kind": "oct15-six-final-raw-comparison-summary",
+  "planHash": "5fb25d813ba28c35c7904ca7dc8e2cc704f2b841ca99c9047e43d3ba40900601",
+  "reviewHash": "52ba890fdfd6973cb29ce25090ef45bcff20aa81802b2cd80683f2431ac0840c",
+  "resultArtifactSha256": "d1d9208ccc5570845676345ec633eca7d5ab2a6415504a013a3ea3c33087c5ee",
+  "freshDecisionsCalls": 6,
+  "freshJevCalls": 0,
+  "freshDecisionsNormalizedObservations": 6,
+  "counts": {
+    "jevRecorded": {
+      "rawExactConceptChoiceAgreement": 13,
+      "scoredConceptChoices": 19,
+      "rawDemonstrationWhenReviewedNoDemonstration": 3,
+      "rawNonDemonstrationWhenReviewedDemonstration": 1,
+      "rawPromptingAttributionDisagreementsOnReviewedDemonstrations": 0,
+      "reviewedSourceChoiceAgreement": 19,
+      "scoredSourceChoices": 19
+    },
+    "decisions": {
+      "rawExactConceptChoiceAgreement": 10,
+      "scoredConceptChoices": 19,
+      "rawDemonstrationWhenReviewedNoDemonstration": 1,
+      "rawNonDemonstrationWhenReviewedDemonstration": 2,
+      "rawPromptingAttributionDisagreementsOnReviewedDemonstrations": 3,
+      "reviewedSourceChoiceAgreement": 17,
+      "scoredSourceChoices": 19
+    }
+  },
+  "reviewedConcepts": {
+    "demonstrated": 11,
+    "noDemonstration": 8
+  },
+  "decisionsUsage": {
+    "inputTokens": 23353,
+    "outputTokens": 0,
+    "totalTokens": 23353
+  },
+  "decisionsBasePriceEstimateUsd": 0.0023353000000000002,
+  "actualBilledCostUsd": null,
+  "pricingSource": "https://developers.openai.com/api/docs/guides/decisions",
+  "pricingQualification": "Base input price estimate only, checked 2026-10-15; regional/long-context premiums may apply. Not an invoice.",
+  "latency": {
+    "recordedJevMappingElapsed": {
+      "n": 6,
+      "p50Ms": 188.117957999988,
+      "p95Ms": 249.41533299998264,
+      "minMs": 153.45329199999105,
+      "maxMs": 249.41533299998264,
+      "convention": "nearest rank; n=6 does not establish tail latency; timestamps/collection conditions differ across arms"
+    },
+    "freshDecisionsAdapterWallTime": {
+      "n": 6,
+      "p50Ms": 298.41091700000015,
+      "p95Ms": 1537.4770839999999,
+      "minMs": 235.84779200000003,
+      "maxMs": 1537.4770839999999,
+      "convention": "nearest rank; n=6 does not establish tail latency; timestamps/collection conditions differ across arms"
+    }
+  },
+  "calibratedMasteryAccuracy": null,
+  "falseMasteryAwards": null,
+  "stability": null,
+  "heldOutAccuracy": null,
+  "recommendation": "retain_active_Jev_1_14_pending_better_evidence; direct Decisions does not demonstrate replacement advantage in this sample",
+  "limitations": [
+    "Six final snapshots, one session/exchange group, one request per case; no population or stability estimate.",
+    "Labels were reviewed after recorded Jev outputs were seen, before any Decisions output; not blind.",
+    "Only direct-equivalent Choices tested; factored experiment not run.",
+    "Jev model/source provenance is operator-confirmed, not present in the export. Authored scene contexts match; original full Jev wire request is reconstructed, not captured.",
+    "Decisions mapping is intentionally unconfigured. No Decisions proposals, reducer awards, UI transitions or full-session assessments were evaluated.",
+    "Exact raw label/source agreement is descriptive; no equality of probability scales or calibrated error rates implied.",
+    "Earlier criterion definitions absent from current-node snapshots cannot erase carried runtime evidence.",
+    "No optional provider objective/tutor Choices were adjudicated; these remain descriptive disagreements.",
+    "Latency conditions and measurement boundaries differ; no causal speed claim."
+  ],
+  "conceptComparisons": [
+    {
+      "caseId": "oct15-engram-final",
+      "criterionId": "engram-biological",
+      "reviewedExpectedChoice": "partial",
+      "reviewedSourceIndexes": [
+        1
+      ],
+      "jevRecorded": {
+        "choice": "demonstrated_independent",
+        "selectedProbability": 0.74,
+        "confidence": 0.65,
+        "sourceChoice": "message_1",
+        "agrees": false,
+        "sourceAgrees": true
+      },
+      "decisions": {
+        "choice": "demonstrated_independent",
+        "selectedProbability": 0.55,
+        "confidence": 0.4,
+        "sourceChoice": "message_1",
+        "agrees": false,
+        "sourceAgrees": true
+      }
+    },
+    {
+      "caseId": "oct15-exogram-final",
+      "criterionId": "engram-biological",
+      "reviewedExpectedChoice": "not_yet",
+      "reviewedSourceIndexes": [],
+      "jevRecorded": {
+        "choice": "not_yet",
+        "selectedProbability": 0.7,
+        "confidence": 0.6,
+        "sourceChoice": "none",
+        "agrees": true,
+        "sourceAgrees": true
+      },
+      "decisions": {
+        "choice": "partial",
+        "selectedProbability": 0.51,
+        "confidence": 0.35,
+        "sourceChoice": "none",
+        "agrees": false,
+        "sourceAgrees": true
+      }
+    },
+    {
+      "caseId": "oct15-exogram-final",
+      "criterionId": "exogram-non-biological",
+      "reviewedExpectedChoice": "demonstrated_independent",
+      "reviewedSourceIndexes": [
+        1
+      ],
+      "jevRecorded": {
+        "choice": "demonstrated_independent",
+        "selectedProbability": 0.7,
+        "confidence": 0.6,
+        "sourceChoice": "message_1",
+        "agrees": true,
+        "sourceAgrees": true
+      },
+      "decisions": {
+        "choice": "demonstrated_independent",
+        "selectedProbability": 0.38,
+        "confidence": 0.17,
+        "sourceChoice": "message_1",
+        "agrees": true,
+        "sourceAgrees": true
+      }
+    },
+    {
+      "caseId": "oct15-compare-final",
+      "criterionId": "engram-biological",
+      "reviewedExpectedChoice": "not_yet",
+      "reviewedSourceIndexes": [],
+      "jevRecorded": {
+        "choice": "not_yet",
+        "selectedProbability": 0.74,
+        "confidence": 0.65,
+        "sourceChoice": "none",
+        "agrees": true,
+        "sourceAgrees": true
+      },
+      "decisions": {
+        "choice": "not_yet",
+        "selectedProbability": 0.71,
+        "confidence": 0.61,
+        "sourceChoice": "none",
+        "agrees": true,
+        "sourceAgrees": true
+      }
+    },
+    {
+      "caseId": "oct15-compare-final",
+      "criterionId": "exogram-non-biological",
+      "reviewedExpectedChoice": "not_yet",
+      "reviewedSourceIndexes": [],
+      "jevRecorded": {
+        "choice": "partial",
+        "selectedProbability": 0.61,
+        "confidence": 0.48,
+        "sourceChoice": "none",
+        "agrees": false,
+        "sourceAgrees": true
+      },
+      "decisions": {
+        "choice": "partial",
+        "selectedProbability": 0.71,
+        "confidence": 0.61,
+        "sourceChoice": "none",
+        "agrees": false,
+        "sourceAgrees": true
+      }
+    },
+    {
+      "caseId": "oct15-compare-final",
+      "criterionId": "exogram-durability",
+      "reviewedExpectedChoice": "demonstrated_independent",
+      "reviewedSourceIndexes": [
+        1
+      ],
+      "jevRecorded": {
+        "choice": "demonstrated_independent",
+        "selectedProbability": 0.9,
+        "confidence": 0.87,
+        "sourceChoice": "message_1",
+        "agrees": true,
+        "sourceAgrees": true
+      },
+      "decisions": {
+        "choice": "demonstrated_prompted",
+        "selectedProbability": 0.47,
+        "confidence": 0.29,
+        "sourceChoice": "message_1",
+        "agrees": false,
+        "sourceAgrees": true
+      }
+    },
+    {
+      "caseId": "oct15-compare-final",
+      "criterionId": "exogram-shareability",
+      "reviewedExpectedChoice": "demonstrated_independent",
+      "reviewedSourceIndexes": [
+        3
+      ],
+      "jevRecorded": {
+        "choice": "demonstrated_independent",
+        "selectedProbability": 0.85,
+        "confidence": 0.8,
+        "sourceChoice": "message_3",
+        "agrees": true,
+        "sourceAgrees": true
+      },
+      "decisions": {
+        "choice": "demonstrated_prompted",
+        "selectedProbability": 0.46,
+        "confidence": 0.28,
+        "sourceChoice": "message_3",
+        "agrees": false,
+        "sourceAgrees": true
+      }
+    },
+    {
+      "caseId": "oct15-compare-final",
+      "criterionId": "exogram-revisability",
+      "reviewedExpectedChoice": "demonstrated_independent",
+      "reviewedSourceIndexes": [
+        3
+      ],
+      "jevRecorded": {
+        "choice": "demonstrated_independent",
+        "selectedProbability": 0.9,
+        "confidence": 0.87,
+        "sourceChoice": "message_3",
+        "agrees": true,
+        "sourceAgrees": true
+      },
+      "decisions": {
+        "choice": "demonstrated_prompted",
+        "selectedProbability": 0.81,
+        "confidence": 0.75,
+        "sourceChoice": "message_3",
+        "agrees": false,
+        "sourceAgrees": true
+      }
+    },
+    {
+      "caseId": "oct15-exographics-final",
+      "criterionId": "visual-symbols",
+      "reviewedExpectedChoice": "demonstrated_independent",
+      "reviewedSourceIndexes": [
+        3
+      ],
+      "jevRecorded": {
+        "choice": "demonstrated_independent",
+        "selectedProbability": 0.58,
+        "confidence": 0.44,
+        "sourceChoice": "message_3",
+        "agrees": true,
+        "sourceAgrees": true
+      },
+      "decisions": {
+        "choice": "demonstrated_independent",
+        "selectedProbability": 0.46,
+        "confidence": 0.28,
+        "sourceChoice": "message_3",
+        "agrees": true,
+        "sourceAgrees": true
+      }
+    },
+    {
+      "caseId": "oct15-exographics-final",
+      "criterionId": "cultural-agreement",
+      "reviewedExpectedChoice": "demonstrated_independent",
+      "reviewedSourceIndexes": [
+        3
+      ],
+      "jevRecorded": {
+        "choice": "demonstrated_independent",
+        "selectedProbability": 0.91,
+        "confidence": 0.88,
+        "sourceChoice": "message_3",
+        "agrees": true,
+        "sourceAgrees": true
+      },
+      "decisions": {
+        "choice": "demonstrated_independent",
+        "selectedProbability": 0.38,
+        "confidence": 0.17,
+        "sourceChoice": "message_3",
+        "agrees": true,
+        "sourceAgrees": true
+      }
+    },
+    {
+      "caseId": "oct15-exographics-final",
+      "criterionId": "beyond-prose",
+      "reviewedExpectedChoice": "demonstrated_independent",
+      "reviewedSourceIndexes": [
+        3
+      ],
+      "jevRecorded": {
+        "choice": "demonstrated_independent",
+        "selectedProbability": 0.89,
+        "confidence": 0.85,
+        "sourceChoice": "message_3",
+        "agrees": true,
+        "sourceAgrees": true
+      },
+      "decisions": {
+        "choice": "demonstrated_independent",
+        "selectedProbability": 0.57,
+        "confidence": 0.43,
+        "sourceChoice": "message_3",
+        "agrees": true,
+        "sourceAgrees": true
+      }
+    },
+    {
+      "caseId": "oct15-exographics-final",
+      "criterionId": "abstract-concepts",
+      "reviewedExpectedChoice": "demonstrated_independent",
+      "reviewedSourceIndexes": [
+        3
+      ],
+      "jevRecorded": {
+        "choice": "demonstrated_independent",
+        "selectedProbability": 0.87,
+        "confidence": 0.83,
+        "sourceChoice": "message_3",
+        "agrees": true,
+        "sourceAgrees": true
+      },
+      "decisions": {
+        "choice": "demonstrated_independent",
+        "selectedProbability": 0.5,
+        "confidence": 0.33,
+        "sourceChoice": "message_3",
+        "agrees": true,
+        "sourceAgrees": true
+      }
+    },
+    {
+      "caseId": "oct15-why-exographics-final",
+      "criterionId": "reification",
+      "reviewedExpectedChoice": "partial",
+      "reviewedSourceIndexes": [
+        1,
+        3
+      ],
+      "jevRecorded": {
+        "choice": "demonstrated_independent",
+        "selectedProbability": 0.55,
+        "confidence": 0.4,
+        "sourceChoice": "message_1",
+        "agrees": false,
+        "sourceAgrees": true
+      },
+      "decisions": {
+        "choice": "partial",
+        "selectedProbability": 0.75,
+        "confidence": 0.67,
+        "sourceChoice": "message_1",
+        "agrees": true,
+        "sourceAgrees": true
+      }
+    },
+    {
+      "caseId": "oct15-why-exographics-final",
+      "criterionId": "memory-extension",
+      "reviewedExpectedChoice": "demonstrated_independent",
+      "reviewedSourceIndexes": [
+        1
+      ],
+      "jevRecorded": {
+        "choice": "demonstrated_independent",
+        "selectedProbability": 0.91,
+        "confidence": 0.88,
+        "sourceChoice": "message_1",
+        "agrees": true,
+        "sourceAgrees": true
+      },
+      "decisions": {
+        "choice": "demonstrated_independent",
+        "selectedProbability": 0.61,
+        "confidence": 0.48,
+        "sourceChoice": "message_1",
+        "agrees": true,
+        "sourceAgrees": true
+      }
+    },
+    {
+      "caseId": "oct15-why-exographics-final",
+      "criterionId": "discovery",
+      "reviewedExpectedChoice": "not_yet",
+      "reviewedSourceIndexes": [],
+      "jevRecorded": {
+        "choice": "partial",
+        "selectedProbability": 0.42,
+        "confidence": 0.23,
+        "sourceChoice": "none",
+        "agrees": false,
+        "sourceAgrees": true
+      },
+      "decisions": {
+        "choice": "partial",
+        "selectedProbability": 0.58,
+        "confidence": 0.44,
+        "sourceChoice": "message_1",
+        "agrees": false,
+        "sourceAgrees": false
+      }
+    },
+    {
+      "caseId": "oct15-techno-literate-culture-final",
+      "criterionId": "widespread-literacy",
+      "reviewedExpectedChoice": "partial",
+      "reviewedSourceIndexes": [
+        1
+      ],
+      "jevRecorded": {
+        "choice": "partial",
+        "selectedProbability": 0.8099999999999999,
+        "confidence": 0.75,
+        "sourceChoice": "message_1",
+        "agrees": true,
+        "sourceAgrees": true
+      },
+      "decisions": {
+        "choice": "partial",
+        "selectedProbability": 0.55,
+        "confidence": 0.4,
+        "sourceChoice": "message_1",
+        "agrees": true,
+        "sourceAgrees": true
+      }
+    },
+    {
+      "caseId": "oct15-techno-literate-culture-final",
+      "criterionId": "idea-discoverers",
+      "reviewedExpectedChoice": "demonstrated_independent",
+      "reviewedSourceIndexes": [
+        1
+      ],
+      "jevRecorded": {
+        "choice": "demonstrated_independent",
+        "selectedProbability": 0.67,
+        "confidence": 0.56,
+        "sourceChoice": "message_1",
+        "agrees": true,
+        "sourceAgrees": true
+      },
+      "decisions": {
+        "choice": "partial",
+        "selectedProbability": 0.67,
+        "confidence": 0.56,
+        "sourceChoice": "message_1",
+        "agrees": false,
+        "sourceAgrees": true
+      }
+    },
+    {
+      "caseId": "oct15-techno-literate-culture-final",
+      "criterionId": "social-coordination",
+      "reviewedExpectedChoice": "demonstrated_independent",
+      "reviewedSourceIndexes": [
+        1
+      ],
+      "jevRecorded": {
+        "choice": "partial",
+        "selectedProbability": 0.49,
+        "confidence": 0.32,
+        "sourceChoice": "message_1",
+        "agrees": false,
+        "sourceAgrees": true
+      },
+      "decisions": {
+        "choice": "partial",
+        "selectedProbability": 0.61,
+        "confidence": 0.48,
+        "sourceChoice": "none",
+        "agrees": false,
+        "sourceAgrees": false
+      }
+    },
+    {
+      "caseId": "oct15-techno-literate-culture-final",
+      "criterionId": "education-system",
+      "reviewedExpectedChoice": "partial",
+      "reviewedSourceIndexes": [
+        1
+      ],
+      "jevRecorded": {
+        "choice": "demonstrated_independent",
+        "selectedProbability": 0.69,
+        "confidence": 0.59,
+        "sourceChoice": "message_1",
+        "agrees": false,
+        "sourceAgrees": true
+      },
+      "decisions": {
+        "choice": "partial",
+        "selectedProbability": 0.78,
+        "confidence": 0.71,
+        "sourceChoice": "message_1",
+        "agrees": true,
+        "sourceAgrees": true
+      }
+    }
+  ],
+  "provenance": {
+    "executingCommit": "a97706284f0679f62956704e97fc287febbed1be",
+    "sourceExportSha256": "de03dc1b6ca848472c26d2bbce3700490926b36caaff69294351ed2d10e0e1e3",
+    "planFileSha256": "3d8a26d6b7491b5eb993707b712fb498d2176776a940c29ec0fd672c6936497d",
+    "runnerSha256": "c0a162d396263f427cdec5e13ae889b0811a400f93bea051810cad57c94c478b",
+    "localSummarySha256": "359cc84c6b116c994715915390240d36aac1cea9f7950363cac8af3729c8b101",
+    "reviewAuthorization": "Explicit user approval in Codex chat 01a140ac-f291-7921-b3b8-bc8b1eb17e29 before Decisions outputs; six calls, no retries.",
+    "privacy": "Sanitized criterion-level derivatives only; source transcripts, private export, credentials and full provider responses excluded.",
+    "separateFromFrozenV1": true
+  }
+}

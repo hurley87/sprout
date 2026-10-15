@@ -34,6 +34,7 @@ export class AnswerRecovery {
     // Closure rechecks have no mastery authority and do not spend the prompt
     // budget. A later microphone-only turn can retry a cancelled recheck.
     private readonly recheckBeforePrompt?: (source: ClassificationSource) => boolean,
+    private readonly separateConnectionCheckBudget = false,
   ) {}
 
   arm(state: LessonRuntimeState, enabled: boolean) {
@@ -105,10 +106,17 @@ export class AnswerRecovery {
       this.turn = sourceFor(state);
       this.missingCandidateTurn = undefined;
     }
-    // A support prompt must not exhaust the later completion prompt. Each stage
-    // remains bounded to one request per visit, including failed sends.
-    const stage = `${state.runtimeId}:${state.visitId}:${this.completionReady ? "completion" : "support"}`;
-    if (this.timer || (this.requestedStages.has(stage) && !this.recheckBeforePrompt)) return;
+    // A conversation-first connection check must not spend the later answer
+    // recovery. Counting retains its shared support budget. Every stage stays
+    // bounded to one prompt per visit, including failed sends.
+    const prompt = this.completionReady
+      ? "completion"
+      : this.separateConnectionCheckBudget && this.reason === "missing_transcript"
+        ? "connection"
+        : "support";
+    const stage = `${state.runtimeId}:${state.visitId}:${prompt}`;
+    const canRecheck = this.reason === "missing_transcript" && this.allowRecheck && !!this.recheckBeforePrompt;
+    if (this.timer || (this.requestedStages.has(stage) && !canRecheck)) return;
     const waitMs = this.completionReady ? ANSWER_COMPLETION_WAIT_MS : ANSWER_RECOVERY_WAIT_MS;
     this.diagnostic("answer_recovery.scheduled", sourceFor(state), {
       waitMs,

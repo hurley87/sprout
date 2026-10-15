@@ -5,6 +5,10 @@ The sole runtime classifier is
 contract, validation, thresholds, and deterministic mapper are in
 `lib/lesson-runtime/conversation-observer-contract.ts`.
 The stable diagnostic identifier is `conversation-state-v2`.
+The active model is explicitly pinned to `jev-1.14.0` in `lib/jev.ts`.
+Questions, thresholds, normalization, evidence mapping and reducer rules are
+unchanged by this model upgrade. Issue #42 retains its separate `jev-1.13.0`
+comparison baseline; see [the upgrade boundary](issue-42-jev-1.14-upgrade.md).
 
 ## Catching Unicorns conversation and later assessment
 

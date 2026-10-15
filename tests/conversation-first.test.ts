@@ -10,6 +10,8 @@ import {
   type LessonRuntimeEvent,
 } from "../lib/lesson-runtime/lesson-runtime-reducer";
 import {
+  CLASSIFIER_VERSION,
+  CONVERSATION_CLASSIFICATION_THRESHOLDS,
   mapConversationObservation,
   type ConversationStateOutputs,
 } from "../lib/lesson-runtime/conversation-observer-contract";
@@ -321,6 +323,92 @@ it("replays question six empty turn, split tutor closure and audio gaps without 
   expect(journal.some(e => e.type === "gpt_live.answer_recovery_append")).toBe(false);
   expect(runtime.report().conversation?.[0].transcript).toContain("Okay, we'll move on.");
   runtime.stop();
+});
+it("recovers a culture answer after a connection check without granting mastery or repeating recovery", async () => {
+  useRuntimeFakeTimers();
+  const definition = { ...lesson, initialNodeId: "techno-literate-culture" };
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url !== "/api/classify") return Response.json({});
+    const input = { ...JSON.parse(init!.body as string), lesson: definition };
+    const choice = (selected: string, probabilities: Record<string, number>) => ({
+      choice: selected, confidence: 0.6, probabilities,
+    });
+    const outputs = {
+      objectiveState: choice("unclear_or_incomplete", {
+        completed: 0.03, incorrect: 0, unclear_or_incomplete: 0.97, unresolved_help: 0, no_attempt: 0,
+      }),
+      tutorState: choice("other", { confirmed_completion: 0, clarifying: 0, helping: 0, asking: 0, other: 1 }),
+      concepts: Object.fromEntries(definition.nodes[input.nodeId].concepts!.map(c => [
+        `concept_${c.id}`, choice("partial", {
+          not_yet: 0.1, partial: 0.6, demonstrated_independent: 0.2, demonstrated_prompted: 0.1,
+        }),
+      ])),
+      sources: Object.fromEntries(definition.nodes[input.nodeId].concepts!.map(c => [
+        `source_${c.id}`, choice("message_1", { none: 0, message_1: 1 }),
+      ])),
+    } as ConversationStateOutputs;
+    const decision = mapConversationObservation(input, outputs);
+    return Response.json({
+      proposal: decision.proposal,
+      diagnostic: {
+        classifierVersion: CLASSIFIER_VERSION,
+        thresholds: CONVERSATION_CLASSIFICATION_THRESHOLDS,
+        elapsedMs: 0,
+        labelCompletionEligible: decision.labelCompletionEligible,
+        decision: decision.status, outcome: decision.outcome, outputs,
+        nodeId: input.nodeId, transcriptRevision: input.transcriptRevision,
+      },
+    });
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  const runtime = new LessonRuntime({} as HTMLAudioElement, () => {}, definition);
+  try {
+    runtime.confirmRendered(runtime.snapshot().display);
+    await vi.advanceTimersByTimeAsync(0);
+    const steering = transport.send.mock.calls[0][0];
+    events.acknowledgeSteering(steering.event_id, 0);
+    transport.receive!({ type: "output.activity", state: "quiet" });
+    events.tutorTurn("What characteristics help a culture develop?", 50);
+    transport.receive!({ type: "microphone.activity_started" });
+    transport.receive!({ type: "microphone.speech_started" });
+    transport.receive!({ type: "microphone.speech_stopped", quietMs: 900 });
+    await vi.advanceTimersByTimeAsync(4000);
+    const appends = () => runtime.report().events.filter(e => e.type === "gpt_live.answer_recovery_append");
+    expect(appends()).toHaveLength(1);
+    expect(appends()[0].detail).toMatchObject({ content: expect.stringContaining("connection check") });
+
+    events.childTurn("Schools teach people shared knowledge.", 5000);
+    await vi.advanceTimersByTimeAsync(300);
+    events.tutorTurn("I'm still putting that together.", 5200);
+    await vi.advanceTimersByTimeAsync(4700);
+    expect(appends()).toHaveLength(2);
+    expect(appends()[1].detail).toMatchObject({
+      content: expect.stringContaining("assessment uncertainty must not hold this question"),
+    });
+    expect(runtime.snapshot().runtime).toMatchObject({
+      nodeId: "techno-literate-culture", phase: "active", answerAccepted: false,
+    });
+    expect(Object.values(runtime.snapshot().runtime!.conceptEvidence).map(e => e.status)).toEqual([
+      "partial", "partial", "partial", "partial",
+    ]);
+
+    events.childTurn("I mean learning things together at school.", 10000);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(appends()).toHaveLength(2);
+    expect(runtime.report().events.filter(e => e.type === "answer_recovery.requested" &&
+      (e.detail as { reason?: string }).reason === "semantic_hold")).toHaveLength(1);
+
+    events.tutorTurn("Would you like to continue?", 15500);
+    events.childTurn("Next question, then", 16000);
+    await vi.advanceTimersByTimeAsync(900);
+    expect(runtime.snapshot().display.nodeId).toBe("caf-application");
+    expect(Object.values(runtime.snapshot().runtime!.conceptEvidence).map(e => e.status)).toEqual([
+      "partial", "partial", "partial", "partial",
+    ]);
+  } finally {
+    runtime.stop();
+    await vi.advanceTimersByTimeAsync(0);
+  }
 });
 it("retains partial evidence when a request advances with no current-turn transcript", () => {
   const h = harness();

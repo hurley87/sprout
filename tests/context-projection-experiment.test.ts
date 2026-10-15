@@ -153,7 +153,8 @@ it("freezes the same cases, identical questions and exact bounded request manife
     baselineReport.cases.map(c => ({ id: c.id, input: c.input })),
   );
   expect(report.source.caseSetHash).toBe(hash(baselineReport.cases.map(c => ({ id: c.id, input: c.input }))));
-  expect(report.contractHash).toBe(hash({ model: JEV_MODEL, questions: CONTEXT_PROJECTION_QUESTIONS }));
+  expect(report.contract.model).toBe("jev-1.13.0");
+  expect(report.contractHash).toBe(hash({ model: report.contract.model, questions: CONTEXT_PROJECTION_QUESTIONS }));
   expect(report.evaluationPlan.calls).toBe(168);
   expect(new Set(report.evaluationPlan.requests.map(r => r.id)).size).toBe(168);
   for (const row of report.cases)
@@ -191,7 +192,7 @@ it("imports bounded results and reviewed labels without calling a provider (synt
     .filter(r => r.caseId === row.id)
     .map(request => ({
       id: request.id,
-      model: JEV_MODEL,
+      model: report.contract.model,
       inputHash: request.inputHash,
       contractHash: request.contractHash,
       latencyMs: 250,
@@ -211,7 +212,7 @@ it("rejects duplicate or wrong-input results rather than comparing mismatched sn
   const request = report.evaluationPlan.requests[0];
   const observation = {
     ...request,
-    model: JEV_MODEL,
+    model: report.contract.model,
     latencyMs: 250,
     normalizedOutput: states("completed", "confirmed_completion"),
   };
@@ -224,7 +225,7 @@ it("keeps provider failures unresolved with no retry or inferred semantic regres
     .filter(r => r.caseId === row.id)
     .map(request => ({
       id: request.id,
-      model: JEV_MODEL,
+      model: report.contract.model,
       inputHash: request.inputHash,
       contractHash: request.contractHash,
       latencyMs: 10000,
