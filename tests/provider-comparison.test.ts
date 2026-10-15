@@ -140,6 +140,9 @@ describe("reproducible provider comparison (all transports synthetic)", () => {
     }
     expect(p.sourceHashes[artifacts.ADAPTER_PATH]).toMatch(/^[a-f0-9]{64}$/);
     expect(p.mappingPolicy).toBeNull();
+    expect(p.activeRuntime.model).toBe("jev-1.14.0");
+    expect(p.providers.jev.model).toBe("jev-1.13.0");
+    expect(p.activeRuntime.sourceHashes).toEqual(artifacts.ACTIVE_MODEL_COMPATIBILITY);
     expect(p.mappingPolicyHash).not.toBe(
       artifacts.makePlan(benchmark, { mappingPolicy: { minProbability: 0.7, minConfidence: 0.6, minMargin: 0.3 } })
         .mappingPolicyHash,
@@ -179,6 +182,8 @@ describe("reproducible provider comparison (all transports synthetic)", () => {
       "tests/fixtures/classifier-benchmark-v1/manifest.json",
       "tests/fixtures/classifier-benchmark-v1/corpus.json",
       artifacts.ADAPTER_PATH,
+      "lib/jev.ts",
+      "lib/lesson-runtime/jev-conversation-state-classifier.ts",
       "lib/lesson-runtime/conversation-observer-contract.ts",
     ]) {
       vi.mocked(readFileSync).mockImplementation(((path: string, encoding?: BufferEncoding) =>
@@ -369,6 +374,27 @@ describe("reproducible provider comparison (all transports synthetic)", () => {
     expect(r.results[0].replay.evidence["engram:engram-biological"].source?.childMessageIndex).toBe(1);
     expect(r.results[0].replay.nodeId).toBe("engram");
     expect(r.results[0].replay.uiEvidence).toBeNull();
+  });
+  it("never labels a 1.14 response as the historical 1.13 comparison arm", async () => {
+    const b = cleanBenchmark();
+    const p = artifacts.makePlan(b, { ...options, repetitions: 1 });
+    vi.stubEnv("TYPESAFE_API_KEY", "synthetic-test-only");
+    const requests: string[] = [];
+    const transport: Transport = async (arm, request, signal) => {
+      const response = await demonstrated()(arm, request, signal);
+      if (arm === "jev") {
+        requests.push(request.model);
+        (response.body as { model: string }).model = "jev-1.14.0";
+      }
+      return response;
+    };
+    const result = await runComparison(b, p, { ...networkFixture(p), transport });
+    expect(requests).toEqual(["jev-1.13.0"]);
+    const row = result.results.find(r => r.arm === "jev")!;
+    expect(row.mapped.reason).toBe("provider_model_mismatch");
+    expect(row.returnedModel).toBeNull();
+    expect(row.normalized).toBeNull();
+    expect(result.summary.jev.observedProviderClassifications).toBe(0);
   });
   it("excludes fresh test-transport cancellation from successful observations", async () => {
     const b = cleanBenchmark();

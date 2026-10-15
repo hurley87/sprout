@@ -36,6 +36,8 @@ try {
     const projections = Object.fromEntries(
       ["A", "B"].map(arm => {
         const request = experiment.contextProjectionRequest(row.input, arm);
+        // This offline report reconstructs historical requests, not the active app model.
+        if (request) request.model = contract.model;
         if (!request || request.model !== contract.model || hash(request.questions) !== hash(contract.questions))
           throw new Error(`Invalid frozen request ${row.id}`);
         return [arm, { state: request.state, inputHash: hash(request.state) }];

@@ -277,8 +277,9 @@ describe("candidate evidence through the unchanged reducer (synthetic labels onl
 });
 it("freezes the exact two-arm request plan and leaves measured B results absent", () => {
   const hash = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).digest("hex");
-  expect(report.contractHashes.A).toBe(hash({ model: JEV_MODEL, questions: CONVERSATION_QUESTIONS }));
-  expect(report.contractHashes.B).toBe(hash({ model: JEV_MODEL, questions: SIMPLIFIED_QUESTIONS }));
+  expect(report.model).toBe("jev-1.13.0");
+  expect(report.contractHashes.A).toBe(hash({ model: report.model, questions: CONVERSATION_QUESTIONS }));
+  expect(report.contractHashes.B).toBe(hash({ model: report.model, questions: SIMPLIFIED_QUESTIONS }));
   expect(report.evaluationPlan.calls).toBe(report.cases.length * 4);
   expect(new Set(report.evaluationPlan.requests.map(r => r.id)).size).toBe(report.evaluationPlan.calls);
   for (const row of report.cases) {

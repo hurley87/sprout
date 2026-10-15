@@ -29,7 +29,8 @@ export async function executeConversationObserver(
   input: ConversationStateClassifierInput,
   signal: AbortSignal,
   request: {
-    model: typeof JEV_MODEL;
+    // The active entry point pins JEV_MODEL; the issue #42 harness explicitly requests its frozen baseline.
+    model: typeof JEV_MODEL | "jev-1.13.0";
     state: unknown;
     questions: {
       [key: string]: {
@@ -43,6 +44,7 @@ export async function executeConversationObserver(
   // Capture before awaiting; provider and later caller mutations never choose identity.
   const snapshot = { ...input, lesson: input.lesson, nodeId: input.nodeId, transcriptRevision: input.transcriptRevision, transcript: input.transcript };
   if (!request?.state || !conversationObserverState(snapshot)) return abstain("invalid_input");
+  const requestedModel = request.model;
   if (signal.aborted) return abstain("cancelled");
   const key = process.env.TYPESAFE_API_KEY;
   if (!key) return abstain("provider_unconfigured");
@@ -58,7 +60,7 @@ export async function executeConversationObserver(
     const body: unknown = await response.json().catch(() => null);
     if (signal.aborted) return abstain("cancelled");
     // Never accept a silently substituted model.
-    if (!body || typeof body !== "object" || !("model" in body) || body.model !== JEV_MODEL)
+    if (!body || typeof body !== "object" || !("model" in body) || body.model !== requestedModel)
       return abstain("provider_model_mismatch");
     const outputs = normalizeConversationOutputs(body, snapshot.lesson, snapshot.nodeId, snapshot.transcript);
     return outputs ? mapConversationObservation(snapshot, outputs) : abstain("provider_unreadable");

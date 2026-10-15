@@ -244,7 +244,7 @@ function category(d: ConversationStateDecision) {
 
 // Only network Jev needs the original adapter's global fetch boundary. CLI runs serially in its own process.
 let jevBridgeBusy = false;
-async function productionJev(
+async function baselineJev(
   input: ConversationStateClassifierInput,
   request: JevRequest,
   signal: AbortSignal,
@@ -256,7 +256,7 @@ async function productionJev(
   globalThis.fetch = async (url, init) => {
     assert.equal(url, "https://api.typesafe.ai/v1/systemone");
     assert.equal(init?.method, "POST");
-    assert.equal(init?.body, JSON.stringify(request), "production Jev request differs from plan");
+    assert.equal(init?.body, JSON.stringify(request), "baseline Jev request differs from plan");
     const response = await transport("jev", structuredClone(request), signal);
     return Response.json(response.body, { status: response.ok ? 200 : 400 });
   };
@@ -382,7 +382,7 @@ export async function runComparison(benchmark: Benchmark, plan: Plan, options: R
         mappingPolicy: plan.mappingPolicy ?? undefined,
         timeoutMs: Math.min(plan.timeoutMs + 1000, 2_147_483_647),
       }).classifyWithDiagnostics(c.input, signal);
-    } else if (mode === "network") decision = await productionJev(c.input, c.jev, signal, bounded);
+    } else if (mode === "network") decision = await baselineJev(c.input, c.jev, signal, bounded);
     else {
       try {
         const response = await bounded("jev", c.jev, signal);

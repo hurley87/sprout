@@ -28,7 +28,8 @@ reported as historical presence only, never replayed into fresh observations.
 ## Identity and parity
 
 The loader checks v1's hard-pinned manifest hash, its checksum file, corpus,
-lessons, replay references, baseline Git blobs and current baseline source bytes.
+lessons, replay references, baseline Git blobs and current baseline source bytes,
+with two exact active-model compatibility exceptions described below.
 It reproduces every input/question/projection hash and verifies the historical
 counting source blob. Baseline PR #68 is
 `fd40c9bc631770ab1220f85767ee2f6cdd56ab9a`; implementation baseline is reviewed
@@ -57,7 +58,20 @@ is allowed. Schedule order alternates by selected-case index plus repetition
 index: Jev first for even sums, Decisions first for odd sums. This controls order
 reproducibly; it does not establish statistical independence.
 
-Network Jev invokes the unchanged production `executeConversationObserver`.
+The `jev` comparison arm remains pinned to **`jev-1.13.0`**, even though the active
+app uses **`jev-1.14.0`**. Plans record `activeRuntime.model` and the exact hashes of
+`lib/jev.ts` and the executor separately from `providers.jev.model`. The loader
+accepts only the two exact source hashes in `ACTIVE_MODEL_COMPATIBILITY` for
+those files; it still verifies their original Git blobs against the frozen
+manifest. Every other baseline source must match v1 exactly. No corpus, historical
+observation or frozen hash changes. This changes plan identities, so old run
+authorizations do not apply to a newly generated plan. See
+[the upgrade boundary](issue-42-jev-1.14-upgrade.md).
+
+Network Jev invokes `executeConversationObserver` with the explicit historical
+request model. Response identity must match that captured request model, rather
+than the active application constant. A 1.14 response to the 1.13 arm is rejected
+and cannot become a normalized 1.13 observation.
 An exclusive, serial CLI transport bridge checks its exact URL, method and body,
 then restores global fetch in `finally`. Native fetch is captured before the
 bridge. The bridge is only for this separate CLI process, never application use

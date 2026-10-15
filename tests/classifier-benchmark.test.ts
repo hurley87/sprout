@@ -9,7 +9,6 @@ import {
   CLASSIFIER_VERSION,
   CONVERSATION_CLASSIFICATION_THRESHOLDS,
 } from "../lib/lesson-runtime/conversation-observer-contract";
-import { JEV_MODEL } from "../lib/jev";
 import {
   benchmarkDirectory as dir,
   jsonPointer,
@@ -46,7 +45,7 @@ describe("frozen classifier benchmark v1 (no provider calls)", () => {
     expect(sha256(execFileSync("git", ["show", `${old.gitRef}:${old.path}`]))).toBe(old.sha256);
     expect(readJson(dir + "lessons.json")).toEqual(lessons);
     expect(manifest.jev).toEqual({
-      model: JEV_MODEL,
+      model: "jev-1.13.0",
       endpoint: "https://api.typesafe.ai/v1/systemone",
       classifierVersion: CLASSIFIER_VERSION,
       thresholds: CONVERSATION_CLASSIFICATION_THRESHOLDS,
