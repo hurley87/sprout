@@ -136,10 +136,12 @@ explicit.
 
 The Catching Unicorns browser suite, `tests/browser/catching-unicorns.spec.ts`,
 uses the production lesson runtime with a local WebRTC peer and mocked
-`/api/classify` responses. It verifies the dedicated route, hidden initial
-answers, independent reveal rows, carry-forward, scene handoffs, skip/early end,
-recap, diagnostic export and media cleanup. These controlled responses prove
-that accepted evidence is rendered safely; they do not measure GPT-Live tutor
+`/api/classify` responses. It verifies the clean default presentation, exact
+`?debug=1` opt-in, four-question committed progress, carry-forward, scene handoffs,
+Start/Stop/restart, startup failure, recap/completion boundaries, diagnostic export,
+keyboard access, narrow layout and media cleanup. The full flow runs in both default
+and debug views. These controlled responses prove that accepted evidence is retained
+without revealing discussion answers; they do not measure GPT-Live tutor
 behavior or Jev's judgment of learner speech. See the
 [Catching Unicorns validation record](catching-unicorns-demo-validation.md) for
 the live acceptance status and source-fidelity cases.

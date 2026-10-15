@@ -109,6 +109,9 @@ async function installLocalSession(page: Page) {
     await route.fulfill({ json: { transport: { sdp } } });
   });
   await page.route("**/api/classify", route => route.fulfill({ json: { proposal: null } }));
+  await page.route("**/api/assess", route =>
+    route.fulfill({ status: 503, json: { error: "Fixture assessment unavailable" } }),
+  );
 }
 
 test.afterEach(async ({ page }) => {
@@ -122,7 +125,9 @@ test.afterEach(async ({ page }) => {
   })()`);
 });
 
-test("direct Catching Unicorns route renders hidden concepts and fits a narrow screen", async ({ page }) => {
+test("default presentation has four steps, essential controls and no debug UI at narrow widths", async ({
+  page,
+}, testInfo) => {
   const requests: string[] = [];
   await page.route("**/api/live", route => {
     requests.push(route.request().url());
@@ -139,16 +144,38 @@ test("direct Catching Unicorns route renders hidden concepts and fits a narrow s
   await expect(page.getByRole("button", { name: "Start discussion", exact: true })).toBeEnabled();
   await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Download diagnostics", exact: true })).toHaveCount(0);
-  await expect(page.getByText("Explain it in your own words.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Explain it in your own words.", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /skip/i })).toHaveCount(0);
-  await expect(page.getByRole("navigation", { name: "Lesson scenes" }).locator('[aria-current="step"]')).toHaveCount(1);
-  await expect(page.getByLabel("Scene 1 of 5", { exact: true })).toBeVisible();
+  const progress = page.getByRole("progressbar", { name: "Discussion progress" });
+  await expect(progress).toHaveAttribute("aria-valuenow", "1");
+  await expect(progress).toHaveAttribute("aria-valuemax", "4");
+  await expect(progress.locator(":scope > div")).toHaveCount(4);
+  await expect(page.getByText("Session details", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Start discussion" })).toBeInViewport();
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("button", { name: "Start discussion" })).toBeFocused();
+  await page.screenshot({ path: testInfo.outputPath("initial-mobile.png") });
+  await page.setViewportSize({ width: 320, height: 568 });
+  await expect(page.getByRole("button", { name: "Start discussion" })).toBeInViewport();
   await expect(page.getByRole("heading", { name: "Conversation so far" })).not.toBeVisible();
   const body = await page.locator("body").innerText();
   expect(body).not.toContain("Biological memory: memory held within a biological mind.");
   expect(body).not.toContain("Non-biological memory: a representation kept outside biological memory.");
   expect(requests).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test("only debug=1 enables the diagnostic view", async ({ page }) => {
+  for (const suffix of ["?debug=0", "?debug=true", "?debug=1&debug=0"]) {
+    await page.goto(`/demos/catching-unicorns${suffix}`);
+    await expect(page.getByText("Session details", { exact: true })).toHaveCount(0);
+  }
+  await page.goto("/demos/catching-unicorns?debug=1");
+  await page.getByText("Session details", { exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Conversation so far" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Export session" })).toBeDisabled();
+  await page.goto("/demos/catching-unicorns");
+  await expect(page.getByText("Session details", { exact: true })).toHaveCount(0);
 });
 
 test("shared runtime starts, holds unresolved scenes, stops, restarts, and cleans up on navigation", async ({
@@ -196,15 +223,10 @@ test("shared runtime starts, holds unresolved scenes, stops, restarts, and clean
   );
   await page.getByRole("button", { name: "Stop" }).click();
   await expect(page.getByRole("status")).toHaveText("ended");
-  const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download diagnostics", exact: true }).click();
-  const download = await downloadPromise;
-  const exportText = await readFile((await download.path())!, "utf8");
-  const diagnostics = JSON.parse(exportText);
-  expect(diagnostics.runtimeId).toBe(firstRuntimeId);
-  expect(diagnostics.status).toBe("ended");
-  expect(diagnostics.events).toEqual(expect.arrayContaining([expect.objectContaining({ type: "lesson.ended" })]));
-  expect(exportText).not.toMatch(/OPENAI_API_KEY|TYPESAFE_API_KEY|authorization|access_token|"sdp"/i);
+  const retained = await page.evaluate(() => (window as LessonObservationWindow).sproutLessonObservation?.report());
+  expect(retained?.events).toEqual(expect.arrayContaining([expect.objectContaining({ type: "lesson.ended" })]));
+  await expect(page.getByText("Session details", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /diagnostics|export/i })).toHaveCount(0);
   // The harness keeps its silent source track alive; the session's cloned capture tracks must end.
   await expect
     .poll(async () => (await microphone.state()).trackStates.filter(state => state === "live").length)
@@ -229,6 +251,7 @@ test("shared runtime starts, holds unresolved scenes, stops, restarts, and clean
 
 test("session startup failure ends and releases the microphone so a fresh attempt is possible", async ({ page }) => {
   const microphone = await installSyntheticMicrophone(page);
+  await page.setViewportSize({ width: 320, height: 568 });
   let requests = 0;
   await page.route("**/api/live", route => {
     requests++;
@@ -239,7 +262,10 @@ test("session startup failure ends and releases the microphone so a fresh attemp
   await page.getByRole("button", { name: "Start discussion" }).click();
   await expect(page.locator("span[role=alert]")).toContainText("Could not start GPT-Live");
   await expect(page.getByRole("status")).toHaveText("ended");
-  await expect(page.getByRole("button", { name: "Download diagnostics", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Start discussion" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Start discussion" })).toBeInViewport();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await expect(page.getByRole("button", { name: /diagnostics|export/i })).toHaveCount(0);
   await expect
     .poll(async () => (await microphone.state()).trackStates.filter(state => state === "live").length)
     .toBe(1);
@@ -248,118 +274,211 @@ test("session startup failure ends and releases the microphone so a fresh attemp
   await expect(page.getByRole("status")).toHaveText("ended");
 });
 
-test("Catching Unicorns reveals accepted evidence through the real lesson runtime and exports safe recap context", async ({
-  page,
-}, testInfo) => {
-  test.setTimeout(90_000);
-  const microphone = await installSyntheticMicrophone(page);
-  await installLocalSession(page);
+for (const debug of [false, true]) {
+  test(`Catching Unicorns commits four-question progress and retains recap (${debug ? "debug" : "default"})`, async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(90_000);
+    const microphone = await installSyntheticMicrophone(page);
+    await installLocalSession(page);
 
-  let holdFirstResponse!: () => void;
-  const firstResponseGate = new Promise<void>(resolve => (holdFirstResponse = resolve));
-  let firstRequestSeen!: () => void;
-  const firstRequest = new Promise<void>(resolve => (firstRequestSeen = resolve));
-  let holdSecondResponse!: () => void;
-  const secondResponseGate = new Promise<void>(resolve => (holdSecondResponse = resolve));
-  let secondRequestSeen!: () => void;
-  const secondRequest = new Promise<void>(resolve => (secondRequestSeen = resolve));
-  let requestCount = 0;
-  await page.route("**/api/classify", async route => {
-    const body = route.request().postDataJSON() as { nodeId: string; transcriptRevision: number; transcript: string };
-    const requestIndex = requestCount++;
-    if (requestIndex === 0) {
-      firstRequestSeen();
-      await firstResponseGate;
-    } else if (requestIndex === 1) {
-      secondRequestSeen();
-      await secondResponseGate;
-    }
-    const concepts = CATCHING_UNICORNS_LESSON.nodes[body.nodeId]?.concepts ?? [];
-    const observations = concepts.map(({ id }) => {
-      const observation =
-        body.nodeId === "engram"
-          ? "demonstrated_independent"
-          : body.nodeId === "compare" &&
-              ["exogram-shareability", "exogram-revisability"].includes(id) &&
-              !body.transcript.includes("be shared, and be revised")
-            ? "not_yet"
-            : body.nodeId === "exogram" && id === "exogram-non-biological"
-              ? "demonstrated_prompted"
-              : body.nodeId === "exographics" && id === "visual-symbols"
+    let holdFirstResponse!: () => void;
+    const firstResponseGate = new Promise<void>(resolve => (holdFirstResponse = resolve));
+    let firstRequestSeen!: () => void;
+    const firstRequest = new Promise<void>(resolve => (firstRequestSeen = resolve));
+    let holdSecondResponse!: () => void;
+    const secondResponseGate = new Promise<void>(resolve => (holdSecondResponse = resolve));
+    let secondRequestSeen!: () => void;
+    const secondRequest = new Promise<void>(resolve => (secondRequestSeen = resolve));
+    let requestCount = 0;
+    await page.route("**/api/classify", async route => {
+      const body = route.request().postDataJSON() as { nodeId: string; transcriptRevision: number; transcript: string };
+      const requestIndex = requestCount++;
+      if (requestIndex === 0) {
+        firstRequestSeen();
+        await firstResponseGate;
+      } else if (requestIndex === 1) {
+        secondRequestSeen();
+        await secondResponseGate;
+      }
+      const concepts = CATCHING_UNICORNS_LESSON.nodes[body.nodeId]?.concepts ?? [];
+      const observations = concepts.map(({ id }) => {
+        const observation =
+          body.nodeId === "engram"
+            ? "demonstrated_independent"
+            : body.nodeId === "compare" &&
+                ["exogram-shareability", "exogram-revisability"].includes(id) &&
+                !body.transcript.includes("be shared, and be revised")
+              ? "not_yet"
+              : body.nodeId === "exogram" && id === "exogram-non-biological"
                 ? "demonstrated_prompted"
-                : "demonstrated_independent";
-      return {
-        criterionId: id,
-        observation,
-        childMessageIndex: transcriptMessages(body.transcript)!.findLastIndex(
-          message => message.speaker === "Child" && substantiveLearnerText(message.text),
-        ),
-      };
-    });
-    await route.fulfill({
-      json: {
-        proposal: {
-          nodeId: body.nodeId,
-          transcriptRevision: body.transcriptRevision,
-          childActivity: "unknown",
-          answerOutcome: "correct",
-          supportState: "none",
-          tutorState: transcriptMessages(body.transcript)
-            ?.findLast(message => message.speaker === "Tutor")
-            ?.text.includes("?")
-            ? "clarifying"
-            : "acknowledging",
-          conceptObservations: observations,
+                : body.nodeId === "exographics" && id === "visual-symbols"
+                  ? "demonstrated_prompted"
+                  : "demonstrated_independent";
+        return {
+          criterionId: id,
+          observation,
+          childMessageIndex: transcriptMessages(body.transcript)!.findLastIndex(
+            message => message.speaker === "Child" && substantiveLearnerText(message.text),
+          ),
+        };
+      });
+      await route.fulfill({
+        json: {
+          proposal: {
+            nodeId: body.nodeId,
+            transcriptRevision: body.transcriptRevision,
+            childActivity: "unknown",
+            answerOutcome: "correct",
+            supportState: "none",
+            tutorState: transcriptMessages(body.transcript)
+              ?.findLast(message => message.speaker === "Tutor")
+              ?.text.includes("?")
+              ? "clarifying"
+              : "acknowledging",
+            conceptObservations: observations,
+          },
         },
-      },
+      });
     });
-  });
 
-  await page.goto("/demos/catching-unicorns");
-  await microphone.loadSpeech("answer-three");
-  await page.getByRole("button", { name: "Start discussion" }).click();
-  await expect(page.getByRole("status")).toHaveText("live");
-  await expect(page.getByText("Biological memory: memory held within a biological mind.", { exact: true })).toHaveCount(
-    0,
-  );
+    await page.goto(`/demos/catching-unicorns${debug ? "?debug=1" : ""}`);
+    await microphone.loadSpeech("answer-three");
+    await page.getByRole("button", { name: "Start discussion" }).click();
+    await expect(page.getByRole("status")).toHaveText("live");
+    await expect(
+      page.getByText("Biological memory: memory held within a biological mind.", { exact: true }),
+    ).toHaveCount(0);
 
-  const sendWire = (type: "session.input_transcript.delta" | "session.output_transcript.delta", text: string) =>
-    page.evaluate(({ type, text }) => (window as unknown as LocalSessionWindow).sendTranscript(type, text), {
-      type,
-      text,
-    });
-  const speakThenTutor = async (answer: string, response: string) => {
-    const playback = await microphone.playSpeech("answer-three");
-    await expect
-      .poll(() => page.evaluate(() => (window as unknown as LocalSessionWindow).currentPeer.channel?.readyState))
-      .toBe("open");
-    await expect
-      .poll(() =>
-        page.evaluate(
-          () => (window as LessonObservationWindow).sproutLessonObservation?.read()?.snapshot.runtime?.childSpeaking,
-        ),
-      )
-      .toBe(true);
-    await sendWire("session.input_transcript.delta", answer);
-    await microphone.waitForPlayback(playback.id);
-    await expect
-      .poll(() =>
-        page.evaluate(
-          () => (window as LessonObservationWindow).sproutLessonObservation?.read()?.snapshot.runtime?.childSpeaking,
-        ),
-      )
-      .toBe(false);
+    const sendWire = (type: "session.input_transcript.delta" | "session.output_transcript.delta", text: string) =>
+      page.evaluate(({ type, text }) => (window as unknown as LocalSessionWindow).sendTranscript(type, text), {
+        type,
+        text,
+      });
+    const speakThenTutor = async (answer: string, response: string) => {
+      const playback = await microphone.playSpeech("answer-three");
+      await expect
+        .poll(() => page.evaluate(() => (window as unknown as LocalSessionWindow).currentPeer.channel?.readyState))
+        .toBe("open");
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () => (window as LessonObservationWindow).sproutLessonObservation?.read()?.snapshot.runtime?.childSpeaking,
+          ),
+        )
+        .toBe(true);
+      await sendWire("session.input_transcript.delta", answer);
+      await microphone.waitForPlayback(playback.id);
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () => (window as LessonObservationWindow).sproutLessonObservation?.read()?.snapshot.runtime?.childSpeaking,
+          ),
+        )
+        .toBe(false);
+      await page.evaluate(() => {
+        (window as unknown as LocalSessionWindow).currentPeer.level.gain.value = 0.15;
+      });
+      await sendWire("session.output_transcript.delta", response);
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () => (window as LessonObservationWindow).sproutLessonObservation?.read()?.snapshot.runtime?.outputActivity,
+          ),
+        )
+        .toBe("active");
+      await page.evaluate(() => {
+        (window as unknown as LocalSessionWindow).currentPeer.level.gain.value = 0;
+      });
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () => (window as LessonObservationWindow).sproutLessonObservation?.read()?.snapshot.runtime?.outputActivity,
+          ),
+        )
+        .toBe("quiet");
+    };
+    const expectEvidence = async (key: string, expected: { status: string; understanding: string | null }) => {
+      await expect
+        .poll(() =>
+          page.evaluate(evidenceKey => {
+            const observation = (window as LessonObservationWindow).sproutLessonObservation?.read();
+            const evidence = observation?.snapshot.runtime?.conceptEvidence[evidenceKey];
+            return evidence ? { status: evidence.status, understanding: evidence.understanding } : null;
+          }, key),
+        )
+        .toEqual(expected);
+    };
+    const questionStyle = () =>
+      page
+        .locator("[data-scene] h2")
+        .first()
+        .evaluate(element => {
+          const style = getComputedStyle(element);
+          return {
+            fontSize: style.fontSize,
+            fontWeight: style.fontWeight,
+            color: style.color,
+            lineHeight: style.lineHeight,
+            letterSpacing: style.letterSpacing,
+          };
+        });
+    const initialQuestionStyle = await questionStyle();
+    const expectProgress = async (number: number) => {
+      const progress = page.getByRole("progressbar");
+      await expect(progress).toHaveAttribute("aria-valuenow", String(number));
+      await expect(progress).toHaveAttribute("aria-valuemax", "4");
+      await expect(progress.locator(":scope > div")).toHaveCount(4);
+      await expect(page.getByText(`${number} of 4`, { exact: true })).toBeVisible();
+    };
+    await expectProgress(1);
+    const waitForScene = async (sceneId: string) => {
+      await expect(page.locator(`[data-scene="${sceneId}"]`)).toBeVisible();
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () => (window as LessonObservationWindow).sproutLessonObservation?.read()?.snapshot.awaitingSteering,
+          ),
+        )
+        .toBe(false);
+    };
+
+    // Hold the child-only classifier response, then add a newer tutor revision.
+    // The old response cannot reveal or advance; only fresh validation can.
+    await speakThenTutor(
+      "Memory exists in a biological mind, unlike an external note.",
+      "Tell me a little more about where that memory exists.",
+    );
+    await firstRequest;
     await page.evaluate(() => {
+      (window as unknown as LocalSessionWindow).sendTranscript(
+        "session.output_transcript.delta",
+        "Yes, that explanation is sufficient.",
+      );
       (window as unknown as LocalSessionWindow).currentPeer.level.gain.value = 0.15;
     });
-    await sendWire("session.output_transcript.delta", response);
     await expect
       .poll(() =>
-        page.evaluate(
-          () => (window as LessonObservationWindow).sproutLessonObservation?.read()?.snapshot.runtime?.outputActivity,
-        ),
+        page.evaluate(() => {
+          const observation = (window as LessonObservationWindow).sproutLessonObservation?.read();
+          return observation?.events.some(
+            event => event.type === "transcript.snapshot" && event.transcriptSpeaker === "tutor",
+          );
+        }),
       )
-      .toBe("active");
+      .toBe(true);
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const events = (window as LessonObservationWindow).sproutLessonObservation?.read()?.events ?? [];
+          return events.some(
+            event =>
+              event.type === "classifier.cancelled" &&
+              (event.detail as Record<string, unknown> | null)?.reason === "newer_transcript_snapshot",
+          );
+        }),
+      )
+      .toBe(true);
     await page.evaluate(() => {
       (window as unknown as LocalSessionWindow).currentPeer.level.gain.value = 0;
     });
@@ -370,193 +489,136 @@ test("Catching Unicorns reveals accepted evidence through the real lesson runtim
         ),
       )
       .toBe("quiet");
-  };
-  const expectEvidence = async (key: string, expected: { status: string; understanding: string | null }) => {
-    await expect
-      .poll(() =>
-        page.evaluate(evidenceKey => {
-          const observation = (window as LessonObservationWindow).sproutLessonObservation?.read();
-          const evidence = observation?.snapshot.runtime?.conceptEvidence[evidenceKey];
-          return evidence ? { status: evidence.status, understanding: evidence.understanding } : null;
-        }, key),
-      )
-      .toEqual(expected);
-  };
-  const questionStyle = () =>
-    page
-      .locator("[data-scene] h2")
-      .first()
-      .evaluate(element => {
-        const style = getComputedStyle(element);
-        return {
-          fontSize: style.fontSize,
-          fontWeight: style.fontWeight,
-          color: style.color,
-          lineHeight: style.lineHeight,
-          letterSpacing: style.letterSpacing,
-        };
-      });
-  const initialQuestionStyle = await questionStyle();
-  const waitForScene = async (sceneId: string) => {
-    await expect(page.locator(`[data-scene="${sceneId}"]`)).toBeVisible();
+    holdFirstResponse();
+    await secondRequest;
+    await expect(
+      page.getByText("Biological memory: memory held within a biological mind.", { exact: true }),
+    ).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Continue", exact: true })).toHaveCount(0);
+    await expectProgress(1);
+    holdSecondResponse();
+    await waitForScene("exogram");
+    await expectProgress(2);
+    await expect(page.getByRole("region", { name: "Learned so far", exact: true })).toHaveCount(0);
+    expect(await questionStyle()).toEqual(initialQuestionStyle);
+    await page.screenshot({ path: testInfo.outputPath("exogram-question.png") });
+    await expectEvidence("engram:engram-biological", { status: "demonstrated", understanding: "independent" });
+    await expect(page.getByRole("heading", { name: "What is an exogram?", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Continue", exact: true })).toHaveCount(0);
+    await expect(
+      page.getByText("Non-biological memory: a representation kept outside biological memory.", { exact: true }),
+    ).toHaveCount(0);
+    await speakThenTutor(
+      "A record outside biological memory, such as a diagram on paper.",
+      "That is an external record.",
+    );
+    await expectEvidence("exogram:exogram-non-biological", { status: "demonstrated", understanding: "prompted" });
+    await waitForScene("compare");
+    await expectProgress(3);
+    await page.screenshot({ path: testInfo.outputPath("comparison-desktop.png") });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeInViewport();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath("comparison-mobile.png") });
+    await page.setViewportSize({ width: 1440, height: 1000 });
+
+    await speakThenTutor(
+      "An external record can persist beyond the moment of thinking.",
+      "That explains one difference. What else differs?",
+    );
+    await expectEvidence("compare:exogram-durability", { status: "demonstrated", understanding: "independent" });
+    await expectProgress(3);
+    await expect(page.locator('[data-scene="compare"]')).not.toContainText("Durable");
+    if (debug) {
+      await page.getByText("Session details", { exact: true }).click();
+      await expect(page.getByText("Durable", { exact: true })).toBeVisible();
+      await page.getByText("Session details", { exact: true }).click();
+    }
+    await page.screenshot({ path: testInfo.outputPath("comparison-explained.png") });
+    await expect(page.locator('[data-scene="compare"]').getByText("Shareable", { exact: true })).toHaveCount(0);
+    await expect(page.locator('[data-scene="compare"]').getByText("Revisable", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Continue", exact: true })).toHaveCount(0);
+    await speakThenTutor(
+      "The first is internal; the external record can last, be shared, and be revised.",
+      "Those are the stated differences.",
+    );
+    await waitForScene("exographics");
+    await expectProgress(4);
+    expect(await questionStyle()).toEqual(initialQuestionStyle);
+    await page.screenshot({ path: testInfo.outputPath("exographics-question.png") });
+
+    await speakThenTutor(
+      "Meaningful shared symbols can show abstract ideas in maps and equations.",
+      "A map can do that too.",
+    );
+    await expectEvidence("exographics:visual-symbols", { status: "demonstrated", understanding: "prompted" });
+    await waitForScene("recap");
+    await expectProgress(4);
+    await expect(page.getByRole("region", { name: "Conversation assessment" })).toHaveCount(debug ? 1 : 0);
+
+    await expect(page.locator('[data-scene="recap"]')).toContainText("Demonstrated independently");
+    await expect(page.locator('[data-scene="recap"]')).toContainText("Demonstrated after a prompt");
+    await expect(page.locator('[data-scene="recap"]')).toContainText("Partly explained");
+    await expect(page.locator('[data-scene="recap"]')).toContainText("Still unresolved or skipped");
+    const recapGroup = (heading: string) =>
+      page
+        .locator('[data-scene="recap"] section')
+        .filter({ has: page.getByRole("heading", { name: heading, exact: true }) });
+    await expect(recapGroup("Demonstrated independently").getByText("Engram", { exact: true })).toBeVisible();
+    await expect(recapGroup("Demonstrated after a prompt").getByText("Exogram", { exact: true })).toBeVisible();
+    await expect(recapGroup("Partly explained").locator("li")).toHaveCount(0);
+    await expect(recapGroup("Still unresolved or skipped")).toContainText(
+      "Every authored criterion has accepted evidence.",
+    );
+    await expect(page.locator('[data-scene="recap"]')).not.toContainText(/extended cognition/i);
+    await page.evaluate(() => {
+      (window as unknown as LocalSessionWindow).currentPeer.level.gain.value = 0.15;
+    });
+    await sendWire("session.output_transcript.delta", "The discussion is finished. Review the recap on screen.");
     await expect
       .poll(() =>
         page.evaluate(
-          () => (window as LessonObservationWindow).sproutLessonObservation?.read()?.snapshot.awaitingSteering,
+          () => (window as LessonObservationWindow).sproutLessonObservation?.read()?.snapshot.runtime?.outputActivity,
         ),
       )
-      .toBe(false);
-  };
-
-  // Hold the child-only classifier response, then add a newer tutor revision.
-  // The old response cannot reveal or advance; only fresh validation can.
-  await speakThenTutor(
-    "Memory exists in a biological mind, unlike an external note.",
-    "Tell me a little more about where that memory exists.",
-  );
-  await firstRequest;
-  await page.evaluate(() => {
-    (window as unknown as LocalSessionWindow).sendTranscript(
-      "session.output_transcript.delta",
-      "Yes, that explanation is sufficient.",
-    );
-    (window as unknown as LocalSessionWindow).currentPeer.level.gain.value = 0.15;
+      .toBe("active");
+    await expect(page.getByRole("status")).toHaveText("live");
+    await page.evaluate(() => {
+      (window as unknown as LocalSessionWindow).currentPeer.level.gain.value = 0;
+    });
+    await expect(page.getByRole("status")).toHaveText("Session complete");
+    await expectProgress(4);
+    await expect(page.locator('[data-scene="recap"]')).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath("completed-recap.png") });
+    if (!debug) {
+      await expect(page.getByText("Session details", { exact: true })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: /diagnostics|export/i })).toHaveCount(0);
+      await page.getByRole("button", { name: "Start discussion" }).click();
+      await expect(page.locator('[data-scene="engram"]')).toBeVisible();
+      await expectProgress(1);
+      return;
+    }
+    await page.getByText("Session details", { exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Conversation so far" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Current evidence" })).toBeVisible();
+    await page.getByText("Session diagnostics", { exact: true }).click();
+    await expect(page.locator("summary").filter({ hasText: /lesson.ended/ })).toBeVisible();
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath("debug-mobile.png"), fullPage: true });
+    const downloadPromise = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Export session", exact: true }).click();
+    const download = await downloadPromise;
+    const exportText = await readFile((await download.path())!, "utf8");
+    const exported = JSON.parse(exportText) as {
+      lesson: { id: string; sceneId: string };
+      acceptedEvidence: Record<string, { status: string }>;
+      revealContext: Record<string, string[]>;
+    };
+    expect(exported.lesson).toEqual({ id: "catching-unicorns", sceneId: "recap" });
+    expect(exported.acceptedEvidence).toHaveProperty("engram:engram-biological");
+    expect(exported.revealContext.engram).toContain("engram-biological");
+    expect(Object.keys(exported.revealContext)).toEqual(["engram", "exogram", "compare", "exographics", "recap"]);
+    expect(exportText).not.toMatch(/OPENAI_API_KEY|TYPESAFE_API_KEY|authorization|access_token|"sdp"/i);
   });
-  await expect
-    .poll(() =>
-      page.evaluate(() => {
-        const observation = (window as LessonObservationWindow).sproutLessonObservation?.read();
-        return observation?.events.some(
-          event => event.type === "transcript.snapshot" && event.transcriptSpeaker === "tutor",
-        );
-      }),
-    )
-    .toBe(true);
-  await expect
-    .poll(() =>
-      page.evaluate(() => {
-        const events = (window as LessonObservationWindow).sproutLessonObservation?.read()?.events ?? [];
-        return events.some(
-          event =>
-            event.type === "classifier.cancelled" &&
-            (event.detail as Record<string, unknown> | null)?.reason === "newer_transcript_snapshot",
-        );
-      }),
-    )
-    .toBe(true);
-  await page.evaluate(() => {
-    (window as unknown as LocalSessionWindow).currentPeer.level.gain.value = 0;
-  });
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () => (window as LessonObservationWindow).sproutLessonObservation?.read()?.snapshot.runtime?.outputActivity,
-      ),
-    )
-    .toBe("quiet");
-  holdFirstResponse();
-  await secondRequest;
-  await expect(page.getByText("Biological memory: memory held within a biological mind.", { exact: true })).toHaveCount(
-    0,
-  );
-  await expect(page.getByRole("button", { name: "Continue", exact: true })).toHaveCount(0);
-  holdSecondResponse();
-  await waitForScene("exogram");
-  const learned = page.getByRole("region", { name: "Learned so far", exact: true });
-  await expect(learned.locator("summary", { hasText: /^Engram$/ })).toBeVisible();
-  await expect(learned.locator("summary", { hasText: /^Exogram$/ })).toHaveCount(0);
-  expect(await questionStyle()).toEqual(initialQuestionStyle);
-  await page.screenshot({ path: testInfo.outputPath("exogram-question.png") });
-  await expectEvidence("engram:engram-biological", { status: "demonstrated", understanding: "independent" });
-  await expect(page.getByRole("heading", { name: "What is an exogram?", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Continue", exact: true })).toHaveCount(0);
-  await expect(
-    page.getByText("Non-biological memory: a representation kept outside biological memory.", { exact: true }),
-  ).toHaveCount(0);
-  await speakThenTutor(
-    "A record outside biological memory, such as a diagram on paper.",
-    "That is an external record.",
-  );
-  await expectEvidence("exogram:exogram-non-biological", { status: "demonstrated", understanding: "prompted" });
-  await waitForScene("compare");
-  await page.screenshot({ path: testInfo.outputPath("comparison-desktop.png") });
-  await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeInViewport();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  await page.screenshot({ path: testInfo.outputPath("comparison-mobile.png") });
-  await page.setViewportSize({ width: 1440, height: 1000 });
-
-  await speakThenTutor(
-    "An external record can persist beyond the moment of thinking.",
-    "That explains one difference. What else differs?",
-  );
-  await expect(page.locator('[data-scene="compare"]')).toContainText("Durable");
-  await page.screenshot({ path: testInfo.outputPath("comparison-explained.png") });
-  await expect(page.locator('[data-scene="compare"]').getByText("Shareable", { exact: true })).toHaveCount(0);
-  await expect(page.locator('[data-scene="compare"]').getByText("Revisable", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Continue", exact: true })).toHaveCount(0);
-  await speakThenTutor(
-    "The first is internal; the external record can last, be shared, and be revised.",
-    "Those are the stated differences.",
-  );
-  await waitForScene("exographics");
-  await expect(learned.locator("summary", { hasText: /^Engram$/ })).toHaveCount(1);
-  await expect(learned.locator("summary", { hasText: /^Exogram$/ })).toHaveCount(1);
-  await expect(learned.locator("summary", { hasText: /^Durable$/ })).toBeVisible();
-  expect(await questionStyle()).toEqual(initialQuestionStyle);
-  await page.screenshot({ path: testInfo.outputPath("exographics-question.png") });
-
-  await speakThenTutor(
-    "Meaningful shared symbols can show abstract ideas in maps and equations.",
-    "A map can do that too.",
-  );
-  await expectEvidence("exographics:visual-symbols", { status: "demonstrated", understanding: "prompted" });
-  await waitForScene("recap");
-
-  await expect(page.locator('[data-scene="recap"]')).toContainText("Demonstrated independently");
-  await expect(page.locator('[data-scene="recap"]')).toContainText("Demonstrated after a prompt");
-  await expect(page.locator('[data-scene="recap"]')).toContainText("Partly explained");
-  await expect(page.locator('[data-scene="recap"]')).toContainText("Still unresolved or skipped");
-  const recapGroup = (heading: string) =>
-    page
-      .locator('[data-scene="recap"] section')
-      .filter({ has: page.getByRole("heading", { name: heading, exact: true }) });
-  await expect(recapGroup("Demonstrated independently").getByText("Engram", { exact: true })).toBeVisible();
-  await expect(recapGroup("Demonstrated after a prompt").getByText("Exogram", { exact: true })).toBeVisible();
-  await expect(recapGroup("Partly explained").locator("li")).toHaveCount(0);
-  await expect(recapGroup("Still unresolved or skipped")).toContainText(
-    "Every authored criterion has accepted evidence.",
-  );
-  await expect(page.locator('[data-scene="recap"]')).not.toContainText(/extended cognition/i);
-  await page.evaluate(() => {
-    (window as unknown as LocalSessionWindow).currentPeer.level.gain.value = 0.15;
-  });
-  await sendWire("session.output_transcript.delta", "The discussion is finished. Review the recap on screen.");
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () => (window as LessonObservationWindow).sproutLessonObservation?.read()?.snapshot.runtime?.outputActivity,
-      ),
-    )
-    .toBe("active");
-  await expect(page.getByRole("status")).toHaveText("live");
-  await page.evaluate(() => {
-    (window as unknown as LocalSessionWindow).currentPeer.level.gain.value = 0;
-  });
-  await expect(page.getByRole("status")).toHaveText("Session complete");
-  await page.getByText("Session details", { exact: true }).click();
-  const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Export session", exact: true }).click();
-  const download = await downloadPromise;
-  const exportText = await readFile((await download.path())!, "utf8");
-  const exported = JSON.parse(exportText) as {
-    lesson: { id: string; sceneId: string };
-    acceptedEvidence: Record<string, { status: string }>;
-    revealContext: Record<string, string[]>;
-  };
-  expect(exported.lesson).toEqual({ id: "catching-unicorns", sceneId: "recap" });
-  expect(exported.acceptedEvidence).toHaveProperty("engram:engram-biological");
-  expect(exported.revealContext.engram).toContain("engram-biological");
-  expect(Object.keys(exported.revealContext)).toEqual(["engram", "exogram", "compare", "exographics", "recap"]);
-  expect(exportText).not.toMatch(/OPENAI_API_KEY|TYPESAFE_API_KEY|authorization|access_token|"sdp"/i);
-});
+}

@@ -25,8 +25,28 @@ audio cannot finish it; assessment failure does not hold completion.
 Provider-free browser coverage follows the four questions in order, checks accepted
 and prompted evidence, enters recap, then verifies completion after output audio.
 Runtime coverage also follows explicit next requests through all four questions
-without granting mastery. UI/debug gating and a personalized visual/spoken recap
-remain later slices of issue #71.
+without granting mastery.
+
+The second slice shows only the current question, a four-step progress bar and
+essential Start/Stop controls during discussion. Progress follows committed scene
+changes and stays at 4 of 4 through recap and completion. Concept reveal layouts,
+Learned so far, supplementary descriptions and illustrations are removed. Transcript,
+authored concept details, evidence, cumulative assessment and scrubbed diagnostic
+export require an explicit `?debug=1` URL; other values do not enable the view.
+Diagnostic capture continues in the shared runtime for every session. The existing
+evidence recap remains visible in both views. A personalized visual/spoken recap
+and further closing/audio polish remain the third slice of issue #71.
+
+Second-slice validation (15 October 2026): 1,188 unit tests and all 24 provider-free
+browser tests passed. After the final accessibility and debug assertions, all six
+demo browser tests also passed against the production build. Production build,
+TypeScript, lint, changed-source formatting and diff whitespace checks passed.
+Production screenshots were inspected for mobile questions, desktop recap and
+mobile debug details. Browser assertions cover 320px startup/failure layout and
+390px discussion/debug layout. Verification used an isolated tracked-source copy
+with local dependencies and no project env files, leaving the existing dev server
+alone. Local WebRTC peers and classifier/assessment fixtures were used; no new live
+provider session or spoken recap quality assessment was performed.
 
 The frozen issue #42 benchmark remains historical classifier evidence, including
 its original lesson snapshot and recorded transcripts. It is never registered as

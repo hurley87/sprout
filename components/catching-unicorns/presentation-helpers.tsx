@@ -1,4 +1,3 @@
-import styles from "../catching-unicorns-demo.module.css";
 import {
   CATCHING_UNICORNS_LESSON,
   CATCHING_UNICORNS_PRESENTATION,
@@ -6,6 +5,8 @@ import {
 import type { ConceptEvidenceRecord, LessonRuntimeState } from "@/lib/lesson-runtime/lesson-runtime-reducer";
 
 export const sceneIds = Object.keys(CATCHING_UNICORNS_LESSON.nodes);
+// Recap is retained on completion, but is never a fifth question.
+export const questionIds = sceneIds.filter(id => id !== "recap");
 export type RevealItem = { readonly title: string; readonly text: string; readonly source: string };
 export type ConceptPresentation = {
   nodeId: string;
@@ -14,17 +15,14 @@ export type ConceptPresentation = {
   item: RevealItem | undefined;
   demonstrated: boolean;
 };
-export type RevealPresentation = ConceptPresentation & { item: RevealItem };
-
 /** Join accepted evidence to authored content without changing evidence or attribution. */
 export function conceptPresentation(
   state: LessonRuntimeState | null | undefined,
   nodeId: string,
   criterionId: string,
-  revealNodeId = nodeId,
 ): ConceptPresentation {
   const evidence = state?.conceptEvidence[`${nodeId}:${criterionId}`];
-  const scene = CATCHING_UNICORNS_PRESENTATION[revealNodeId as keyof typeof CATCHING_UNICORNS_PRESENTATION];
+  const scene = CATCHING_UNICORNS_PRESENTATION[nodeId as keyof typeof CATCHING_UNICORNS_PRESENTATION];
   const reveals = (scene as { readonly reveals?: Readonly<Record<string, RevealItem>> } | undefined)?.reveals;
   return {
     nodeId,
@@ -38,37 +36,6 @@ export function conceptPresentation(
 export function sceneConcepts(state: LessonRuntimeState | null | undefined, nodeId: string) {
   return (CATCHING_UNICORNS_LESSON.nodes[nodeId].concepts ?? []).map(concept =>
     conceptPresentation(state, nodeId, concept.id),
-  );
-}
-
-export function hasReveal(concept: ConceptPresentation): concept is RevealPresentation {
-  return concept.item !== undefined;
-}
-
-export type SceneProps = {
-  state: LessonRuntimeState | null | undefined;
-  nodeId: string;
-  node: (typeof CATCHING_UNICORNS_LESSON.nodes)[string];
-  revealCards: RevealPresentation[];
-};
-
-export function ExplanationList({ concepts }: { concepts: RevealPresentation[] }) {
-  return (
-    <ul className={styles.differenceList}>
-      {concepts
-        .filter(concept => concept.demonstrated)
-        .map(({ criterionId, item }) => (
-          <li className={styles.difference} key={criterionId}>
-            <span className={styles.differenceCheck} aria-hidden="true">
-              ✓
-            </span>
-            <div>
-              <h4>{item.title}</h4>
-              <p>{item.text}</p>
-            </div>
-          </li>
-        ))}
-    </ul>
   );
 }
 
