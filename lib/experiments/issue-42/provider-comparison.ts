@@ -31,6 +31,14 @@ import {
   type RunReview,
 } from "./benchmark-artifacts";
 
+import {
+  createFactoredClassifier,
+  factoredRequest,
+  promptingRequest,
+  type FactoredObservation,
+  type FactoredDecision,
+} from "./factored-decisions";
+
 type JevRequest = Benchmark["cases"][number]["jev"];
 export type Transport = (
   arm: Arm,
@@ -38,7 +46,15 @@ export type Transport = (
   signal: AbortSignal,
 ) => Promise<{ ok: boolean; body: unknown }>;
 type Usage = { inputTokens: number; outputTokens: number; totalTokens: number };
+type CallMeasurement = {
+  requestHash: string;
+  questionNames: string[];
+  latencyMs: number | null;
+  usage: Usage | null;
+  failure: string | null;
+};
 type Attempt = {
+  calls?: CallMeasurement[];
   requestCount: number;
   latencyMs: number | null;
   usage: Usage | null;
@@ -141,7 +157,11 @@ export function syntheticTransport(): Transport {
             ? "asking"
             : q.name.startsWith("source_")
               ? "none"
-              : "not_yet";
+              : q.name.startsWith("demonstration_")
+                ? "not_attempted"
+                : q.name.startsWith("prompting_")
+                  ? "unresolved"
+                  : "not_yet";
       const probabilities = q.choices.map(c => ({ value: c.value, probability: c.value === choice ? 1 : 0 }));
       return { name: q.name, type: "choice", choice, confidence: 1, probabilities };
     });
@@ -230,8 +250,64 @@ function compareChoices(outputs: ConversationStateOutputs | null, reviewed?: Run
   );
   return { choices, concepts, objectiveAggregate: "unscored", questionResponse: "unscored" };
 }
+function compareFactored(raw: FactoredObservation | null, reviewed?: RunReview["cases"][number]) {
+  if (!raw) return null;
+  return Object.fromEntries(
+    Object.entries(raw.demonstration).map(([key, a]) => {
+      const id = key.slice("demonstration_".length);
+      const label = reviewed?.labels.concepts[id];
+      const source = raw.sources[`source_${id}`]?.choice;
+      const index = source?.match(/^message_(\d+)$/u)?.[1];
+      const prompting = raw.prompting[`prompting_${id}`]?.choice;
+      return [
+        id,
+        {
+          demonstration:
+            !label || a.choice === "uncertain"
+              ? "unscored"
+              : (a.choice === "demonstrated") === (label.demonstration === "demonstrated")
+                ? "agree"
+                : "semantic_disagreement",
+          attempt:
+            !label || a.choice === "uncertain"
+              ? "unscored"
+              : (a.choice === "partial" ? "partial" : a.choice === "not_attempted" ? "not_attempted" : "complete") ===
+                  label.attempt
+                ? "agree"
+                : "semantic_disagreement",
+          attribution:
+            !label ||
+            a.choice !== "demonstrated" ||
+            !prompting ||
+            prompting === "unresolved" ||
+            !["independent", "prompted"].includes(label.attribution)
+              ? "unscored"
+              : prompting === label.attribution
+                ? "agree"
+                : "semantic_disagreement",
+          learnerEvidence:
+            !label || label.learnerEvidence.validity === "unresolved"
+              ? "unscored"
+              : source === "none"
+                ? label.learnerEvidence.validity === "none"
+                  ? "agree"
+                  : "source_provenance_disagreement"
+                : index !== undefined && label.learnerEvidence.messageIndexes.includes(Number(index))
+                  ? "agree"
+                  : "source_provenance_disagreement",
+          choice:
+            reviewed?.choices?.[key] === undefined
+              ? "unscored"
+              : reviewed.choices[key] === a.choice
+                ? "agree"
+                : "semantic_disagreement",
+        },
+      ];
+    }),
+  );
+}
 function category(d: ConversationStateDecision) {
-  if (d.outputs && d.proposal) return "mapped_proposal";
+  if (d.proposal) return "mapped_proposal";
   if (d.reason === "learner_source_unavailable" || d.reason === "decisions_request_limits")
     return "locally_unsupported";
   if (d.reason === "learner_source_unresolved") return "source_provenance_failure";
@@ -239,7 +315,7 @@ function category(d: ConversationStateDecision) {
   if (d.reason === "timeout") return "timeout";
   if (d.reason === "budget_exhausted") return "budget_exhausted";
   if (d.reason === "provider_refused") return "refusal";
-  return d.outputs ? "confidence_or_mapping_rejection" : "provider_error";
+  return d.outputs || (d as Partial<FactoredDecision>).factored ? "confidence_or_mapping_rejection" : "provider_error";
 }
 
 // Only network Jev needs the original adapter's global fetch boundary. CLI runs serially in its own process.
@@ -289,7 +365,9 @@ export async function runComparison(benchmark: Benchmark, plan: Plan, options: R
       repetitions: plan.repetitions,
       maxRequests: plan.maxRequests,
       timeoutMs: plan.timeoutMs,
-      mappingPolicy: plan.mappingPolicy ?? undefined,
+      variant: plan.version === 2 ? plan.variant : undefined,
+      lockedPolicy: plan.lockedPolicy ?? undefined,
+      mappingPolicy: plan.lockedPolicy ? undefined : (plan.mappingPolicy ?? undefined),
     }),
     plan,
     "plan no longer matches checkout",
@@ -322,6 +400,8 @@ export async function runComparison(benchmark: Benchmark, plan: Plan, options: R
   for (const slot of plan.schedule) {
     const c = benchmark.cases.find(c => c.row.id === slot.caseId)!;
     const attempt: Attempt = { requestCount: 0, latencyMs: null, usage: null, costUsd: null, failure: null };
+    const calls: CallMeasurement[] = [];
+    if (plan.version === 2) attempt.calls = calls;
     const bounded: Transport = async (arm, request, adapterSignal) => {
       if (signal.aborted || adapterSignal.aborted) {
         attempt.failure = "cancelled";
@@ -331,15 +411,35 @@ export async function runComparison(benchmark: Benchmark, plan: Plan, options: R
         attempt.failure = "budget_exhausted";
         throw new Error("budget exhausted");
       }
-      assert.equal(attempt.requestCount, 0, "no hidden retries allowed");
-      assert.equal(arm, slot.arm);
-      assert.equal(
-        valueHash(request),
-        arm === "jev" ? valueHash(c.jev) : valueHash(c.decisions),
-        "transport input differs",
+      assert(
+        attempt.requestCount < (slot.arm === "decisions" && plan.version === 2 ? 2 : 1),
+        "no hidden retries allowed",
       );
+      assert.equal(arm, slot.arm);
+      if (arm === "decisions" && plan.version === 2) {
+        const req = request as DecisionsRequest;
+        const ids = req.questions.map(q => q.name.slice("prompting_".length));
+        const expected = attempt.requestCount === 0 ? factoredRequest(c.input) : promptingRequest(c.input, ids);
+        assert.equal(valueHash(request), valueHash(expected), "factored transport input differs");
+      } else
+        assert.equal(
+          valueHash(request),
+          arm === "jev" ? valueHash(c.jev) : valueHash(c.decisions),
+          "transport input differs",
+        );
       requestCount++;
       attempt.requestCount++;
+      const call: CallMeasurement = {
+        requestHash: valueHash(request),
+        questionNames:
+          arm === "decisions"
+            ? (request as DecisionsRequest).questions.map(q => q.name)
+            : Object.keys((request as JevRequest).questions),
+        latencyMs: null,
+        usage: null,
+        failure: null,
+      };
+      calls.push(call);
       const start = now();
       const controller = new AbortController();
       const cancel = () => {
@@ -360,27 +460,40 @@ export async function runComparison(benchmark: Benchmark, plan: Plan, options: R
       try {
         const response = await Promise.race([transport(arm, structuredClone(request), controller.signal), aborted]);
         if (controller.signal.aborted) throw new Error("request stopped");
-        attempt.usage = response.ok ? usageOf(arm, response.body) : null;
+        const usage = response.ok ? usageOf(arm, response.body) : null;
+        call.usage = usage;
+        attempt.usage =
+          attempt.requestCount === 1
+            ? usage
+            : attempt.usage && usage
+              ? {
+                  inputTokens: attempt.usage.inputTokens + usage.inputTokens,
+                  outputTokens: attempt.usage.outputTokens + usage.outputTokens,
+                  totalTokens: attempt.usage.totalTokens + usage.totalTokens,
+                }
+              : null;
         return response;
       } catch {
         attempt.failure ??= "provider_unreachable";
         throw new Error("safe transport failure");
       } finally {
         const elapsed = now() - start;
-        attempt.latencyMs = Number.isFinite(elapsed) && elapsed >= 0 ? elapsed : null;
+        call.failure = attempt.failure;
+        call.latencyMs = Number.isFinite(elapsed) && elapsed >= 0 ? elapsed : null;
+        attempt.latencyMs = Number.isFinite(elapsed) && elapsed >= 0 ? (attempt.latencyMs ?? 0) + elapsed : null;
         clearTimeout(timer);
         signal.removeEventListener("abort", cancel);
         adapterSignal.removeEventListener("abort", cancel);
         controller.signal.removeEventListener("abort", stopped);
       }
     };
-    let decision: ConversationStateDecision;
+    let decision: ConversationStateDecision | FactoredDecision;
     if (signal.aborted) decision = abstain("cancelled");
     else if (slot.arm === "decisions") {
-      decision = await createDecisionsClassifier({
+      decision = await (plan.version === 2 ? createFactoredClassifier : createDecisionsClassifier)({
         transport: (request, s) => bounded("decisions", request, s),
         mappingPolicy: plan.mappingPolicy ?? undefined,
-        timeoutMs: Math.min(plan.timeoutMs + 1000, 2_147_483_647),
+        timeoutMs: plan.version === 2 ? plan.timeoutMs : Math.min(plan.timeoutMs + 1000, 2_147_483_647),
       }).classifyWithDiagnostics(c.input, signal);
     } else if (mode === "network") decision = await baselineJev(c.input, c.jev, signal, bounded);
     else {
@@ -398,13 +511,15 @@ export async function runComparison(benchmark: Benchmark, plan: Plan, options: R
       }
     }
     if (attempt.failure) decision = abstain(attempt.failure);
+    const factored = (decision as Partial<FactoredDecision>).factored ?? null;
     const replay = replayReducer(c.input, decision.proposal);
     results.push({
       ...slot,
       kind: mode === "offline" ? "synthetic_mock" : "fresh_provider_measurement",
       category: category(decision),
       normalized: decision.outputs,
-      returnedModel: decision.outputs ? plan.providers[slot.arm].model : null,
+      ...(plan.version === 2 ? { factored } : {}),
+      returnedModel: decision.outputs || factored ? plan.providers[slot.arm].model : null,
       mapped: {
         status: decision.status,
         reason: decision.reason ?? null,
@@ -416,9 +531,22 @@ export async function runComparison(benchmark: Benchmark, plan: Plan, options: R
         decision.outputs,
         review?.cases.find(r => r.caseId === slot.caseId),
       ),
+      ...(plan.version === 2
+        ? {
+            factoredSemantic: compareFactored(
+              factored,
+              review?.cases.find(r => r.caseId === slot.caseId),
+            ),
+          }
+        : {}),
       measurement: {
         ...attempt,
-        latencyKind: mode === "offline" ? "mock_request_only" : "provider_request_including_body_parse",
+        latencyKind:
+          mode === "offline"
+            ? "mock_request_only"
+            : plan.version === 2
+              ? "sum_of_provider_calls_including_body_parse"
+              : "provider_request_including_body_parse",
         costAvailability: "unavailable_no_verified_pricing",
         liveEndToEndMs: null,
       },
@@ -426,12 +554,27 @@ export async function runComparison(benchmark: Benchmark, plan: Plan, options: R
     });
   }
   return {
-    version: 1,
+    version: plan.version,
     plan,
     reviewHash,
     reviewGate: gate,
     mode,
     requestCount,
+    ...(plan.version === 2
+      ? {
+          calibration: plan.lockedPolicy
+            ? {
+                status: "locked_candidate",
+                candidateHash: plan.lockedPolicy.candidate.candidateHash,
+                limitations: plan.lockedPolicy.candidate.fitting.limitations,
+              }
+            : {
+                status: "calibration_unavailable",
+                reason:
+                  "No eligible observation/review fit and separately locked policy supplied; explicit thresholds are experimental hypotheses.",
+              },
+        }
+      : {}),
     results,
     summary: aggregateResults(results),
     pairedComparisons: pairedComparisons(results),
@@ -513,22 +656,29 @@ export function aggregateResults(
     kind: string;
     category: string;
     normalized: ConversationStateOutputs | null;
+    factored?: FactoredObservation | null;
     measurement: Attempt;
   }[],
 ) {
   return Object.fromEntries(
     (["jev", "decisions"] as const).map(arm => {
       const rows = results.filter(r => r.arm === arm);
-      const observed = rows.filter(r => r.kind === "fresh_provider_measurement" && r.normalized !== null);
+      const observed = rows.filter(
+        r => r.kind === "fresh_provider_measurement" && (r.normalized !== null || !!r.factored),
+      );
       const stability = [...new Set(rows.map(r => r.caseId))].map(caseId => {
         const samples = observed.filter(r => r.caseId === caseId);
         const labels = samples.map(r =>
-          valueHash({
-            objective: r.normalized!.objectiveState.choice,
-            tutor: r.normalized!.tutorState.choice,
-            concepts: Object.fromEntries(Object.entries(r.normalized!.concepts ?? {}).map(([k, a]) => [k, a.choice])),
-            sources: Object.fromEntries(Object.entries(r.normalized!.sources ?? {}).map(([k, a]) => [k, a.choice])),
-          }),
+          r.factored
+            ? valueHash(r.factored)
+            : valueHash({
+                objective: r.normalized!.objectiveState.choice,
+                tutor: r.normalized!.tutorState.choice,
+                concepts: Object.fromEntries(
+                  Object.entries(r.normalized!.concepts ?? {}).map(([k, a]) => [k, a.choice]),
+                ),
+                sources: Object.fromEntries(Object.entries(r.normalized!.sources ?? {}).map(([k, a]) => [k, a.choice])),
+              }),
         );
         return {
           caseId,
@@ -545,16 +695,37 @@ export function aggregateResults(
             [...new Set(rows.map(r => r.category))].map(k => [k, rows.filter(r => r.category === k).length]),
           ),
           successfulProviderRequestLatencyMs: latencySummary(
-            observed.flatMap(r => (r.measurement.latencyMs === null ? [] : [r.measurement.latencyMs])),
+            observed.flatMap(r =>
+              r.measurement.calls
+                ? r.measurement.calls.flatMap(c => (c.latencyMs === null ? [] : [c.latencyMs]))
+                : r.measurement.latencyMs === null
+                  ? []
+                  : [r.measurement.latencyMs],
+            ),
           ),
           allProviderAttemptLatencyMs: latencySummary(
             rows
               .filter(r => r.kind === "fresh_provider_measurement" && r.measurement.requestCount > 0)
-              .flatMap(r => (r.measurement.latencyMs === null ? [] : [r.measurement.latencyMs])),
+              .flatMap(r =>
+                r.measurement.calls
+                  ? r.measurement.calls.flatMap(c => (c.latencyMs === null ? [] : [c.latencyMs]))
+                  : r.measurement.latencyMs === null
+                    ? []
+                    : [r.measurement.latencyMs],
+              ),
           ),
-          usageAvailableRequests: rows.filter(
-            r => r.kind === "fresh_provider_measurement" && r.measurement.usage !== null,
-          ).length,
+          usageAvailableRequests: rows
+            .filter(r => r.kind === "fresh_provider_measurement")
+            .reduce(
+              (n, r) =>
+                n +
+                (r.measurement.calls
+                  ? r.measurement.calls.filter(c => c.usage !== null).length
+                  : r.measurement.usage !== null
+                    ? 1
+                    : 0),
+              0,
+            ),
           costUsd: null,
           liveEndToEndMs: null,
           stability,

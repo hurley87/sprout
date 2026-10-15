@@ -12,6 +12,8 @@ try {
     else if (
       [
         "--mode",
+        "--variant",
+        "--locked-policy",
         "--cases",
         "--repetitions",
         "--max-requests",
@@ -38,6 +40,7 @@ try {
   };
   const review = jsonFile("--review");
   const policy = jsonFile("--policy");
+  const lockedPolicy = jsonFile("--locked-policy");
   // envDir:false is essential: Vite must not load .env.local or any other environment file.
   const server = await createServer({
     configFile: false,
@@ -63,6 +66,8 @@ try {
     const harness = await server.ssrLoadModule("/lib/experiments/issue-42/provider-comparison.ts");
     const benchmark = artifacts.loadBenchmark();
     const options = {
+      ...(flags.has("--variant") ? { variant: flags.get("--variant") } : {}),
+      ...(lockedPolicy ? { lockedPolicy: lockedPolicy.value } : {}),
       ...(flags.has("--cases") ? { caseIds: flags.get("--cases").split(",") } : {}),
       ...(flags.has("--repetitions") ? { repetitions: Number(flags.get("--repetitions")) } : {}),
       ...(flags.has("--max-requests") ? { maxRequests: Number(flags.get("--max-requests")) } : {}),

@@ -212,3 +212,14 @@ suite and focused lint/format checks apply. Default TypeScript has seven existin
 errors in ignored `test-results/commit3-review/app/`; keep those copies intact
 and check repository source separately with that directory excluded. No build,
 voice session, calibration or paid measurement is needed to validate mechanics.
+
+## Commit 4 extension
+
+The default direct design and its adapter byte checks remain reproducible.
+[Factored evaluation and calibration](issue-42-factored-calibration.md) adds an
+explicit v2 experiment/review boundary, conditional-call accounting and an
+independent provider-free calibration mechanism. New source/plan hashes require
+new run authorization. Fresh held-out network evaluation now requires a compatible
+locked policy; this is implemented only for the factored variant, so fresh direct
+held-out network runs are blocked. No provider or empirical calibration results
+are added, and the existing six-case review still does not authorize a run.
