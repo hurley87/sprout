@@ -30,6 +30,34 @@ it("recovers a current semantic hold with the same one-request visit budget as m
   expect(request).toHaveBeenCalledOnce();
 });
 
+it("keeps one conversation recovery after a connection check, including when that check failed to send", async () => {
+  vi.useFakeTimers();
+  const request = vi.fn(); // Runtime catches send failures; the stage remains spent.
+  const diagnostics = vi.fn();
+  const recovery = new AnswerRecovery(request, diagnostics, true, () => false, true);
+  const initial = state();
+  recovery.arm(initial, true);
+  await vi.advanceTimersByTimeAsync(ANSWER_RECOVERY_WAIT_MS);
+  recovery.cancel("send_failed");
+  recovery.arm({ ...initial, childTurnId: 3 }, true);
+  await vi.advanceTimersByTimeAsync(ANSWER_RECOVERY_WAIT_MS);
+  expect(request).toHaveBeenCalledOnce();
+
+  const held = { ...initial, hasChildTranscript: true, childTurnId: 4, transcriptRevision: 3 };
+  recovery.armSemanticHold(held, true, classificationSource(held)!);
+  await vi.advanceTimersByTimeAsync(ANSWER_RECOVERY_WAIT_MS - 1);
+  expect(request).toHaveBeenCalledOnce();
+  await vi.advanceTimersByTimeAsync(1);
+  expect(request).toHaveBeenCalledTimes(2);
+  expect(request).toHaveBeenLastCalledWith(classificationSource(held));
+  const repeated = { ...held, childTurnId: 5, transcriptRevision: 4 };
+  recovery.armSemanticHold(repeated, true, classificationSource(repeated)!);
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(request).toHaveBeenCalledTimes(2);
+  expect(diagnostics.mock.calls.filter(([type, , detail]) => type === "answer_recovery.requested" &&
+    detail.reason === "semantic_hold")).toHaveLength(1);
+});
+
 it("rejects a stale held response and cancels a pending semantic recovery on a newer revision", async () => {
   vi.useFakeTimers();
   const request = vi.fn();

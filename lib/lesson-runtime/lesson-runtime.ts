@@ -186,6 +186,7 @@ export class LessonRuntime {
             return true;
           }
         : undefined,
+      this.lessonDefinition.conversationFirst === true,
     );
     this.transport = new BrowserTransport(audio, true);
     this.transport.setMicrophoneDiagnosticSink(event => {
