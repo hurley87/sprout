@@ -14,6 +14,7 @@ import {
   type ConversationStateOutputs,
 } from "../lib/lesson-runtime/conversation-observer-contract";
 import { assessmentQuestions, normalizeAssessment } from "../lib/lesson-runtime/conversation-assessment";
+import { evidenceRecap } from "../lib/lesson-runtime/evidence-recap";
 import { LessonRuntime } from "../lib/lesson-runtime/lesson-runtime";
 import type { ClientCommand, ProviderEvent } from "../lib/events";
 import replay from "./fixtures/catching-unicorns-stall-replay.json";
@@ -97,21 +98,26 @@ it("ignores stale closure and revoked completion after a tutor follow-up", () =>
   h.send({ type: "transcript.updated", source: runtimeSource(h.state), revision: 3, speaker: "tutor" });
   expect(h.state.conversationAdvanceRequested).toBe(false);
 });
-it.each(["Next question, then", "Please move on", "Can we go to the next question?", "Skip this question."])(
-  "honors %s without accepting uncertain evidence",
-  text => {
-    const h = harness();
-    h.send({ type: "output.activity", source: runtimeSource(h.state), state: "quiet" });
-    h.send({
-      type: "conversation.advance.requested",
-      source: classificationSource(h.state),
-      transcriptSnapshot: `Child: ${text}`,
-    });
-    h.send({ type: "clock.tick", source: runtimeSource(h.state) }, 51);
-    expect(h.state.nodeId).toBe("recap");
-    expect(h.state.conceptEvidence).toEqual({});
-  },
-);
+it.each([
+  "Next",
+  "I don’t know. Next.",
+  "I don't know, please move on",
+  "Next question, then",
+  "Please move on",
+  "Can we go to the next question?",
+  "Skip this question.",
+])("honors %s without accepting uncertain evidence", text => {
+  const h = harness();
+  h.send({ type: "output.activity", source: runtimeSource(h.state), state: "quiet" });
+  h.send({
+    type: "conversation.advance.requested",
+    source: classificationSource(h.state),
+    transcriptSnapshot: `Child: ${text}`,
+  });
+  h.send({ type: "clock.tick", source: runtimeSource(h.state) }, 51);
+  expect(h.state.nodeId).toBe("recap");
+  expect(h.state.conceptEvidence).toEqual({});
+});
 it("never treats quoted requests, tutor speech, or a learner answer containing next question as a navigation request", () => {
   for (const text of [
     "Tutor: Next question, then",
@@ -269,6 +275,8 @@ it.each([
 });
 it.each([
   "I don't think next question.",
+  "I don't know if we should move on.",
+  "I don't know.",
   "I think we should not move on.",
   "Don't move on.",
   'He said "next question".',
@@ -372,8 +380,8 @@ it("follows the four-question path through recap and completes without another l
     transport.receive!({ type: "output.activity", state: "quiet" });
     await vi.advanceTimersByTimeAsync(900);
     expect(runtime.snapshot().status).toBe("live"); // Unavailable output revokes observed audio.
-    events.tutorTurn("The discussion is finished. Review the recap on screen.", providerTime + 100);
-    await vi.advanceTimersByTimeAsync(900);
+    events.tutorTurn(evidenceRecap(lesson, runtime.snapshot().runtime), providerTime + 100);
+    await vi.advanceTimersByTimeAsync(1600);
     expect(runtime.snapshot().runtime?.phase).toBe("rendering");
     const terminal = runtime.snapshot().display;
     expect(terminal.nodeId).toBeNull();
@@ -389,4 +397,103 @@ it("follows the four-question path through recap and completes without another l
   } finally {
     runtime.stop();
   }
+});
+
+function startTerminal() {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => Response.json({}, { status: 503 })),
+  );
+  const runtime = new LessonRuntime({} as HTMLAudioElement, () => {}, { ...lesson, initialNodeId: "recap" });
+  runtime.confirmRendered(runtime.snapshot().display);
+  const command = transport.send.mock.calls.at(-1)![0];
+  if (command.type !== "session.instructions.append") throw new Error("Expected recap steering");
+  events.acknowledgeSteering(command.event_id, 1000);
+  return runtime;
+}
+it("requires the whole close, not a chunk or pause, and ignores duplicate starts, stale text and stale media", async () => {
+  useRuntimeFakeTimers();
+  const runtime = startTerminal();
+  try {
+    const text = evidenceRecap(lesson, runtime.snapshot().runtime);
+    expect(transport.send.mock.calls[0][0]).toMatchObject({ content: expect.stringContaining(JSON.stringify(text)) });
+    transport.receive!({ type: "session.started" });
+    expect(transport.send).toHaveBeenCalledOnce();
+    events.tutorTurn(text, 900); // Before this visit's steering timeline.
+    transport.receive!({ type: "output.activity", state: "active", sourceId: 0 });
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(runtime.snapshot().runtime?.terminalTranscriptComplete).not.toBe(true);
+    const split = text.indexOf(". ") + 2;
+    events.tutorTurn(text.slice(0, split), 1100);
+    await vi.advanceTimersByTimeAsync(2200);
+    expect(runtime.snapshot().runtime?.phase).toBe("active");
+    events.tutorTurn(text.slice(split), 1300);
+    await vi.advanceTimersByTimeAsync(600);
+    expect(runtime.snapshot().runtime?.phase).toBe("active");
+    transport.receive!({ type: "output.activity", state: "active" });
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(runtime.snapshot().runtime?.phase).toBe("active");
+    transport.receive!({ type: "output.activity", state: "quiet" });
+    await vi.advanceTimersByTimeAsync(1600);
+    expect(runtime.snapshot().runtime?.phase).toBe("rendering");
+    const terminal = runtime.snapshot().display;
+    runtime.confirmRendered({ ...terminal, token: "stale" });
+    expect(transport.close).not.toHaveBeenCalled();
+    runtime.confirmRendered(terminal);
+    expect(transport.close).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(0);
+    const report = runtime.report();
+    events.tutorTurn("Another question?", 1500);
+    transport.receive!({ type: "session.started" });
+    await vi.advanceTimersByTimeAsync(65_000);
+    expect(runtime.report()).toEqual(report);
+  } finally {
+    runtime.stop();
+  }
+});
+it.each(["no_output", "no_transcript", "unavailable", "different_close"])(
+  "bounds terminal failure and tears down without claiming completion: %s",
+  async mode => {
+    useRuntimeFakeTimers();
+    const runtime = startTerminal();
+    try {
+      if (mode !== "no_output") {
+        if (mode !== "no_transcript")
+          events.tutorTurn(
+            mode === "different_close" ? "You mastered everything." : evidenceRecap(lesson, runtime.snapshot().runtime),
+            1100,
+          );
+        else {
+          transport.receive!({ type: "output.activity", state: "active" });
+          transport.receive!({ type: "output.activity", state: "quiet" });
+        }
+        if (mode === "unavailable") transport.receive!({ type: "output.activity", state: "unavailable" });
+      }
+      runtime.skipScene();
+      await vi.advanceTimersByTimeAsync(60_100);
+      expect(runtime.snapshot()).toMatchObject({
+        status: "ended",
+        runtime: { phase: "stopped", lessonComplete: false },
+        error: expect.stringContaining("spoken recap could not be confirmed"),
+      });
+      expect(transport.close).toHaveBeenCalledOnce();
+      expect(transport.send.mock.calls.filter(([c]) => c.type === "session.instructions.append")).toHaveLength(1);
+    } finally {
+      runtime.stop();
+    }
+  },
+);
+it("stop during the close cancels its timeout and never completes from late output", async () => {
+  useRuntimeFakeTimers();
+  const runtime = startTerminal();
+  runtime.stop();
+  events.tutorTurn(evidenceRecap(lesson, runtime.snapshot().runtime), 1100);
+  await vi.advanceTimersByTimeAsync(65_000);
+  expect(runtime.snapshot()).toMatchObject({ status: "ended", error: null, runtime: { lessonComplete: false } });
+  expect(transport.close).toHaveBeenCalledOnce();
+});
+it("limits don't-know scaffolding and forbids repeated reconfirmation in durable guidance", () => {
+  expect(lesson.tutor.sessionGuidance).toContain("at most one useful clarification or hint");
+  expect(lesson.tutor.sessionGuidance).toContain("Never reconfirm an adequate accepted answer");
+  expect(lesson.tutor.sessionGuidance).toContain("A request to move on needs no clarification");
 });

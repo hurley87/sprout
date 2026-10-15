@@ -74,7 +74,7 @@ describe("Catching Unicorns scene presentation", () => {
   it("leaves the final recap as the evidence summary", () => {
     const html = renderScene("recap", { "engram:engram-biological": evidence("engram-biological") });
     expect(html).toContain("What this conversation showed");
-    expect(html).toContain("Demonstrated independently");
+    expect(html).toContain("You independently explained engrams.");
     expect(html).not.toContain("Learned so far");
   });
 
@@ -86,8 +86,8 @@ describe("Catching Unicorns scene presentation", () => {
         "A memory inside my brain, unlike an external note.",
       ),
     });
-    expect(recap).toContain("Demonstrated · prompting unclear");
-    expect(recap).toContain("A memory inside my brain, unlike an external note.");
+    expect(recap).toContain("You explained engrams, with prompting unclear.");
+    expect(recap).not.toContain("A memory inside my brain, unlike an external note.");
   });
 
   it("projects actual independent, prompted, partial, and unresolved evidence into recap", () => {
@@ -96,14 +96,14 @@ describe("Catching Unicorns scene presentation", () => {
       "exogram:exogram-non-biological": evidence("exogram-non-biological", "prompted", "A note outside my brain."),
       "exographics:visual-symbols": { ...evidence("visual-symbols"), status: "partial", understanding: null },
     });
-    expect(recap).toContain("Demonstrated independently");
-    expect(recap).toContain("Demonstrated after a prompt");
-    expect(recap).toContain("Partly explained");
-    expect(recap).toContain("Still unresolved or skipped");
-    expect(recap).toContain("Memory held in a biological mind.");
-    expect(recap).toContain("A note outside my brain.");
+    expect(recap).toContain("You independently explained engrams.");
+    expect(recap).toContain("After a prompt, you explained exograms.");
+    expect(recap).toContain("Partly explained: visual symbols");
+    expect(recap).toContain("unresolved or skipped:");
+    expect(recap).not.toContain("Memory held in a biological mind.");
+    expect(recap).not.toContain("A note outside my brain.");
     expect(recap).not.toContain("Supporting longer threads of reasoning");
     expect(recap).not.toContain("Substantial education</p>");
-    expect(recap).toContain("one unresolved item");
+    expect(recap).toContain("abstract ideas");
   });
 });

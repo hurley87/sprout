@@ -56,6 +56,18 @@ const lesson: LessonDefinition = {
   id: "catching-unicorns",
   initialNodeId: "engram",
   conversationFirst: true,
+  recapTopics: {
+    "engram-biological": "engrams",
+    "exogram-non-biological": "exograms",
+    "exogram-durability": "durability",
+    "exogram-shareability": "sharing",
+    "exogram-revisability": "revision",
+    "visual-symbols": "visual symbols",
+    "cultural-agreement": "shared meanings",
+    "beyond-prose": "examples beyond prose",
+    "abstract-concepts": "abstract ideas",
+  },
+
   nodes: {
     engram: scene({
       id: "engram",
@@ -140,8 +152,7 @@ const lesson: LessonDefinition = {
       prompt:
         "Review what you explained independently, what became clear after a prompt, what is still partial, and what remains to revisit.",
       objective: "Close with an evidence-based recap, without converting unresolved or skipped ideas into mastery.",
-      tutorBrief:
-        "The app presents the session's evidence-based recap. Briefly acknowledge that the discussion is finished and invite the learner to review the visible recap. End without a question; do not infer or invent a summary from conversation memory. Keep independent, prompted, partial, and unresolved evidence distinct. Do not fill gaps with hidden answers when the lesson ends or a scene was skipped.",
+      tutorBrief: "Read the application-authored evidence recap once, then stop. No question or further exercise.",
       next: null,
     }),
   },
@@ -154,7 +165,7 @@ const lesson: LessonDefinition = {
   tutor: {
     persona:
       "You are a curious, respectful discussion partner helping an adult learner think through Catching Unicorns.",
-    sessionGuidance: `Use only claims grounded in ${SOURCE.introduction}. The app, not you, controls scene changes and visual reveals. Let the learner answer before teaching. Keep unresolved canonical answers private except when the current scene tutor brief explicitly permits targeted scaffolding after difficulty or a request. Tutor-supplied content alone never establishes learner mastery. Natural paraphrases count. A probe must clarify the learner's meaning without putting an answer in their mouth. Honor a request to stop or skip without treating it as evidence.`,
+    sessionGuidance: `Use only claims grounded in ${SOURCE.introduction}. The app, not you, controls scene changes and visual reveals. Let the learner answer before teaching. Keep unresolved canonical answers private except when the current scene tutor brief explicitly permits targeted scaffolding after difficulty or a request. Tutor-supplied content alone never establishes learner mastery. Natural paraphrases count. Never reconfirm an adequate accepted answer or request its repetition. After "I don't know", offer at most one useful clarification or hint where the scene permits it, then close the question if they remain unsure. A request to move on needs no clarification. Do not probe indefinitely or manufacture understanding. A probe must clarify the learner's meaning without putting an answer in their mouth. Honor a request to stop or skip without treating it as evidence.`,
     startInstruction:
       "Begin the Catching Unicorns discussion by asking the current scene's prompt, then pause for the learner.",
     nodeInstruction:
@@ -250,17 +261,6 @@ export const CATCHING_UNICORNS_PRESENTATION = {
         source: SOURCE.introduction,
       },
     },
-  },
-  recap: {
-    groups: [
-      { id: "independent", title: "Demonstrated independently", evidence: "demonstrated-independent" },
-      { id: "prompted", title: "Demonstrated after a prompt", evidence: "demonstrated-prompted" },
-      { id: "unattributed", title: "Demonstrated · prompting unclear", evidence: "demonstrated-unattributed" },
-      { id: "partial", title: "Partly explained", evidence: "partial" },
-      { id: "missing", title: "Still unresolved or skipped", evidence: "not-yet-or-absent" },
-    ],
-    policy:
-      "Recap labels describe recorded evidence only. A skipped or unresolved criterion remains unresolved; do not append the hidden reveal text to explain it.",
   },
 } as const;
 

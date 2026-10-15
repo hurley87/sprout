@@ -3,6 +3,7 @@ import { transcriptMessages, substantiveLearnerText } from "../../lib/lesson-run
 import { readFile } from "node:fs/promises";
 import { installSyntheticMicrophone } from "../helpers/synthetic-microphone";
 import type { LessonObservationWindow } from "../../lib/lesson-runtime/browser-observation";
+import { evidenceRecap } from "../../lib/lesson-runtime/evidence-recap";
 import { CATCHING_UNICORNS_LESSON } from "../../lib/lesson-runtime/catching-unicorns-lesson";
 
 type LocalPeer = {
@@ -17,6 +18,7 @@ type LocalSessionWindow = LessonObservationWindow & {
   peerContext: AudioContext;
   currentPeer: LocalPeer;
   appPeerCloseCount: number;
+  steeringContents: string[];
   acceptOffer(sdp: string): Promise<string>;
   sendTranscript(type: "session.input_transcript.delta" | "session.output_transcript.delta", delta: string): void;
 };
@@ -29,6 +31,7 @@ async function installLocalSession(page: Page) {
     browser.peers = [];
     browser.peerContext = new AudioContext();
     browser.appPeerCloseCount = 0;
+    browser.steeringContents = [];
     let transcriptTime = 10;
     const serverPeers = new WeakSet<RTCPeerConnection>();
     const nativeClose = RTCPeerConnection.prototype.close;
@@ -65,6 +68,7 @@ async function installLocalSession(page: Page) {
         source.channel.onmessage = message => {
           const command = JSON.parse(message.data);
           if (command.type === "session.instructions.append") {
+            browser.steeringContents.push(command.content);
             // Catch scene-context expansion before a live provider rejects it.
             if (new TextEncoder().encode(command.content).length > 2000) {
               source.channel!.send(
@@ -556,25 +560,32 @@ for (const debug of [false, true]) {
     await expectProgress(4);
     await expect(page.getByRole("region", { name: "Conversation assessment" })).toHaveCount(debug ? 1 : 0);
 
-    await expect(page.locator('[data-scene="recap"]')).toContainText("Demonstrated independently");
-    await expect(page.locator('[data-scene="recap"]')).toContainText("Demonstrated after a prompt");
-    await expect(page.locator('[data-scene="recap"]')).toContainText("Partly explained");
-    await expect(page.locator('[data-scene="recap"]')).toContainText("Still unresolved or skipped");
-    const recapGroup = (heading: string) =>
-      page
-        .locator('[data-scene="recap"] section')
-        .filter({ has: page.getByRole("heading", { name: heading, exact: true }) });
-    await expect(recapGroup("Demonstrated independently").getByText("Engram", { exact: true })).toBeVisible();
-    await expect(recapGroup("Demonstrated after a prompt").getByText("Exogram", { exact: true })).toBeVisible();
-    await expect(recapGroup("Partly explained").locator("li")).toHaveCount(0);
-    await expect(recapGroup("Still unresolved or skipped")).toContainText(
-      "Every authored criterion has accepted evidence.",
+    const recapState = await page.evaluate(
+      () => (window as LessonObservationWindow).sproutLessonObservation?.read()?.snapshot.runtime,
     );
-    await expect(page.locator('[data-scene="recap"]')).not.toContainText(/extended cognition/i);
+    const closeText = evidenceRecap(CATCHING_UNICORNS_LESSON, recapState);
+    await expect(page.locator('[data-scene="recap"] p')).toHaveText(closeText);
+    const appends = await page.evaluate(() => (window as unknown as LocalSessionWindow).steeringContents);
+    expect(appends).toHaveLength(5);
+    expect(appends.at(-1)).toContain(JSON.stringify(closeText));
+    await expect(page.locator('[data-scene="recap"]')).toContainText("You independently explained engrams");
+    await expect(page.locator('[data-scene="recap"]')).toContainText("After a prompt, you explained exograms");
+    await expect(page.locator('[data-scene="recap"]')).not.toContainText(/extended cognition|unresolved/i);
     await page.evaluate(() => {
       (window as unknown as LocalSessionWindow).currentPeer.level.gain.value = 0.15;
     });
-    await sendWire("session.output_transcript.delta", "The discussion is finished. Review the recap on screen.");
+    // A pause after only the beginning of the close must not end the session.
+    const split = closeText.indexOf(". ") + 2;
+    await sendWire("session.output_transcript.delta", closeText.slice(0, split));
+    await page.evaluate(() => {
+      (window as unknown as LocalSessionWindow).currentPeer.level.gain.value = 0;
+    });
+    await page.waitForTimeout(1800);
+    await expect(page.getByRole("status")).toHaveText("live");
+    await page.evaluate(() => {
+      (window as unknown as LocalSessionWindow).currentPeer.level.gain.value = 0.15;
+    });
+    await sendWire("session.output_transcript.delta", closeText.slice(split));
     await expect
       .poll(() =>
         page.evaluate(
@@ -590,7 +601,13 @@ for (const debug of [false, true]) {
     await expectProgress(4);
     await expect(page.locator('[data-scene="recap"]')).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath("completed-recap.png") });
+    await expect
+      .poll(async () => (await microphone.state()).trackStates.filter(state => state === "live").length)
+      .toBe(1);
     if (!debug) {
+      await page.setViewportSize({ width: 320, height: 568 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await page.screenshot({ path: testInfo.outputPath("completed-recap-mobile.png") });
       await expect(page.getByText("Session details", { exact: true })).toHaveCount(0);
       await expect(page.getByRole("button", { name: /diagnostics|export/i })).toHaveCount(0);
       await page.getByRole("button", { name: "Start discussion" }).click();
@@ -622,3 +639,94 @@ for (const debug of [false, true]) {
     expect(exportText).not.toMatch(/OPENAI_API_KEY|TYPESAFE_API_KEY|authorization|access_token|"sdp"/i);
   });
 }
+
+test("don't-know can move on through four skipped questions without evidence or another exercise", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(60_000);
+  const microphone = await installSyntheticMicrophone(page);
+  await installLocalSession(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/demos/catching-unicorns");
+  await microphone.loadSpeech("answer-three");
+  await page.getByRole("button", { name: "Start discussion" }).click();
+  await expect(page.getByRole("status")).toHaveText("live");
+  const say = async (text: string) => {
+    const playback = await microphone.playSpeech("answer-three");
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as LessonObservationWindow).sproutLessonObservation?.read()?.snapshot.runtime?.childSpeaking,
+        ),
+      )
+      .toBe(true);
+    await page.evaluate(
+      text => (window as unknown as LocalSessionWindow).sendTranscript("session.input_transcript.delta", text),
+      text,
+    );
+    await microphone.waitForPlayback(playback.id);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as LessonObservationWindow).sproutLessonObservation?.read()?.snapshot.runtime?.childSpeaking,
+        ),
+      )
+      .toBe(false);
+  };
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => (window as LessonObservationWindow).sproutLessonObservation?.read()?.snapshot.awaitingSteering,
+      ),
+    )
+    .toBe(false);
+  await say("I don't know.");
+  await expect(page.locator('[data-scene="engram"]')).toBeVisible();
+  // Controlled tutor clarification, never manufactured as learner evidence.
+  await page.evaluate(() =>
+    (window as unknown as LocalSessionWindow).sendTranscript(
+      "session.output_transcript.delta",
+      "Would you like a clarification?",
+    ),
+  );
+  for (const [index, next] of ["exogram", "compare", "exographics", "recap"].entries()) {
+    await say(index === 0 ? "I don't know. Next." : "Next");
+    await expect(page.locator(`[data-scene="${next}"]`)).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as LessonObservationWindow).sproutLessonObservation?.read()?.snapshot.awaitingSteering,
+        ),
+      )
+      .toBe(false);
+  }
+  const state = await page.evaluate(
+    () => (window as LessonObservationWindow).sproutLessonObservation?.read()?.snapshot.runtime,
+  );
+  expect(state?.conceptEvidence).toEqual({});
+  const text = evidenceRecap(CATCHING_UNICORNS_LESSON, state);
+  await expect(page.locator('[data-scene="recap"] p')).toHaveText(text);
+  expect(text).not.toMatch(/you.*explained/i);
+  await page.evaluate(text => {
+    const browser = window as unknown as LocalSessionWindow;
+    browser.currentPeer.level.gain.value = 0.15;
+    browser.sendTranscript("session.output_transcript.delta", text);
+  }, text);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => (window as LessonObservationWindow).sproutLessonObservation?.read()?.snapshot.runtime?.outputActivity,
+      ),
+    )
+    .toBe("active");
+  await page.evaluate(() => {
+    (window as unknown as LocalSessionWindow).currentPeer.level.gain.value = 0;
+  });
+  await expect(page.getByRole("status")).toHaveText("Session complete");
+  await expect(page.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "4");
+  const appends = await page.evaluate(() => (window as unknown as LocalSessionWindow).steeringContents);
+  expect(appends).toHaveLength(5);
+  expect(appends.at(-1)).toContain(JSON.stringify(text));
+  await expect.poll(async () => (await microphone.state()).trackStates.filter(s => s === "live").length).toBe(1);
+  await page.screenshot({ path: testInfo.outputPath("all-skipped-recap-mobile.png") });
+});

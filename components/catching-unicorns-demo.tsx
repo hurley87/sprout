@@ -237,12 +237,22 @@ export default function CatchingUnicornsDemo({ debug = false }: { debug?: boolea
             <div className="rounded-2xl border p-4">
               <h2 className="font-semibold">Current evidence</h2>
               <div className="mt-3 space-y-2 text-sm">
-                {sceneConcepts(state, nodeId).map(concept => (
-                  <div key={concept.criterionId}>
+                {(nodeId === "recap"
+                  ? questionIds.flatMap(id => sceneConcepts(state, id))
+                  : sceneConcepts(state, nodeId)
+                ).map(concept => (
+                  <div key={`${concept.nodeId}:${concept.criterionId}`}>
                     <div className="flex justify-between gap-3">
                       <span>{concept.demonstrated ? (concept.item?.title ?? "Concept") : "Unresolved concept"}</span>
                       <EvidenceState evidence={concept.evidence} />
                     </div>
+                    {concept.evidence && (
+                      <p className="text-xs text-slate-500">
+                        {concept.nodeId} · {concept.criterionId} ·{" "}
+                        {concept.evidence.understanding ?? "prompting unclear"} ·{" "}
+                        {concept.evidence.source?.childTranscript ?? "No learner transcript"}
+                      </p>
+                    )}
                     {concept.demonstrated && concept.item && (
                       <details>
                         <summary>Authored concept</summary>

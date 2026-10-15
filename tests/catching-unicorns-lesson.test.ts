@@ -28,7 +28,9 @@ describe("isolated Catching Unicorns lesson content", () => {
       { kind: "node", nodeId: "exographics" },
       { kind: "node", nodeId: "recap" },
     ]);
-    expect(Object.keys(CATCHING_UNICORNS_PRESENTATION)).toEqual(CATCHING_UNICORNS_SCENE_IDS);
+    expect(Object.keys(CATCHING_UNICORNS_PRESENTATION)).toEqual(
+      CATCHING_UNICORNS_SCENE_IDS.filter(id => id !== "recap"),
+    );
     expect(nodes.at(-1)?.completeAfterTutorOutput).toBe(true);
     expect(nodes.slice(0, -1).every(node => node.concepts?.length)).toBe(true);
     expect(CATCHING_UNICORNS_LESSON.nodes.compare.concepts?.map(item => item.id)).toEqual([
@@ -67,14 +69,6 @@ describe("isolated Catching Unicorns lesson content", () => {
         expect(reveal.text).toBeTruthy();
       }
     }
-    expect(CATCHING_UNICORNS_PRESENTATION.recap.groups.map(group => group.id)).toEqual([
-      "independent",
-      "prompted",
-      "unattributed",
-      "partial",
-      "missing",
-    ]);
-    expect(CATCHING_UNICORNS_PRESENTATION.recap.policy).toContain("remains unresolved");
     for (const nodeId of CATCHING_UNICORNS_SCENE_IDS.slice(0, -1)) {
       const expected = (CATCHING_UNICORNS_LESSON.nodes[nodeId].concepts ?? []).map(item => `concept_${item.id}`);
       const questions = conversationStateQuestions(CATCHING_UNICORNS_LESSON, nodeId);
@@ -107,14 +101,6 @@ describe("isolated Catching Unicorns lesson content", () => {
     expect(CATCHING_UNICORNS_TRANSCRIPT_FIXTURES.exographics.partial.transcript).toMatch(
       /just an exogram, just writing things down/i,
     );
-
-    expect(CATCHING_UNICORNS_PRESENTATION.recap.groups.map(group => group.title)).toEqual([
-      "Demonstrated independently",
-      "Demonstrated after a prompt",
-      "Demonstrated · prompting unclear",
-      "Partly explained",
-      "Still unresolved or skipped",
-    ]);
   });
 
   it("projects only current-scene prompt data to tutor context, keeping reveal payloads client-side", () => {
@@ -127,13 +113,17 @@ describe("isolated Catching Unicorns lesson content", () => {
       expect(context.scene).not.toHaveProperty("reveals");
       const currentPresentation = CATCHING_UNICORNS_PRESENTATION[nodeId as keyof typeof CATCHING_UNICORNS_PRESENTATION];
       const currentRevealText =
-        "reveals" in currentPresentation ? Object.values(currentPresentation.reveals).map(item => item.text) : [];
+        currentPresentation && "reveals" in currentPresentation
+          ? Object.values(currentPresentation.reveals).map(item => item.text)
+          : [];
       for (const answer of currentRevealText) expect(JSON.stringify(context)).not.toContain(answer);
     }
     expect(CATCHING_UNICORNS_LESSON.tutor.sessionGuidance).toContain(
       "except when the current scene tutor brief explicitly permits targeted scaffolding",
     );
-    expect(CATCHING_UNICORNS_LESSON.tutor.sessionGuidance).toContain("Tutor-supplied content alone never establishes learner mastery");
+    expect(CATCHING_UNICORNS_LESSON.tutor.sessionGuidance).toContain(
+      "Tutor-supplied content alone never establishes learner mastery",
+    );
   });
 });
 

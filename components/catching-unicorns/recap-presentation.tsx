@@ -1,94 +1,12 @@
-import type { ConceptEvidenceRecord, LessonRuntimeState } from "@/lib/lesson-runtime/lesson-runtime-reducer";
-import { sceneConcepts, sceneIds } from "./presentation-helpers";
-
-const recapSceneLabel = (id: string) =>
-  ({
-    engram: "Engram prompt",
-    exogram: "Exogram prompt",
-    compare: "Comparison scene",
-    exographics: "Visual practice scene",
-    recap: "Recap",
-  })[id] ?? "Lesson scene";
+import { CATCHING_UNICORNS_LESSON } from "@/lib/lesson-runtime/catching-unicorns-lesson";
+import { evidenceRecap } from "@/lib/lesson-runtime/evidence-recap";
+import type { LessonRuntimeState } from "@/lib/lesson-runtime/lesson-runtime-reducer";
 
 export function RecapPresentation({ state }: { state: LessonRuntimeState | null | undefined }) {
-  const evidenceGroups = [
-    {
-      id: "independent",
-      title: "Demonstrated independently",
-      filter: (item: ConceptEvidenceRecord) => item.status === "demonstrated" && item.understanding === "independent",
-    },
-    {
-      id: "prompted",
-      title: "Demonstrated after a prompt",
-      filter: (item: ConceptEvidenceRecord) => item.status === "demonstrated" && item.understanding === "prompted",
-    },
-    {
-      id: "unattributed",
-      title: "Demonstrated · prompting unclear",
-      filter: (item: ConceptEvidenceRecord) => item.status === "demonstrated" && item.understanding === null,
-    },
-    { id: "partial", title: "Partly explained", filter: (item: ConceptEvidenceRecord) => item.status === "partial" },
-  ];
-  const all = sceneIds.flatMap(id => sceneConcepts(state, id));
-  const groups = evidenceGroups
-    .map(group => ({
-      ...group,
-      entries: all.filter(item => item.evidence && group.filter(item.evidence)),
-    }))
-    .filter(group => group.id !== "unattributed" || group.entries.length > 0);
-  const unresolved = all.filter(item => !item.demonstrated);
   return (
-    <div className="space-y-5" data-scene="recap">
-      <header>
-        <p className="text-sm uppercase tracking-[0.2em] text-emerald-800">Catching Unicorns · recap</p>
-        <h2 className="mt-2 text-3xl font-semibold">What this conversation showed</h2>
-        <p className="mt-3 max-w-3xl text-slate-600">A record of accepted evidence from this session.</p>
-      </header>
-      <div className="grid gap-4 md:grid-cols-2">
-        {groups.map(group => (
-          <section className="rounded-2xl border bg-white p-4" key={group.id}>
-            <h3 className="font-semibold">{group.title}</h3>
-            {group.entries.length ? (
-              <ul className="mt-3 space-y-3">
-                {group.entries.map(item => (
-                  <li key={`${item.nodeId}:${item.criterionId}`}>
-                    <p className="font-medium">
-                      {item.demonstrated
-                        ? (item.item?.title ?? recapSceneLabel(item.nodeId))
-                        : recapSceneLabel(item.nodeId)}
-                    </p>
-                    <p className="text-sm text-slate-600">
-                      {item.evidence?.source?.childTranscript
-                        ? `“${item.evidence.source.childTranscript}”`
-                        : "Accepted evidence recorded."}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="mt-3 text-sm text-slate-500">Nothing recorded in this group.</p>
-            )}
-          </section>
-        ))}
-        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 md:col-span-2">
-          <h3 className="font-semibold text-amber-950">Still unresolved or skipped</h3>
-          {unresolved.length ? (
-            <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-              {unresolved.map(item => (
-                <li className="rounded-xl bg-white/80 p-3 text-sm" key={`${item.nodeId}:${item.criterionId}`}>
-                  <span className="font-medium">{recapSceneLabel(item.nodeId)}</span>
-                  <span className="text-slate-600">
-                    {" "}
-                    · {item.evidence?.status === "partial" ? "partial evidence" : "one unresolved item"}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-3 text-sm">Every authored criterion has accepted evidence.</p>
-          )}
-        </section>
-      </div>
+    <div className="mx-auto max-w-2xl space-y-5" data-scene="recap" aria-live="polite">
+      <h2 className="text-3xl font-semibold">What this conversation showed</h2>
+      <p className="text-lg leading-relaxed text-slate-700">{evidenceRecap(CATCHING_UNICORNS_LESSON, state)}</p>
     </div>
   );
 }

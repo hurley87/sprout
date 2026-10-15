@@ -145,3 +145,24 @@ without revealing discussion answers; they do not measure GPT-Live tutor
 behavior or Jev's judgment of learner speech. See the
 [Catching Unicorns validation record](catching-unicorns-demo-validation.md) for
 the live acceptance status and source-fidelity cases.
+
+
+## Issue #71 closing coverage
+
+The provider-free Catching Unicorns peer checks exactly five steering appends: four
+questions and one evidence-authored close. Tests hold a partial closing transcript
+through an audio pause, resume audio, and require Session complete only after the
+full expected text and quiet drain. Default/debug walkthroughs retain 4 of 4,
+inspect export data and verify capture-track cleanup. An all-skipped walkthrough
+says `I don't know`, receives a controlled clarification, then uses `next` requests
+without earning evidence. These fixtures verify application choreography, not live
+tutor behavior. See [demo validation](catching-unicorns-demo-validation.md) for the
+remaining live acceptance checks.
+
+When a development server holds the checkout's Next.js lock, copy only tracked
+source (plus explicitly named new implementation files) to an isolated temporary
+directory. Exclude env files and generated outputs; use installed local dependencies.
+Build there with `npm run build -- --webpack`, then run Playwright with its existing
+provider-free configuration overriding only the server command to
+`npm run start -- --port 3100`. Keep refusal to reuse existing servers and empty
+provider credential overrides. Do not stop the user's server to acquire its lock.

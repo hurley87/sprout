@@ -30,11 +30,20 @@ steering. Optional presentation confirmation remains supported.
 
 A node may explicitly set `completeAfterTutorOutput` for a terminal presentation
 with no concept criteria and a `complete` edge. Catching Unicorns uses it for recap.
-It needs no learner turn or classifier proposal: a fresh tutor audio onset in that
-visit must be observed, then sustained quiet, before the authored terminal render
-is requested. Unavailable audio revokes that observation; learner speech blocks
-the drain. Completion still requires exact terminal render confirmation. The
-option is rejected on question nodes and is absent from the counting lesson.
+It needs no learner turn or classifier proposal. The browser runtime checks the
+assembled tutor transcript against the deterministic accepted-evidence close and
+supplies `terminal.transcript.checked` with the current runtime/visit/turn identity.
+The reducer requires that full-text check, a fresh observed tutor audio onset and
+at least 1,500 ms of sustained quiet after the latest text/audio before requesting
+the terminal render. Transcript chunks, quiet alone and navigation/skip requests
+cannot finish the recap. New text revokes the full-text check until rechecked;
+unavailable audio revokes the audio observation, and learner speech blocks drain.
+Completion still requires exact terminal render confirmation. Recovery/classifier
+prompts are disabled for the terminal close; missing or mismatched output hits a
+60-second runtime failure deadline with teardown and no completion claim. Stop
+cancels the deadline. This local transcript/PCM boundary is not a provider
+response-finished signal. The option is rejected on question nodes and is absent
+from the counting lesson, whose ordinary drain threshold remains unchanged.
 
 Post-conversation grading lives in the browser runtime and `/api/assess`, outside
 this reducer. It cannot reveal concepts, change live mastery, or choose a scene.

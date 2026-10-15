@@ -77,6 +77,7 @@ export type LessonRuntimeState = {
   /** Candidate audio for this ended child turn; semantic authority is still required to use it. */
   readonly tutorOutputObserved: boolean;
   readonly tutorOutputDrained: boolean;
+  readonly terminalTranscriptComplete?: boolean;
   readonly quietSinceMs: number | null;
   readonly quietDrainMs: number;
   readonly nowMs: number;
@@ -119,6 +120,7 @@ export type LessonRuntimeEvent = { readonly atMs: number } & (
       readonly source: ClassificationSource;
       readonly transcriptSnapshot: string;
     }
+  | { readonly type: "terminal.transcript.checked"; readonly source: RuntimeSource; readonly complete: boolean }
   | { readonly type: "clock.tick"; readonly source: RuntimeSource }
   | { readonly type: "render.confirmed"; readonly runtimeId: string; readonly identity: RenderIdentity }
   | { readonly type: "scene.skipped"; readonly source: RuntimeSource }
@@ -200,8 +202,9 @@ export function learnerRequestedNext(transcript: string) {
     .replace(/\s+/gu, " ");
   if (!text) return false;
   const request =
-    /^(?:please[,.]?\s+)?(?:(?:let['’]s|can we|could we|i(?:['’]d| would) like to)\s+)?(?:(?:can|could) i (?:have|get) (?:the )?next question|i(?:['’]d| would) like (?:the )?next question|let['’]s do (?:the )?next question|next question(?:,? then)?|(?:go|move|skip)(?: on)? to (?:the )?next(?: question)?|move on|skip (?:this|the)(?: question)?)(?:[.!?]|,? please)?$/iu;
+    /^(?:please[,.]?\s+)?(?:(?:let['’]s|can we|could we|i(?:['’]d| would) like to)\s+)?(?:(?:can|could) i (?:have|get) (?:the )?next question|i(?:['’]d| would) like (?:the )?next question|let['’]s do (?:the )?next question|next(?: question)?(?:,? then)?|(?:go|move|skip)(?: on)? to (?:the )?next(?: question)?|move on|skip (?:this|the)(?: question)?)(?:[.!?]|,? please)?$/iu;
   const normalized = text
+    .replace(/^i (?:don't|don’t|do not) know[,.!]\s+/iu, "")
     .replace(/^(?:(?:yes|yeah|okay|ok|well|um|i am)[,.]?\s+)+/iu, "")
     .replace(/^i think\s+/iu, "")
     .replace(/[.!]\s+i(?: think i)?(?: have|['’]ve) answered (?:this|that)(?: question)?[.!]?$/iu, "");
@@ -250,7 +253,8 @@ export function meetsAuthoredCompletionPolicy(state: LessonRuntimeState, lesson:
 }
 
 export function hasCurrentCompletionEvidence(state: LessonRuntimeState, lesson: LessonDefinition) {
-  if (lesson.nodes[state.nodeId].completeAfterTutorOutput) return state.tutorOutputObserved;
+  if (lesson.nodes[state.nodeId].completeAfterTutorOutput)
+    return state.tutorOutputObserved && state.terminalTranscriptComplete === true;
   if (lesson.conversationFirst)
     return (
       state.conversationAdvanceRequested === "learner" ||
@@ -293,7 +297,8 @@ function finish(state: LessonRuntimeState, lesson: LessonDefinition): LessonRunt
       (lesson.conversationFirst === true && state.conversationAdvanceRequested === "learner")) &&
     state.outputActivity === "quiet" &&
     state.quietSinceMs !== null &&
-    state.nowMs - state.quietSinceMs >= state.quietDrainMs;
+    state.nowMs - state.quietSinceMs >=
+      (lesson.nodes[state.nodeId].completeAfterTutorOutput ? Math.max(1500, state.quietDrainMs) : state.quietDrainMs);
   const next = { ...state, tutorOutputDrained: drained, transitionReady: false };
   if (!hasCurrentCompletionEvidence(next, lesson) || !drained || next.childSpeaking) {
     return { state: next, effects: [] };
@@ -504,6 +509,7 @@ export function reduceLessonRuntime(
     };
   }
   if (event.type === "scene.skipped") {
+    if (lesson.nodes[state.nodeId].completeAfterTutorOutput) return ignored;
     if (
       state.phase !== "active" ||
       state.childSpeaking ||
@@ -579,6 +585,7 @@ export function reduceLessonRuntime(
       next = {
         ...next,
         ...clearedEvidence,
+        ...(lesson.nodes[state.nodeId].completeAfterTutorOutput ? { terminalTranscriptComplete: false } : {}),
         interruptedExchange:
           lesson.conversationFirst && (state.hasChildTranscript || state.interruptedExchange)
             ? {
@@ -639,6 +646,7 @@ export function reduceLessonRuntime(
         // Even tutor-only updates require the latest answer to be revalidated before progression.
         answerAccepted: false,
         acknowledgmentObserved: false,
+        ...(lesson.nodes[state.nodeId].completeAfterTutorOutput ? { terminalTranscriptComplete: false } : {}),
       };
       break;
     case "conversation.recheck.requested": {
@@ -651,7 +659,8 @@ export function reduceLessonRuntime(
         !state.interruptedExchange?.tutorOutputObserved ||
         state.transcriptSource !== "tutor" ||
         state.outputActivity !== "quiet"
-      ) return ignored;
+      )
+        return ignored;
       next = {
         ...next,
         interruptedExchange: { ...state.interruptedExchange, ready: true },
@@ -793,6 +802,14 @@ export function reduceLessonRuntime(
         // separately requires relevant tutor output to have been observed.
         next = { ...next, quietSinceMs: event.atMs };
       }
+      break;
+    case "terminal.transcript.checked":
+      if (lesson.nodes[state.nodeId].completeAfterTutorOutput)
+        next = {
+          ...next,
+          terminalTranscriptComplete: event.complete,
+          quietSinceMs: next.outputActivity === "quiet" ? event.atMs : null,
+        };
       break;
     case "clock.tick":
       break;

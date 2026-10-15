@@ -33,14 +33,14 @@ export const ACTIVE_MODEL_COMPATIBILITY = {
 // by isolated reducer replay. Their frozen baseline Git blobs remain mandatory.
 export const RECOVERY_SOURCE_COMPATIBILITY = {
   "lib/lesson-runtime/answer-recovery.ts": "4e3159932c3ad5beed9ed9786118910fac5d38ea1b8d725acbdb536729554a8c",
-  "lib/lesson-runtime/lesson-runtime.ts": "b8e09c305de67b006d2fdb96934ba57e7717b4aa4a4fc49d42c38c99525385a4",
+  "lib/lesson-runtime/lesson-runtime.ts": "6de22a6c8910a8a0a68803ae87e4961b4a66675df16152020ea3e89580ef8286",
 };
 // Issue #71 changes the active lesson and terminal gate. Frozen v1 inputs stay historical.
 export const SHORT_LESSON_COMPATIBILITY = {
-  "lib/lesson-runtime/catching-unicorns-lesson.ts": "1923b45d800cad8d2c66336588289205d72a4acf17199559e88c573b099ab957",
-  "lib/lesson-runtime/lesson-definition.ts": "f9d046c170ff620d249ab5380354da713c3d6cec1a70d6018b4cbb3b43999924",
-  "lib/lesson-runtime/lesson-runtime-reducer.ts": "502bebd02e97bf8ff0185ca4c4dccb03756be6e91b90d7f68024aa092ea7fe3f",
-  "lib/lesson-runtime/live-context.ts": "58890cb4f6a792e0d5d869830399aa316182c1171e534bc7b61fd321377710f5",
+  "lib/lesson-runtime/catching-unicorns-lesson.ts": "6a3205a9cea980d02742b33072fc444034182afb12028b679cfaccbb3408bf84",
+  "lib/lesson-runtime/lesson-definition.ts": "56c7c48e77cb4c39a05c6ac926504c00ec9dd964056fc079c1a810a3b5a5a411",
+  "lib/lesson-runtime/lesson-runtime-reducer.ts": "a2026b92a81bc8f021cae8cfd49a3297389036163a456a69b0079075feaf0e95",
+  "lib/lesson-runtime/live-context.ts": "6ae645ba44e3dee6b667ec6e49a52a65c7b4456bbf3301ed75a3aef075b6dd06",
 };
 const toolPaths = [
   ADAPTER_PATH,

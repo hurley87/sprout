@@ -1,3 +1,4 @@
+import { evidenceRecap, normalizeRecapSpeech } from "./evidence-recap";
 import { normalizeAssessment, type ConversationAssessment, type ConversationVisit } from "./conversation-assessment";
 import { BrowserTransport } from "../browser-transport";
 import type { ProviderEvent, TranscriptEvent } from "../events";
@@ -116,6 +117,8 @@ export class LessonRuntime {
   private clarificationRequest?: { eventId: string; source: ClassificationSource };
   private stabilizationTimer?: ReturnType<typeof setTimeout>;
   private clockTimer?: ReturnType<typeof setTimeout>;
+  private terminalTimer?: ReturnType<typeof setTimeout>;
+  private terminalText?: string;
   private startupTimer?: ReturnType<typeof setTimeout>;
   private steering?: {
     eventId: string;
@@ -377,6 +380,7 @@ export class LessonRuntime {
     const source = runtimeSource(this.state);
     switch (event.type) {
       case "session.started":
+        if (this.status !== "connecting") return;
         clearTimeout(this.startupTimer);
         this.status = "live";
         this.log("session.started", { sourceId: event.sourceId });
@@ -594,11 +598,28 @@ export class LessonRuntime {
       speaker,
       atMs: this.now(),
     });
+    if (
+      this.terminalText &&
+      this.lessonDefinition.nodes[this.state.nodeId].completeAfterTutorOutput &&
+      speaker === "tutor"
+    ) {
+      const spoken = this.fragments
+        .filter(item => item.event.speaker === "sprout")
+        .map(item => item.event.delta)
+        .join("");
+      this.dispatch({
+        type: "terminal.transcript.checked",
+        source: runtimeSource(this.state),
+        complete: normalizeRecapSpeech(spoken) === normalizeRecapSpeech(this.terminalText),
+        atMs: this.now(),
+      });
+    }
     this.scheduleClassification(`${speaker}_transcript_stabilized`);
   }
 
   private scheduleClassification(trigger: string) {
     clearTimeout(this.stabilizationTimer);
+    if (this.state && this.lessonDefinition.nodes[this.state.nodeId].completeAfterTutorOutput) return;
     if (this.lessonDefinition.conversationFirst && this.state && !this.steering) {
       const source =
         this.state.phase === "active" && !this.state.childSpeaking
@@ -645,6 +666,12 @@ export class LessonRuntime {
   }
 
   private syncTutorStabilization(trigger: string) {
+    if (this.state && this.lessonDefinition.nodes[this.state.nodeId].completeAfterTutorOutput) {
+      this.answerRecovery.cancel("terminal_close");
+      this.supportClarification.cancel("terminal_close");
+      this.tutorStabilization.cancel("terminal_close");
+      return;
+    }
     if (this.state) this.answerRecovery.observe(this.state, this.status === "live" && !this.steering);
     if (this.state) this.supportClarification.observe(this.state, this.status === "live" && !this.steering);
     if (this.state) this.tutorStabilization.observe(this.state, this.status === "live" && !this.steering, trigger);
@@ -824,7 +851,18 @@ export class LessonRuntime {
   private appendSteering(context: CurrentNodeSteeringContext, renderToken: string, startLesson = false) {
     if (!this.state || this.status !== "live") return false;
     const eventId = `${this.runtimeId}:steer:${this.state.visitId}`;
-    const content = teachingInstruction(context, this.lessonDefinition, startLesson);
+    const terminal = this.lessonDefinition.nodes[context.nodeId].completeAfterTutorOutput;
+    if (terminal) {
+      this.terminalText = evidenceRecap(this.lessonDefinition, this.state);
+      this.terminalTimer = setTimeout(
+        () =>
+          this.fail(
+            "The spoken recap could not be confirmed. Your recap is available on screen; start a new discussion when ready.",
+          ),
+        60_000,
+      );
+    }
+    const content = teachingInstruction(context, this.lessonDefinition, startLesson, this.terminalText);
     const source = runtimeSource(this.state);
     this.steering = {
       eventId,
@@ -858,6 +896,7 @@ export class LessonRuntime {
       !this.state ||
       this.status !== "live" ||
       this.state.phase !== "active" ||
+      this.lessonDefinition.nodes[this.state.nodeId].completeAfterTutorOutput ||
       this.state.childSpeaking ||
       this.state.childCandidate !== null ||
       this.steering !== undefined
@@ -942,6 +981,7 @@ export class LessonRuntime {
     this.answerRecovery.cancel(reason);
     clearTimeout(this.clockTimer);
     clearTimeout(this.startupTimer);
+    clearTimeout(this.terminalTimer);
     if (this.steering) clearTimeout(this.steering.timer);
     this.steering = undefined;
     if (this.state && this.state.phase !== "complete") {
