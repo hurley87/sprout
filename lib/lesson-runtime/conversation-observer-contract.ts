@@ -76,13 +76,14 @@ export function conversationStateQuestions(lesson: LessonDefinition, nodeId?: st
   // boundaries support it. No tutor messages or assent options are offered.
   if (transcript !== undefined) {
     const candidates = learnerSourceOptions(transcript);
+    const singleSource = singleLearnerSourceIndex(transcript) !== null;
     for (const concept of currentNode?.concepts ?? []) {
       questions[`source_${concept.id}`] = {
         type: "choice",
-        instructions: `${conceptScopeInstructions} Select the START of the earliest learner utterance or complete explanation supporting this criterion: ${criterionText(concept)}. The sourceEnd question separately selects its inclusive END. If one message is sufficient, start and end must be that same message. If a thought spans learner messages, select the first necessary fragment here and include its completion in sourceEnd. A sentence started before a tutor acknowledgment and finished after it has its START before the acknowledgment, even if the completion also contains a standalone explanation. Consider intervening tutor words for prompting attribution, but never count them as learner evidence. A span must express one coherent explanation; do not combine unrelated answers, supply missing meaning, or include unnecessary messages. If several complete explanations support it, prefer the earliest. The same explanation may support multiple criteria. If only partial evidence exists, locate that partial explanation without extending it with unrelated answers. If attribution is unresolved, select none. Indexes are application projections; never infer unseen content.`,
+        instructions: `${conceptScopeInstructions} Select the START of the earliest learner utterance or complete explanation supporting this criterion: ${criterionText(concept)}. ${singleSource ? "There is only one eligible learner message, so no separate END decision is needed." : "The sourceEnd question separately selects its inclusive END. If one message is sufficient, start and end must be that same message. If a thought spans learner messages, select the first necessary fragment here and include its completion in sourceEnd. A sentence started before a tutor acknowledgment and finished after it has its START before the acknowledgment, even if the completion also contains a standalone explanation."} Consider intervening tutor words for prompting attribution, but never count them as learner evidence. A span must express one coherent explanation; do not combine unrelated answers, supply missing meaning, or include unnecessary messages. If several complete explanations support it, prefer the earliest. The same explanation may support multiple criteria. If only partial evidence exists, locate that partial explanation without extending it with unrelated answers. If attribution is unresolved, select none. Indexes are application projections; never infer unseen content.`,
         criteria: candidates,
       };
-      questions[`sourceEnd_${concept.id}`] = {
+      if (!singleSource) questions[`sourceEnd_${concept.id}`] = {
         type: "choice",
         instructions: `${conceptScopeInstructions} Select the inclusive END learner message of the same earliest complete explanation whose START is selected by source_${concept.id}. Criterion: ${criterionText(concept)}. Choose the earliest message that completes the supporting explanation. Do not stop at an unfinished sentence: if the first fragment trails off before saying what something means, include the later learner continuation that finishes that sentence. A tutor acknowledgment cannot complete a learner sentence. If one message suffices, select that same message for both boundaries. For split speech, include the completion even after a neutral tutor acknowledgment. Consider all intervening tutor content for prompting attribution. Never extend a partial answer with an unrelated answer or later assent; if source attribution is unresolved choose none.`,
         criteria: candidates,
@@ -102,6 +103,13 @@ export function learnerSourceOptions(transcript: string, allowFragments = true):
   };
 }
 
+/** Include fragments: excluding a short continuation could hide a real span.
+ * One candidate proves the boundary, never the meaning or prompting attribution. */
+function singleLearnerSourceIndex(transcript: string) {
+  const candidates = Object.keys(learnerSourceOptions(transcript)).filter(key => key !== "none");
+  return candidates.length === 1 ? Number(candidates[0].slice("message_".length)) : null;
+}
+
 export const OBJECTIVE_STATES = OBJECTIVE_CRITERIA_IDS;
 export const OBSERVED_TUTOR_STATES = TUTOR_CRITERIA_IDS;
 export type ObjectiveState = (typeof OBJECTIVE_STATES)[number];
@@ -115,7 +123,7 @@ export type ConversationStateOutputs = {
   objectiveState: ChoiceOutput<ObjectiveState>;
   tutorState: ChoiceOutput<ObservedTutorState>;
   concepts?: Readonly<Record<string, ChoiceOutput<(typeof CONCEPT_OBSERVATIONS)[number]>>>;
-  /** source_<id> starts an explanation; sourceEnd_<id> completes it. */
+  /** source_<id> starts an explanation; sourceEnd_<id> is required for multiple candidate messages. */
   sources?: Readonly<Record<string, ChoiceOutput<string>>>;
 };
 export type ConversationStateDecision = {
@@ -170,13 +178,14 @@ export function normalizeConversationOutputs(body: unknown, lesson?: LessonDefin
   for (const concept of concepts) expected[`concept_${concept.id}`] = CONCEPT_OBSERVATIONS;
   const hasSources = Object.keys(body.answers).some(key => key.startsWith("source_"));
   const hasSourceEnds = Object.keys(body.answers).some(key => key.startsWith("sourceEnd_"));
-  if (transcript !== undefined && concepts.length && (!hasSources || (!hasSourceEnds && !allowLegacySources))) return null;
+  const singleSource = transcript !== undefined && singleLearnerSourceIndex(transcript) !== null;
+  if (transcript !== undefined && concepts.length && (!hasSources || (!hasSourceEnds && !allowLegacySources && !singleSource))) return null;
   if (hasSources) {
     for (const concept of concepts) {
       for (const id of [`source_${concept.id}`, ...(hasSourceEnds ? [`sourceEnd_${concept.id}`] : [])]) {
         const answer = body.answers[id];
         if (!record(answer) || !record(answer.probabilities)) return null;
-        const options = transcript !== undefined ? Object.keys(learnerSourceOptions(transcript, hasSourceEnds || !allowLegacySources)) : Object.keys(answer.probabilities);
+        const options = transcript !== undefined ? Object.keys(learnerSourceOptions(transcript, hasSourceEnds || singleSource || !allowLegacySources)) : Object.keys(answer.probabilities);
         if (!options.includes("none") || options.some(option => option !== "none" && !/^message_(?:0|[1-9]\d*)$/u.test(option))) return null;
         expected[id] = options;
       }
@@ -246,7 +255,7 @@ function confidenceFailureReason(id: string, answer: ChoiceOutput<string>) {
 }
 
 /** Shared interpretation of validated scores for mapping and exported diagnostics. */
-export function interpretConversationOutputs(outputs: ConversationStateOutputs, lesson?: LessonDefinition, nodeId = "") {
+export function interpretConversationOutputs(outputs: ConversationStateOutputs, lesson?: LessonDefinition, nodeId = "", transcript?: string) {
   const objectiveConfident = confidentlyClassified(outputs.objectiveState);
   const tutorConfident = confidentlyClassified(outputs.tutorState);
   const genericConfident = objectiveConfident && tutorConfident;
@@ -269,6 +278,7 @@ export function interpretConversationOutputs(outputs: ConversationStateOutputs, 
       conceptObservations.push({ criterionId: key.slice("concept_".length), observation: "partial_uncertain" });
   }
   if (outputs.sources) {
+    const singleSource = transcript === undefined ? null : singleLearnerSourceIndex(transcript);
     for (let index = 0; index < conceptObservations.length; index++) {
       const observation = conceptObservations[index];
       const locator = outputs.sources[`source_${observation.criterionId}`];
@@ -276,7 +286,10 @@ export function interpretConversationOutputs(outputs: ConversationStateOutputs, 
       const locatedIndex = (answer: ChoiceOutput<string> | undefined) => answer && confidentlyClassified(answer) && /^message_\d+$/u.test(answer.choice)
         ? Number(answer.choice.slice("message_".length)) : null;
       const start = locatedIndex(locator);
-      const end = endLocator ? locatedIndex(endLocator) : start;
+      // With only one eligible learner message, START already determines END.
+      // Ignore redundant historical end scores only with transcript proof. With
+      // multiple candidates, never infer an end from an uncertain locator.
+      const end = start !== null && start === singleSource ? start : endLocator ? locatedIndex(endLocator) : start;
       const childMessageIndex = start !== null && end !== null && end >= start ? start : null;
       conceptObservations[index] = { ...observation, childMessageIndex,
         ...(childMessageIndex !== null && end !== null && end > childMessageIndex ? { childMessageEndIndex: end } : {}),
@@ -325,7 +338,7 @@ export function mapConversationObservation(
   }, input.lesson, input.nodeId, outputs.sources ? input.transcript : undefined, true);
   if (!normalized) return abstain("invalid_outputs");
   const { objectiveConfident, tutorConfident, labelCompletionEligible, hasConceptQuestions, conceptObservations, criterionCompletionEligible, completionEligible } =
-    interpretConversationOutputs(normalized, input.lesson, input.nodeId);
+    interpretConversationOutputs(normalized, input.lesson, input.nodeId, input.transcript);
   if (!hasConceptQuestions && !input.lesson?.conversationFirst) {
     if (!objectiveConfident) return abstain(confidenceFailureReason("objectiveState", normalized.objectiveState), normalized, labelCompletionEligible);
     if (!tutorConfident) return abstain(confidenceFailureReason("tutorState", normalized.tutorState), normalized, labelCompletionEligible);
