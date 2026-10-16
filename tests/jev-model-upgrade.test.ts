@@ -38,7 +38,7 @@ function response(input: (typeof snapshots)[number], model: string = JEV_MODEL) 
             ? "completed"
             : name === "tutorState"
               ? "confirmed_completion"
-              : name.startsWith("source_")
+              : (name.startsWith("source_") || name.startsWith("sourceEnd_"))
                 ? "message_1"
                 : "demonstrated_independent";
         return [

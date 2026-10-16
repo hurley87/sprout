@@ -1,7 +1,7 @@
 import type { OutputActivityEvent } from "../events";
 import { parseConversationStateProposal } from "./conversation-state-classifier";
 import { currentNodeContext, isLessonNodeId, type LessonDefinition } from "./lesson-definition";
-import { transcriptMessages, substantiveLearnerText } from "./tutor-observation";
+import { transcriptMessages, substantiveLearnerText, neutralTutorAcknowledgment } from "./tutor-observation";
 
 /** App-owned identities, captured at the source/request boundary, never supplied by the classifier. */
 export type RuntimeSource = {
@@ -36,6 +36,15 @@ export type ConceptEvidenceReference = {
   readonly transcriptRevision: number;
   readonly childMessageIndex: number;
   readonly childTranscript: string;
+  /** Present for multi-message evidence. Legacy fields above remain the first
+   * learner anchor; this ordered span is the authoritative complete provenance.
+   * Tutor entries are context only, never learner evidence. */
+  readonly childMessageEndIndex?: number;
+  readonly messages?: readonly {
+    readonly messageIndex: number;
+    readonly speaker: "Child" | "Tutor";
+    readonly text: string;
+  }[];
 };
 export type ConceptEvidenceRecord = {
   readonly criterionId: string;
@@ -427,18 +436,30 @@ function applyConceptObservations(
     const childMessageIndex = observation.childMessageIndex === undefined
       ? candidates.length === 1 ? candidates[0] : null
       : observation.childMessageIndex;
-    if (childMessageIndex === null || !candidates.includes(childMessageIndex)) continue;
+    if (childMessageIndex === null) continue;
+    const end = observation.childMessageEndIndex ?? childMessageIndex;
+    const spanning = end !== childMessageIndex;
+    if (spanning ? messages[childMessageIndex]?.speaker !== "Child" || messages[end]?.speaker !== "Child"
+      : !candidates.includes(childMessageIndex)) continue;
+    const selectedMessages = messages.slice(childMessageIndex, end + 1)
+      .map((message, offset) => ({ messageIndex: childMessageIndex + offset, ...message }));
+    const learnerMessages = selectedMessages.filter(message => message.speaker === "Child");
+    if (!learnerMessages.some(message => substantiveLearnerText(message.text))) continue;
     const childTranscript = messages[childMessageIndex].text.trim();
-    const tutorTexts = messages.slice(0, childMessageIndex)
-      .filter(message => message.speaker === "Tutor").map(message => message.text);
-    const echoed = echoedByTutor(childTranscript, tutorTexts);
+    const echoed = learnerMessages.filter(message => substantiveLearnerText(message.text)).every(message =>
+      echoedByTutor(message.text, messages.slice(0, message.messageIndex)
+        .filter(prior => prior.speaker === "Tutor").map(prior => prior.text)),
+    );
+    const interveningHelpUnresolved = spanning && selectedMessages.some(message =>
+      message.speaker === "Tutor" && !neutralTutorAcknowledgment(message.text),
+    ) && observation.observation === "demonstrated_independent";
     const tentative = observation.observation === "partial_uncertain";
     let status: ConceptEvidenceRecord["status"] =
       observation.observation === "partial" || tentative ? "partial" : "demonstrated";
     let understanding: ConceptEvidenceRecord["understanding"] =
       observation.observation === "demonstrated_independent" ? "independent"
         : observation.observation === "demonstrated_prompted" ? "prompted" : null;
-    if (echoed && status === "demonstrated") {
+    if ((echoed || interveningHelpUnresolved) && status === "demonstrated") {
       status = "partial";
       understanding = null;
     }
@@ -451,18 +472,32 @@ function applyConceptObservations(
     const existingAttempt = previous?.promptingHistory.find(entry => sameUtterance(entry.source));
     const contentKey = (text: string) => (text.replace(/\[[^\]]*(?:\]|$)/gu, " ").toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [])
       .filter(word => !["uh", "um", "hmm", "well", "ah", "oh"].includes(word)).join(" ");
-    const unchanged = existingAttempt && contentKey(existingAttempt.source.childTranscript) === contentKey(childTranscript);
+    const spanKey = (span: ConceptEvidenceReference["messages"]) => JSON.stringify(span?.map(message =>
+      [message.messageIndex, message.speaker, contentKey(message.text)],
+    ));
+    // A later locator for an overlapping explanation must not truncate or
+    // shift accepted provenance. Extending a partial anchor is still allowed.
+    const acceptedSource = previous?.source;
+    if (previous?.status === "demonstrated" && acceptedSource &&
+      acceptedSource.runtimeId === source.runtimeId && acceptedSource.nodeId === source.nodeId &&
+      acceptedSource.visitId === source.visitId && acceptedSource.childMessageIndex <= end &&
+      (acceptedSource.childMessageEndIndex ?? acceptedSource.childMessageIndex) >= end &&
+      (acceptedSource.childMessageIndex !== childMessageIndex || (acceptedSource.childMessageEndIndex ?? acceptedSource.childMessageIndex) > end) &&
+      (previous.understanding === understanding || status !== "demonstrated" || understanding === null)) continue;
+    const unchanged = existingAttempt && (existingAttempt.source.childMessageEndIndex ?? existingAttempt.source.childMessageIndex) === end && contentKey(existingAttempt.source.childTranscript) === contentKey(childTranscript) &&
+      (!spanning || spanKey(existingAttempt.source.messages) === spanKey(selectedMessages));
     const evidenceReference: ConceptEvidenceReference = unchanged ? existingAttempt.source : {
       runtimeId: source.runtimeId, nodeId: source.nodeId, visitId: source.visitId,
-      childTurnId: childMessageIndex === messages.findLastIndex(message => message.speaker === "Child")
+      childTurnId: !spanning && childMessageIndex === messages.findLastIndex(message => message.speaker === "Child")
         ? source.childTurnId : null,
       transcriptRevision: source.transcriptRevision, childMessageIndex, childTranscript,
+      ...(spanning ? { childMessageEndIndex: end, messages: selectedMessages } : {}),
     };
     // Reclassification of an unchanged utterance is not a fresh attempt. Once
     // attribution is known, an ambiguous cumulative label cannot rewrite it.
     if (unchanged && previous?.status === "demonstrated" &&
       (status !== "demonstrated" || understanding === null || previous.understanding !== null)) continue;
-    const prompted = observation.observation === "demonstrated_independent" && !echoed ? false
+    const prompted = observation.observation === "demonstrated_independent" && !echoed && !interveningHelpUnresolved ? false
       : observation.observation === "demonstrated_prompted" ? true : null;
     const promptingHistory = existingAttempt
       ? previous!.promptingHistory.map(entry => entry === existingAttempt

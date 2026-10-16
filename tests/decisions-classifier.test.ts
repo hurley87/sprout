@@ -54,7 +54,7 @@ function body(request = decisionsRequest(input)!) {
           ? "completed"
           : q.name === "tutorState"
             ? "confirmed_completion"
-            : q.name.startsWith("source_")
+            : (q.name.startsWith("source_") || q.name.startsWith("sourceEnd_"))
               ? "message_1"
               : "demonstrated_independent",
       ),

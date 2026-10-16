@@ -22,6 +22,9 @@ export type ProposedConceptObservation = {
   /** Index in transcriptMessages, validated against the exact request snapshot.
    * null means no confident supporting utterance; omitted supports legacy single-attempt snapshots. */
   readonly childMessageIndex?: number | null;
+  /** Inclusive end for multi-message spans; must exceed childMessageIndex.
+   * Omitted means a single message. */
+  readonly childMessageEndIndex?: number;
 };
 
 /**
@@ -112,15 +115,19 @@ export function parseConversationStateProposal(value: unknown): ConversationStat
     for (const item of proposal.conceptObservations) {
       if (
         !item || typeof item !== "object" || Array.isArray(item) ||
-        Object.keys(item).some(key => !["criterionId", "observation", "childMessageIndex"].includes(key)) ||
+        Object.keys(item).some(key => !["criterionId", "observation", "childMessageIndex", "childMessageEndIndex"].includes(key)) ||
         ("childMessageIndex" in item && item.childMessageIndex !== null &&
           (!Number.isSafeInteger(item.childMessageIndex) || (item.childMessageIndex as number) < 0)) ||
+        ("childMessageEndIndex" in item &&
+          (!Number.isSafeInteger(item.childMessageEndIndex) || !Number.isSafeInteger(item.childMessageIndex) ||
+            item.childMessageIndex === null || item.childMessageEndIndex <= item.childMessageIndex)) ||
         typeof item.criterionId !== "string" || !item.criterionId ||
         typeof item.observation !== "string" || !PROPOSED_CONCEPT_OBSERVATIONS.includes(item.observation as ProposedConceptObservation["observation"]) ||
         conceptObservations.some(existing => existing.criterionId === item.criterionId)
       ) return null;
       conceptObservations.push({ criterionId: item.criterionId, observation: item.observation as ProposedConceptObservation["observation"],
         ...("childMessageIndex" in item ? { childMessageIndex: item.childMessageIndex as number | null } : {}),
+        ...("childMessageEndIndex" in item ? { childMessageEndIndex: item.childMessageEndIndex as number } : {}),
       });
     }
   }

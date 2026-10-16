@@ -73,13 +73,18 @@ export function conversationStateQuestions(lesson: LessonDefinition, nodeId?: st
     }
   }
   // Keep criterion classification cumulative, but ask separately which actual
-  // learner utterance supports it. No tutor messages or assent options are offered.
+  // boundaries support it. No tutor messages or assent options are offered.
   if (transcript !== undefined) {
     const candidates = learnerSourceOptions(transcript);
     for (const concept of currentNode?.concepts ?? []) {
       questions[`source_${concept.id}`] = {
         type: "choice",
-        instructions: `${conceptScopeInstructions} Select the earliest learner utterance sufficient to support this criterion: ${criterionText(concept)}. Use the whole transcript to understand fragmented speech across neutral tutor acknowledgments. Select the utterance introducing the supporting explanation, even if a later learner fragment completes its sentence. If several utterances each support it, select the earliest sufficient one rather than splitting attribution between equivalent sources. The same utterance can support multiple criteria. If none is sufficient, select the earliest relevant partial explanation. Never select later assent or a different criterion's answer. If no utterance supports relevant progress, select none. Indexes are application projections; never infer unseen content.`,
+        instructions: `${conceptScopeInstructions} Select the START of the earliest learner utterance or complete explanation supporting this criterion: ${criterionText(concept)}. The sourceEnd question separately selects its inclusive END. If one message is sufficient, start and end must be that same message. If a thought spans learner messages, select the first necessary fragment here and include its completion in sourceEnd. A sentence started before a tutor acknowledgment and finished after it has its START before the acknowledgment, even if the completion also contains a standalone explanation. Consider intervening tutor words for prompting attribution, but never count them as learner evidence. A span must express one coherent explanation; do not combine unrelated answers, supply missing meaning, or include unnecessary messages. If several complete explanations support it, prefer the earliest. The same explanation may support multiple criteria. If only partial evidence exists, locate that partial explanation without extending it with unrelated answers. If attribution is unresolved, select none. Indexes are application projections; never infer unseen content.`,
+        criteria: candidates,
+      };
+      questions[`sourceEnd_${concept.id}`] = {
+        type: "choice",
+        instructions: `${conceptScopeInstructions} Select the inclusive END learner message of the same earliest complete explanation whose START is selected by source_${concept.id}. Criterion: ${criterionText(concept)}. Choose the earliest message that completes the supporting explanation. Do not stop at an unfinished sentence: if the first fragment trails off before saying what something means, include the later learner continuation that finishes that sentence. A tutor acknowledgment cannot complete a learner sentence. If one message suffices, select that same message for both boundaries. For split speech, include the completion even after a neutral tutor acknowledgment. Consider all intervening tutor content for prompting attribution. Never extend a partial answer with an unrelated answer or later assent; if source attribution is unresolved choose none.`,
         criteria: candidates,
       };
     }
@@ -87,11 +92,11 @@ export function conversationStateQuestions(lesson: LessonDefinition, nodeId?: st
   return questions;
 }
 
-export function learnerSourceOptions(transcript: string): Record<string, string> {
+export function learnerSourceOptions(transcript: string, allowFragments = true): Record<string, string> {
   return {
     none: "No supporting learner utterance, or attribution is unresolved.",
     ...Object.fromEntries((transcriptMessages(transcript) ?? []).flatMap((message, index) =>
-      message.speaker === "Child" && substantiveLearnerText(message.text)
+      message.speaker === "Child" && substantiveLearnerText(message.text, allowFragments)
         ? [[`message_${index}`, `Learner utterance ${index}: ${JSON.stringify(message.text)}`]] : [],
     )),
   };
@@ -110,6 +115,7 @@ export type ConversationStateOutputs = {
   objectiveState: ChoiceOutput<ObjectiveState>;
   tutorState: ChoiceOutput<ObservedTutorState>;
   concepts?: Readonly<Record<string, ChoiceOutput<(typeof CONCEPT_OBSERVATIONS)[number]>>>;
+  /** source_<id> starts an explanation; sourceEnd_<id> completes it. */
   sources?: Readonly<Record<string, ChoiceOutput<string>>>;
 };
 export type ConversationStateDecision = {
@@ -151,7 +157,7 @@ const record = (v: unknown): v is Record<string, unknown> => typeof v === "objec
 const probability = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 1;
 
 /** Validate the documented Choice shape; never retain raw bodies or provider identity claims. */
-export function normalizeConversationOutputs(body: unknown, lesson?: LessonDefinition, nodeId?: string, transcript?: string): ConversationStateOutputs | null {
+export function normalizeConversationOutputs(body: unknown, lesson?: LessonDefinition, nodeId?: string, transcript?: string, allowLegacySources = false): ConversationStateOutputs | null {
   if (!record(body) || !record(body.answers)) return null;
   const normalized: Record<string, unknown> = {};
   const expected: Record<string, readonly string[]> = {
@@ -163,14 +169,17 @@ export function normalizeConversationOutputs(body: unknown, lesson?: LessonDefin
     : [];
   for (const concept of concepts) expected[`concept_${concept.id}`] = CONCEPT_OBSERVATIONS;
   const hasSources = Object.keys(body.answers).some(key => key.startsWith("source_"));
-  if (transcript !== undefined && concepts.length && !hasSources) return null;
+  const hasSourceEnds = Object.keys(body.answers).some(key => key.startsWith("sourceEnd_"));
+  if (transcript !== undefined && concepts.length && (!hasSources || (!hasSourceEnds && !allowLegacySources))) return null;
   if (hasSources) {
     for (const concept of concepts) {
-      const answer = body.answers[`source_${concept.id}`];
-      if (!record(answer) || !record(answer.probabilities)) return null;
-      const options = transcript !== undefined ? Object.keys(learnerSourceOptions(transcript)) : Object.keys(answer.probabilities);
-      if (!options.includes("none") || options.some(option => option !== "none" && !/^message_(?:0|[1-9]\d*)$/u.test(option))) return null;
-      expected[`source_${concept.id}`] = options;
+      for (const id of [`source_${concept.id}`, ...(hasSourceEnds ? [`sourceEnd_${concept.id}`] : [])]) {
+        const answer = body.answers[id];
+        if (!record(answer) || !record(answer.probabilities)) return null;
+        const options = transcript !== undefined ? Object.keys(learnerSourceOptions(transcript, hasSourceEnds || !allowLegacySources)) : Object.keys(answer.probabilities);
+        if (!options.includes("none") || options.some(option => option !== "none" && !/^message_(?:0|[1-9]\d*)$/u.test(option))) return null;
+        expected[id] = options;
+      }
     }
   }
   if (Object.keys(body.answers).length !== Object.keys(expected).length) return null;
@@ -207,7 +216,10 @@ export function normalizeConversationOutputs(body: unknown, lesson?: LessonDefin
     objectiveState: normalized.objectiveState as ConversationStateOutputs["objectiveState"],
     tutorState: normalized.tutorState as ConversationStateOutputs["tutorState"],
     ...(concepts.length ? { concepts: conceptOutputs as ConversationStateOutputs["concepts"] } : {}),
-    ...(hasSources ? { sources: Object.fromEntries(concepts.map(concept => [`source_${concept.id}`, normalized[`source_${concept.id}`]])) as ConversationStateOutputs["sources"] } : {}),
+    ...(hasSources ? { sources: Object.fromEntries(concepts.flatMap(concept => [
+      [`source_${concept.id}`, normalized[`source_${concept.id}`]],
+      ...(hasSourceEnds ? [[`sourceEnd_${concept.id}`, normalized[`sourceEnd_${concept.id}`]]] : []),
+    ])) as ConversationStateOutputs["sources"] } : {}),
   };
 }
 
@@ -260,9 +272,15 @@ export function interpretConversationOutputs(outputs: ConversationStateOutputs, 
     for (let index = 0; index < conceptObservations.length; index++) {
       const observation = conceptObservations[index];
       const locator = outputs.sources[`source_${observation.criterionId}`];
-      const childMessageIndex = locator && confidentlyClassified(locator) && /^message_\d+$/u.test(locator.choice)
-        ? Number(locator.choice.slice("message_".length)) : null;
-      conceptObservations[index] = { ...observation, childMessageIndex };
+      const endLocator = outputs.sources[`sourceEnd_${observation.criterionId}`];
+      const locatedIndex = (answer: ChoiceOutput<string> | undefined) => answer && confidentlyClassified(answer) && /^message_\d+$/u.test(answer.choice)
+        ? Number(answer.choice.slice("message_".length)) : null;
+      const start = locatedIndex(locator);
+      const end = endLocator ? locatedIndex(endLocator) : start;
+      const childMessageIndex = start !== null && end !== null && end >= start ? start : null;
+      conceptObservations[index] = { ...observation, childMessageIndex,
+        ...(childMessageIndex !== null && end !== null && end > childMessageIndex ? { childMessageEndIndex: end } : {}),
+      };
     }
   }
   const hasConceptQuestions = outputs.concepts !== undefined;
@@ -304,7 +322,7 @@ export function mapConversationObservation(
       ...Object.fromEntries(Object.entries(outputs.concepts ?? {}).map(([id, answer]) => [id, { type: "choice", ...answer }])),
       ...Object.fromEntries(Object.entries(outputs.sources ?? {}).map(([id, answer]) => [id, { type: "choice", ...answer }])),
     },
-  }, input.lesson, input.nodeId, outputs.sources ? input.transcript : undefined);
+  }, input.lesson, input.nodeId, outputs.sources ? input.transcript : undefined, true);
   if (!normalized) return abstain("invalid_outputs");
   const { objectiveConfident, tutorConfident, labelCompletionEligible, hasConceptQuestions, conceptObservations, criterionCompletionEligible, completionEligible } =
     interpretConversationOutputs(normalized, input.lesson, input.nodeId);
