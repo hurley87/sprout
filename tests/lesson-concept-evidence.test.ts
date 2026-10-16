@@ -218,11 +218,11 @@ describe("deterministic concept evidence and progression", () => {
     }
   });
 
-  it("retains prompted understanding when the child repeats tutor-supplied content", () => {
+  it("does not award prompted understanding for a copied definition", () => {
     const runtime = reducerHarness();
     const snapshot = runtime.childSnapshot("Tutor: The circle repeats each time.\nChild: The circle repeats each time.");
     runtime.proposal(snapshot, { conceptObservations: [{ criterionId: "repetition", observation: "demonstrated_prompted" }] });
-    expect(runtime.state.conceptEvidence["concept-a:repetition"]).toMatchObject({ status: "demonstrated", understanding: "prompted" });
+    expect(runtime.state.conceptEvidence["concept-a:repetition"]).toMatchObject({ status: "partial", understanding: null });
   });
 
   it("ignores stale revisions, un-authored criteria, and malformed duplicate observations", () => {

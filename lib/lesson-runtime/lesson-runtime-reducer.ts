@@ -438,7 +438,7 @@ function applyConceptObservations(
     let understanding: ConceptEvidenceRecord["understanding"] =
       observation.observation === "demonstrated_independent" ? "independent"
         : observation.observation === "demonstrated_prompted" ? "prompted" : null;
-    if (echoed && understanding === "independent") {
+    if (echoed && status === "demonstrated") {
       status = "partial";
       understanding = null;
     }
@@ -458,8 +458,6 @@ function applyConceptObservations(
         ? source.childTurnId : null,
       transcriptRevision: source.transcriptRevision, childMessageIndex, childTranscript,
     };
-    const unattributed = observation.observation === "demonstrated_unattributed";
-    if (unattributed && previous?.status === "demonstrated") understanding = previous.understanding;
     // Reclassification of an unchanged utterance is not a fresh attempt. Once
     // attribution is known, an ambiguous cumulative label cannot rewrite it.
     if (unchanged && previous?.status === "demonstrated" &&
@@ -470,10 +468,17 @@ function applyConceptObservations(
       ? previous!.promptingHistory.map(entry => entry === existingAttempt
         ? { source: evidenceReference, prompted } : entry)
       : [...(previous?.promptingHistory ?? []), { source: evidenceReference, prompted }];
+    // Retain the strongest accepted evidence and its own attribution. Later
+    // uncertain or prompted attempts cannot erase an independent demonstration.
+    if (previous?.status === "demonstrated" && (status !== "demonstrated" ||
+      understanding === null || (previous.understanding === "independent" && understanding !== "independent"))) {
+      evidence[key] = { ...previous, promptingHistory };
+      continue;
+    }
     evidence[key] = {
       criterionId: observation.criterionId, status, understanding,
       ...(tentative ? { tentative: true } : {}),
-      source: unattributed && previous?.status === "demonstrated" ? previous.source : evidenceReference,
+      source: evidenceReference,
       promptingHistory,
     };
     if (status === "demonstrated" && previous?.status !== "demonstrated")
