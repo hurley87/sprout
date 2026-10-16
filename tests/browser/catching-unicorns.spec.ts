@@ -151,7 +151,7 @@ test("default presentation has four steps, essential controls and no debug UI at
   await expect(page.getByText("Explain it in your own words.", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /skip/i })).toHaveCount(0);
   const progress = page.getByRole("progressbar", { name: "Discussion progress" });
-  await expect(progress).toHaveAttribute("aria-valuenow", "1");
+  await expect(progress).toHaveAttribute("aria-valuenow", "0");
   await expect(progress).toHaveAttribute("aria-valuemax", "4");
   await expect(progress.locator(":scope > div")).toHaveCount(4);
   await expect(page.getByText("Session details", { exact: true })).toHaveCount(0);
@@ -430,9 +430,13 @@ for (const debug of [false, true]) {
     const initialQuestionStyle = await questionStyle();
     const expectProgress = async (number: number) => {
       const progress = page.getByRole("progressbar");
-      await expect(progress).toHaveAttribute("aria-valuenow", String(number));
+      await expect(progress).toHaveAttribute("aria-valuenow", String(number - 1));
       await expect(progress).toHaveAttribute("aria-valuemax", "4");
       await expect(progress.locator(":scope > div")).toHaveCount(4);
+      await expect(progress).toHaveAttribute("aria-valuetext", `Question ${number} of 4`);
+      await expect(progress.locator('[data-state="completed"]')).toHaveCount(number - 1);
+      await expect(progress.locator('[data-state="active"]')).toHaveCount(1);
+      await expect(progress.locator('[data-state="upcoming"]')).toHaveCount(4 - number);
       await expect(page.getByText(`${number} of 4`, { exact: true })).toBeVisible();
     };
     await expectProgress(1);
@@ -557,7 +561,13 @@ for (const debug of [false, true]) {
     );
     await expectEvidence("exographics:visual-symbols", { status: "demonstrated", understanding: "prompted" });
     await waitForScene("recap");
-    await expectProgress(4);
+    await expect(page.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "4");
+    await expect(page.getByRole("progressbar")).toHaveAttribute("aria-valuetext", "Recap");
+    await expect(page.locator('[data-state="completed"]')).toHaveCount(4);
+    await expect(page.locator('[data-state="active"]')).toHaveCount(0);
+    expect(
+      await page.locator('[data-scene="recap"] p').evaluate(element => parseFloat(getComputedStyle(element).fontSize)),
+    ).toBeGreaterThanOrEqual(22);
     await expect(page.getByRole("region", { name: "Conversation assessment" })).toHaveCount(debug ? 1 : 0);
 
     const recapState = await page.evaluate(
@@ -598,7 +608,10 @@ for (const debug of [false, true]) {
       (window as unknown as LocalSessionWindow).currentPeer.level.gain.value = 0;
     });
     await expect(page.getByRole("status")).toHaveText("Session complete");
-    await expectProgress(4);
+    await expect(page.getByRole("progressbar")).toHaveAttribute("aria-valuetext", "Session complete");
+    await expect(page.locator('[data-state="completed"]')).toHaveCount(4);
+    await expect(page.getByRole("button", { name: "Stop", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Restart discussion" })).toBeEnabled();
     await expect(page.locator('[data-scene="recap"]')).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath("completed-recap.png") });
     await expect
@@ -610,7 +623,7 @@ for (const debug of [false, true]) {
       await page.screenshot({ path: testInfo.outputPath("completed-recap-mobile.png") });
       await expect(page.getByText("Session details", { exact: true })).toHaveCount(0);
       await expect(page.getByRole("button", { name: /diagnostics|export/i })).toHaveCount(0);
-      await page.getByRole("button", { name: "Start discussion" }).click();
+      await page.getByRole("button", { name: "Restart discussion" }).click();
       await expect(page.locator('[data-scene="engram"]')).toBeVisible();
       await expectProgress(1);
       return;

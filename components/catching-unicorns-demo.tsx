@@ -121,7 +121,16 @@ export default function CatchingUnicornsDemo({ debug = false }: { debug?: boolea
   const sceneId = String(CATCHING_UNICORNS_LESSON.nodes[nodeId]?.presentation.sceneId ?? nodeId);
   const identity: RenderIdentity | undefined = display ?? { token: "initial", nodeId, sceneId };
 
+  const completed = state?.phase === "complete";
+  const inRecap = nodeId === "recap" || completed;
   const questionNumber = nodeId === "recap" ? questionIds.length : questionIds.indexOf(nodeId) + 1;
+
+  const completedQuestions = inRecap ? questionIds.length : questionNumber - 1;
+  const progressText = completed
+    ? "Session complete"
+    : inRecap
+      ? "Recap"
+      : `Question ${questionNumber} of ${questionIds.length}`;
 
   return (
     <main className={styles.lesson}>
@@ -131,22 +140,29 @@ export default function CatchingUnicornsDemo({ debug = false }: { debug?: boolea
           <div
             role="progressbar"
             aria-label="Discussion progress"
-            aria-valuemin={1}
+            aria-valuemin={0}
             aria-valuemax={questionIds.length}
-            aria-valuenow={questionNumber}
-            aria-valuetext={`Question ${questionNumber} of ${questionIds.length}`}
+            aria-valuenow={completedQuestions}
+            aria-valuetext={progressText}
             className={styles.segments}
           >
             {questionIds.map((id, index) => (
               <div
                 aria-hidden="true"
-                className={`${styles.segment} ${index < questionNumber ? styles.activeSegment : ""}`}
+                data-state={
+                  index < completedQuestions
+                    ? "completed"
+                    : index === completedQuestions && !inRecap
+                      ? "active"
+                      : "upcoming"
+                }
+                className={`${styles.segment} ${index < completedQuestions ? styles.completedSegment : index === completedQuestions && !inRecap ? styles.activeSegment : ""}`}
                 key={id}
               />
             ))}
           </div>
           <span className={styles.counter} aria-hidden="true">
-            {questionNumber} of {questionIds.length}
+            {inRecap ? progressText : `${questionNumber} of ${questionIds.length}`}
           </span>
         </div>
         <section className={styles.scene} aria-label="Lesson scene">
@@ -171,12 +187,14 @@ export default function CatchingUnicornsDemo({ debug = false }: { debug?: boolea
           <div className={styles.controls}>
             {!live && (
               <button className={styles.startButton} onClick={start}>
-                Start discussion
+                {completed ? "Restart discussion" : "Start discussion"}
               </button>
             )}
-            <button className={styles.button} disabled={!live} onClick={() => runtime.current?.stop()}>
-              Stop
-            </button>
+            {!completed && (
+              <button className={styles.button} disabled={!live} onClick={() => runtime.current?.stop()}>
+                Stop
+              </button>
+            )}
           </div>
         </footer>
       </div>

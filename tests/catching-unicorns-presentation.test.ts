@@ -51,6 +51,7 @@ describe("Catching Unicorns scene presentation", () => {
       expect(html.match(/<h2/g)).toHaveLength(1);
       expect(html).not.toMatch(/<p|<details|<section|<ul|<svg/);
       expect(html).not.toContain("Learned so far");
+      expect(html).toContain(String(CATCHING_UNICORNS_LESSON.nodes[nodeId].presentation.prompt));
     },
   );
 
@@ -68,13 +69,13 @@ describe("Catching Unicorns scene presentation", () => {
       expect(debug).toContain(label);
     }
     expect(normal).toContain('aria-valuemax="4"');
-    expect(normal).toContain('aria-valuenow="1"');
+    expect(normal).toContain('aria-valuenow="0"');
   });
 
   it("leaves the final recap as the evidence summary", () => {
     const html = renderScene("recap", { "engram:engram-biological": evidence("engram-biological") });
     expect(html).toContain("What this conversation showed");
-    expect(html).toContain("You independently explained engrams.");
+    expect(html).toContain("You independently explained engrams");
     expect(html).not.toContain("Learned so far");
   });
 
@@ -96,11 +97,11 @@ describe("Catching Unicorns scene presentation", () => {
       "exogram:exogram-non-biological": evidence("exogram-non-biological", "prompted", "A note outside my brain."),
       "exographics:visual-symbols": { ...evidence("visual-symbols"), status: "partial", understanding: null },
     });
-    expect(recap).toContain("You independently explained engrams.");
+    expect(recap).toContain("You independently explained engrams");
     expect(recap).toContain("After a prompt, you explained exograms.");
     expect(recap).toContain("Partly explained: visual symbols");
     expect(recap).toContain("unresolved or skipped:");
-    expect(recap).not.toContain("Memory held in a biological mind.");
+    expect(recap).toContain("Memory held in a biological mind”");
     expect(recap).not.toContain("A note outside my brain.");
     expect(recap).not.toContain("Supporting longer threads of reasoning");
     expect(recap).not.toContain("Substantial education</p>");

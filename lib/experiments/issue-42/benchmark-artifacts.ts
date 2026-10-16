@@ -37,7 +37,7 @@ export const RECOVERY_SOURCE_COMPATIBILITY = {
 };
 // Issue #71 changes the active lesson and terminal gate. Frozen v1 inputs stay historical.
 export const SHORT_LESSON_COMPATIBILITY = {
-  "lib/lesson-runtime/catching-unicorns-lesson.ts": "6a3205a9cea980d02742b33072fc444034182afb12028b679cfaccbb3408bf84",
+  "lib/lesson-runtime/catching-unicorns-lesson.ts": "a5aff29c5ed472c1d58df686262a24ec063f1581d7e18a7481ffb2cafe410d9f",
   "lib/lesson-runtime/lesson-definition.ts": "56c7c48e77cb4c39a05c6ac926504c00ec9dd964056fc079c1a810a3b5a5a411",
   "lib/lesson-runtime/lesson-runtime-reducer.ts": "7cbdb5a1170698dff67c4344092535b4cd1a973f1df2b0fb8c515ce777893bff",
   "lib/lesson-runtime/live-context.ts": "6ae645ba44e3dee6b667ec6e49a52a65c7b4456bbf3301ed75a3aef075b6dd06",

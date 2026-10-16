@@ -29,7 +29,9 @@ without granting mastery.
 
 The second slice shows only the current question, a four-step progress bar and
 essential Start/Stop controls during discussion. Progress follows committed scene
-changes and stays at 4 of 4 through recap and completion. Concept reveal layouts,
+changes: prior questions are filled, the active question is outlined, and upcoming
+questions are muted. The accessible numeric value counts finished questions (0–4);
+recap and completion have distinct text labels. Concept reveal layouts,
 Learned so far, supplementary descriptions and illustrations are removed. Transcript,
 authored concept details, evidence, cumulative assessment and scrubbed diagnostic
 export require an explicit `?debug=1` URL; other values do not enable the view.
@@ -71,8 +73,13 @@ criteria appear once: the earliest retained demonstration supplies its prompting
 attribution; if no demonstration exists, accepted partial evidence or an unresolved
 label is used. A demonstrated record with null attribution stays prompting-unclear.
 The asynchronous cumulative assessment retains its scores in debug/export but is
-not recap authority and cannot change a close already delivered. Learner quotations
-and unconstrained conversation memory never enter the closing instruction.
+not recap authority and cannot change a close already delivered. The October 16
+polish can quote one brief learner contribution from the accepted independent
+evidence source (6–22 words). Complete evidence spans supply only Child entries;
+tutor context, prompted/uncertain records and partial evidence cannot supply the
+quote. Unsuitable or missing text preserves the existing general recap. Attribution
+groups remain unchanged; personalized closes omit the extra thank-you sentence to
+stay within three sentences. Unconstrained conversation memory is never used.
 
 The default recap is one readable paragraph of two to four sentences. Typical
 complete and mixed examples are approximately 35–45 words (roughly 15–20 seconds
@@ -91,7 +98,10 @@ There is no recap retry, classification or recovery question. A missing, incompl
 or differently worded provider close fails after 60 seconds, releases resources and
 leaves the visual recap available with failure feedback; it does not claim completion.
 Stop cancels that deadline. The terminal render still requires exact confirmation,
-then the provider close command and local teardown run once. Progress remains 4 of 4.
+then the provider close command and local teardown run once. All four progress
+segments are filled, with a Session complete label. The recap remains visible in
+larger type and Restart discussion replaces the initial start action; the inactive
+Stop button is removed after automatic completion.
 
 The durable tutor guidance forbids repeated confirmation of adequate answers and
 limits don't-know scaffolding to at most one useful clarification/hint before
@@ -471,3 +481,22 @@ the delivery branch retained the demo. After removal, `npm run build`,
 generated `.next/dev/types` reference to the deleted route; after clearing only
 the disposable checkout's generated `.next` directory, fresh type generation
 and typecheck passed. No shared runtime redesign or counting change was needed.
+
+
+## Conversational polish (16 October 2026)
+
+One concise, specific acknowledgment is now requested in the durable tutor guidance,
+with natural variation, encouragement when uncertain, and the existing acceptance
+or move-on closure signal. Question presentation reads the authored prompt directly,
+including the comparison question, so speech and screen share one source. Learning
+objectives, criteria, thresholds, evidence attribution and progression are unchanged.
+
+Validation: all 25 focused recap, presentation and steering unit tests, all seven
+provider-free demo browser tests, TypeScript, lint and changed-source formatting
+pass. Desktop and mobile recap screenshots were inspected. The full unit run has 1,185 passing tests and 48 skipped tests, with one
+failed test and two failed suite setups in the frozen issue #42 benchmarks. The
+same failures reproduce on parent 0200112: conversation-observer source compatibility
+and historical question hashes have drifted. Frozen manifests and classifier logic
+were left untouched; only the active lesson guidance compatibility hash was updated.
+A live provider demo is still needed to judge acknowledgment rhythm, pronunciation
+of learner quotations, and perceived recap length.

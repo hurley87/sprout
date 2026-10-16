@@ -11,6 +11,7 @@ export function evidenceRecap(
   lesson: LessonDefinition,
   state: Pick<LessonRuntimeState, "conceptEvidence"> | null | undefined,
 ) {
+  let learnerDetail: string | undefined;
   const groups = {
     independent: [] as string[],
     prompted: [] as string[],
@@ -30,12 +31,36 @@ export function evidenceRecap(
         (a.source?.transcriptRevision ?? 0) - (b.source?.transcriptRevision ?? 0),
     );
     const demonstrated = records.find(record => record.status === "demonstrated");
-    if (demonstrated)
+    if (demonstrated) {
       groups[demonstrated.understanding === null ? "uncertain" : demonstrated.understanding].push(label);
-    else groups[records.some(record => record.status === "partial") ? "partial" : "unresolved"].push(label);
+      // Quote one complete, brief learner contribution from the accepted source.
+      // Supported/uncertain answers remain in their own groups; never borrow
+      // tutor context or later diagnostic assessment to personalize the close.
+      if (!learnerDetail && demonstrated.understanding === "independent") {
+        const source = demonstrated.source;
+        const messages = source?.messages;
+        const candidates = messages
+          ? messages.filter(message => message.speaker === "Child").map(message => message.text)
+          : [source?.childTranscript ?? ""];
+        const quote = candidates
+          .map(text => text.trim())
+          .find(text => {
+            const words = text.split(/\s+/u).length;
+            return (
+              words >= 6 &&
+              words <= 22 &&
+              !/[\n\r“”"\[\]]/u.test(text) &&
+              !/\b(?:instructions?|ignore|say|repeat|mastered|don't know|not sure)\b/iu.test(text) &&
+              !messages?.some(message => message.speaker === "Tutor" && message.text.includes(text))
+            );
+          });
+        if (quote) learnerDetail = `; for ${label}, you said “${quote.replace(/[.!?]+$/u, "")}”`;
+      }
+    } else groups[records.some(record => record.status === "partial") ? "partial" : "unresolved"].push(label);
   }
   const sentences: string[] = [];
-  if (groups.independent.length) sentences.push(`You independently explained ${list(groups.independent)}.`);
+  if (groups.independent.length)
+    sentences.push(`You independently explained ${list(groups.independent)}${learnerDetail ?? ""}.`);
   const supported = [];
   if (groups.prompted.length) supported.push(`after a prompt, you explained ${list(groups.prompted)}`);
   if (groups.uncertain.length) supported.push(`you explained ${list(groups.uncertain)}, with prompting unclear`);
@@ -44,7 +69,7 @@ export function evidenceRecap(
   if (groups.partial.length) unfinished.push(`partly explained: ${list(groups.partial)}`);
   if (groups.unresolved.length) unfinished.push(`unresolved or skipped: ${list(groups.unresolved)}`);
   if (unfinished.length) sentences.push(`${unfinished.join("; ").replace(/^./u, char => char.toUpperCase())}.`);
-  sentences.push("Thanks for the discussion.");
+  if (!learnerDetail) sentences.push("Thanks for the discussion.");
   return sentences.join(" ");
 }
 

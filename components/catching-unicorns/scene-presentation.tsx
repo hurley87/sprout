@@ -9,11 +9,7 @@ export function ScenePresentation({ state }: { state: LessonRuntimeState | null 
 
   return (
     <div className={styles.questionScene} data-scene={nodeId} aria-live="polite">
-      <h2 className={styles.question}>
-        {nodeId === "compare"
-          ? "How are they different?"
-          : String(CATCHING_UNICORNS_LESSON.nodes[nodeId].presentation.prompt)}
-      </h2>
+      <h2 className={styles.question}>{String(CATCHING_UNICORNS_LESSON.nodes[nodeId].presentation.prompt)}</h2>
     </div>
   );
 }

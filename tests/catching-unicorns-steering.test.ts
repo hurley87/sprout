@@ -2,34 +2,46 @@ import { expect, it } from "vitest";
 import { CATCHING_UNICORNS_LESSON as lesson } from "../lib/lesson-runtime/catching-unicorns-lesson";
 import { currentNodeContext } from "../lib/lesson-runtime/lesson-definition";
 import { createLessonRuntime } from "../lib/lesson-runtime/lesson-runtime-reducer";
-import { answerRecoveryInstruction, createLiveSessionConfig, teachingInstruction } from "../lib/lesson-runtime/live-context";
+import {
+  answerRecoveryInstruction,
+  createLiveSessionConfig,
+  teachingInstruction,
+} from "../lib/lesson-runtime/live-context";
 
-it.each(Object.keys(lesson.nodes))("bounds scene and recovery updates and explicitly requests speech for %s", nodeId => {
-  const context = currentNodeContext(lesson, nodeId);
-  const instruction = teachingInstruction(context, lesson, nodeId === lesson.initialNodeId);
-  // Regression budget for the authored English text, independently measured
-  // below 350 tokens with two tokenizers. This is not a provider token counter.
-  expect(Buffer.byteLength(instruction)).toBeLessThanOrEqual(2000);
-  if (nodeId === "recap") {
-    expect(instruction).toContain("terminal recap, not a question");
-    expect(instruction).toContain("application ends the session after audio drains");
-    expect(instruction).not.toContain("Ask the displayed question");
-    return;
-  }
-  expect(instruction).toContain(String(lesson.nodes[nodeId].presentation.prompt));
-  expect(instruction).toContain("Ask the displayed question aloud now, then wait for the learner");
-  expect(instruction).toContain("listen instead of interrupting");
-  expect(instruction).not.toContain("source inventory");
-  expect(instruction).not.toContain(lesson.tutor.nodeInstruction);
-  const state = { ...createLessonRuntime("budget", { lesson: { ...lesson, initialNodeId: nodeId } }), hasChildTranscript: true };
-  expect(Buffer.byteLength(answerRecoveryInstruction(lesson, state))).toBeLessThanOrEqual(1000);
-});
+it.each(Object.keys(lesson.nodes))(
+  "bounds scene and recovery updates and explicitly requests speech for %s",
+  nodeId => {
+    const context = currentNodeContext(lesson, nodeId);
+    const instruction = teachingInstruction(context, lesson, nodeId === lesson.initialNodeId);
+    // Regression budget for the authored English text, independently measured
+    // below 350 tokens with two tokenizers. This is not a provider token counter.
+    expect(Buffer.byteLength(instruction)).toBeLessThanOrEqual(2000);
+    if (nodeId === "recap") {
+      expect(instruction).toContain("terminal recap, not a question");
+      expect(instruction).toContain("application ends the session after audio drains");
+      expect(instruction).not.toContain("Ask the displayed question");
+      return;
+    }
+    expect(instruction).toContain(String(lesson.nodes[nodeId].presentation.prompt));
+    expect(instruction).toContain("Ask the displayed question aloud now, then wait for the learner");
+    expect(instruction).toContain("listen instead of interrupting");
+    expect(instruction).not.toContain("source inventory");
+    expect(instruction).not.toContain(lesson.tutor.nodeInstruction);
+    const state = {
+      ...createLessonRuntime("budget", { lesson: { ...lesson, initialNodeId: nodeId } }),
+      hasChildTranscript: true,
+    };
+    expect(Buffer.byteLength(answerRecoveryInstruction(lesson, state))).toBeLessThanOrEqual(1000);
+  },
+);
 
 it("keeps durable teaching and recovery guidance in startup instructions", () => {
   const setup = createLiveSessionConfig(lesson);
   expect(setup.instructions).toContain(lesson.tutor.nodeInstruction);
   expect(setup.instructions).toContain(lesson.recovery.answerRecoveryInstruction);
-  expect(setup.instructions).toContain("On each new rendered-scene update, ask its displayed question aloud immediately");
+  expect(setup.instructions).toContain(
+    "On each new rendered-scene update, ask its displayed question aloud immediately",
+  );
   expect(JSON.stringify(setup.input)).not.toContain('"nodeId":"compare"');
 });
 
@@ -51,4 +63,15 @@ it("uses a presence check only for missing transcript, keeping incomplete answer
   const incomplete = answerRecoveryInstruction(lesson, { ...state, hasChildTranscript: true });
   expect(incomplete).not.toContain("Are you still there?");
   expect(incomplete).toContain("assessment uncertainty must not hold this question");
+});
+
+it("guides concise, varied acknowledgment while retaining natural closure and uncertainty support", () => {
+  const instructions = createLiveSessionConfig(lesson).instructions;
+  expect(instructions).toContain("one brief, specific acknowledgment");
+  expect(instructions).toContain("avoid stacking agreement phrases");
+  expect(instructions).toContain("repeating their answer");
+  expect(instructions).toContain("Vary the wording naturally");
+  expect(instructions).toContain("concise acceptance or move-on signal");
+  expect(instructions).toContain("appropriate encouragement or clarification");
+  expect(instructions).toContain("app advances after your conversational closure");
 });
