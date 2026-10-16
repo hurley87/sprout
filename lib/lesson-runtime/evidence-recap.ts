@@ -1,7 +1,51 @@
 import type { LessonDefinition } from "./lesson-definition";
+import { neutralTutorAcknowledgment } from "./tutor-observation";
 import type { ConceptEvidenceRecord, LessonRuntimeState } from "./lesson-runtime-reducer";
 
 const list = (items: string[]) => new Intl.ListFormat("en", { style: "long", type: "conjunction" }).format(items);
+
+/** Only contiguous learner words from accepted provenance. Neutral backchannels
+ * can separate transcription fragments; substantive tutor content breaks a run.
+ * Excerpt at sentence boundaries, never truncate a claim or generate a paraphrase. */
+export function learnerRecapExcerpt(record: ConceptEvidenceRecord): string | undefined {
+  if (record.status !== "demonstrated" || record.understanding !== "independent" || !record.source) return;
+  const runs: string[] = [];
+  let run = "";
+  for (const message of record.source.messages ?? [{ speaker: "Child", text: record.source.childTranscript }]) {
+    if (message.speaker === "Child") run += `${run ? " " : ""}${message.text}`;
+    else if (!neutralTutorAcknowledgment(message.text)) {
+      if (run) runs.push(run);
+      run = "";
+    }
+  }
+  if (run) runs.push(run);
+  const clean = (text: string) =>
+    text
+      .replace(/\s+/gu, " ")
+      .replace(/\s+([,.!?;:])/gu, "$1")
+      .trim();
+  const tutorTexts = (record.source.messages ?? [])
+    .filter(message => message.speaker === "Tutor")
+    .map(message => normalizeRecapSpeech(message.text));
+  return runs
+    .flatMap(text => {
+      const normalized = clean(text);
+      return Array.from(new Intl.Segmenter("en", { granularity: "sentence" }).segment(normalized), part =>
+        clean(part.segment),
+      );
+    })
+    .filter(text => {
+      const words = text.split(/\s+/u).length;
+      return (
+        words >= 6 &&
+        words <= 40 &&
+        !/[“”"\[\]]/u.test(text) &&
+        !/\b(?:instructions?|ignore|say|repeat|mastered|don't know|not sure)\b/iu.test(text) &&
+        !tutorTexts.some(tutor => tutor.includes(normalizeRecapSpeech(text)))
+      );
+    })
+    .sort((a, b) => b.split(/\s+/u).length - a.split(/\s+/u).length)[0];
+}
 
 /** The accepted reducer ledger is the sole recap authority. The asynchronous
  * cumulative assessment is diagnostic only and cannot rewrite a delivered close.
@@ -12,6 +56,7 @@ export function evidenceRecap(
   state: Pick<LessonRuntimeState, "conceptEvidence"> | null | undefined,
 ) {
   let learnerDetail: string | undefined;
+  let detailWords = 0;
   const groups = {
     independent: [] as string[],
     prompted: [] as string[],
@@ -33,28 +78,12 @@ export function evidenceRecap(
     const demonstrated = records.find(record => record.status === "demonstrated");
     if (demonstrated) {
       groups[demonstrated.understanding === null ? "uncertain" : demonstrated.understanding].push(label);
-      // Quote one complete, brief learner contribution from the accepted source.
-      // Supported/uncertain answers remain in their own groups; never borrow
-      // tutor context or later diagnostic assessment to personalize the close.
-      if (!learnerDetail && demonstrated.understanding === "independent") {
-        const source = demonstrated.source;
-        const messages = source?.messages;
-        const candidates = messages
-          ? messages.filter(message => message.speaker === "Child").map(message => message.text)
-          : [source?.childTranscript ?? ""];
-        const quote = candidates
-          .map(text => text.trim())
-          .find(text => {
-            const words = text.split(/\s+/u).length;
-            return (
-              words >= 6 &&
-              words <= 22 &&
-              !/[\n\r“”"\[\]]/u.test(text) &&
-              !/\b(?:instructions?|ignore|say|repeat|mastered|don't know|not sure)\b/iu.test(text) &&
-              !messages?.some(message => message.speaker === "Tutor" && message.text.includes(text))
-            );
-          });
-        if (quote) learnerDetail = `; for ${label}, you said “${quote.replace(/[.!?]+$/u, "")}”`;
+      const quote = learnerRecapExcerpt(demonstrated);
+      const words = quote?.split(/\s+/u).length ?? 0;
+      // Prefer a substantive explanation over an earlier short definition.
+      if (quote && words > detailWords) {
+        detailWords = words;
+        learnerDetail = `; for ${label}, you said “${quote.replace(/[.!?]+$/u, "")}”`;
       }
     } else groups[records.some(record => record.status === "partial") ? "partial" : "unresolved"].push(label);
   }
@@ -69,7 +98,7 @@ export function evidenceRecap(
   if (groups.partial.length) unfinished.push(`partly explained: ${list(groups.partial)}`);
   if (groups.unresolved.length) unfinished.push(`unresolved or skipped: ${list(groups.unresolved)}`);
   if (unfinished.length) sentences.push(`${unfinished.join("; ").replace(/^./u, char => char.toUpperCase())}.`);
-  if (!learnerDetail) sentences.push("Thanks for the discussion.");
+  if (!learnerDetail && sentences.length < 3) sentences.push("Thanks for the discussion.");
   return sentences.join(" ");
 }
 

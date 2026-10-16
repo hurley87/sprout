@@ -8,7 +8,7 @@ const record = (
   status: ConceptEvidenceRecord["status"],
   understanding: ConceptEvidenceRecord["understanding"],
 ): ConceptEvidenceRecord => ({ criterionId, status, understanding, source: null, promptingHistory: [] });
-it("keeps every attribution distinct in at most four brief sentences without quoting learner instructions", () => {
+it("keeps every attribution distinct in at most three brief sentences without quoting learner instructions", () => {
   const text = evidenceRecap(lesson, {
     conceptEvidence: {
       "engram:engram-biological": record("engram-biological", "demonstrated", "independent"),
@@ -18,7 +18,7 @@ it("keeps every attribution distinct in at most four brief sentences without quo
     },
   });
   expect(text).toBe(
-    "You independently explained engrams. After a prompt, you explained exograms; you explained durability, with prompting unclear. Partly explained: sharing; unresolved or skipped: revision, visual symbols, shared meanings, examples beyond prose, and abstract ideas. Thanks for the discussion.",
+    "You independently explained engrams. After a prompt, you explained exograms; you explained durability, with prompting unclear. Partly explained: sharing; unresolved or skipped: revision, visual symbols, shared meanings, examples beyond prose, and abstract ideas.",
   );
   expect(text.split(/\s+/).length).toBeLessThan(55);
 });
@@ -134,4 +134,69 @@ it("falls back unchanged for missing, overlong or instruction-like learner detai
       }),
     ).toBe(fallback);
   }
+});
+
+it("extracts the recorded longer explanation with line breaks from accepted evidence", async () => {
+  const { default: trace } = await import("./fixtures/catching-unicorns-closure-oct16.json");
+  const text = evidenceRecap(lesson, {
+    conceptEvidence: {
+      "engram:engram-biological": {
+        ...quotedRecord("An engram is information stored inside our brain or mind."),
+        criterionId: "engram-biological",
+      },
+      "exographics:cultural-agreement": trace.acceptedLearnerEvidence as ConceptEvidenceRecord,
+    },
+  });
+  expect(text).toContain("for shared meanings, you said");
+  expect(text).toContain("one, two, and three are abstract concepts, but we have a shared understanding");
+  expect(text).not.toContain("\n");
+  expect(text).not.toContain("Sure.");
+});
+
+it("joins learner fragments across neutral backchannels without quoting the tutor", () => {
+  const accepted = quotedRecord("A musical score represents");
+  const evidence: ConceptEvidenceRecord = {
+    ...accepted,
+    source: {
+      ...accepted.source!,
+      messages: [
+        { messageIndex: 1, speaker: "Child", text: "A musical score represents" },
+        { messageIndex: 2, speaker: "Tutor", text: "Mm-hmm." },
+        { messageIndex: 3, speaker: "Child", text: "sounds using symbols musicians agree on." },
+      ],
+    },
+  };
+  const text = evidenceRecap(lesson, { conceptEvidence: { "exographics:cultural-agreement": evidence } });
+  expect(text).toContain("A musical score represents sounds using symbols musicians agree on");
+  expect(text).not.toContain("Mm-hmm");
+});
+it("uses a complete sentence from an overlong explanation rather than clipping its meaning", () => {
+  const explanation = "A musical score represents sounds using symbols musicians agree on.";
+  const text = evidenceRecap(lesson, {
+    conceptEvidence: {
+      "exographics:cultural-agreement": quotedRecord(`${"Some background context ".repeat(20)}. ${explanation}`),
+    },
+  });
+  expect(text).toContain(explanation.slice(0, -1));
+  expect(text).not.toContain("background");
+});
+it("does not turn a quoted tutor explanation or an independent partial record into a learner example", () => {
+  const sentence = "An orchestra shares the meaning of musical notation.";
+  const accepted = quotedRecord(sentence);
+  for (const evidence of [
+    { ...accepted, status: "partial" as const },
+    {
+      ...accepted,
+      source: {
+        ...accepted.source!,
+        messages: [
+          { messageIndex: 0, speaker: "Tutor" as const, text: sentence },
+          { messageIndex: 1, speaker: "Child" as const, text: sentence },
+        ],
+      },
+    },
+  ])
+    expect(evidenceRecap(lesson, { conceptEvidence: { "exographics:cultural-agreement": evidence } })).not.toContain(
+      "you said",
+    );
 });

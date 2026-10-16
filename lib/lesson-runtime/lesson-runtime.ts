@@ -421,7 +421,12 @@ export class LessonRuntime {
         if (this.status !== "live") return;
         this.log(event.type);
         if (!this.state.childSpeaking) {
-          this.cancelClassification("child_turn_started");
+          if (
+            event.type === "microphone.speech_started" ||
+            !this.lessonDefinition.conversationFirst ||
+            this.lessonDefinition.nodes[this.state.nodeId].completeAfterTutorOutput
+          )
+            this.cancelClassification("child_turn_started");
           this.childTurnFloorMs = this.lastChildEndMs;
           // Block progression immediately; missing-text recovery can later recheck conversational closure.
           this.dispatch({
@@ -430,6 +435,7 @@ export class LessonRuntime {
             atMs: this.now(),
           });
         } else if (event.type === "microphone.speech_started") {
+          this.cancelClassification("child_turn_confirmed");
           this.dispatch({ type: "child.turn.confirmed", source, atMs: this.now() });
         }
         return;
@@ -438,14 +444,16 @@ export class LessonRuntime {
         if (this.status !== "live") return;
         this.log(event.type, event.type === "microphone.speech_stopped" ? { quietMs: event.quietMs } : null);
         if (this.state.childSpeaking) {
-          if (event.type === "microphone.speech_stopped" && this.state.childCandidate)
+          if (event.type === "microphone.speech_stopped" && this.state.childCandidate) {
+            this.cancelClassification("child_turn_confirmed");
             this.dispatch({ type: "child.turn.confirmed", source, atMs: this.now() });
+          }
           this.dispatch({
             type:
               event.type === "microphone.activity_discarded" && this.state.childCandidate
                 ? "child.candidate.discarded"
                 : "child.turn.ended",
-            source,
+            source: runtimeSource(this.state),
             atMs: this.now(),
           });
           if (
@@ -545,7 +553,8 @@ export class LessonRuntime {
 
   private observeTranscript(fragment: Fragment) {
     if (!this.state || this.status !== "live") return;
-    const { event, source } = fragment;
+    const { event } = fragment;
+    let { source } = fragment;
     const speaker = event.speaker === "child" ? "child" : "tutor";
     if (this.state.phase === "rendering") {
       // A new child revision interrupts an unconfirmed render even before a VAD turn is bound.
@@ -572,7 +581,7 @@ export class LessonRuntime {
     else if (source.visitId !== this.state.visitId) rejection = "previous_visit_source";
     else if (
       speaker === "child" &&
-      (!this.state.hasChildTurn ||
+      ((!this.state.hasChildTurn && !this.state.childCandidate?.deferredTurn) ||
         source.childTurnId !== this.state.childTurnId ||
         event.startMs < this.childTurnFloorMs)
     )
@@ -588,6 +597,14 @@ export class LessonRuntime {
     }
     if (!event.delta) return;
     if (this.state.phase !== "active") return;
+    // Valid learner text confirms provisional energy even before the detector's
+    // sustained-speech callback. Bind it to the newly confirmed turn.
+    if (speaker === "child" && event.delta.trim() && this.state.childCandidate?.deferredTurn) {
+      this.cancelClassification("child_transcript_confirmed");
+      this.dispatch({ type: "child.turn.confirmed", source, atMs: this.now() });
+      source = runtimeSource(this.state);
+      fragment = { ...fragment, source };
+    }
     this.fragments.push(fragment);
     // Order by provider interval; late delivery must not put an earlier child answer after its acknowledgment.
     this.fragments.sort((a, b) => a.event.startMs - b.event.startMs || a.order - b.order);

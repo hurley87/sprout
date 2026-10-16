@@ -68,8 +68,9 @@ export type LessonRuntimeState = {
   readonly hasChildTurn: boolean;
   readonly hasChildTranscript: boolean;
   readonly childSpeaking: boolean;
-  /** Eligibility/audio only, never semantic authority; discarded onset requires fresh classification. */
+  /** Provisional energy blocks navigation; confirmed speech owns a new turn. */
   readonly childCandidate: {
+    readonly deferredTurn?: boolean;
     readonly hasChildTranscript: boolean;
     readonly tutorOutputObserved: boolean;
   } | null;
@@ -681,6 +682,24 @@ export function reduceLessonRuntime(
     case "child.candidate.started":
     case "child.turn.started":
       if (event.type === "child.candidate.started" && state.childSpeaking) return ignored;
+      if (
+        event.type === "child.candidate.started" &&
+        lesson.conversationFirst &&
+        !lesson.nodes[state.nodeId].completeAfterTutorOutput
+      ) {
+        // Energy alone is not a new learner exchange. Preserve exact-source
+        // classification and audio history, but block finish until resolved.
+        next = {
+          ...next,
+          childSpeaking: true,
+          childCandidate: {
+            deferredTurn: true,
+            hasChildTranscript: state.hasChildTranscript,
+            tutorOutputObserved: state.tutorOutputObserved,
+          },
+        };
+        break;
+      }
       next = {
         ...next,
         ...clearedEvidence,
@@ -716,6 +735,10 @@ export function reduceLessonRuntime(
       break;
     case "child.candidate.discarded":
       if (!state.childSpeaking || !state.childCandidate) return ignored;
+      if (state.childCandidate.deferredTurn) {
+        next = { ...next, childSpeaking: false, childCandidate: null };
+        break;
+      }
       next = {
         ...next,
         ...clearedEvidence,
@@ -735,6 +758,8 @@ export function reduceLessonRuntime(
       break;
     case "child.turn.confirmed":
       if (!state.childSpeaking || !state.childCandidate) return ignored;
+      if (state.childCandidate.deferredTurn)
+        return reduceLessonRuntime(state, { ...event, type: "child.turn.started" }, lesson);
       next = {
         ...next,
         childCandidate: null,
@@ -749,6 +774,10 @@ export function reduceLessonRuntime(
       break;
     case "transcript.updated":
       if (!Number.isSafeInteger(event.revision) || event.revision <= state.transcriptRevision) return ignored;
+      if (event.speaker === "child" && state.childCandidate?.deferredTurn) {
+        const confirmed = reduceLessonRuntime(state, { ...event, type: "child.turn.started" }, lesson).state;
+        return reduceLessonRuntime(confirmed, { ...event, source: runtimeSource(confirmed) }, lesson);
+      }
       next = {
         ...next,
         ...(event.speaker === "tutor" ? {} : clearedEvidence),
@@ -816,7 +845,7 @@ export function reduceLessonRuntime(
       const proposal = parseConversationStateProposal(event.proposal);
       const currentNode = lesson.nodes[state.nodeId];
       if (
-        state.childSpeaking ||
+        (state.childSpeaking && !state.childCandidate?.deferredTurn) ||
         (!state.hasChildTranscript && !(lesson.conversationFirst && state.interruptedExchange?.ready)) ||
         !proposal ||
         !isLessonNodeId(lesson, proposal.nodeId) ||
