@@ -39,7 +39,7 @@ export const RECOVERY_SOURCE_COMPATIBILITY = {
 export const SHORT_LESSON_COMPATIBILITY = {
   "lib/lesson-runtime/catching-unicorns-lesson.ts": "6a3205a9cea980d02742b33072fc444034182afb12028b679cfaccbb3408bf84",
   "lib/lesson-runtime/lesson-definition.ts": "56c7c48e77cb4c39a05c6ac926504c00ec9dd964056fc079c1a810a3b5a5a411",
-  "lib/lesson-runtime/lesson-runtime-reducer.ts": "a2026b92a81bc8f021cae8cfd49a3297389036163a456a69b0079075feaf0e95",
+  "lib/lesson-runtime/lesson-runtime-reducer.ts": "6f93bd6ca873915abbf76f4e21f7e52243e7e7cabc37a390f89e364bbd3769b3",
   "lib/lesson-runtime/live-context.ts": "6ae645ba44e3dee6b667ec6e49a52a65c7b4456bbf3301ed75a3aef075b6dd06",
 };
 const toolPaths = [

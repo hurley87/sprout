@@ -472,7 +472,8 @@ export function reduceLessonRuntime(
 ): LessonRuntimeResult {
   const ignored = { state, effects: [] };
   if (state.lessonId && state.lessonId !== lesson.id) return ignored;
-  if (state.phase === "stopped" || !validTime(event.atMs) || event.atMs < state.nowMs) return ignored;
+  if (state.phase === "stopped" || state.phase === "complete" || !validTime(event.atMs) || event.atMs < state.nowMs)
+    return ignored;
   if (event.type === "stop" || event.type === "disconnect") {
     return event.runtimeId === state.runtimeId
       ? { state: stopped({ ...state, nowMs: event.atMs }), effects: [] }
@@ -572,6 +573,11 @@ export function reduceLessonRuntime(
         event.revision > state.transcriptRevision)) &&
     (sameSource(state, event.source) || sameSource(state.pendingRender!.origin, event.source))
   ) {
+    // A delivered terminal recap is already committed. Microphone/transcript
+    // callbacks cannot reopen it while React confirms the completion screen.
+    // Fresh output still cancels the render so teardown cannot cut off audio.
+    if (state.lessonComplete && lesson.nodes[state.nodeId].completeAfterTutorOutput && event.type !== "output.activity")
+      return ignored;
     return { state: stopped({ ...state, nowMs: event.atMs }), effects: [] };
   }
   if (state.phase !== "active" || !sameSource(state, event.source)) return ignored;
@@ -585,7 +591,11 @@ export function reduceLessonRuntime(
       next = {
         ...next,
         ...clearedEvidence,
-        ...(lesson.nodes[state.nodeId].completeAfterTutorOutput ? { terminalTranscriptComplete: false } : {}),
+        // Terminal transcript/audio evidence belongs to this recap visit, not a
+        // microphone turn. Activity blocks completion but is not new learner text.
+        ...(lesson.nodes[state.nodeId].completeAfterTutorOutput
+          ? { tutorOutputObserved: state.tutorOutputObserved, quietSinceMs: state.quietSinceMs }
+          : {}),
         interruptedExchange:
           lesson.conversationFirst && (state.hasChildTranscript || state.interruptedExchange)
             ? {
@@ -614,8 +624,13 @@ export function reduceLessonRuntime(
         ...clearedEvidence,
         hasChildTranscript: state.childCandidate.hasChildTranscript,
         tutorOutputObserved: state.childCandidate.tutorOutputObserved,
-        // Candidate time never satisfies drain. Recheck sustained quiet after discard.
-        quietSinceMs: state.childCandidate.tutorOutputObserved && state.outputActivity === "quiet" ? event.atMs : null,
+        // Recap output quiet is independent of microphone activity. Other nodes
+        // still need fresh quiet and classification after a discarded candidate.
+        quietSinceMs: lesson.nodes[state.nodeId].completeAfterTutorOutput
+          ? state.quietSinceMs
+          : state.childCandidate.tutorOutputObserved && state.outputActivity === "quiet"
+            ? event.atMs
+            : null,
         childSpeaking: false,
         childCandidate: null,
         consumedRevision: null,
@@ -771,7 +786,9 @@ export function reduceLessonRuntime(
         const observed =
           event.state !== "unavailable" &&
           (candidate.tutorOutputObserved ||
-            (event.state === "active" && state.outputActivity !== "active" && candidate.hasChildTranscript));
+            (event.state === "active" &&
+              state.outputActivity !== "active" &&
+              (candidate.hasChildTranscript || lesson.nodes[state.nodeId].completeAfterTutorOutput === true)));
         next = {
           ...next,
           childCandidate: {
@@ -793,7 +810,7 @@ export function reduceLessonRuntime(
               (state.hasChildTranscript ||
                 state.interruptedExchange?.ready === true ||
                 lesson.nodes[state.nodeId].completeAfterTutorOutput === true) &&
-              !state.childSpeaking),
+              (!state.childSpeaking || lesson.nodes[state.nodeId].completeAfterTutorOutput === true)),
           quietSinceMs: null,
         };
       } else if (state.quietSinceMs === null) {
