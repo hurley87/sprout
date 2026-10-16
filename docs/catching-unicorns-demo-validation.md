@@ -33,8 +33,10 @@ changes: prior questions are filled, the active question is outlined, and upcomi
 questions are muted. The accessible numeric value counts finished questions (0–4);
 recap and completion have distinct text labels. Concept reveal layouts,
 Learned so far, supplementary descriptions and illustrations are removed. Transcript,
-authored concept details, evidence, cumulative assessment and scrubbed diagnostic
-export require an explicit `?debug=1` URL; other values do not enable the view.
+authored concept details, evidence and cumulative assessment require an explicit
+`?debug=1` URL; other values do not enable the view. Download diagnostics remains
+available in the default view after completion, Stop or failure, using the same
+scrubbed session export as the debug view.
 Diagnostic capture continues in the shared runtime for every session. The same concise evidence recap remains visible in both views. The final slice
 uses the accepted evidence ledger for both visual and spoken claims, as described
 below.

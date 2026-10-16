@@ -190,10 +190,16 @@ export default function CatchingUnicornsDemo({ debug = false }: { debug?: boolea
                 {completed ? "Restart discussion" : "Start discussion"}
               </button>
             )}
-            {!completed && (
-              <button className={styles.button} disabled={!live} onClick={() => runtime.current?.stop()}>
-                Stop
+            {snapshot?.status === "ended" ? (
+              <button className={styles.button} onClick={download}>
+                Download diagnostics
               </button>
+            ) : (
+              !completed && (
+                <button className={styles.button} disabled={!live} onClick={() => runtime.current?.stop()}>
+                  Stop
+                </button>
+              )
             )}
           </div>
         </footer>

@@ -230,7 +230,7 @@ test("shared runtime starts, holds unresolved scenes, stops, restarts, and clean
   const retained = await page.evaluate(() => (window as LessonObservationWindow).sproutLessonObservation?.report());
   expect(retained?.events).toEqual(expect.arrayContaining([expect.objectContaining({ type: "lesson.ended" })]));
   await expect(page.getByText("Session details", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: /diagnostics|export/i })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Download diagnostics", exact: true })).toBeEnabled();
   // The harness keeps its silent source track alive; the session's cloned capture tracks must end.
   await expect
     .poll(async () => (await microphone.state()).trackStates.filter(state => state === "live").length)
@@ -269,7 +269,7 @@ test("session startup failure ends and releases the microphone so a fresh attemp
   await expect(page.getByRole("button", { name: "Start discussion" })).toBeEnabled();
   await expect(page.getByRole("button", { name: "Start discussion" })).toBeInViewport();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  await expect(page.getByRole("button", { name: /diagnostics|export/i })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Download diagnostics", exact: true })).toBeEnabled();
   await expect
     .poll(async () => (await microphone.state()).trackStates.filter(state => state === "live").length)
     .toBe(1);
@@ -622,7 +622,14 @@ for (const debug of [false, true]) {
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
       await page.screenshot({ path: testInfo.outputPath("completed-recap-mobile.png") });
       await expect(page.getByText("Session details", { exact: true })).toHaveCount(0);
-      await expect(page.getByRole("button", { name: /diagnostics|export/i })).toHaveCount(0);
+      const downloadPromise = page.waitForEvent("download");
+      await page.getByRole("button", { name: "Download diagnostics", exact: true }).click();
+      const download = await downloadPromise;
+      const exportText = await readFile((await download.path())!, "utf8");
+      const exported = JSON.parse(exportText);
+      expect(exported.lesson).toEqual({ id: "catching-unicorns", sceneId: "recap" });
+      expect(exported.acceptedEvidence).toHaveProperty("engram:engram-biological");
+      expect(exportText).not.toMatch(/OPENAI_API_KEY|TYPESAFE_API_KEY|authorization|access_token|"sdp"/i);
       await page.getByRole("button", { name: "Restart discussion" }).click();
       await expect(page.locator('[data-scene="engram"]')).toBeVisible();
       await expectProgress(1);
