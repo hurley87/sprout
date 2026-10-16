@@ -173,7 +173,7 @@ export default function CatchingUnicornsDemo({ debug = false }: { debug?: boolea
             data-node-id={identity.nodeId ?? "complete"}
             data-scene-id={identity.sceneId ?? "complete"}
           >
-            <ScenePresentation state={state} />
+            <ScenePresentation state={state} recapText={snapshot?.recapText} />
           </div>
         </section>
         <footer className={styles.footer}>

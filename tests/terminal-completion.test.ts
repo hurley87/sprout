@@ -387,3 +387,79 @@ it("replays the October 16 transcript/audio/microphone race and completes before
   expect(send({ type: "stop", runtimeId: state.runtimeId, atMs: 153713.1 }).effects).toEqual([]);
   expect(state).toBe(complete);
 });
+
+it("accepts an isolated opening restart but keeps audio drain and the frozen recap authoritative", async () => {
+  const { runtime, text } = startTerminal();
+  expect(runtime.snapshot().recapText).toBe(text);
+  const opening = text.split(" ")[0];
+  emit({ type: "transcript", speaker: "sprout", delta: opening, startMs: 1100, endMs: 1200 });
+  emit({ type: "output.activity", state: "active" });
+  emit({ type: "transcript", speaker: "sprout", delta: text, startMs: 1400, endMs: 1500 });
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(runtime.snapshot().runtime?.terminalTranscriptComplete).toBe(true);
+  expect(transport.close).not.toHaveBeenCalled();
+  expect(runtime.snapshot().recapText).toBe(text);
+  emit({ type: "output.activity", state: "quiet" });
+  await vi.advanceTimersByTimeAsync(1600);
+  confirmCompletion(runtime);
+  expect(runtime.snapshot().recapText).toBe(text);
+});
+
+it("cannot complete from a complete transcript without observed audio", async () => {
+  const { runtime, text } = startTerminal();
+  emit({ type: "transcript", speaker: "sprout", delta: text, startMs: 1100, endMs: 1200 });
+  emit({ type: "output.activity", state: "quiet" });
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(runtime.snapshot().runtime).toMatchObject({
+    phase: "active",
+    terminalTranscriptComplete: true,
+    tutorOutputObserved: false,
+  });
+  expect(transport.close).not.toHaveBeenCalled();
+  runtime.stop("page_hidden");
+  expect(runtime.snapshot().runtime?.lessonComplete).toBe(false);
+});
+
+it.each(["opening", "closing", "different"])(
+  "holds an incomplete or different %s recap despite drained audio",
+  async change => {
+    const { runtime, text } = startTerminal();
+    const altered =
+      change === "opening"
+        ? text.slice(text.indexOf(" ") + 1)
+        : change === "closing"
+          ? text.slice(0, text.lastIndexOf(" "))
+          : text.replace("explained", "mastered").replace("Unresolved", "Mastered");
+    events.tutorTurn(altered, 1100);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(runtime.snapshot().runtime).toMatchObject({
+      phase: "active",
+      terminalTranscriptComplete: false,
+      lessonComplete: false,
+    });
+    runtime.stop();
+    expect(runtime.report().events.filter(event => event.type === "lesson.completed")).toHaveLength(0);
+  },
+);
+
+it("accepts a delayed complete transcript and duplicate interval only after audio has drained", async () => {
+  const { runtime, text } = startTerminal();
+  emit({ type: "output.activity", state: "active" });
+  emit({ type: "output.activity", state: "quiet" });
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(runtime.snapshot().runtime?.phase).toBe("active");
+  const split = text.indexOf(" ");
+  const opening: ProviderEvent = {
+    type: "transcript",
+    speaker: "sprout",
+    delta: text.slice(0, split),
+    startMs: 1100,
+    endMs: 1200,
+  };
+  emit(opening);
+  emit(opening); // Same interval, even without a provider event ID.
+  emit({ type: "transcript", speaker: "sprout", delta: text.slice(split), startMs: 1200, endMs: 1300 });
+  expect(runtime.snapshot().runtime?.terminalTranscriptComplete).toBe(true);
+  await vi.advanceTimersByTimeAsync(1600);
+  confirmCompletion(runtime);
+});

@@ -79,6 +79,17 @@ describe("Catching Unicorns scene presentation", () => {
     expect(html).not.toContain("Learned so far");
   });
 
+  it("renders the frozen delivery snapshot even if evidence changes during delivery", () => {
+    const recapText = "You independently explained sharing. Thanks for the discussion.";
+    const state = { ...createLessonRuntime("snapshot", { lesson: CATCHING_UNICORNS_LESSON }), nodeId: "recap" };
+    const before = renderToStaticMarkup(createElement(ScenePresentation, { state, recapText }));
+    const changed = { ...state, conceptEvidence: { "engram:engram-biological": evidence("engram-biological") } };
+    const after = renderToStaticMarkup(createElement(ScenePresentation, { state: changed, recapText }));
+    expect(after).toBe(before);
+    expect(after).toContain(recapText);
+    expect(after).not.toContain("You independently explained engrams");
+  });
+
   it("keeps demonstrated evidence with uncertain prompting visible in the recap", () => {
     const recap = renderScene("recap", {
       "engram:engram-biological": evidence(

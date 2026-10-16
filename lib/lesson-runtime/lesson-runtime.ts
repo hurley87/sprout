@@ -1,4 +1,5 @@
-import { evidenceRecap, normalizeRecapSpeech } from "./evidence-recap";
+import { terminalRecapComplete } from "./terminal-recap";
+import { evidenceRecap } from "./evidence-recap";
 import { normalizeAssessment, type ConversationAssessment, type ConversationVisit } from "./conversation-assessment";
 import { BrowserTransport } from "../browser-transport";
 import type { ProviderEvent, TranscriptEvent } from "../events";
@@ -73,6 +74,7 @@ export type LessonSnapshot = {
   runtime: LessonRuntimeState | null;
   display: RenderIdentity;
   transcript: string;
+  recapText?: string;
   error: string | null;
   awaitingSteering: boolean;
   diagnostics: readonly LessonDiagnostic[];
@@ -133,6 +135,8 @@ export class LessonRuntime {
     private readonly changed: (snapshot: LessonSnapshot) => void,
     private readonly lessonDefinition: LessonDefinition,
   ) {
+    if (this.lessonDefinition.nodes[this.lessonDefinition.initialNodeId].completeAfterTutorOutput)
+      this.terminalText = evidenceRecap(this.lessonDefinition, null);
     this.display = {
       token: `${this.runtimeId}:initial`,
       nodeId: this.lessonDefinition.initialNodeId,
@@ -246,6 +250,7 @@ export class LessonRuntime {
       runtime: this.state,
       display: this.display,
       transcript: this.transcript,
+      recapText: this.terminalText,
       error: this.error,
       awaitingSteering: Boolean(this.steering),
       diagnostics: this.events.slice(-100),
@@ -343,6 +348,9 @@ export class LessonRuntime {
           this.fragments = [];
           this.transcript = "";
           this.log("transcript.reset", { reason: "node_visit_committed", providerFloorMs: this.providerFloorMs });
+          if (effect.identity.nodeId && this.lessonDefinition.nodes[effect.identity.nodeId].completeAfterTutorOutput)
+            // Freeze before React can render or asynchronous assessment can settle.
+            this.terminalText ??= evidenceRecap(this.lessonDefinition, this.state);
           this.display = effect.identity;
           break;
         case "steering.ready":
@@ -627,14 +635,11 @@ export class LessonRuntime {
       this.lessonDefinition.nodes[this.state.nodeId].completeAfterTutorOutput &&
       speaker === "tutor"
     ) {
-      const spoken = this.fragments
-        .filter(item => item.event.speaker === "sprout")
-        .map(item => item.event.delta)
-        .join("");
+      const spoken = this.fragments.filter(item => item.event.speaker === "sprout").map(item => item.event);
       this.dispatch({
         type: "terminal.transcript.checked",
         source: runtimeSource(this.state),
-        complete: normalizeRecapSpeech(spoken) === normalizeRecapSpeech(this.terminalText),
+        complete: terminalRecapComplete(this.terminalText, spoken),
         atMs: this.now(),
       });
     }
@@ -878,7 +883,7 @@ export class LessonRuntime {
     const eventId = `${this.runtimeId}:steer:${this.state.visitId}`;
     const terminal = this.lessonDefinition.nodes[context.nodeId].completeAfterTutorOutput;
     if (terminal) {
-      this.terminalText = evidenceRecap(this.lessonDefinition, this.state);
+      this.terminalText ??= evidenceRecap(this.lessonDefinition, this.state);
       this.terminalTimer = setTimeout(
         () =>
           this.fail(

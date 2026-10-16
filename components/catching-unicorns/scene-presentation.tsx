@@ -3,9 +3,15 @@ import { CATCHING_UNICORNS_LESSON } from "@/lib/lesson-runtime/catching-unicorns
 import type { LessonRuntimeState } from "@/lib/lesson-runtime/lesson-runtime-reducer";
 import { RecapPresentation } from "./recap-presentation";
 
-export function ScenePresentation({ state }: { state: LessonRuntimeState | null | undefined }) {
+export function ScenePresentation({
+  state,
+  recapText,
+}: {
+  state: LessonRuntimeState | null | undefined;
+  recapText?: string;
+}) {
   const nodeId = state?.nodeId ?? CATCHING_UNICORNS_LESSON.initialNodeId;
-  if (nodeId === "recap") return <RecapPresentation state={state} />;
+  if (nodeId === "recap") return <RecapPresentation state={state} recapText={recapText} />;
 
   return (
     <div className={styles.questionScene} data-scene={nodeId} aria-live="polite">
