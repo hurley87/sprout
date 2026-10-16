@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import type { ClientCommand, ProviderEvent } from "../lib/events";
 import { CATCHING_UNICORNS_LESSON as lesson } from "../lib/lesson-runtime/catching-unicorns-lesson";
 import { LessonRuntime } from "../lib/lesson-runtime/lesson-runtime";
+import { ANSWER_RECOVERY_WAIT_MS } from "../lib/lesson-runtime/answer-recovery";
 import {
   createLessonRuntime,
   reduceLessonRuntime,
@@ -109,9 +110,141 @@ it.each(["discarded", "confirmed"])(
         ? { type: "microphone.activity_discarded" }
         : { type: "microphone.speech_stopped", quietMs: 900 },
     );
+    if (activity === "confirmed") {
+      expect(runtime.snapshot().runtime?.phase).toBe("active");
+      await vi.advanceTimersByTimeAsync(ANSWER_RECOVERY_WAIT_MS);
+    }
     confirmCompletion(runtime);
   },
 );
+
+it("accepts a delayed learner transcript after confirmed speech stops instead of completing", async () => {
+  const { runtime, text } = startTerminal();
+  events.tutorTurn(text, 1100);
+  await vi.advanceTimersByTimeAsync(1000);
+  emit({ type: "microphone.activity_started" });
+  emit({ type: "microphone.speech_started" });
+  await vi.advanceTimersByTimeAsync(1000);
+  emit({ type: "microphone.speech_stopped", quietMs: 900 });
+  expect(runtime.snapshot().runtime?.phase).toBe("active");
+  await vi.advanceTimersByTimeAsync(ANSWER_RECOVERY_WAIT_MS - 1);
+  emit({ type: "transcript", speaker: "child", delta: "Wait, I have a question.", startMs: 1300, endMs: 1500 });
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(runtime.snapshot()).toMatchObject({
+    status: "live",
+    error: null,
+    runtime: { phase: "active", hasChildTranscript: true, terminalTranscriptComplete: false },
+  });
+  expect(runtime.snapshot().transcript).toContain("Child: Wait, I have a question.");
+  expect(transport.close).not.toHaveBeenCalled();
+  runtime.stop();
+});
+
+it("bounds missing terminal transcripts using the existing quiet recovery window", async () => {
+  const { runtime, text } = startTerminal();
+  events.tutorTurn(text, 1100);
+  emit({ type: "microphone.speech_started" });
+  emit({ type: "microphone.speech_stopped", quietMs: 900 });
+  await vi.advanceTimersByTimeAsync(ANSWER_RECOVERY_WAIT_MS - 200);
+  // Discarded noise must not silently resolve a confirmed utterance or restart
+  // its missing-transcript recovery window.
+  emit({ type: "microphone.activity_started" });
+  await vi.advanceTimersByTimeAsync(100);
+  emit({ type: "microphone.activity_discarded" });
+  expect(runtime.snapshot().runtime?.phase).toBe("active");
+  await vi.advanceTimersByTimeAsync(99);
+  expect(runtime.snapshot().runtime?.phase).toBe("active");
+  await vi.advanceTimersByTimeAsync(1);
+  confirmCompletion(runtime);
+  expect(transport.send.mock.calls.filter(([command]) => command.type === "session.instructions.append")).toHaveLength(
+    1,
+  );
+});
+
+it("waits for late audio during completion rendering without error or premature teardown", async () => {
+  const { runtime, text } = startTerminal();
+  events.tutorTurn(text, 1100);
+  await vi.advanceTimersByTimeAsync(1600);
+  const oldDisplay = runtime.snapshot().display;
+  emit({ type: "output.activity", state: "active" });
+  emit({ type: "output.activity", state: "active" });
+  runtime.confirmRendered(oldDisplay);
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(runtime.snapshot()).toMatchObject({
+    status: "live",
+    error: null,
+    runtime: { phase: "rendering", outputActivity: "active" },
+  });
+  expect(transport.close).not.toHaveBeenCalled();
+  emit({ type: "output.activity", state: "quiet" });
+  await vi.advanceTimersByTimeAsync(1000);
+  emit({ type: "output.activity", state: "quiet" });
+  runtime.confirmRendered(oldDisplay);
+  expect(transport.close).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(600);
+  expect(runtime.snapshot().display.token).not.toBe(oldDisplay.token);
+  runtime.confirmRendered(oldDisplay); // Stale UI callback cannot acknowledge the new drain.
+  expect(transport.close).not.toHaveBeenCalled();
+  confirmCompletion(runtime);
+});
+
+it("requires fresh observed audio after unavailable output during completion rendering", async () => {
+  const { runtime, text } = startTerminal();
+  events.tutorTurn(text, 1100);
+  await vi.advanceTimersByTimeAsync(1600);
+  const oldDisplay = runtime.snapshot().display;
+  emit({ type: "output.activity", state: "unavailable" });
+  emit({ type: "output.activity", state: "quiet" });
+  await vi.advanceTimersByTimeAsync(2000);
+  runtime.confirmRendered(oldDisplay);
+  expect(runtime.snapshot()).toMatchObject({ status: "live", error: null });
+  expect(transport.close).not.toHaveBeenCalled();
+  emit({ type: "output.activity", state: "active" });
+  emit({ type: "output.activity", state: "quiet" });
+  await vi.advanceTimersByTimeAsync(1600);
+  confirmCompletion(runtime);
+});
+
+it("can resolve missing text more than once in a recap without spending a prompt budget", async () => {
+  const { runtime, text } = startTerminal();
+  const split = Math.floor(text.length / 2);
+  events.tutorTurn(text.slice(0, split), 1100);
+  emit({ type: "microphone.speech_started" });
+  emit({ type: "microphone.speech_stopped", quietMs: 900 });
+  await vi.advanceTimersByTimeAsync(ANSWER_RECOVERY_WAIT_MS);
+  expect(runtime.snapshot().runtime).toMatchObject({ phase: "active", terminalLearnerPending: false });
+  events.tutorTurn(text.slice(split), 1300);
+  emit({ type: "microphone.speech_started" });
+  emit({ type: "microphone.speech_stopped", quietMs: 900 });
+  await vi.advanceTimersByTimeAsync(ANSWER_RECOVERY_WAIT_MS);
+  confirmCompletion(runtime);
+});
+
+it("restarts missing-text recovery on fresh confirmed speech and cancels it on Stop", async () => {
+  const { runtime, text } = startTerminal();
+  events.tutorTurn(text, 1100);
+  emit({ type: "microphone.speech_started" });
+  emit({ type: "microphone.speech_stopped", quietMs: 900 });
+  await vi.advanceTimersByTimeAsync(ANSWER_RECOVERY_WAIT_MS - 1);
+  emit({ type: "microphone.speech_started" });
+  await vi.advanceTimersByTimeAsync(1);
+  expect(runtime.snapshot().runtime).toMatchObject({
+    phase: "active",
+    childSpeaking: true,
+    terminalLearnerPending: true,
+  });
+  emit({ type: "microphone.speech_stopped", quietMs: 900 });
+  await vi.advanceTimersByTimeAsync(ANSWER_RECOVERY_WAIT_MS - 1);
+  expect(runtime.snapshot().runtime?.phase).toBe("active");
+  runtime.stop();
+  await vi.advanceTimersByTimeAsync(ANSWER_RECOVERY_WAIT_MS + 1000);
+  expect(runtime.snapshot()).toMatchObject({
+    status: "ended",
+    error: null,
+    runtime: { phase: "stopped", lessonComplete: false },
+  });
+  expect(transport.close).toHaveBeenCalledOnce();
+});
 
 it.each(["partial", "full"])("honors a learner interruption during %s recap output", async portion => {
   const { runtime, text } = startTerminal();

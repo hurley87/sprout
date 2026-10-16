@@ -78,6 +78,8 @@ export type LessonRuntimeState = {
   readonly tutorOutputObserved: boolean;
   readonly tutorOutputDrained: boolean;
   readonly terminalTranscriptComplete?: boolean;
+  /** Confirmed terminal speech must receive text or bounded missing-text recovery. */
+  readonly terminalLearnerPending?: boolean;
   readonly quietSinceMs: number | null;
   readonly quietDrainMs: number;
   readonly nowMs: number;
@@ -121,6 +123,7 @@ export type LessonRuntimeEvent = { readonly atMs: number } & (
       readonly transcriptSnapshot: string;
     }
   | { readonly type: "terminal.transcript.checked"; readonly source: RuntimeSource; readonly complete: boolean }
+  | { readonly type: "terminal.learner.resolved"; readonly source: RuntimeSource }
   | { readonly type: "clock.tick"; readonly source: RuntimeSource }
   | { readonly type: "render.confirmed"; readonly runtimeId: string; readonly identity: RenderIdentity }
   | { readonly type: "scene.skipped"; readonly source: RuntimeSource }
@@ -254,7 +257,7 @@ export function meetsAuthoredCompletionPolicy(state: LessonRuntimeState, lesson:
 
 export function hasCurrentCompletionEvidence(state: LessonRuntimeState, lesson: LessonDefinition) {
   if (lesson.nodes[state.nodeId].completeAfterTutorOutput)
-    return state.tutorOutputObserved && state.terminalTranscriptComplete === true;
+    return state.tutorOutputObserved && state.terminalTranscriptComplete === true && !state.terminalLearnerPending;
   if (lesson.conversationFirst)
     return (
       state.conversationAdvanceRequested === "learner" ||
@@ -291,14 +294,19 @@ function stopped(state: LessonRuntimeState): LessonRuntimeState {
   };
 }
 
-function finish(state: LessonRuntimeState, lesson: LessonDefinition): LessonRuntimeResult {
-  const drained =
+function outputHasDrained(state: LessonRuntimeState, lesson: LessonDefinition) {
+  return (
     (state.tutorOutputObserved ||
       (lesson.conversationFirst === true && state.conversationAdvanceRequested === "learner")) &&
     state.outputActivity === "quiet" &&
     state.quietSinceMs !== null &&
     state.nowMs - state.quietSinceMs >=
-      (lesson.nodes[state.nodeId].completeAfterTutorOutput ? Math.max(1500, state.quietDrainMs) : state.quietDrainMs);
+      (lesson.nodes[state.nodeId].completeAfterTutorOutput ? Math.max(1500, state.quietDrainMs) : state.quietDrainMs)
+  );
+}
+
+function finish(state: LessonRuntimeState, lesson: LessonDefinition): LessonRuntimeResult {
+  const drained = outputHasDrained(state, lesson);
   const next = { ...state, tutorOutputDrained: drained, transitionReady: false };
   if (!hasCurrentCompletionEvidence(next, lesson) || !drained || next.childSpeaking) {
     return { state: next, effects: [] };
@@ -338,6 +346,15 @@ function requestAuthoredTransition(
     state: {
       ...next,
       ...clearedEvidence,
+      // Keep delivery evidence until the terminal screen has actually committed;
+      // resumed output can suspend that confirmation without closing the voice.
+      ...(edge.kind === "complete" && node.completeAfterTutorOutput
+        ? {
+            tutorOutputObserved: next.tutorOutputObserved,
+            tutorOutputDrained: next.tutorOutputDrained,
+            quietSinceMs: next.quietSinceMs,
+          }
+        : {}),
       nodeId: edge.kind === "node" ? edge.nodeId : next.nodeId,
       visitId,
       hasChildTurn: false,
@@ -479,12 +496,48 @@ export function reduceLessonRuntime(
       ? { state: stopped({ ...state, nowMs: event.atMs }), effects: [] }
       : ignored;
   }
+  const terminalRendering =
+    state.phase === "rendering" && state.lessonComplete && lesson.nodes[state.nodeId].completeAfterTutorOutput;
+  if (
+    terminalRendering &&
+    (event.type === "output.activity" || event.type === "clock.tick") &&
+    (sameSource(state, event.source) || sameSource(state.pendingRender!.origin, event.source))
+  ) {
+    if (event.type === "output.activity") {
+      if (event.state === state.outputActivity) return ignored;
+      return {
+        state: {
+          ...state,
+          nowMs: event.atMs,
+          outputActivity: event.state,
+          tutorOutputObserved: event.state === "active" || (event.state === "quiet" && state.tutorOutputObserved),
+          tutorOutputDrained: false,
+          quietSinceMs: event.state === "quiet" ? event.atMs : null,
+        },
+        effects: [],
+      };
+    }
+    const next = { ...state, nowMs: event.atMs };
+    if (state.tutorOutputDrained || !outputHasDrained(next, lesson)) return ignored;
+    // Ask React to confirm again after fresh quiet. The old callback must not
+    // acknowledge a later delivery boundary, even if its frame was delayed.
+    const identity = {
+      ...state.pendingRender!.identity,
+      token: JSON.stringify([state.runtimeId, state.visitId, event.atMs]),
+    };
+    return {
+      state: { ...next, tutorOutputDrained: true, pendingRender: { ...state.pendingRender!, identity } },
+      effects: [{ type: "render.requested", identity }],
+    };
+  }
   if (event.type === "render.confirmed") {
     if (
       event.runtimeId !== state.runtimeId ||
       state.phase !== "rendering" ||
       !state.pendingRender ||
-      !sameRender(state.pendingRender.identity, event.identity)
+      !sameRender(state.pendingRender.identity, event.identity) ||
+      (terminalRendering &&
+        (!state.tutorOutputDrained || !outputHasDrained({ ...state, nowMs: event.atMs }, lesson)))
     )
       return ignored;
     const next: LessonRuntimeState = {
@@ -575,7 +628,7 @@ export function reduceLessonRuntime(
   ) {
     // A delivered terminal recap is already committed. Microphone/transcript
     // callbacks cannot reopen it while React confirms the completion screen.
-    // Fresh output still cancels the render so teardown cannot cut off audio.
+    // Terminal output is handled above by suspending render confirmation.
     if (state.lessonComplete && lesson.nodes[state.nodeId].completeAfterTutorOutput && event.type !== "output.activity")
       return ignored;
     return { state: stopped({ ...state, nowMs: event.atMs }), effects: [] };
@@ -594,7 +647,11 @@ export function reduceLessonRuntime(
         // Terminal transcript/audio evidence belongs to this recap visit, not a
         // microphone turn. Activity blocks completion but is not new learner text.
         ...(lesson.nodes[state.nodeId].completeAfterTutorOutput
-          ? { tutorOutputObserved: state.tutorOutputObserved, quietSinceMs: state.quietSinceMs }
+          ? {
+              tutorOutputObserved: state.tutorOutputObserved,
+              quietSinceMs: state.quietSinceMs,
+              ...(event.type === "child.turn.started" ? { terminalLearnerPending: true } : {}),
+            }
           : {}),
         interruptedExchange:
           lesson.conversationFirst && (state.hasChildTranscript || state.interruptedExchange)
@@ -638,7 +695,13 @@ export function reduceLessonRuntime(
       break;
     case "child.turn.confirmed":
       if (!state.childSpeaking || !state.childCandidate) return ignored;
-      next = { ...next, childCandidate: null };
+      next = {
+        ...next,
+        childCandidate: null,
+        ...(lesson.nodes[state.nodeId].completeAfterTutorOutput
+          ? { terminalLearnerPending: !state.hasChildTranscript }
+          : {}),
+      };
       break;
     case "child.turn.ended":
       if (!state.childSpeaking) return ignored;
@@ -662,6 +725,9 @@ export function reduceLessonRuntime(
         answerAccepted: false,
         acknowledgmentObserved: false,
         ...(lesson.nodes[state.nodeId].completeAfterTutorOutput ? { terminalTranscriptComplete: false } : {}),
+        ...(lesson.nodes[state.nodeId].completeAfterTutorOutput && event.speaker === "child"
+          ? { terminalLearnerPending: false }
+          : {}),
       };
       break;
     case "conversation.recheck.requested": {
@@ -827,6 +893,17 @@ export function reduceLessonRuntime(
           terminalTranscriptComplete: event.complete,
           quietSinceMs: next.outputActivity === "quiet" ? event.atMs : null,
         };
+      break;
+    case "terminal.learner.resolved":
+      if (
+        !lesson.nodes[state.nodeId].completeAfterTutorOutput ||
+        !state.terminalLearnerPending ||
+        state.childSpeaking ||
+        state.hasChildTranscript ||
+        state.outputActivity !== "quiet"
+      )
+        return ignored;
+      next = { ...next, terminalLearnerPending: false };
       break;
     case "clock.tick":
       break;

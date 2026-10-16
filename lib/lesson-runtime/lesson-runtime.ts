@@ -114,6 +114,7 @@ export class LessonRuntime {
   private readonly tutorStabilization: TutorStabilizationGate;
   private readonly supportClarification: SupportClarification;
   private readonly answerRecovery: AnswerRecovery;
+  private readonly terminalTranscriptRecovery: AnswerRecovery;
   private clarificationRequest?: { eventId: string; source: ClassificationSource };
   private stabilizationTimer?: ReturnType<typeof setTimeout>;
   private clockTimer?: ReturnType<typeof setTimeout>;
@@ -190,6 +191,21 @@ export class LessonRuntime {
           }
         : undefined,
       this.lessonDefinition.conversationFirst === true,
+    );
+    // Local VAD stop is not a provider transcript boundary. Reuse the existing
+    // quiet missing-transcript window, resolving terminal speech without prompts
+    // or semantic classification when that bounded recovery expires.
+    const resolveTerminalTranscript = (source: ClassificationSource) =>
+      this.dispatch({ type: "terminal.learner.resolved", source, atMs: this.now() });
+    this.terminalTranscriptRecovery = new AnswerRecovery(
+      resolveTerminalTranscript,
+      (type, source, detail) => this.log(`terminal.${type}`, detail, source),
+      true,
+      source => {
+        // Resolution is a closure recheck, not a once-per-visit support prompt.
+        resolveTerminalTranscript(source);
+        return true;
+      },
     );
     this.transport = new BrowserTransport(audio, true);
     this.transport.setMicrophoneDiagnosticSink(event => {
@@ -355,10 +371,13 @@ export class LessonRuntime {
 
   private scheduleClock() {
     clearTimeout(this.clockTimer);
+    const terminalRendering =
+      this.state?.phase === "rendering" && this.state.lessonComplete &&
+      this.lessonDefinition.nodes[this.state.nodeId].completeAfterTutorOutput;
     if (
       !this.state ||
       this.status === "ended" ||
-      this.state.phase !== "active" ||
+      (this.state.phase !== "active" && !terminalRendering) ||
       this.state.outputActivity !== "quiet" ||
       (!this.state.tutorOutputObserved && this.state.conversationAdvanceRequested !== "learner") ||
       this.state.tutorOutputDrained ||
@@ -440,7 +459,12 @@ export class LessonRuntime {
             // Navigation uses the latest learner message in this visit, independently
             // of microphone segmentation. Missing current-turn text still cannot
             // authorize mastery classification or answer recovery for that request.
-            if (!this.lessonDefinition.conversationFirst || !learnerRequestedNext(this.transcript))
+            if (
+              this.lessonDefinition.nodes[this.state.nodeId].completeAfterTutorOutput &&
+              this.state.terminalLearnerPending
+            )
+              this.terminalTranscriptRecovery.arm(this.state, !this.steering);
+            else if (!this.lessonDefinition.conversationFirst || !learnerRequestedNext(this.transcript))
               this.answerRecovery.arm(this.state, !this.steering);
           }
           this.scheduleClassification(event.type);
@@ -667,6 +691,7 @@ export class LessonRuntime {
 
   private syncTutorStabilization(trigger: string) {
     if (this.state && this.lessonDefinition.nodes[this.state.nodeId].completeAfterTutorOutput) {
+      this.terminalTranscriptRecovery.observe(this.state, this.status === "live" && !this.steering);
       this.answerRecovery.cancel("terminal_close");
       this.supportClarification.cancel("terminal_close");
       this.tutorStabilization.cancel("terminal_close");
@@ -979,6 +1004,7 @@ export class LessonRuntime {
     if (this.status === "ended") return;
     this.cancelClassification(reason);
     this.answerRecovery.cancel(reason);
+    this.terminalTranscriptRecovery.cancel(reason);
     clearTimeout(this.clockTimer);
     clearTimeout(this.startupTimer);
     clearTimeout(this.terminalTimer);
