@@ -98,6 +98,13 @@ export type LessonRuntimeState = {
   /** True when accepted evidence is ready to advance after an application-owned review action. */
   readonly transitionReady: boolean;
   readonly conversationAdvanceRequested?: "learner" | "tutor" | false;
+  /** Classifier-accepted closure of this tutor message, independent of the latest speaker.
+   * Suspended during a new learner turn until its text proves to be a brief acknowledgment. */
+  readonly tutorClosure?: {
+    readonly source: ClassificationSource;
+    readonly messageIndex: number;
+    readonly text: string;
+  } | null;
   /** Session-local evidence; a new runtime always starts empty. */
   readonly conceptEvidence: Readonly<Record<string, ConceptEvidenceRecord>>;
   readonly pendingRender: {
@@ -119,6 +126,7 @@ export type LessonRuntimeEvent = { readonly atMs: number } & (
       readonly source: RuntimeSource;
       readonly revision: number;
       readonly speaker: "child" | "tutor" | "unknown";
+      readonly transcriptSnapshot?: string;
     }
   | {
       readonly type: "proposal.received";
@@ -165,6 +173,7 @@ const clearedEvidence = {
   quietSinceMs: null,
   transitionReady: false,
   conversationAdvanceRequested: false,
+  tutorClosure: null,
 } as const;
 
 /** The initial authored scene must already be rendered. Use a fresh runtimeId for every start/reconnect. */
@@ -282,6 +291,21 @@ export function hasCurrentCompletionEvidence(state: LessonRuntimeState, lesson: 
     state.acknowledgmentObserved &&
     meetsAuthoredCompletionPolicy(state, lesson)
   );
+}
+
+/** This only bounds what may follow a classified tutor close; it never establishes closure. */
+function closingTutorExchange(snapshot: string | undefined) {
+  const messages = snapshot === undefined ? null : transcriptMessages(snapshot);
+  if (!messages) return null;
+  const messageIndex = messages.findLastIndex(message => message.speaker === "Tutor");
+  if (messageIndex < 0) return null;
+  const suffix = messages.slice(messageIndex + 1).map(message => message.text.trim().replace(/\s+/gu, " "));
+  const acknowledgment = /^(?:great|okay|ok|sounds good|thanks|thank you)[.! ,]*$/iu;
+  const complete = suffix.every(text => acknowledgment.test(text));
+  // Provider fragments can split "Sounds good" or "Thank you". Keep authority
+  // suspended across the prefix; incomplete text cannot authorize progression.
+  return suffix.every(text => acknowledgment.test(text) || /^(?:sounds|thank)$/iu.test(text))
+    ? { messageIndex, text: messages[messageIndex].text, complete } : null;
 }
 
 function sameRender(expected: RenderIdentity, actual: RenderIdentity) {
@@ -703,6 +727,7 @@ export function reduceLessonRuntime(
       next = {
         ...next,
         ...clearedEvidence,
+        tutorClosure: lesson.conversationFirst ? state.tutorClosure : null,
         // Terminal transcript/audio evidence belongs to this recap visit, not a
         // microphone turn. Activity blocks completion but is not new learner text.
         ...(lesson.nodes[state.nodeId].completeAfterTutorOutput
@@ -772,15 +797,27 @@ export function reduceLessonRuntime(
       if (!state.childSpeaking) return ignored;
       next = { ...next, childSpeaking: false, childCandidate: null };
       break;
-    case "transcript.updated":
+    case "transcript.updated": {
       if (!Number.isSafeInteger(event.revision) || event.revision <= state.transcriptRevision) return ignored;
       if (event.speaker === "child" && state.childCandidate?.deferredTurn) {
         const confirmed = reduceLessonRuntime(state, { ...event, type: "child.turn.started" }, lesson).state;
         return reduceLessonRuntime(confirmed, { ...event, source: runtimeSource(confirmed) }, lesson);
       }
+      const exchange = lesson.conversationFirst && event.speaker === "child"
+        ? closingTutorExchange(event.transcriptSnapshot) : null;
+      const closure = exchange && state.tutorClosure &&
+        exchange.messageIndex === state.tutorClosure.messageIndex && exchange.text === state.tutorClosure.text
+        ? state.tutorClosure : null;
       next = {
         ...next,
         ...(event.speaker === "tutor" ? {} : clearedEvidence),
+        tutorClosure: closure,
+        // A brief acknowledgment belongs to the preceding exchange. Keep its
+        // observed audio even when classification of the close is still in flight.
+        ...(exchange ? {
+          tutorOutputObserved: state.tutorOutputObserved || !!state.interruptedExchange?.tutorOutputObserved,
+          quietSinceMs: state.outputActivity === "quiet" ? (state.quietSinceMs ?? event.atMs) : null,
+        } : {}),
         childCandidate: event.speaker === "tutor" ? state.childCandidate : null,
         interruptedExchange: event.speaker === "tutor" ? state.interruptedExchange : null,
         transcriptRevision: event.revision,
@@ -789,8 +826,9 @@ export function reduceLessonRuntime(
           event.speaker === "child" ? state.hasChildTurn : event.speaker === "tutor" && state.hasChildTranscript,
         consumedRevision: null,
         conversationAdvanceRequested:
-          event.speaker === "tutor" && state.conversationAdvanceRequested === "learner" ? "learner" : false,
-        // Even tutor-only updates require the latest answer to be revalidated before progression.
+          event.speaker === "tutor" && state.conversationAdvanceRequested === "learner" ? "learner"
+            : closure && exchange?.complete ? "tutor" : false,
+        // Answer acceptance remains revision-bound, independently of conversational closure.
         answerAccepted: false,
         acknowledgmentObserved: false,
         ...(lesson.nodes[state.nodeId].completeAfterTutorOutput ? { terminalTranscriptComplete: false } : {}),
@@ -799,6 +837,7 @@ export function reduceLessonRuntime(
           : {}),
       };
       break;
+    }
     case "conversation.recheck.requested": {
       if (
         !lesson.conversationFirst ||
@@ -874,12 +913,17 @@ export function reduceLessonRuntime(
       next = conceptResult.state;
       additionalEffects = conceptResult.effects;
       if (lesson.conversationFirst) {
+        const exchange = closingTutorExchange(event.transcriptSnapshot);
+        const tutorClosed = proposal.tutorState === "acknowledging" &&
+          (state.transcriptSource === "tutor" || (state.transcriptSource === "child" && exchange?.complete === true));
         next = {
           ...next,
+          tutorClosure: tutorClosed && exchange
+            ? { messageIndex: exchange.messageIndex, text: exchange.text, source: event.source } : null,
           conversationAdvanceRequested:
             next.conversationAdvanceRequested === "learner"
               ? "learner"
-              : state.transcriptSource === "tutor" && proposal.tutorState === "acknowledging"
+              : tutorClosed
                 ? "tutor"
                 : false,
         };

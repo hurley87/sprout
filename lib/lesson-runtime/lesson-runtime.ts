@@ -645,6 +645,7 @@ export class LessonRuntime {
       source,
       revision: this.revision,
       speaker,
+      transcriptSnapshot: text,
       atMs: this.now(),
     });
     if (
