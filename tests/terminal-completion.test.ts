@@ -429,7 +429,7 @@ it.each(["opening", "closing", "different"])(
         ? text.slice(text.indexOf(" ") + 1)
         : change === "closing"
           ? text.slice(0, text.lastIndexOf(" "))
-          : text.replace("explained", "mastered").replace("Unresolved", "Mastered");
+          : "You mastered every concept.";
     events.tutorTurn(altered, 1100);
     await vi.advanceTimersByTimeAsync(2000);
     expect(runtime.snapshot().runtime).toMatchObject({

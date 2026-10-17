@@ -62,7 +62,6 @@ export function evidenceRecap(
     prompted: [] as string[],
     uncertain: [] as string[],
     partial: [] as string[],
-    unresolved: [] as string[],
   };
   for (const [id, label] of Object.entries(lesson.recapTopics ?? {})) {
     const records: ConceptEvidenceRecord[] = Object.values(lesson.nodes).flatMap(node => {
@@ -85,7 +84,7 @@ export function evidenceRecap(
         detailWords = words;
         learnerDetail = `; for ${label}, you said “${quote.replace(/[.!?]+$/u, "")}”`;
       }
-    } else groups[records.some(record => record.status === "partial") ? "partial" : "unresolved"].push(label);
+    } else if (records.some(record => record.status === "partial")) groups.partial.push(label);
   }
   const sentences: string[] = [];
   if (groups.independent.length)
@@ -94,10 +93,7 @@ export function evidenceRecap(
   if (groups.prompted.length) supported.push(`after a prompt, you explained ${list(groups.prompted)}`);
   if (groups.uncertain.length) supported.push(`you explained ${list(groups.uncertain)}, with prompting unclear`);
   if (supported.length) sentences.push(`${supported.join("; ").replace(/^./u, char => char.toUpperCase())}.`);
-  const unfinished = [];
-  if (groups.partial.length) unfinished.push(`partly explained: ${list(groups.partial)}`);
-  if (groups.unresolved.length) unfinished.push(`unresolved or skipped: ${list(groups.unresolved)}`);
-  if (unfinished.length) sentences.push(`${unfinished.join("; ").replace(/^./u, char => char.toUpperCase())}.`);
+  if (groups.partial.length) sentences.push(`Partly explained: ${list(groups.partial)}.`);
   if (!learnerDetail && sentences.length < 3) sentences.push("Thanks for the discussion.");
   return sentences.join(" ");
 }

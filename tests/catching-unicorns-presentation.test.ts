@@ -102,7 +102,7 @@ describe("Catching Unicorns scene presentation", () => {
     expect(recap).not.toContain("A memory inside my brain, unlike an external note.");
   });
 
-  it("projects actual independent, prompted, partial, and unresolved evidence into recap", () => {
+  it("shows independent, prompted and partial evidence without listing unresolved topics", () => {
     const recap = renderScene("recap", {
       "engram:engram-biological": evidence("engram-biological", "independent", "Memory held in a biological mind."),
       "exogram:exogram-non-biological": evidence("exogram-non-biological", "prompted", "A note outside my brain."),
@@ -111,11 +111,11 @@ describe("Catching Unicorns scene presentation", () => {
     expect(recap).toContain("You independently explained engrams");
     expect(recap).toContain("After a prompt, you explained exograms.");
     expect(recap).toContain("Partly explained: visual symbols");
-    expect(recap).toContain("unresolved or skipped:");
+    expect(recap).not.toMatch(/unresolved or skipped/i);
     expect(recap).toContain("Memory held in a biological mind”");
     expect(recap).not.toContain("A note outside my brain.");
     expect(recap).not.toContain("Supporting longer threads of reasoning");
     expect(recap).not.toContain("Substantial education</p>");
-    expect(recap).toContain("abstract ideas");
+    expect(recap).not.toContain("abstract ideas");
   });
 });

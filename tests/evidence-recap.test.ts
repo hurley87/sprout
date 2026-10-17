@@ -18,7 +18,7 @@ it("keeps every attribution distinct in at most three brief sentences without qu
     },
   });
   expect(text).toBe(
-    "You independently explained engrams. After a prompt, you explained exograms; you explained durability, with prompting unclear. Partly explained: sharing; unresolved or skipped: revision, visual symbols, shared meanings, examples beyond prose, and abstract ideas.",
+    "You independently explained engrams. After a prompt, you explained exograms; you explained durability, with prompting unclear. Partly explained: sharing.",
   );
   expect(text.split(/\s+/).length).toBeLessThan(55);
 });
@@ -36,7 +36,7 @@ it("deduplicates carried evidence and does not upgrade an uncertain original att
 });
 it("never invents mastery for an entirely skipped or unavailable-evidence session", () => {
   expect(evidenceRecap(lesson, null)).toBe(
-    "Unresolved or skipped: engrams, exograms, durability, sharing, revision, visual symbols, shared meanings, examples beyond prose, and abstract ideas. Thanks for the discussion.",
+    "Thanks for the discussion.",
   );
 });
 it("covers exactly the retained criteria and keeps a full-success close brief", () => {
@@ -81,7 +81,7 @@ it("personalizes with a brief accepted learner contribution without hardcoding e
       },
     });
     expect(text).toContain(`for shared meanings, you said “${example.slice(0, -1)}”`);
-    expect(text).toContain("Unresolved or skipped:");
+    expect(text).not.toMatch(/unresolved or skipped/i);
     expect(text).not.toMatch(/mastered|you explained abstract ideas/i);
   }
 });

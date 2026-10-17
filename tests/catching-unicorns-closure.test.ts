@@ -139,7 +139,7 @@ it("replays the recorded microphone/output sequence through the scheduler withou
     ),
   ).toBe(true);
   const frozen = runtime.snapshot().recapText;
-  expect(frozen).toContain("Unresolved or skipped");
+  expect(frozen).not.toMatch(/unresolved or skipped/i);
   runtime.confirmRendered(runtime.snapshot().display);
   const close = transport.send.mock.calls.at(-1)![0];
   expect(close).toMatchObject({ content: expect.stringContaining(JSON.stringify(frozen)) });
