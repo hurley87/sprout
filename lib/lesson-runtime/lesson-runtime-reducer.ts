@@ -215,22 +215,44 @@ export function createLessonRuntime(
   };
 }
 
-/** Recognize a bounded navigation utterance, including conversational fillers.
- * Never search arbitrarily inside an answer, quotation, or reported speech. */
+/** Recognize only complete navigation commands and short explanations surrounding them.
+ * Every sentence must match the grammar; never search inside answers or quotations. */
 export function learnerRequestedNext(transcript: string) {
   const text = transcriptMessages(transcript)
     ?.findLast(message => message.speaker === "Child")
-    ?.text.trim()
-    .replace(/\s+/gu, " ");
+    ?.text.trim().replace(/\s+/gu, " ");
   if (!text) return false;
-  const request =
-    /^(?:please[,.]?\s+)?(?:(?:let['’]s|can we|could we|i(?:['’]d| would) like to)\s+)?(?:(?:can|could) i (?:have|get) (?:the )?next question|i(?:['’]d| would) like (?:the )?next question|let['’]s do (?:the )?next question|next(?: question)?(?:,? then)?|(?:go|move|skip)(?: on)? to (?:the )?next(?: question)?|move on|skip (?:this|the)(?: question)?)(?:[.!?]|,? please)?$/iu;
-  const normalized = text
-    .replace(/^i (?:don't|don’t|do not) know[,.!]\s+/iu, "")
-    .replace(/^(?:(?:yes|yeah|okay|ok|well|um|i am)[,.]?\s+)+/iu, "")
-    .replace(/^i think\s+/iu, "")
-    .replace(/[.!]\s+i(?: think i)?(?: have|['’]ve) answered (?:this|that)(?: question)?[.!]?$/iu, "");
-  return request.test(normalized);
+  const sentences = text.split(/(?<=[.!?])\s+/u);
+  let requested = false;
+  for (const sentence of sentences) {
+    const command = sentence
+      .replace(/[.!?]+$/u, "")
+      .replace(/^i (?:don't|don’t|do not) know,\s+/iu, "")
+      .replace(/^(?:(?:yes|yeah|okay|ok|well|um|i am)[,.]?\s+)+/iu, "")
+      .replace(/^i think\s+/iu, "")
+      .replace(/^please[,.]?\s+/iu, "")
+      .replace(/,? please$/iu, "");
+    const directRequest = [
+      /^next(?: question)?(?:,? then)?$/iu,
+      /^(?:can|could) i (?:have|get) (?:the )?next question$/iu,
+      /^i(?:['’]d| would) like (?:the )?next question$/iu,
+      /^let['’]s do (?:the )?next question$/iu,
+      /^(?:(?:let['’]s|can we|could we|i(?:['’]d| would) like to)\s+)?(?:move on|(?:go|move|skip)(?: on)? to (?:the )?next(?: question)?|skip (?:this|that|the)(?: question)?)$/iu,
+    ].some(pattern => pattern.test(command));
+    if (directRequest) {
+      requested = true;
+      continue;
+    }
+    // Explanations alone never request navigation. Questions, disagreement and
+    // added answer content do not match and invalidate the entire utterance.
+    const explanation = sentence.replace(/[.!]+$/u, "");
+    if (![
+      /^i (?:don't|don’t|do not) know$/iu,
+      /^i(?: think i)?(?: have|['’]ve) answered (?:(?:this|that)(?: question)?|the question)$/iu,
+      /^i(?:['’]m| am) done with (?:this|that|the) question$/iu,
+    ].some(pattern => pattern.test(explanation))) return false;
+  }
+  return requested;
 }
 
 export function runtimeSource(state: LessonRuntimeState): RuntimeSource {
