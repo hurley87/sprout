@@ -7,7 +7,7 @@ import type { LessonDefinition } from "../../lesson-runtime/lesson-definition";
 import {
   conversationObserverState,
   conversationStateQuestions,
-} from "../../lesson-runtime/conversation-observer-contract";
+} from "./historical-v1/lib/lesson-runtime/conversation-observer-contract";
 import { decisionsRequest, type DecisionsMappingPolicy } from "./decisions-classifier";
 import {
   benchmarkDirectory as dir,
@@ -22,28 +22,22 @@ export { sha256, valueHash };
 export const EXPECTED_PARENT = "1223826b3708627bbc5326ec249e05e3a827cf9c";
 export const MANIFEST_HASH = "ceba27f934ad67b96c8ec0381f2e98156151660c5542c6cfdf3adc332e863c1c";
 export const ADAPTER_PATH = "lib/experiments/issue-42/decisions-classifier.ts";
-// Exact reviewed active-source exceptions; all frozen Git blobs are still checked.
-// Other runtime files must continue matching v1 byte-for-byte.
-export const ACTIVE_MODEL_COMPATIBILITY = {
-  "lib/jev.ts": "733168e1333903a53eb891e9eb7800d20c3a397b30bf50a45ab19d9415b9f3a9",
-  "lib/lesson-runtime/jev-conversation-state-classifier.ts":
-    "c0ad13bb7f5202c625d9ae3ff2ebc55c39bce195de750db8adc8f8467f38ac9f",
-};
-// Exact recovery fix from 4b3c268; these orchestration modules are not executed
-// by isolated reducer replay. Their frozen baseline Git blobs remain mandatory.
-export const RECOVERY_SOURCE_COMPATIBILITY = {
-  "lib/lesson-runtime/answer-recovery.ts": "4e3159932c3ad5beed9ed9786118910fac5d38ea1b8d725acbdb536729554a8c",
-  "lib/lesson-runtime/lesson-runtime.ts": "588338768b6ec1e74f09afd5b391c6a56c53c6e3b48074667b21340602d78cd6",
-};
-// Issue #71 changes the active lesson and terminal gate. Frozen v1 inputs stay historical.
-export const SHORT_LESSON_COMPATIBILITY = {
-  "lib/lesson-runtime/catching-unicorns-lesson.ts": "a5aff29c5ed472c1d58df686262a24ec063f1581d7e18a7481ffb2cafe410d9f",
-  "lib/lesson-runtime/lesson-definition.ts": "56c7c48e77cb4c39a05c6ac926504c00ec9dd964056fc079c1a810a3b5a5a411",
-  "lib/lesson-runtime/lesson-runtime-reducer.ts": "7cbdb5a1170698dff67c4344092535b4cd1a973f1df2b0fb8c515ce777893bff",
-  "lib/lesson-runtime/live-context.ts": "6ae645ba44e3dee6b667ec6e49a52a65c7b4456bbf3301ed75a3aef075b6dd06",
-};
+/** Exact copies of the original Git blobs. No production module imports these. */
+export const HISTORICAL_DIRECTORY = "lib/experiments/issue-42/historical-v1/";
+export const HISTORICAL_ADAPTER_PATH = HISTORICAL_DIRECTORY + ADAPTER_PATH;
+export const HISTORICAL_SOURCES = [
+  "lib/jev.ts",
+  ...["conversation-observer-contract", "conversation-state-classifier", "tutor-observation",
+    "lesson-definition", "lesson-runtime-reducer", "jev-conversation-state-classifier"]
+    .map(name => `lib/lesson-runtime/${name}.ts`),
+];
+const adapterEntrypoint = `/** Issue #42's byte-verified historical Decisions adapter; never used by production. */
+export * from "./historical-v1/lib/experiments/issue-42/decisions-classifier";
+`;
 const toolPaths = [
   ADAPTER_PATH,
+  HISTORICAL_ADAPTER_PATH,
+  ...HISTORICAL_SOURCES.map(path => HISTORICAL_DIRECTORY + path),
   "lib/experiments/issue-42/factored-decisions.ts",
   "lib/experiments/issue-42/decisions-calibration.ts",
   "tests/helpers/classifier-benchmark.ts",
@@ -74,16 +68,14 @@ export function loadBenchmark() {
   for (const [path, hash] of Object.entries({ ...manifest.files, ...manifest.replaySources }))
     assert.equal(bytesHash(path), hash, `frozen file mismatch: ${path}`);
   for (const [path, hash] of Object.entries(manifest.baselineSources)) {
-    const activeHash =
-      ACTIVE_MODEL_COMPATIBILITY[path as keyof typeof ACTIVE_MODEL_COMPATIBILITY] ??
-      RECOVERY_SOURCE_COMPATIBILITY[path as keyof typeof RECOVERY_SOURCE_COMPATIBILITY] ??
-      SHORT_LESSON_COMPATIBILITY[path as keyof typeof SHORT_LESSON_COMPATIBILITY];
-    assert.equal(bytesHash(path), activeHash ?? hash, `baseline incompatibility: ${path}`);
     assert.equal(
       sha256(execFileSync("git", ["show", `${manifest.baselineSha}:${path}`])),
       hash,
       "baseline object mismatch",
     );
+  }
+  for (const path of HISTORICAL_SOURCES) {
+    assert.equal(bytesHash(HISTORICAL_DIRECTORY + path), manifest.baselineSources[path], `historical source drift: ${path}`);
   }
   const old = manifest.historicalCounting;
   assert.equal(sha256(execFileSync("git", ["show", `${old.gitRef}:${old.path}`])), old.sha256);
@@ -92,12 +84,13 @@ export function loadBenchmark() {
     EXPECTED_PARENT,
     "expected implementation baseline is not an ancestor",
   );
-  // Commit 2's adapter is also a compatibility boundary, independent of the v1 manifest.
+  // The separately reviewed Decisions adapter is pinned independently of v1.
   assert.equal(
-    bytesHash(ADAPTER_PATH),
+    bytesHash(HISTORICAL_ADAPTER_PATH),
     sha256(execFileSync("git", ["show", `${EXPECTED_PARENT}:${ADAPTER_PATH}`])),
     "Decisions adapter drift",
   );
+  assert.equal(readFileSync(ADAPTER_PATH, "utf8"), adapterEntrypoint, "Decisions adapter entrypoint drift");
   const lessons = JSON.parse(readFileSync(dir + "lessons.json", "utf8")) as LessonDefinition[];
   const corpus: unknown = JSON.parse(readFileSync(dir + "corpus.json", "utf8"));
   validateBenchmarkCorpus(corpus, lessons);
@@ -141,9 +134,8 @@ export function loadBenchmark() {
     sourceHashes: Object.fromEntries(toolPaths.map(path => [path, bytesHash(path)])),
     activeRuntime: {
       model: JEV_MODEL,
-      sourceHashes: { ...ACTIVE_MODEL_COMPATIBILITY },
-      recoverySourceHashes: { ...RECOVERY_SOURCE_COMPATIBILITY },
-      shortLessonSourceHashes: { ...SHORT_LESSON_COMPATIBILITY },
+      // Provenance of the executing application, not a historical compatibility gate.
+      sourceHashes: Object.fromEntries(Object.keys(manifest.baselineSources).map(path => [path, bytesHash(path)])),
     },
     executingCommit: git("rev-parse", "HEAD"),
     executingParent: git("rev-parse", "HEAD^"),

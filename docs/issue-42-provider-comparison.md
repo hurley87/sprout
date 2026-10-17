@@ -59,27 +59,32 @@ index: Jev first for even sums, Decisions first for odd sums. This controls orde
 reproducibly; it does not establish statistical independence.
 
 The `jev` comparison arm remains pinned to **`jev-1.13.0`**, even though the active
-app uses **`jev-1.14.0`**. Plans record `activeRuntime.model` and the exact hashes of
-`lib/jev.ts` and the executor separately from `providers.jev.model`. The loader
-accepts only the two exact source hashes in `ACTIVE_MODEL_COMPATIBILITY` for
-those files; it still verifies their original Git blobs against the frozen
-manifest. A separately pinned `RECOVERY_SOURCE_COMPATIBILITY` covers the two later
-recovery/orchestration files, which isolated reducer replay does not execute.
-Their original baseline Git blobs are still checked, and their exact active
-hashes are reported in `activeRuntime.recoverySourceHashes`. Every other baseline
-source must match v1 exactly. No corpus, historical
-observation or frozen hash changes. This changes plan identities, so old run
-authorizations do not apply to a newly generated plan. See
-[the upgrade boundary](issue-42-jev-1.14-upgrade.md).
+app uses **`jev-1.14.0`**. `lib/experiments/issue-42/historical-v1/` contains exact
+copies of the original contract, its runtime dependencies, Jev executor and
+isolated reducer. `loadBenchmark()` verifies each copy against the unchanged
+manifest's baseline-source hashes, and still verifies every original baseline
+Git blob. The historical Decisions adapter is an exact copy of the reviewed
+`EXPECTED_PARENT` blob; its public entry point only re-exports that copy and is
+checked separately. The type-only events bridge does not execute runtime code.
 
-Network Jev invokes `executeConversationObserver` with the explicit historical
-request model. Response identity must match that captured request model, rather
-than the active application constant. A 1.14 response to the 1.13 arm is rejected
-and cannot become a normalized 1.13 observation.
+Both request construction and response interpretation use these historical
+modules. This preserves source selection, questions, projection, mapping and
+reducer semantics together. Production imports none of these copies. The active
+lesson, source filtering, `evidenceMessages` projection and Jev 1.14 contract are
+covered by their current-contract tests rather than historical byte assertions.
+Plans record actual active source hashes under `activeRuntime.sourceHashes` as
+execution provenance, not a historical compatibility gate. The old active-source
+exception lists no longer apply. No corpus, manifest or frozen hash changes.
+Updated tooling and provenance change plan identities, so old run authorizations
+do not apply to a newly generated plan.
+
+Network Jev invokes the historical `executeConversationObserver`, whose model
+constant is pinned to 1.13. A 1.14 response to the 1.13 arm is rejected and cannot
+become a normalized 1.13 observation.
 An exclusive, serial CLI transport bridge checks its exact URL, method and body,
 then restores global fetch in `finally`. Native fetch is captured before the
 bridge. The bridge is only for this separate CLI process, never application use
-or concurrent classification. Offline Jev uses the same production normalizer
+or concurrent classification. Offline Jev uses the same historical normalizer
 and mapper; tests compare it to the original executor. Decisions uses the
 unchanged isolated `createDecisionsClassifier`. Sole-`none` source options and
 request-size limits abstain **locally**, make zero Decisions requests, and are

@@ -6,19 +6,19 @@ import {
   normalizeConversationOutputs,
   type ConversationStateDecision,
   type ConversationStateOutputs,
-} from "../../lesson-runtime/conversation-observer-contract";
-import { executeConversationObserver } from "../../lesson-runtime/jev-conversation-state-classifier";
+} from "./historical-v1/lib/lesson-runtime/conversation-observer-contract";
+import { executeConversationObserver } from "./historical-v1/lib/lesson-runtime/jev-conversation-state-classifier";
 import { createDecisionsClassifier, type DecisionsRequest } from "./decisions-classifier";
 import {
   classificationSource,
   createLessonRuntime,
   reduceLessonRuntime,
-} from "../../lesson-runtime/lesson-runtime-reducer";
+} from "./historical-v1/lib/lesson-runtime/lesson-runtime-reducer";
 import type {
   ConversationStateClassifierInput,
   ConversationStateProposal,
 } from "../../lesson-runtime/conversation-state-classifier";
-import { transcriptMessages } from "../../lesson-runtime/tutor-observation";
+import { transcriptMessages } from "./historical-v1/lib/lesson-runtime/tutor-observation";
 import {
   loadBenchmark,
   makePlan,
