@@ -226,7 +226,7 @@ it("makes scene-specific sufficiency and accurate acknowledgment explicit in liv
   expect(instructions).toContain("Assessment uncertainty does not require more answers");
 });
 
-it("shares one personalized frozen recap across display, steering and completion verification", async () => {
+it("shares one frozen topic recap across display, steering and completion verification", async () => {
   useRuntimeFakeTimers();
   vi.stubGlobal(
     "fetch",
@@ -255,7 +255,8 @@ it("shares one personalized frozen recap across display, steering and completion
   events.tutorTurn("That makes sense. We can move on.", 500);
   await vi.advanceTimersByTimeAsync(1200);
   const frozen = runtime.snapshot().recapText!;
-  expect(frozen).toContain("shared understanding");
+  expect(frozen).toContain("shared meanings");
+  expect(frozen).not.toContain("you said");
   runtime.confirmRendered(runtime.snapshot().display);
   const close = transport.send.mock.calls.at(-1)![0];
   if (close.type !== "session.instructions.append") throw Error("Expected recap steering");
