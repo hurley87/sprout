@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CATCHING_UNICORNS_LESSON as lesson } from "../lib/lesson-runtime/catching-unicorns-lesson";
-import { conversationStateQuestions, interpretConversationOutputs, mapConversationObservation, normalizeConversationOutputs, type ConversationStateOutputs } from "../lib/lesson-runtime/conversation-observer-contract";
+import { conversationStateQuestions, interpretConversationOutputs, learnerSourceOptions, mapConversationObservation, normalizeConversationOutputs, type ConversationStateOutputs } from "../lib/lesson-runtime/conversation-observer-contract";
 import { classificationSource, createLessonRuntime, reduceLessonRuntime, runtimeSource, type LessonRuntimeEvent } from "../lib/lesson-runtime/lesson-runtime-reducer";
 import { evidenceRecap } from "../lib/lesson-runtime/evidence-recap";
 import recording from "./fixtures/catching-unicorns-source-boundaries-oct16.json";
@@ -137,13 +137,26 @@ describe("source boundaries with one provable learner source", () => {
     expect(evidenceRecap(lesson, { conceptEvidence: unresolved.evidence })).toContain("prompting unclear");
   });
 
-  it("replays every recorded output without changing other confidence gates and categorizes persisted evidence in the recap", () => {
+  it("replays compatible recorded outputs, rejects obsolete acknowledgment options, and categorizes persisted evidence in the recap", () => {
     const evidence: ReturnType<typeof harness>["evidence"] = {};
+    let obsoleteOptions = 0;
     for (const nodeId of ["engram", "exogram", "compare", "exographics"]) {
       const h = harness(nodeId);
-      for (const c of recording.checkpoints.filter(c => c.nodeId === nodeId)) h.observe(c.transcript, c.outputs as unknown as ConversationStateOutputs);
+      for (const c of recording.checkpoints.filter(c => c.nodeId === nodeId)) {
+        const outputs = c.outputs as unknown as ConversationStateOutputs;
+        if (c.transcript.endsWith("Child: Sounds\nChild: good")) {
+          // Keep historical scores intact. Their distributions still offer the
+          // now-excluded message_5; strict live validation must reject them.
+          expect(Object.keys(learnerSourceOptions(c.transcript))).toEqual(["none", "message_1", "message_3"]);
+          expect(Object.values(outputs.sources!).every(answer => "message_5" in answer.probabilities)).toBe(true);
+          expect(mapConversationObservation({ lesson, nodeId, transcript: c.transcript, transcriptRevision: c.transcriptRevision }, outputs))
+            .toMatchObject({ reason: "invalid_outputs", proposal: null });
+          obsoleteOptions++;
+        } else h.observe(c.transcript, outputs);
+      }
       Object.assign(evidence, h.evidence);
     }
+    expect(obsoleteOptions).toBe(2);
     expect(evidence["engram:engram-biological"].understanding).toBe("independent");
     expect(evidence["exogram:exogram-non-biological"].understanding).toBe("independent");
     // These recorded criteria have insufficient concept or start scores even

@@ -95,8 +95,14 @@ describe("supporting learner utterance provenance", () => {
     expect(accepted.source?.childTranscript).toContain("Lives outside of the mind");
     expect(accepted.promptingHistory).toHaveLength(1);
     expect(accepted.promptingHistory[0].prompted).toBe(false);
-    h.observe(later.transcript + "\nTutor: Correct.\nChild: Yep.", decision.proposal!.conceptObservations!);
-    expect(h.state.conceptEvidence["exogram:exogram-non-biological"]).toEqual(accepted);
+    for (const acknowledgment of ["Yep.", "Great.", "Sounds good.", "Thank you very much."]) {
+      const transcript = later.transcript + `\nTutor: Correct.\nChild: ${acknowledgment}`;
+      h.observe(transcript, decision.proposal!.conceptObservations!);
+      expect(h.state.conceptEvidence["exogram:exogram-non-biological"]).toEqual(accepted);
+      h.observe(transcript, [{ criterionId: "exogram-non-biological", observation: "demonstrated_independent",
+        childMessageIndex: transcriptMessages(transcript)!.length - 1 }]);
+      expect(h.state.conceptEvidence["exogram:exogram-non-biological"]).toEqual(accepted);
+    }
   });
 
   it("attributes cultural agreement to shared understanding, before the quantities/music answer", () => {
@@ -122,6 +128,13 @@ describe("supporting learner utterance provenance", () => {
     "Yes",
     "Yep",
     "That's right",
+    "Great.",
+    "Sounds good.",
+    "That's great.",
+    "Okay, thanks.",
+    "Thank you very much.",
+    "Yes, exactly.",
+    "Right, I see.",
     "[inhale] [exhale]",
     "Um. Well...",
     "I",
@@ -134,6 +147,27 @@ describe("supporting learner utterance provenance", () => {
     ]);
     expect(h.state.conceptEvidence).toEqual({});
     expect(result.effects).toEqual([]);
+  });
+
+  it.each(["Great.", "Sounds good.", "That's great.", "Okay, thanks.", "Thank you very much.", "Yes, exactly.", "Right, I see."])(
+    "does not infer an acknowledgment through the legacy single-candidate fallback: %s", text => {
+      const h = harness("exogram");
+      h.observe(`Tutor: Explain.\nChild: ${text}`, [
+        { criterionId: "exogram-non-biological", observation: "demonstrated_independent" },
+      ]);
+      expect(h.state.conceptEvidence).toEqual({});
+    },
+  );
+
+  it("infers only the substantive source at its original index and still requires semantic evidence", () => {
+    const transcript = "Tutor: Explain.\nChild: Great.\nTutor: Go on.\nChild: An exogram stores memory outside the brain.\nTutor: Okay.\nChild: Thanks.";
+    const h = harness("exogram");
+    h.observe(transcript, []);
+    expect(h.state.conceptEvidence).toEqual({});
+    h.observe(transcript, [{ criterionId: "exogram-non-biological", observation: "demonstrated_independent" }]);
+    expect(h.state.conceptEvidence["exogram:exogram-non-biological"]).toMatchObject({
+      status: "demonstrated", source: { childMessageIndex: 3, childTranscript: "An exogram stores memory outside the brain." },
+    });
   });
 
   it("rejects tutor/out-of-range references and refuses to guess in ambiguous legacy snapshots", () => {

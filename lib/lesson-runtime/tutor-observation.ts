@@ -42,11 +42,19 @@ export function tutorObservation(transcript: string): TutorObservation | null {
 export function substantiveLearnerText(text: string, allowFragments = false) {
   const words = text.replace(/\[[^\]]*(?:\]|$)/gu, " ").toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
   const phrase = words.join(" ");
-  if (/^(?:that s |that is )?right(?: that s right)?$/u.test(phrase)) return false;
+  if (standaloneLearnerAcknowledgment(phrase)) return false;
   if (!allowFragments && /^(?:can|could|would|mean)$/u.test(phrase)) return false;
   if (!allowFragments && /^(?:i|it|we|they|you)(?: can| mean| could| would| do| think| guess)?$/u.test(phrase)) return false;
   if (!phrase || /^(?:i )?(?:don t know|do not know|not sure|no idea)(?: yet)?$/u.test(phrase)) return false;
-  return words.some(word => !["yes", "yeah", "yep", "yup", "no", "nope", "okay", "ok", "right", "sure", "correct", "thanks", "thank", "you", "uh", "um", "hmm", "well", "ah", "oh", "mhm", "so"].includes(word));
+  return true;
+}
+
+/** Match the entire normalized utterance, including combinations of backchannels.
+ * Extra explanation words must remain eligible, even after an acknowledgment.
+ * Closure and neutral tutor backchannels deliberately have narrower rules: they
+ * grant progression or prompting authority rather than merely exclude sources. */
+function standaloneLearnerAcknowledgment(phrase: string) {
+  return /^(?:(?:(?:that s|that is) (?:right|great)|sounds good|thank you(?: very much| so much)?|i see|mm hmm|uh huh|yes|yeah|yep|yup|no|nope|okay|ok|right|sure|correct|exactly|great|thanks|thank|you|uh|um|hmm|well|ah|oh|mhm|so)(?: |$))+$/u.test(phrase);
 }
 
 /** Deliberately narrow: anything else requires model prompting attribution. */
