@@ -1,11 +1,18 @@
 import { existsSync, readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+const simulatedActivePolicy = vi.hoisted(() => ({ model: null as string | null }));
+vi.mock("../lib/jev", async importOriginal => {
+  const actual = await importOriginal<typeof import("../lib/jev")>();
+  return { ...actual, get JEV_MODEL() { return simulatedActivePolicy.model ?? actual.JEV_MODEL; } };
+});
 vi.mock("server-only", () => ({}));
 vi.mock("node:fs", async importOriginal => {
   const actual = await importOriginal<typeof import("node:fs")>();
   return { ...actual, readFileSync: vi.fn(actual.readFileSync) };
 });
+import { JEV_MODEL } from "../lib/jev";
+import { CONVERSATION_CLASSIFICATION_THRESHOLDS as activeThresholds } from "../lib/lesson-runtime/conversation-observer-contract";
 import * as artifacts from "../lib/experiments/issue-42/benchmark-artifacts";
 import {
   aggregateResults,
@@ -25,6 +32,7 @@ beforeAll(() => {
   benchmark = artifacts.loadBenchmark();
 });
 afterEach(() => {
+  simulatedActivePolicy.model = null;
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
@@ -142,7 +150,7 @@ describe("reproducible provider comparison (all transports synthetic)", () => {
     }
     expect(p.sourceHashes[artifacts.ADAPTER_PATH]).toMatch(/^[a-f0-9]{64}$/);
     expect(p.mappingPolicy).toBeNull();
-    expect(p.activeRuntime.model).toBe("jev-1.14.0");
+    expect(p.activeRuntime.model).toBe(JEV_MODEL);
     expect(p.providers.jev.model).toBe("jev-1.13.0");
     for (const [path, hash] of Object.entries(p.activeRuntime.sourceHashes)) {
       expect(hash).toBe(artifacts.sha256(readFileSync(path)));
@@ -205,6 +213,45 @@ describe("reproducible provider comparison (all transports synthetic)", () => {
       } finally {
         vi.mocked(readFileSync).mockImplementation(actual.readFileSync);
       }
+    }
+  });
+  it.each(["model", "thresholds"] as const)("isolates an active %s change from historical contracts and reducer replay", async change => {
+    const network = vi.fn(() => { throw Error("unexpected provider execution"); });
+    vi.stubGlobal("fetch", network);
+    const beforePlan = artifacts.makePlan(benchmark);
+    const beforeReplay = await runComparison(benchmark, beforePlan, { mode: "offline", now: () => 0, transport: demonstrated() });
+    expect(beforeReplay.results.some(row => row.replay.proposalAccepted)).toBe(true);
+    const oldPlan = plan();
+    const oldReview = review(oldPlan);
+    expect(artifacts.reviewGate(benchmark, oldPlan, oldReview).ready).toBe(true);
+    const originalThresholds = { ...activeThresholds };
+    const actual = await vi.importActual<typeof import("node:fs")>("node:fs");
+    const path = change === "model" ? "lib/jev.ts" : "lib/lesson-runtime/conversation-observer-contract.ts";
+    if (change === "model") simulatedActivePolicy.model = "jev-future-test-only";
+    else Object.assign(activeThresholds, { HIGH: originalThresholds.HIGH === 0.95 ? 0.96 : 0.95 });
+    // Simulate the changed source bytes as well as the exported policy value,
+    // without editing production files or the frozen snapshot.
+    vi.mocked(readFileSync).mockImplementation(((file: string, encoding?: BufferEncoding) => {
+      const source = actual.readFileSync(file, "utf8");
+      const text = file === path ? source + `\n// Test-only simulated active ${change} policy change.\n` : source;
+      return encoding ? text : Buffer.from(text);
+    }) as typeof readFileSync);
+    try {
+      const changed = artifacts.loadBenchmark();
+      expect(changed.cases).toEqual(benchmark.cases);
+      expect(changed.cases.map(c => c.hashes)).toEqual(changed.manifest.cases);
+      expect(changed.activeRuntime.model).toBe(change === "model" ? "jev-future-test-only" : benchmark.activeRuntime.model);
+      expect(changed.activeRuntime.sourceHashes[path]).not.toBe(benchmark.activeRuntime.sourceHashes[path]);
+      const afterReplay = await runComparison(changed, artifacts.makePlan(changed), { mode: "offline", now: () => 0, transport: demonstrated() });
+      expect(afterReplay.results).toEqual(beforeReplay.results);
+      const changedPlan = artifacts.makePlan(changed, options);
+      expect(changedPlan.planHash).not.toBe(oldPlan.planHash);
+      expect(artifacts.reviewGate(changed, changedPlan, oldReview).ready).toBe(false);
+      expect(network).not.toHaveBeenCalled();
+    } finally {
+      simulatedActivePolicy.model = null;
+      Object.assign(activeThresholds, originalThresholds);
+      vi.mocked(readFileSync).mockImplementation(actual.readFileSync);
     }
   });
   it("records active source changes as run provenance without regenerating historical contracts", async () => {

@@ -62,7 +62,6 @@ export function loadBenchmark() {
     cases: { id: string; inputSha256: string; questionsSha256: string; projectionSha256: string }[];
     jev: { model: "jev-1.13.0"; endpoint: string };
   };
-  assert.equal(JEV_MODEL, "jev-1.14.0", "unreviewed active model upgrade");
   assert.equal(manifest.jev.model, "jev-1.13.0", "historical Jev model must stay pinned");
   assert.equal(manifest.providerRunsAllowed, false, "frozen permission must remain false");
   for (const [path, hash] of Object.entries({ ...manifest.files, ...manifest.replaySources }))

@@ -2,9 +2,6 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import type { CATCHING_UNICORNS_LESSON } from "../lib/lesson-runtime/catching-unicorns-lesson";
-import { CATCHING_UNICORNS_LESSON as activeLesson } from "../lib/lesson-runtime/catching-unicorns-lesson";
-import * as activeContract from "../lib/lesson-runtime/conversation-observer-contract";
-import { JEV_MODEL } from "../lib/jev";
 import { JEV_MODEL as HISTORICAL_JEV_MODEL } from "../lib/experiments/issue-42/historical-v1/lib/jev";
 import {
   conversationObserverState,
@@ -28,25 +25,6 @@ validateBenchmarkCorpus(corpus, lessons);
 const manifest = JSON.parse(readFileSync(dir + "manifest.json", "utf8"));
 
 describe("frozen classifier benchmark v1 (no provider calls)", () => {
-  it("keeps current Jev 1.14 source filtering and evidence projection separate from historical Jev 1.13", () => {
-    const input = { lesson: activeLesson, nodeId: "exographics", transcriptRevision: 7,
-      transcript: "Tutor: Explain.\nChild: Symbols represent abstract ideas.\nTutor: Okay.\nChild: Sounds good." };
-    expect(JEV_MODEL).toBe("jev-1.14.0");
-    expect(HISTORICAL_JEV_MODEL).toBe(manifest.jev.model);
-    expect(Object.keys(activeContract.learnerSourceOptions(input.transcript))).toEqual(["none", "message_1"]);
-    expect(activeContract.conversationObserverState(input)).toHaveProperty("evidenceMessages", [
-      { messageIndex: 0, speaker: "Tutor", text: "Explain." },
-      { messageIndex: 1, speaker: "Child", text: "Symbols represent abstract ideas." },
-      { messageIndex: 2, speaker: "Tutor", text: "Okay." },
-      { messageIndex: 3, speaker: "Child", text: "Sounds good." },
-    ]);
-    expect(conversationObserverState(input)).not.toHaveProperty("evidenceMessages");
-    const historical = conversationStateQuestions(input.lesson, input.nodeId, input.transcript);
-    const active = activeContract.conversationStateQuestions(input.lesson, input.nodeId, input.transcript);
-    expect(Object.keys(historical["source_abstract-concepts"].criteria)).toEqual(["none", "message_1", "message_3"]);
-    expect(Object.keys(active["source_abstract-concepts"].criteria)).toEqual(["none", "message_1"]);
-    expect(activeContract.CONVERSATION_CLASSIFICATION_THRESHOLDS).toEqual(CONVERSATION_CLASSIFICATION_THRESHOLDS);
-  });
   it("validates the closed draft labels, identities, evidence and split isolation", () => {
     validateBenchmarkCorpus(corpus, lessons);
     expect(corpus.cases).toHaveLength(71);
@@ -67,6 +45,10 @@ describe("frozen classifier benchmark v1 (no provider calls)", () => {
     const old = manifest.historicalCounting;
     expect(sha256(execFileSync("git", ["show", `${old.gitRef}:${old.path}`]))).toBe(old.sha256);
     expect(readJson(dir + "lessons.json")).toEqual(lessons);
+    expect(HISTORICAL_JEV_MODEL).toBe("jev-1.13.0");
+    expect(CONVERSATION_CLASSIFICATION_THRESHOLDS).toEqual({
+      HIGH: 0.9, LOW: 0.1, COMPETITOR_CEILING: 0.2, MIN_MARGIN: 0.7,
+    });
     expect(manifest.jev).toEqual({
       model: "jev-1.13.0",
       endpoint: "https://api.typesafe.ai/v1/systemone",
