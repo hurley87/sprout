@@ -146,6 +146,7 @@ describe("reproducible provider comparison (all transports synthetic)", () => {
     expect(p.providers.jev.model).toBe("jev-1.13.0");
     expect(p.activeRuntime.sourceHashes).toEqual(artifacts.ACTIVE_MODEL_COMPATIBILITY);
     expect(p.activeRuntime.recoverySourceHashes).toEqual(artifacts.RECOVERY_SOURCE_COMPATIBILITY);
+    expect(p.activeRuntime.shortLessonSourceHashes).toEqual(artifacts.SHORT_LESSON_COMPATIBILITY);
     expect(p.mappingPolicyHash).not.toBe(
       artifacts.makePlan(benchmark, { mappingPolicy: { minProbability: 0.7, minConfidence: 0.6, minMargin: 0.3 } })
         .mappingPolicyHash,

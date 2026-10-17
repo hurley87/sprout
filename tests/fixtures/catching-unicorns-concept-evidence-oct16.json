@@ -1,0 +1,1729 @@
+{
+  "source": "October 16, 2026 demo diagnostic export, runtime 61325729-348d-4c2a-8c1f-77b753d950cb. Exact recorded classifier inputs and normalized Jev outputs; no reconstructed scores.",
+  "checkpoints": [
+    {
+      "nodeId": "exogram",
+      "transcriptRevision": 46,
+      "transcript": "Tutor: Okay, what\nTutor: is an exogram?\nChild: It's information that can be stored external to the brain\nTutor: Nicely put. Yeah, that's the idea. All right, let's move on.",
+      "outputs": {
+        "objectiveState": {
+          "choice": "unclear_or_incomplete",
+          "confidence": 0.61,
+          "probabilities": {
+            "completed": 0.3,
+            "incorrect": 0.01,
+            "unclear_or_incomplete": 0.69,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "confirmed_completion",
+          "confidence": 0.99,
+          "probabilities": {
+            "confirmed_completion": 0.99,
+            "clarifying": 0,
+            "helping": 0,
+            "asking": 0,
+            "other": 0.01
+          }
+        },
+        "concepts": {
+          "concept_engram-biological": {
+            "choice": "not_yet",
+            "confidence": 0.56,
+            "probabilities": {
+              "not_yet": 0.67,
+              "partial": 0.16,
+              "demonstrated_independent": 0.15,
+              "demonstrated_prompted": 0.02
+            }
+          },
+          "concept_exogram-non-biological": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.45,
+            "probabilities": {
+              "not_yet": 0.01,
+              "partial": 0.37,
+              "demonstrated_independent": 0.59,
+              "demonstrated_prompted": 0.03
+            }
+          }
+        },
+        "sources": {
+          "source_engram-biological": {
+            "choice": "none",
+            "confidence": 0.56,
+            "probabilities": {
+              "none": 0.78,
+              "message_1": 0.22
+            }
+          },
+          "source_exogram-non-biological": {
+            "choice": "message_1",
+            "confidence": 0.92,
+            "probabilities": {
+              "none": 0.04,
+              "message_1": 0.96
+            }
+          }
+        }
+      },
+      "replayOutputs": {
+        "objectiveState": {
+          "choice": "unclear_or_incomplete",
+          "confidence": 0.81,
+          "probabilities": {
+            "completed": 0.15,
+            "incorrect": 0,
+            "unclear_or_incomplete": 0.85,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "confirmed_completion",
+          "confidence": 1,
+          "probabilities": {
+            "confirmed_completion": 1,
+            "clarifying": 0,
+            "helping": 0,
+            "asking": 0,
+            "other": 0
+          }
+        },
+        "concepts": {
+          "concept_engram-biological": {
+            "choice": "not_yet",
+            "confidence": 0.73,
+            "probabilities": {
+              "not_yet": 0.8,
+              "partial": 0.14,
+              "demonstrated_independent": 0.06,
+              "demonstrated_prompted": 0
+            }
+          },
+          "concept_exogram-non-biological": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.99,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.01,
+              "demonstrated_independent": 0.99,
+              "demonstrated_prompted": 0
+            }
+          }
+        },
+        "sources": {
+          "source_engram-biological": {
+            "choice": "none",
+            "confidence": 0.58,
+            "probabilities": {
+              "none": 0.79,
+              "message_1": 0.21
+            }
+          },
+          "source_exogram-non-biological": {
+            "choice": "message_1",
+            "confidence": 1,
+            "probabilities": {
+              "none": 0,
+              "message_1": 1
+            }
+          }
+        }
+      }
+    },
+    {
+      "nodeId": "compare",
+      "transcriptRevision": 85,
+      "transcript": "Tutor: Compare engrams and exograms. What differences does the manuscript describe?\nChild: Right, so here\nChild: , Um, exograms are more durable\nChild: and they are easier to share and revise\nTutor: Yeah, that's what the manuscript\nTutor: says. Okay, seems like we've got it. Let's move on.",
+      "outputs": {
+        "objectiveState": {
+          "choice": "unclear_or_incomplete",
+          "confidence": 0.5,
+          "probabilities": {
+            "completed": 0.39,
+            "incorrect": 0.01,
+            "unclear_or_incomplete": 0.6,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "confirmed_completion",
+          "confidence": 1,
+          "probabilities": {
+            "confirmed_completion": 1,
+            "clarifying": 0,
+            "helping": 0,
+            "asking": 0,
+            "other": 0
+          }
+        },
+        "concepts": {
+          "concept_engram-biological": {
+            "choice": "not_yet",
+            "confidence": 0.68,
+            "probabilities": {
+              "not_yet": 0.76,
+              "partial": 0.24,
+              "demonstrated_independent": 0,
+              "demonstrated_prompted": 0
+            }
+          },
+          "concept_exogram-non-biological": {
+            "choice": "partial",
+            "confidence": 0.39,
+            "probabilities": {
+              "not_yet": 0.42,
+              "partial": 0.54,
+              "demonstrated_independent": 0.03,
+              "demonstrated_prompted": 0.01
+            }
+          },
+          "concept_exogram-durability": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.8,
+            "probabilities": {
+              "not_yet": 0.01,
+              "partial": 0.09,
+              "demonstrated_independent": 0.85,
+              "demonstrated_prompted": 0.05
+            }
+          },
+          "concept_exogram-shareability": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.72,
+            "probabilities": {
+              "not_yet": 0.01,
+              "partial": 0.14,
+              "demonstrated_independent": 0.79,
+              "demonstrated_prompted": 0.06
+            }
+          },
+          "concept_exogram-revisability": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.84,
+            "probabilities": {
+              "not_yet": 0.01,
+              "partial": 0.08,
+              "demonstrated_independent": 0.88,
+              "demonstrated_prompted": 0.03
+            }
+          }
+        },
+        "sources": {
+          "source_engram-biological": {
+            "choice": "none",
+            "confidence": 0.96,
+            "probabilities": {
+              "none": 0.98,
+              "message_1": 0.02
+            }
+          },
+          "source_exogram-non-biological": {
+            "choice": "none",
+            "confidence": 0.76,
+            "probabilities": {
+              "none": 0.88,
+              "message_1": 0.12
+            }
+          },
+          "source_exogram-durability": {
+            "choice": "message_1",
+            "confidence": 0.96,
+            "probabilities": {
+              "none": 0.02,
+              "message_1": 0.98
+            }
+          },
+          "source_exogram-shareability": {
+            "choice": "message_1",
+            "confidence": 0.94,
+            "probabilities": {
+              "none": 0.03,
+              "message_1": 0.97
+            }
+          },
+          "source_exogram-revisability": {
+            "choice": "message_1",
+            "confidence": 0.98,
+            "probabilities": {
+              "none": 0.01,
+              "message_1": 0.99
+            }
+          }
+        }
+      },
+      "replayOutputs": {
+        "objectiveState": {
+          "choice": "unclear_or_incomplete",
+          "confidence": 0.54,
+          "probabilities": {
+            "completed": 0.35,
+            "incorrect": 0.02,
+            "unclear_or_incomplete": 0.63,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "confirmed_completion",
+          "confidence": 1,
+          "probabilities": {
+            "confirmed_completion": 1,
+            "clarifying": 0,
+            "helping": 0,
+            "asking": 0,
+            "other": 0
+          }
+        },
+        "concepts": {
+          "concept_engram-biological": {
+            "choice": "not_yet",
+            "confidence": 0.96,
+            "probabilities": {
+              "not_yet": 0.97,
+              "partial": 0.03,
+              "demonstrated_independent": 0,
+              "demonstrated_prompted": 0
+            }
+          },
+          "concept_exogram-non-biological": {
+            "choice": "not_yet",
+            "confidence": 0.47,
+            "probabilities": {
+              "not_yet": 0.6,
+              "partial": 0.35,
+              "demonstrated_independent": 0.05,
+              "demonstrated_prompted": 0
+            }
+          },
+          "concept_exogram-durability": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.85,
+            "probabilities": {
+              "not_yet": 0.01,
+              "partial": 0.09,
+              "demonstrated_independent": 0.89,
+              "demonstrated_prompted": 0.01
+            }
+          },
+          "concept_exogram-shareability": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.92,
+            "probabilities": {
+              "not_yet": 0.01,
+              "partial": 0.04,
+              "demonstrated_independent": 0.94,
+              "demonstrated_prompted": 0.01
+            }
+          },
+          "concept_exogram-revisability": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.87,
+            "probabilities": {
+              "not_yet": 0.02,
+              "partial": 0.07,
+              "demonstrated_independent": 0.9,
+              "demonstrated_prompted": 0.01
+            }
+          }
+        },
+        "sources": {
+          "source_engram-biological": {
+            "choice": "none",
+            "confidence": 0.98,
+            "probabilities": {
+              "none": 0.99,
+              "message_1": 0.01
+            }
+          },
+          "source_exogram-non-biological": {
+            "choice": "none",
+            "confidence": 0.58,
+            "probabilities": {
+              "none": 0.79,
+              "message_1": 0.21
+            }
+          },
+          "source_exogram-durability": {
+            "choice": "message_1",
+            "confidence": 0.98,
+            "probabilities": {
+              "none": 0.01,
+              "message_1": 0.99
+            }
+          },
+          "source_exogram-shareability": {
+            "choice": "message_1",
+            "confidence": 0.98,
+            "probabilities": {
+              "none": 0.01,
+              "message_1": 0.99
+            }
+          },
+          "source_exogram-revisability": {
+            "choice": "message_1",
+            "confidence": 0.98,
+            "probabilities": {
+              "none": 0.01,
+              "message_1": 0.99
+            }
+          }
+        }
+      }
+    },
+    {
+      "nodeId": "exographics",
+      "transcriptRevision": 102,
+      "transcript": "Tutor: So,\nTutor: what does exographics mean?\nChild: So this is when we use symbols\nChild: ... Something like writing or even math",
+      "outputs": {
+        "objectiveState": {
+          "choice": "unclear_or_incomplete",
+          "confidence": 0.9,
+          "probabilities": {
+            "completed": 0.07,
+            "incorrect": 0.01,
+            "unclear_or_incomplete": 0.92,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "asking",
+          "confidence": 0.51,
+          "probabilities": {
+            "confirmed_completion": 0,
+            "clarifying": 0.05,
+            "helping": 0.01,
+            "asking": 0.61,
+            "other": 0.33
+          }
+        },
+        "concepts": {
+          "concept_visual-symbols": {
+            "choice": "partial",
+            "confidence": 0.69,
+            "probabilities": {
+              "not_yet": 0.01,
+              "partial": 0.77,
+              "demonstrated_independent": 0.2,
+              "demonstrated_prompted": 0.02
+            }
+          },
+          "concept_cultural-agreement": {
+            "choice": "partial",
+            "confidence": 0.75,
+            "probabilities": {
+              "not_yet": 0.18,
+              "partial": 0.81,
+              "demonstrated_independent": 0.01,
+              "demonstrated_prompted": 0
+            }
+          },
+          "concept_beyond-prose": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.83,
+            "probabilities": {
+              "not_yet": 0.01,
+              "partial": 0.11,
+              "demonstrated_independent": 0.87,
+              "demonstrated_prompted": 0.01
+            }
+          },
+          "concept_abstract-concepts": {
+            "choice": "partial",
+            "confidence": 0.75,
+            "probabilities": {
+              "not_yet": 0.16,
+              "partial": 0.81,
+              "demonstrated_independent": 0.03,
+              "demonstrated_prompted": 0
+            }
+          }
+        },
+        "sources": {
+          "source_visual-symbols": {
+            "choice": "message_1",
+            "confidence": 0.7,
+            "probabilities": {
+              "none": 0.15,
+              "message_1": 0.85
+            }
+          },
+          "source_cultural-agreement": {
+            "choice": "none",
+            "confidence": 0.78,
+            "probabilities": {
+              "none": 0.89,
+              "message_1": 0.11
+            }
+          },
+          "source_beyond-prose": {
+            "choice": "message_1",
+            "confidence": 0.96,
+            "probabilities": {
+              "none": 0.02,
+              "message_1": 0.98
+            }
+          },
+          "source_abstract-concepts": {
+            "choice": "none",
+            "confidence": 0.16,
+            "probabilities": {
+              "none": 0.58,
+              "message_1": 0.42
+            }
+          }
+        }
+      },
+      "replayOutputs": {
+        "objectiveState": {
+          "choice": "unclear_or_incomplete",
+          "confidence": 0.9,
+          "probabilities": {
+            "completed": 0.06,
+            "incorrect": 0.02,
+            "unclear_or_incomplete": 0.92,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "asking",
+          "confidence": 0.51,
+          "probabilities": {
+            "confirmed_completion": 0,
+            "clarifying": 0.05,
+            "helping": 0.02,
+            "asking": 0.61,
+            "other": 0.32
+          }
+        },
+        "concepts": {
+          "concept_visual-symbols": {
+            "choice": "partial",
+            "confidence": 0.32,
+            "probabilities": {
+              "not_yet": 0.02,
+              "partial": 0.49,
+              "demonstrated_independent": 0.49,
+              "demonstrated_prompted": 0
+            }
+          },
+          "concept_cultural-agreement": {
+            "choice": "not_yet",
+            "confidence": 0.39,
+            "probabilities": {
+              "not_yet": 0.54,
+              "partial": 0.45,
+              "demonstrated_independent": 0.01,
+              "demonstrated_prompted": 0
+            }
+          },
+          "concept_beyond-prose": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.93,
+            "probabilities": {
+              "not_yet": 0.01,
+              "partial": 0.03,
+              "demonstrated_independent": 0.95,
+              "demonstrated_prompted": 0.01
+            }
+          },
+          "concept_abstract-concepts": {
+            "choice": "partial",
+            "confidence": 0.56,
+            "probabilities": {
+              "not_yet": 0.22,
+              "partial": 0.67,
+              "demonstrated_independent": 0.11,
+              "demonstrated_prompted": 0
+            }
+          }
+        },
+        "sources": {
+          "source_visual-symbols": {
+            "choice": "message_1",
+            "confidence": 0.88,
+            "probabilities": {
+              "none": 0.06,
+              "message_1": 0.94
+            }
+          },
+          "source_cultural-agreement": {
+            "choice": "none",
+            "confidence": 0.66,
+            "probabilities": {
+              "none": 0.83,
+              "message_1": 0.17
+            }
+          },
+          "source_beyond-prose": {
+            "choice": "message_1",
+            "confidence": 0.96,
+            "probabilities": {
+              "none": 0.02,
+              "message_1": 0.98
+            }
+          },
+          "source_abstract-concepts": {
+            "choice": "message_1",
+            "confidence": 0.08,
+            "probabilities": {
+              "none": 0.46,
+              "message_1": 0.54
+            }
+          }
+        }
+      }
+    },
+    {
+      "nodeId": "exographics",
+      "transcriptRevision": 111,
+      "transcript": "Tutor: So,\nTutor: what does exographics mean?\nChild: So this is when we use symbols\nChild: ... Something like writing or even math\nChild: . Um, some sort of external representation to discover new ideas",
+      "outputs": {
+        "objectiveState": {
+          "choice": "unclear_or_incomplete",
+          "confidence": 0.79,
+          "probabilities": {
+            "completed": 0.13,
+            "incorrect": 0.04,
+            "unclear_or_incomplete": 0.83,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "asking",
+          "confidence": 0.54,
+          "probabilities": {
+            "confirmed_completion": 0,
+            "clarifying": 0.05,
+            "helping": 0.01,
+            "asking": 0.63,
+            "other": 0.31
+          }
+        },
+        "concepts": {
+          "concept_visual-symbols": {
+            "choice": "partial",
+            "confidence": 0.49,
+            "probabilities": {
+              "not_yet": 0.01,
+              "partial": 0.62,
+              "demonstrated_independent": 0.35,
+              "demonstrated_prompted": 0.02
+            }
+          },
+          "concept_cultural-agreement": {
+            "choice": "partial",
+            "confidence": 0.61,
+            "probabilities": {
+              "not_yet": 0.28,
+              "partial": 0.71,
+              "demonstrated_independent": 0.01,
+              "demonstrated_prompted": 0
+            }
+          },
+          "concept_beyond-prose": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.88,
+            "probabilities": {
+              "not_yet": 0.01,
+              "partial": 0.07,
+              "demonstrated_independent": 0.91,
+              "demonstrated_prompted": 0.01
+            }
+          },
+          "concept_abstract-concepts": {
+            "choice": "partial",
+            "confidence": 0.69,
+            "probabilities": {
+              "not_yet": 0.09,
+              "partial": 0.77,
+              "demonstrated_independent": 0.13,
+              "demonstrated_prompted": 0.01
+            }
+          }
+        },
+        "sources": {
+          "source_visual-symbols": {
+            "choice": "message_1",
+            "confidence": 0.8,
+            "probabilities": {
+              "none": 0.1,
+              "message_1": 0.9
+            }
+          },
+          "source_cultural-agreement": {
+            "choice": "none",
+            "confidence": 0.84,
+            "probabilities": {
+              "none": 0.92,
+              "message_1": 0.08
+            }
+          },
+          "source_beyond-prose": {
+            "choice": "message_1",
+            "confidence": 0.96,
+            "probabilities": {
+              "none": 0.02,
+              "message_1": 0.98
+            }
+          },
+          "source_abstract-concepts": {
+            "choice": "none",
+            "confidence": 0.14,
+            "probabilities": {
+              "none": 0.57,
+              "message_1": 0.43
+            }
+          }
+        }
+      },
+      "replayOutputs": {
+        "objectiveState": {
+          "choice": "unclear_or_incomplete",
+          "confidence": 0.8,
+          "probabilities": {
+            "completed": 0.12,
+            "incorrect": 0.04,
+            "unclear_or_incomplete": 0.84,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "asking",
+          "confidence": 0.52,
+          "probabilities": {
+            "confirmed_completion": 0,
+            "clarifying": 0.07,
+            "helping": 0.01,
+            "asking": 0.62,
+            "other": 0.3
+          }
+        },
+        "concepts": {
+          "concept_visual-symbols": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.64,
+            "probabilities": {
+              "not_yet": 0.01,
+              "partial": 0.26,
+              "demonstrated_independent": 0.73,
+              "demonstrated_prompted": 0
+            }
+          },
+          "concept_cultural-agreement": {
+            "choice": "not_yet",
+            "confidence": 0.56,
+            "probabilities": {
+              "not_yet": 0.67,
+              "partial": 0.32,
+              "demonstrated_independent": 0.01,
+              "demonstrated_prompted": 0
+            }
+          },
+          "concept_beyond-prose": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.95,
+            "probabilities": {
+              "not_yet": 0.01,
+              "partial": 0.03,
+              "demonstrated_independent": 0.96,
+              "demonstrated_prompted": 0
+            }
+          },
+          "concept_abstract-concepts": {
+            "choice": "partial",
+            "confidence": 0.48,
+            "probabilities": {
+              "not_yet": 0.16,
+              "partial": 0.61,
+              "demonstrated_independent": 0.23,
+              "demonstrated_prompted": 0
+            }
+          }
+        },
+        "sources": {
+          "source_visual-symbols": {
+            "choice": "message_1",
+            "confidence": 0.94,
+            "probabilities": {
+              "none": 0.03,
+              "message_1": 0.97
+            }
+          },
+          "source_cultural-agreement": {
+            "choice": "none",
+            "confidence": 0.76,
+            "probabilities": {
+              "none": 0.88,
+              "message_1": 0.12
+            }
+          },
+          "source_beyond-prose": {
+            "choice": "message_1",
+            "confidence": 0.98,
+            "probabilities": {
+              "none": 0.01,
+              "message_1": 0.99
+            }
+          },
+          "source_abstract-concepts": {
+            "choice": "message_1",
+            "confidence": 0.28,
+            "probabilities": {
+              "none": 0.36,
+              "message_1": 0.64
+            }
+          }
+        }
+      }
+    },
+    {
+      "nodeId": "exographics",
+      "transcriptRevision": 158,
+      "transcript": "Tutor: So,\nTutor: what does exographics mean?\nChild: So this is when we use symbols\nChild: ... Something like writing or even math\nChild: . Um, some sort of external representation to discover new ideas\nTutor: Okay,\nChild: That wouldn't have been able to discover otherwise\nTutor: I see. And how do those symbols\nTutor: end up meaning the same thing to people?\nChild: Well, take math as an example, it\nChild: Um\nChild: , We have a shared understanding around what the numbers one, two, and three\nTutor: Mm-hmm.\nChild: mean. They represent abstract concepts",
+      "outputs": {
+        "objectiveState": {
+          "choice": "unclear_or_incomplete",
+          "confidence": 0.69,
+          "probabilities": {
+            "completed": 0.23,
+            "incorrect": 0.01,
+            "unclear_or_incomplete": 0.75,
+            "unresolved_help": 0.01,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "clarifying",
+          "confidence": 0.33,
+          "probabilities": {
+            "confirmed_completion": 0.01,
+            "clarifying": 0.46,
+            "helping": 0.02,
+            "asking": 0.42,
+            "other": 0.09
+          }
+        },
+        "concepts": {
+          "concept_visual-symbols": {
+            "choice": "partial",
+            "confidence": 0.35,
+            "probabilities": {
+              "not_yet": 0.02,
+              "partial": 0.51,
+              "demonstrated_independent": 0.43,
+              "demonstrated_prompted": 0.04
+            }
+          },
+          "concept_cultural-agreement": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.28,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.1,
+              "demonstrated_independent": 0.46,
+              "demonstrated_prompted": 0.44
+            }
+          },
+          "concept_beyond-prose": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.87,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.07,
+              "demonstrated_independent": 0.9,
+              "demonstrated_prompted": 0.03
+            }
+          },
+          "concept_abstract-concepts": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.69,
+            "probabilities": {
+              "not_yet": 0.01,
+              "partial": 0.14,
+              "demonstrated_independent": 0.77,
+              "demonstrated_prompted": 0.08
+            }
+          }
+        },
+        "sources": {
+          "source_visual-symbols": {
+            "choice": "message_1",
+            "confidence": 0.7,
+            "probabilities": {
+              "none": 0.13,
+              "message_1": 0.76,
+              "message_3": 0,
+              "message_5": 0.1,
+              "message_7": 0.01
+            }
+          },
+          "source_cultural-agreement": {
+            "choice": "message_5",
+            "confidence": 0.96,
+            "probabilities": {
+              "none": 0.01,
+              "message_1": 0,
+              "message_3": 0,
+              "message_5": 0.97,
+              "message_7": 0.02
+            }
+          },
+          "source_beyond-prose": {
+            "choice": "message_1",
+            "confidence": 0.45,
+            "probabilities": {
+              "none": 0.01,
+              "message_1": 0.56,
+              "message_3": 0,
+              "message_5": 0.42,
+              "message_7": 0.01
+            }
+          },
+          "source_abstract-concepts": {
+            "choice": "message_7",
+            "confidence": 0.95,
+            "probabilities": {
+              "none": 0.01,
+              "message_1": 0.01,
+              "message_3": 0,
+              "message_5": 0.02,
+              "message_7": 0.96
+            }
+          }
+        }
+      },
+      "replayOutputs": {
+        "objectiveState": {
+          "choice": "unclear_or_incomplete",
+          "confidence": 0.69,
+          "probabilities": {
+            "completed": 0.23,
+            "incorrect": 0.01,
+            "unclear_or_incomplete": 0.75,
+            "unresolved_help": 0.01,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "clarifying",
+          "confidence": 0.41,
+          "probabilities": {
+            "confirmed_completion": 0.02,
+            "clarifying": 0.53,
+            "helping": 0.02,
+            "asking": 0.36,
+            "other": 0.07
+          }
+        },
+        "concepts": {
+          "concept_visual-symbols": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.53,
+            "probabilities": {
+              "not_yet": 0.03,
+              "partial": 0.31,
+              "demonstrated_independent": 0.65,
+              "demonstrated_prompted": 0.01
+            }
+          },
+          "concept_cultural-agreement": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.95,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.02,
+              "demonstrated_independent": 0.96,
+              "demonstrated_prompted": 0.02
+            }
+          },
+          "concept_beyond-prose": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.95,
+            "probabilities": {
+              "not_yet": 0.01,
+              "partial": 0.02,
+              "demonstrated_independent": 0.96,
+              "demonstrated_prompted": 0.01
+            }
+          },
+          "concept_abstract-concepts": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.81,
+            "probabilities": {
+              "not_yet": 0.01,
+              "partial": 0.1,
+              "demonstrated_independent": 0.86,
+              "demonstrated_prompted": 0.03
+            }
+          }
+        },
+        "sources": {
+          "source_visual-symbols": {
+            "choice": "message_1",
+            "confidence": 0.89,
+            "probabilities": {
+              "none": 0.04,
+              "message_1": 0.91,
+              "message_3": 0,
+              "message_5": 0.05,
+              "message_7": 0
+            }
+          },
+          "source_cultural-agreement": {
+            "choice": "message_5",
+            "confidence": 1,
+            "probabilities": {
+              "none": 0,
+              "message_1": 0,
+              "message_3": 0,
+              "message_5": 1,
+              "message_7": 0
+            }
+          },
+          "source_beyond-prose": {
+            "choice": "message_1",
+            "confidence": 0.94,
+            "probabilities": {
+              "none": 0,
+              "message_1": 0.95,
+              "message_3": 0,
+              "message_5": 0.05,
+              "message_7": 0
+            }
+          },
+          "source_abstract-concepts": {
+            "choice": "message_7",
+            "confidence": 0.92,
+            "probabilities": {
+              "none": 0.01,
+              "message_1": 0.02,
+              "message_3": 0,
+              "message_5": 0.03,
+              "message_7": 0.94
+            }
+          }
+        }
+      }
+    },
+    {
+      "nodeId": "exographics",
+      "transcriptRevision": 186,
+      "transcript": "Tutor: So,\nTutor: what does exographics mean?\nChild: So this is when we use symbols\nChild: ... Something like writing or even math\nChild: . Um, some sort of external representation to discover new ideas\nTutor: Okay,\nChild: That wouldn't have been able to discover otherwise\nTutor: I see. And how do those symbols\nTutor: end up meaning the same thing to people?\nChild: Well, take math as an example, it\nChild: Um\nChild: , We have a shared understanding around what the numbers one, two, and three\nTutor: Mm-hmm.\nChild: mean. They represent abstract concepts\nChild: . Um, but because\nChild: We have this shared language. It makes it easier for us to discuss those abstract ideas\nTutor: Right, yeah. That\nTutor: makes sense.\nTutor: Okay, I'm\nTutor: with you. Let's\nTutor: go on.",
+      "outputs": {
+        "objectiveState": {
+          "choice": "completed",
+          "confidence": 0.61,
+          "probabilities": {
+            "completed": 0.6900000000000001,
+            "incorrect": 0.02,
+            "unclear_or_incomplete": 0.29,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "confirmed_completion",
+          "confidence": 0.95,
+          "probabilities": {
+            "confirmed_completion": 0.96,
+            "clarifying": 0.01,
+            "helping": 0,
+            "asking": 0.02,
+            "other": 0.01
+          }
+        },
+        "concepts": {
+          "concept_visual-symbols": {
+            "choice": "partial",
+            "confidence": 0.4,
+            "probabilities": {
+              "not_yet": 0.02,
+              "partial": 0.55,
+              "demonstrated_independent": 0.4,
+              "demonstrated_prompted": 0.03
+            }
+          },
+          "concept_cultural-agreement": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.43,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.03,
+              "demonstrated_independent": 0.57,
+              "demonstrated_prompted": 0.4
+            }
+          },
+          "concept_beyond-prose": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.93,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.03,
+              "demonstrated_independent": 0.95,
+              "demonstrated_prompted": 0.02
+            }
+          },
+          "concept_abstract-concepts": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.88,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.05,
+              "demonstrated_independent": 0.91,
+              "demonstrated_prompted": 0.04
+            }
+          }
+        },
+        "sources": {
+          "source_visual-symbols": {
+            "choice": "message_1",
+            "confidence": 0.71,
+            "probabilities": {
+              "none": 0.17,
+              "message_1": 0.77,
+              "message_3": 0,
+              "message_5": 0.05,
+              "message_7": 0.01
+            }
+          },
+          "source_cultural-agreement": {
+            "choice": "message_5",
+            "confidence": 0.56,
+            "probabilities": {
+              "none": 0.01,
+              "message_1": 0,
+              "message_3": 0,
+              "message_5": 0.65,
+              "message_7": 0.34
+            }
+          },
+          "source_beyond-prose": {
+            "choice": "message_5",
+            "confidence": 0.37,
+            "probabilities": {
+              "none": 0.01,
+              "message_1": 0.47,
+              "message_3": 0,
+              "message_5": 0.5,
+              "message_7": 0.02
+            }
+          },
+          "source_abstract-concepts": {
+            "choice": "message_7",
+            "confidence": 0.92,
+            "probabilities": {
+              "none": 0.01,
+              "message_1": 0.03,
+              "message_3": 0,
+              "message_5": 0.02,
+              "message_7": 0.94
+            }
+          }
+        }
+      },
+      "replayOutputs": {
+        "objectiveState": {
+          "choice": "completed",
+          "confidence": 0.62,
+          "probabilities": {
+            "completed": 0.7,
+            "incorrect": 0.01,
+            "unclear_or_incomplete": 0.29,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "confirmed_completion",
+          "confidence": 0.92,
+          "probabilities": {
+            "confirmed_completion": 0.94,
+            "clarifying": 0.02,
+            "helping": 0,
+            "asking": 0.03,
+            "other": 0.01
+          }
+        },
+        "concepts": {
+          "concept_visual-symbols": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.47,
+            "probabilities": {
+              "not_yet": 0.06,
+              "partial": 0.33,
+              "demonstrated_independent": 0.6,
+              "demonstrated_prompted": 0.01
+            }
+          },
+          "concept_cultural-agreement": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.88,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.02,
+              "demonstrated_independent": 0.91,
+              "demonstrated_prompted": 0.07
+            }
+          },
+          "concept_beyond-prose": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.97,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.01,
+              "demonstrated_independent": 0.98,
+              "demonstrated_prompted": 0.01
+            }
+          },
+          "concept_abstract-concepts": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.89,
+            "probabilities": {
+              "not_yet": 0.01,
+              "partial": 0.04,
+              "demonstrated_independent": 0.92,
+              "demonstrated_prompted": 0.03
+            }
+          }
+        },
+        "sources": {
+          "source_visual-symbols": {
+            "choice": "message_1",
+            "confidence": 0.85,
+            "probabilities": {
+              "none": 0.07,
+              "message_1": 0.88,
+              "message_3": 0,
+              "message_5": 0.04,
+              "message_7": 0.01
+            }
+          },
+          "source_cultural-agreement": {
+            "choice": "message_5",
+            "confidence": 0.9,
+            "probabilities": {
+              "none": 0,
+              "message_1": 0,
+              "message_3": 0,
+              "message_5": 0.92,
+              "message_7": 0.08
+            }
+          },
+          "source_beyond-prose": {
+            "choice": "message_1",
+            "confidence": 0.94,
+            "probabilities": {
+              "none": 0,
+              "message_1": 0.95,
+              "message_3": 0,
+              "message_5": 0.05,
+              "message_7": 0
+            }
+          },
+          "source_abstract-concepts": {
+            "choice": "message_7",
+            "confidence": 0.94,
+            "probabilities": {
+              "none": 0,
+              "message_1": 0.02,
+              "message_3": 0,
+              "message_5": 0.03,
+              "message_7": 0.95
+            }
+          }
+        }
+      }
+    }
+  ],
+  "replay": "Normalized Jev 1.14.0 outputs from real /api/classify replays on October 16, 2026 after criterion/context changes. These freeze observed scores; unit tests do not assert live model determinism.",
+  "controls": [
+    {
+      "name": "vague",
+      "lessonId": "catching-unicorns",
+      "nodeId": "exogram",
+      "transcriptRevision": 1,
+      "transcript": "Tutor: What is an exogram?\nChild: Something to do with memory, I guess.\nTutor: Okay, let us move on.",
+      "outputs": {
+        "objectiveState": {
+          "choice": "unclear_or_incomplete",
+          "confidence": 0.99,
+          "probabilities": {
+            "completed": 0,
+            "incorrect": 0.01,
+            "unclear_or_incomplete": 0.99,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "confirmed_completion",
+          "confidence": 0.35,
+          "probabilities": {
+            "confirmed_completion": 0.48,
+            "clarifying": 0.01,
+            "helping": 0.07,
+            "asking": 0.01,
+            "other": 0.43
+          }
+        },
+        "concepts": {
+          "concept_engram-biological": {
+            "choice": "not_yet",
+            "confidence": 0.6,
+            "probabilities": {
+              "not_yet": 0.7,
+              "partial": 0.3,
+              "demonstrated_independent": 0,
+              "demonstrated_prompted": 0
+            }
+          },
+          "concept_exogram-non-biological": {
+            "choice": "partial",
+            "confidence": 0.63,
+            "probabilities": {
+              "not_yet": 0.28,
+              "partial": 0.72,
+              "demonstrated_independent": 0,
+              "demonstrated_prompted": 0
+            }
+          }
+        },
+        "sources": {
+          "source_engram-biological": {
+            "choice": "none",
+            "confidence": 0.84,
+            "probabilities": {
+              "none": 0.92,
+              "message_1": 0.08
+            }
+          },
+          "source_exogram-non-biological": {
+            "choice": "none",
+            "confidence": 0.7,
+            "probabilities": {
+              "none": 0.85,
+              "message_1": 0.15
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "unanswered",
+      "lessonId": "catching-unicorns",
+      "nodeId": "exogram",
+      "transcriptRevision": 1,
+      "transcript": "Tutor: What is an exogram?\nTutor: It is information stored outside the brain.\nTutor: Let us move on.",
+      "outputs": {
+        "objectiveState": {
+          "choice": "no_attempt",
+          "confidence": 0.96,
+          "probabilities": {
+            "completed": 0,
+            "incorrect": 0,
+            "unclear_or_incomplete": 0.03,
+            "unresolved_help": 0,
+            "no_attempt": 0.97
+          }
+        },
+        "tutorState": {
+          "choice": "confirmed_completion",
+          "confidence": 0.44,
+          "probabilities": {
+            "confirmed_completion": 0.55,
+            "clarifying": 0,
+            "helping": 0.27,
+            "asking": 0.06,
+            "other": 0.11
+          }
+        },
+        "concepts": {
+          "concept_engram-biological": {
+            "choice": "not_yet",
+            "confidence": 0.99,
+            "probabilities": {
+              "not_yet": 0.99,
+              "partial": 0.01,
+              "demonstrated_independent": 0,
+              "demonstrated_prompted": 0
+            }
+          },
+          "concept_exogram-non-biological": {
+            "choice": "not_yet",
+            "confidence": 0.99,
+            "probabilities": {
+              "not_yet": 0.99,
+              "partial": 0.01,
+              "demonstrated_independent": 0,
+              "demonstrated_prompted": 0
+            }
+          }
+        },
+        "sources": {
+          "source_engram-biological": {
+            "choice": "none",
+            "confidence": 1,
+            "probabilities": {
+              "none": 1
+            }
+          },
+          "source_exogram-non-biological": {
+            "choice": "none",
+            "confidence": 1,
+            "probabilities": {
+              "none": 1
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "skip",
+      "lessonId": "catching-unicorns",
+      "nodeId": "exogram",
+      "transcriptRevision": 1,
+      "transcript": "Tutor: What is an exogram?\nChild: I do not know. Skip this question.\nTutor: Sure, let us move on.",
+      "outputs": {
+        "objectiveState": {
+          "choice": "no_attempt",
+          "confidence": 0.7,
+          "probabilities": {
+            "completed": 0,
+            "incorrect": 0,
+            "unclear_or_incomplete": 0.1,
+            "unresolved_help": 0.14,
+            "no_attempt": 0.76
+          }
+        },
+        "tutorState": {
+          "choice": "confirmed_completion",
+          "confidence": 0.51,
+          "probabilities": {
+            "confirmed_completion": 0.61,
+            "clarifying": 0,
+            "helping": 0.01,
+            "asking": 0.01,
+            "other": 0.37
+          }
+        },
+        "concepts": {
+          "concept_engram-biological": {
+            "choice": "not_yet",
+            "confidence": 0.99,
+            "probabilities": {
+              "not_yet": 0.99,
+              "partial": 0.01,
+              "demonstrated_independent": 0,
+              "demonstrated_prompted": 0
+            }
+          },
+          "concept_exogram-non-biological": {
+            "choice": "not_yet",
+            "confidence": 1,
+            "probabilities": {
+              "not_yet": 1,
+              "partial": 0,
+              "demonstrated_independent": 0,
+              "demonstrated_prompted": 0
+            }
+          }
+        },
+        "sources": {
+          "source_engram-biological": {
+            "choice": "none",
+            "confidence": 1,
+            "probabilities": {
+              "none": 1,
+              "message_1": 0
+            }
+          },
+          "source_exogram-non-biological": {
+            "choice": "none",
+            "confidence": 1,
+            "probabilities": {
+              "none": 1,
+              "message_1": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "copy",
+      "lessonId": "catching-unicorns",
+      "nodeId": "exogram",
+      "transcriptRevision": 1,
+      "transcript": "Tutor: An exogram is information stored outside the brain. Can you repeat that?\nChild: An exogram is information stored outside the brain.\nTutor: Correct, let us move on.",
+      "outputs": {
+        "objectiveState": {
+          "choice": "unclear_or_incomplete",
+          "confidence": 0.91,
+          "probabilities": {
+            "completed": 0.06,
+            "incorrect": 0,
+            "unclear_or_incomplete": 0.93,
+            "unresolved_help": 0,
+            "no_attempt": 0.01
+          }
+        },
+        "tutorState": {
+          "choice": "confirmed_completion",
+          "confidence": 1,
+          "probabilities": {
+            "confirmed_completion": 1,
+            "clarifying": 0,
+            "helping": 0,
+            "asking": 0,
+            "other": 0
+          }
+        },
+        "concepts": {
+          "concept_engram-biological": {
+            "choice": "not_yet",
+            "confidence": 0.95,
+            "probabilities": {
+              "not_yet": 0.96,
+              "partial": 0.04,
+              "demonstrated_independent": 0,
+              "demonstrated_prompted": 0
+            }
+          },
+          "concept_exogram-non-biological": {
+            "choice": "partial",
+            "confidence": 0.36,
+            "probabilities": {
+              "not_yet": 0.36,
+              "partial": 0.52,
+              "demonstrated_independent": 0,
+              "demonstrated_prompted": 0.12
+            }
+          }
+        },
+        "sources": {
+          "source_engram-biological": {
+            "choice": "none",
+            "confidence": 0.84,
+            "probabilities": {
+              "none": 0.92,
+              "message_1": 0.08
+            }
+          },
+          "source_exogram-non-biological": {
+            "choice": "message_1",
+            "confidence": 0.04,
+            "probabilities": {
+              "none": 0.48,
+              "message_1": 0.52
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "prompted-application",
+      "lessonId": "catching-unicorns",
+      "nodeId": "exogram",
+      "transcriptRevision": 1,
+      "transcript": "Tutor: An exogram is information stored outside the brain, like a written record. Use that explanation to tell me how your own grocery list works.\nChild: My fridge list keeps the grocery information outside my head. Even if I forget what I need, I can read it there.\nTutor: Yes, that makes sense.",
+      "outputs": {
+        "objectiveState": {
+          "choice": "completed",
+          "confidence": 0.66,
+          "probabilities": {
+            "completed": 0.73,
+            "incorrect": 0,
+            "unclear_or_incomplete": 0.27,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "confirmed_completion",
+          "confidence": 0.99,
+          "probabilities": {
+            "confirmed_completion": 0.99,
+            "clarifying": 0,
+            "helping": 0,
+            "asking": 0.01,
+            "other": 0
+          }
+        },
+        "concepts": {
+          "concept_engram-biological": {
+            "choice": "not_yet",
+            "confidence": 0.8,
+            "probabilities": {
+              "not_yet": 0.85,
+              "partial": 0.07,
+              "demonstrated_independent": 0,
+              "demonstrated_prompted": 0.08
+            }
+          },
+          "concept_exogram-non-biological": {
+            "choice": "demonstrated_prompted",
+            "confidence": 0.95,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.01,
+              "demonstrated_independent": 0.03,
+              "demonstrated_prompted": 0.96
+            }
+          }
+        },
+        "sources": {
+          "source_engram-biological": {
+            "choice": "none",
+            "confidence": 0.3,
+            "probabilities": {
+              "none": 0.65,
+              "message_1": 0.35
+            }
+          },
+          "source_exogram-non-biological": {
+            "choice": "message_1",
+            "confidence": 1,
+            "probabilities": {
+              "none": 0,
+              "message_1": 1
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "keywords",
+      "lessonId": "catching-unicorns",
+      "nodeId": "compare",
+      "transcriptRevision": 1,
+      "transcript": "Tutor: Compare engrams and exograms.\nChild: Durable, share, revise. Durable, share, revise. I am just reading those words; I cannot explain what they mean.\nTutor: We can move on.",
+      "outputs": {
+        "objectiveState": {
+          "choice": "unclear_or_incomplete",
+          "confidence": 0.86,
+          "probabilities": {
+            "completed": 0,
+            "incorrect": 0.02,
+            "unclear_or_incomplete": 0.89,
+            "unresolved_help": 0.04,
+            "no_attempt": 0.05
+          }
+        },
+        "tutorState": {
+          "choice": "confirmed_completion",
+          "confidence": 0.52,
+          "probabilities": {
+            "confirmed_completion": 0.62,
+            "clarifying": 0,
+            "helping": 0.03,
+            "asking": 0.01,
+            "other": 0.34
+          }
+        },
+        "concepts": {
+          "concept_engram-biological": {
+            "choice": "not_yet",
+            "confidence": 0.97,
+            "probabilities": {
+              "not_yet": 0.98,
+              "partial": 0.02,
+              "demonstrated_independent": 0,
+              "demonstrated_prompted": 0
+            }
+          },
+          "concept_exogram-non-biological": {
+            "choice": "not_yet",
+            "confidence": 0.97,
+            "probabilities": {
+              "not_yet": 0.98,
+              "partial": 0.02,
+              "demonstrated_independent": 0,
+              "demonstrated_prompted": 0
+            }
+          },
+          "concept_exogram-durability": {
+            "choice": "not_yet",
+            "confidence": 0.75,
+            "probabilities": {
+              "not_yet": 0.81,
+              "partial": 0.19,
+              "demonstrated_independent": 0,
+              "demonstrated_prompted": 0
+            }
+          },
+          "concept_exogram-shareability": {
+            "choice": "not_yet",
+            "confidence": 0.73,
+            "probabilities": {
+              "not_yet": 0.8,
+              "partial": 0.2,
+              "demonstrated_independent": 0,
+              "demonstrated_prompted": 0
+            }
+          },
+          "concept_exogram-revisability": {
+            "choice": "not_yet",
+            "confidence": 0.69,
+            "probabilities": {
+              "not_yet": 0.77,
+              "partial": 0.23,
+              "demonstrated_independent": 0,
+              "demonstrated_prompted": 0
+            }
+          }
+        },
+        "sources": {
+          "source_engram-biological": {
+            "choice": "none",
+            "confidence": 1,
+            "probabilities": {
+              "none": 1,
+              "message_1": 0
+            }
+          },
+          "source_exogram-non-biological": {
+            "choice": "none",
+            "confidence": 0.98,
+            "probabilities": {
+              "none": 0.99,
+              "message_1": 0.01
+            }
+          },
+          "source_exogram-durability": {
+            "choice": "none",
+            "confidence": 0.94,
+            "probabilities": {
+              "none": 0.97,
+              "message_1": 0.03
+            }
+          },
+          "source_exogram-shareability": {
+            "choice": "none",
+            "confidence": 0.94,
+            "probabilities": {
+              "none": 0.97,
+              "message_1": 0.03
+            }
+          },
+          "source_exogram-revisability": {
+            "choice": "none",
+            "confidence": 0.94,
+            "probabilities": {
+              "none": 0.97,
+              "message_1": 0.03
+            }
+          }
+        }
+      }
+    }
+  ],
+  "controlsSource": "Realistic authored negative and prompted-application controls, with normalized live Jev 1.14.0 outputs recorded October 16, 2026; not part of the original demo."
+}

@@ -1,0 +1,91 @@
+{
+  "source": "sprout-catching-unicorns-61325729-348d-4c2a-8c1f-77b753d950cb.json",
+  "description": "Recorded terminal transcript checks, decoded output activity and discarded microphone candidates after 2:29. Sources are rebound to the test recap visit. No learner transcript arrived in this interval.",
+  "events": [
+    {
+      "type": "transcript.updated",
+      "revision": 215,
+      "speaker": "tutor",
+      "atMs": 149120.4
+    },
+    {
+      "type": "terminal.transcript.checked",
+      "complete": false,
+      "atMs": 149120.6
+    },
+    {
+      "type": "output.activity",
+      "state": "quiet",
+      "atMs": 149244.5
+    },
+    {
+      "type": "transcript.updated",
+      "revision": 216,
+      "speaker": "tutor",
+      "atMs": 149321.1
+    },
+    {
+      "type": "terminal.transcript.checked",
+      "complete": false,
+      "atMs": 149321.2
+    },
+    {
+      "type": "transcript.updated",
+      "revision": 217,
+      "speaker": "tutor",
+      "atMs": 149525.3
+    },
+    {
+      "type": "terminal.transcript.checked",
+      "complete": true,
+      "atMs": 149525.4
+    },
+    {
+      "type": "output.activity",
+      "state": "active",
+      "atMs": 149643.5
+    },
+    {
+      "type": "transcript.updated",
+      "revision": 218,
+      "speaker": "tutor",
+      "atMs": 149710.4
+    },
+    {
+      "type": "terminal.transcript.checked",
+      "complete": true,
+      "atMs": 149710.5
+    },
+    {
+      "type": "output.activity",
+      "state": "quiet",
+      "atMs": 149943.3
+    },
+    {
+      "type": "output.activity",
+      "state": "active",
+      "atMs": 149992.9
+    },
+    {
+      "type": "output.activity",
+      "state": "quiet",
+      "atMs": 150643.4
+    },
+    {
+      "type": "child.candidate.started",
+      "atMs": 150965.7
+    },
+    {
+      "type": "child.candidate.discarded",
+      "atMs": 151198.8
+    },
+    {
+      "type": "child.candidate.started",
+      "atMs": 152582.2
+    },
+    {
+      "type": "child.candidate.discarded",
+      "atMs": 152815.5
+    }
+  ]
+}

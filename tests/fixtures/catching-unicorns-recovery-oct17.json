@@ -1,0 +1,14 @@
+{
+  "provenance": "Minimal fixture from the user-supplied October 17 incident ordering; original af06ed93-d150-4dc5-935e-f2db02934db6 export unavailable in this workspace. Only the quoted close, acknowledgment, and missing-transcript ordering are reported values. Learner answer, provider timestamps, delays, and classifier responses in tests are synthetic. No claim that the microphone event was noise.",
+  "answer": "Mathematical symbols have shared meanings and can represent abstract concepts.",
+  "close": "I think we've covered what we need here.",
+  "acknowledgment": "Great.",
+  "ordering": [
+    "learner answer",
+    "tutor close",
+    "learner acknowledgment",
+    "classifier recognizes close but runtime holds",
+    "confirmed microphone stop without matching transcript",
+    "redundant connection check"
+  ]
+}

@@ -6,50 +6,160 @@ session endpoint and semantic classifier endpoint. The authored content and
 presentation are demo-specific; the lesson definition, reducer and runtime stay
 shared with the counting lesson.
 
-## Scope and evidence
+## Current scope (issue #71)
 
-`tests/catching-unicorns-lesson.test.ts` exercises reviewed transcript shapes
-through the deterministic reducer. Its observations are controlled inputs, not
-claims about provider accuracy. The fixtures cover paraphrase, incomplete and
-misconception answers, self-correction, non-leading prompts, tutor-supplied
-wording echoed by the learner, mixed evidence, both justified Canadian Armed
-Forces conclusions, and weak transfer reasoning. The source-fidelity regression
-also checks that:
+The existing lesson is permanently shortened to four questions:
+`engram → exogram → compare → exographics → recap → complete`. There is no
+full-length application variant. This supersedes issue #71's original request to
+preserve one. Arithmetic, culture/literacy, CAF transfer and synthesis nodes,
+criteria, reveal payloads, components and exclusive regressions are removed.
 
-- biological-memory paraphrases demonstrate Engram while an external-record
-  answer does not; non-biological/external-memory paraphrases demonstrate
-  Exogram;
-- durability, shareability and revisability remain separate criteria;
-- “writing things down” remains partial for Exographics until broader symbolic
-  representation is shown;
-- `84 + 1,045 + 693 + 719` prompts reification and memory extension, while the
-  arithmetic result is explicitly outside the mastery rubric;
-- technology use alone leaves the four techno-literate characteristics
-  undemonstrated; and
-- recap categories report recorded evidence and do not require “extended
-  cognition” as a source-defined term.
+The retained transcript fixtures cover paraphrases, partial answers, misconceptions,
+self-correction, prompts, tutor echoes and mixed evidence. Shared runtime,
+classifier, carry-forward evidence, diagnostic exports and cumulative assessment
+remain. The recap grades no new question: its render starts cumulative assessment,
+its steering asks for one brief close, and observed tutor audio must drain before
+terminal render confirmation completes the session. Silence alone and unavailable
+audio cannot finish it; assessment failure does not hold completion.
 
-`tests/browser/catching-unicorns.spec.ts` mounts the route and shared runtime
-with local transport and controlled classifier responses. It checks hidden
-answers, individual within-scene reveals, carried evidence, scene handoffs,
-skip/early ending, evidence-grouped recap, export and cleanup. This is
-provider-free integration coverage. A mocked accepted proposal is not evidence
-that GPT-Live will prompt correctly or that Jev will judge a live paraphrase,
-correction or tutor echo correctly.
+Provider-free browser coverage follows the four questions in order, checks accepted
+and prompted evidence, enters recap, then verifies completion after output audio.
+Runtime coverage also follows explicit next requests through all four questions
+without granting mastery.
 
-On the final demo implementation, `npm test` passed (45 files, 887 tests),
-`npm run typecheck`, `npm run lint`, and `npm run build` passed, and
-`npm run test:browser` passed all 22 provider-free browser tests. Existing
-counting coverage is included in the full unit and browser suites. The browser
-suite ran from the disposable checkout because the primary checkout already had
-a Next.js development server holding the shared `.next` lock; its configured
-server reuse is disabled.
+The second slice shows only the current question, a four-step progress bar and
+essential Start/Stop controls during discussion. Progress follows committed scene
+changes: prior questions are filled, the active question is outlined, and upcoming
+questions are muted. The accessible numeric value counts finished questions (0–4);
+recap and completion have distinct text labels. Concept reveal layouts,
+Learned so far, supplementary descriptions and illustrations are removed. Transcript,
+authored concept details, evidence and cumulative assessment require an explicit
+`?debug=1` URL; other values do not enable the view. Download diagnostics remains
+available in the default view after completion, Stop or failure, using the same
+scrubbed session export as the debug view.
+Diagnostic capture continues in the shared runtime for every session. The same concise evidence recap remains visible in both views. The final slice
+uses the accepted evidence ledger for both visual and spoken claims, as described
+below.
 
-The authored source inventory points to *Catching Unicorns*, Preface
-pp. xi–xiii and Introduction pp. 3–6. The referenced `CU to Dave.pdf` was not
-available in the workspace during #65; its page claims are inherited from that
-inventory and have not been independently checked against the PDF. The demo
-does not make claims from the later body chapters.
+Second-slice validation (15 October 2026): 1,188 unit tests and all 24 provider-free
+browser tests passed. After the final accessibility and debug assertions, all six
+demo browser tests also passed against the production build. Production build,
+TypeScript, lint, changed-source formatting and diff whitespace checks passed.
+Production screenshots were inspected for mobile questions, desktop recap and
+mobile debug details. Browser assertions cover 320px startup/failure layout and
+390px discussion/debug layout. Verification used an isolated tracked-source copy
+with local dependencies and no project env files, leaving the existing dev server
+alone. Local WebRTC peers and classifier/assessment fixtures were used; no new live
+provider session or spoken recap quality assessment was performed.
+
+The frozen issue #42 benchmark remains historical classifier evidence, including
+its original lesson snapshot and recorded transcripts. It is never registered as
+an application lesson or offered as a full-length lesson variant. Its source
+hash compatibility list records the shortened active lesson and terminal contract;
+its frozen corpus, manifests and replay bytes remain unchanged.
+
+Source claims for the retained concepts come from the reviewed issue #65 inventory
+for *Catching Unicorns*, Introduction pp. 3–6. `CU to Dave.pdf` was not available
+during that review, so these page claims remain inherited rather than independently
+verified.
+
+## Final recap and completion (15 October 2026)
+
+Final slice: `Polish evidence-based recap and completion`, based on
+`4c5d1795d708a270f9aa52c96c4fc9f1b7231a11` on
+`codex/issue-71-catching-unicorns-demo`.
+
+`evidence-recap.ts` deterministically projects accepted `conceptEvidence` from the
+current runtime. Its authored topic labels contain no hidden answer text. Carried
+criteria appear once: the earliest retained demonstration supplies its prompting
+attribution; if no demonstration exists, accepted partial evidence or an unresolved
+label is used. A demonstrated record with null attribution stays prompting-unclear.
+The asynchronous cumulative assessment retains its scores in debug/export but is
+not recap authority and cannot change a close already delivered. The October 16
+polish can quote one brief learner contribution from the accepted independent
+evidence source (6–22 words). Complete evidence spans supply only Child entries;
+tutor context, prompted/uncertain records and partial evidence cannot supply the
+quote. Unsuitable or missing text preserves the existing general recap. Attribution
+groups remain unchanged; personalized closes omit the extra thank-you sentence to
+stay within three sentences. Unconstrained conversation memory is never used.
+
+The default recap is one readable paragraph of two to four sentences. Typical
+complete and mixed examples are approximately 35–45 words (roughly 15–20 seconds
+at conversational pace; actual provider duration remains unmeasured). All-skipped
+sessions receive a shorter unresolved-only close. The identical text goes into one
+terminal steering append with a verbatim-reading instruction, no added question,
+exercise or follow-up. Verbose recap group cards and their unused metadata are
+removed; detailed accepted records and source transcripts remain in debug/export.
+
+Completion requires the whole normalized closing transcript (punctuation and case
+may differ), observed output audio and at least 1,500 ms of sustained quiet after
+the latest closing text/audio. Earlier transcript chunks, silent output, unavailable
+media, stale sources/timeline intervals, duplicate starts and unconfirmed terminal
+renders cannot complete the session. Ordinary counting drain behavior is unchanged.
+There is no recap retry, classification or recovery question. A missing, incomplete
+or differently worded provider close fails after 60 seconds, releases resources and
+leaves the visual recap available with failure feedback; it does not claim completion.
+Stop cancels that deadline. The terminal render still requires exact confirmation,
+then the provider close command and local teardown run once. All four progress
+segments are filled, with a Session complete label. The recap remains visible in
+larger type and Restart discussion replaces the initial start action; the inactive
+Stop button is removed after automatic completion.
+
+The durable tutor guidance forbids repeated confirmation of adequate answers and
+limits don't-know scaffolding to at most one useful clarification/hint before
+closing when the learner remains unsure. Bare `next`, `next question`, and explicit
+requests such as `I don't know. Next.` advance without mastery evidence. `I don't
+know` alone is not manufactured into a demonstration or an automatic skip. The
+existing current-scene classifier, skip/stop flow and evidence provenance remain.
+
+Final provider-free validation: 1,204 unit tests across 59 files, 25 production
+browser tests, production webpack build, TypeScript, lint and diff whitespace checks
+pass. The full browser run includes counting/transport coverage, correct and
+incomplete discussion paths, prompted evidence, default/debug completion, all-skipped
+navigation, stop/restart, teardown and 320/390px layouts. Unit regressions additionally
+cover partial/uncertain prompting, stale events, duplicate starts, partial closing
+text with a long pause, resumed audio, unavailable/missing output, timeout and late
+output after stop/completion. Rendered desktop/mobile recap, mobile questions,
+unresolved-only recap and debug screenshots were inspected. React review found no
+new effect subscriptions, hook-order issues or unstable list keys. Inspected screenshots
+are retained locally under `test-results/issue-71-final-review/` (ignored artifacts).
+
+Build/browser/type checks ran in an isolated tracked-source verification copy,
+with local dependencies, no env files and empty provider credential overrides for
+Playwright. The user's running dev server was left alone. Historical benchmark
+corpus/manifests/replays are unchanged; only exact active-source compatibility hashes
+are refreshed for the current implementation.
+
+Remaining issue #71 acceptance limitations: no new live billed calls were made.
+Actual tutor adherence (no reconfirmation, at most one don't-know hint, verbatim
+once-only close and no added question), naturalness and 15–20 second duration need
+a fresh opt-in voice walkthrough. The current transport exposes transcript deltas
+and decoded PCM, not an authoritative response-finished/playback marker. The full
+text plus 1.5-second quiet gate prevents the tested premature chunk/pause close,
+but is a conservative local boundary, not proof against an arbitrarily delayed
+future audio chunk. Live provider playback and cleanup therefore remain unverified.
+The original full-length-variant criterion is explicitly superseded by user approval.
+
+Changed files for this slice (18; the unrelated issue-42 review JSON is untouched):
+
+- UI: `components/catching-unicorns-demo.tsx`,
+  `components/catching-unicorns/recap-presentation.tsx`.
+- Runtime/content: `lib/lesson-runtime/evidence-recap.ts` (new),
+  `catching-unicorns-lesson.ts`, `lesson-definition.ts`, `lesson-runtime-reducer.ts`,
+  `lesson-runtime.ts`, `live-context.ts` in the same directory.
+- Historical benchmark active-source compatibility only:
+  `lib/experiments/issue-42/benchmark-artifacts.ts`.
+- Tests: `tests/evidence-recap.test.ts` (new), `tests/conversation-first.test.ts`,
+  `tests/catching-unicorns-lesson.test.ts`, `tests/catching-unicorns-presentation.test.ts`,
+  `tests/browser/catching-unicorns.spec.ts`.
+- Documentation: this file, `docs/architecture.md`, `docs/browser-tests.md`,
+  `docs/lesson-runtime-reducer.md`.
+
+## Historical validation record
+
+The records below describe earlier lesson versions, including the former nine-scene
+flow and now-deleted arithmetic/culture/application/synthesis UI. They are historical
+session evidence, not the current lesson contract or a promise of current test counts.
 
 ## Live acceptance status
 
@@ -85,7 +195,7 @@ provider bodies are excluded.
 
 When the demo voice connection is available, rerun only the bounded Catching
 Unicorns walkthrough: one incomplete/ambiguous Engram answer followed by a
-learner recovery, then the complete nine-scene lesson. Record the prompt,
+learner recovery, then the current four-question lesson and terminal recap. Record the prompt,
 learner evidence, tutor probe, classification, reveal/hold, final recap and
 resource cleanup from the observation export. Keep the run small and opt-in
 because it can make billed GPT-Live and Jev calls; use `docs/browser-tests.md`
@@ -373,3 +483,22 @@ the delivery branch retained the demo. After removal, `npm run build`,
 generated `.next/dev/types` reference to the deleted route; after clearing only
 the disposable checkout's generated `.next` directory, fresh type generation
 and typecheck passed. No shared runtime redesign or counting change was needed.
+
+
+## Conversational polish (16 October 2026)
+
+One concise, specific acknowledgment is now requested in the durable tutor guidance,
+with natural variation, encouragement when uncertain, and the existing acceptance
+or move-on closure signal. Question presentation reads the authored prompt directly,
+including the comparison question, so speech and screen share one source. Learning
+objectives, criteria, thresholds, evidence attribution and progression are unchanged.
+
+Validation: all 25 focused recap, presentation and steering unit tests, all seven
+provider-free demo browser tests, TypeScript, lint and changed-source formatting
+pass. Desktop and mobile recap screenshots were inspected. The full unit run has 1,185 passing tests and 48 skipped tests, with one
+failed test and two failed suite setups in the frozen issue #42 benchmarks. The
+same failures reproduce on parent 0200112: conversation-observer source compatibility
+and historical question hashes have drifted. Frozen manifests and classifier logic
+were left untouched; only the active lesson guidance compatibility hash was updated.
+A live provider demo is still needed to judge acknowledgment rhythm, pronunciation
+of learner quotations, and perceived recap length.

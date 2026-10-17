@@ -40,6 +40,7 @@ transcript revision identity. Exact render-token identity controls the handoff.
 | `lib/lesson-runtime/conversation-state-classifier.ts` | Closed proposal/input contract |
 | `lib/lesson-runtime/jev-conversation-state-classifier.ts` | Authored current-node projection and Jev questions |
 | `lib/lesson-runtime/classification-decision.ts` | Probability mapping and safe diagnostics |
+| `lib/lesson-runtime/evidence-recap.ts` | Deterministic accepted-evidence summary shared by visual and spoken terminal close |
 | `lib/lesson-runtime/live-context.ts` | GPT-Live setup and bounded teaching instructions |
 | `lib/browser-transport.ts` | Single WebRTC connection, input fence, playback and resource teardown |
 | `lib/events.ts` | Provider event parsing and client command types |
@@ -84,6 +85,16 @@ a fresh runtime. Stop, page hiding and navigation release microphone and connect
 See the [reducer contract](lesson-runtime-reducer.md) and
 [browser guide](lesson-browser-guide.md) for exact timing
 and known media/transcript limitations.
+
+For the four-question Catching Unicorns discussion, conversational closure or an
+explicit next request advances without requiring mastery. The terminal recap reads
+a deterministic projection of accepted concept evidence; cumulative grading is
+separate debug data. A complete matching closing transcript plus observed audio and
+1.5 seconds of sustained quiet permits terminal render confirmation and teardown.
+Missing or mismatched output ends with failure feedback after a 60-second deadline,
+without retrying the close or claiming completion. PCM quiet is a local media gate,
+not a provider response-finished signal. See the [current demo validation](catching-unicorns-demo-validation.md)
+for tested cases and live-provider limitations.
 
 ## Diagnostics and prototype reset
 

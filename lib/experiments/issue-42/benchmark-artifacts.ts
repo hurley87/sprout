@@ -33,7 +33,14 @@ export const ACTIVE_MODEL_COMPATIBILITY = {
 // by isolated reducer replay. Their frozen baseline Git blobs remain mandatory.
 export const RECOVERY_SOURCE_COMPATIBILITY = {
   "lib/lesson-runtime/answer-recovery.ts": "4e3159932c3ad5beed9ed9786118910fac5d38ea1b8d725acbdb536729554a8c",
-  "lib/lesson-runtime/lesson-runtime.ts": "b8e09c305de67b006d2fdb96934ba57e7717b4aa4a4fc49d42c38c99525385a4",
+  "lib/lesson-runtime/lesson-runtime.ts": "588338768b6ec1e74f09afd5b391c6a56c53c6e3b48074667b21340602d78cd6",
+};
+// Issue #71 changes the active lesson and terminal gate. Frozen v1 inputs stay historical.
+export const SHORT_LESSON_COMPATIBILITY = {
+  "lib/lesson-runtime/catching-unicorns-lesson.ts": "a5aff29c5ed472c1d58df686262a24ec063f1581d7e18a7481ffb2cafe410d9f",
+  "lib/lesson-runtime/lesson-definition.ts": "56c7c48e77cb4c39a05c6ac926504c00ec9dd964056fc079c1a810a3b5a5a411",
+  "lib/lesson-runtime/lesson-runtime-reducer.ts": "7cbdb5a1170698dff67c4344092535b4cd1a973f1df2b0fb8c515ce777893bff",
+  "lib/lesson-runtime/live-context.ts": "6ae645ba44e3dee6b667ec6e49a52a65c7b4456bbf3301ed75a3aef075b6dd06",
 };
 const toolPaths = [
   ADAPTER_PATH,
@@ -69,7 +76,8 @@ export function loadBenchmark() {
   for (const [path, hash] of Object.entries(manifest.baselineSources)) {
     const activeHash =
       ACTIVE_MODEL_COMPATIBILITY[path as keyof typeof ACTIVE_MODEL_COMPATIBILITY] ??
-      RECOVERY_SOURCE_COMPATIBILITY[path as keyof typeof RECOVERY_SOURCE_COMPATIBILITY];
+      RECOVERY_SOURCE_COMPATIBILITY[path as keyof typeof RECOVERY_SOURCE_COMPATIBILITY] ??
+      SHORT_LESSON_COMPATIBILITY[path as keyof typeof SHORT_LESSON_COMPATIBILITY];
     assert.equal(bytesHash(path), activeHash ?? hash, `baseline incompatibility: ${path}`);
     assert.equal(
       sha256(execFileSync("git", ["show", `${manifest.baselineSha}:${path}`])),
@@ -135,6 +143,7 @@ export function loadBenchmark() {
       model: JEV_MODEL,
       sourceHashes: { ...ACTIVE_MODEL_COMPATIBILITY },
       recoverySourceHashes: { ...RECOVERY_SOURCE_COMPATIBILITY },
+      shortLessonSourceHashes: { ...SHORT_LESSON_COMPATIBILITY },
     },
     executingCommit: git("rev-parse", "HEAD"),
     executingParent: git("rev-parse", "HEAD^"),

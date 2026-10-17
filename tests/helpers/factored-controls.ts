@@ -24,7 +24,7 @@ export function body(
           ? "completed"
           : q.name === "tutorState"
             ? "confirmed_completion"
-            : q.name.startsWith("source_")
+            : (q.name.startsWith("source_") || q.name.startsWith("sourceEnd_"))
               ? source
               : q.name.startsWith("prompting_")
                 ? prompting
