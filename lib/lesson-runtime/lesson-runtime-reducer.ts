@@ -119,7 +119,7 @@ export type LessonRuntimeEvent = { readonly atMs: number } & (
   | { readonly type: "child.candidate.started"; readonly source: RuntimeSource }
   | { readonly type: "child.candidate.discarded"; readonly source: RuntimeSource }
   | { readonly type: "child.turn.confirmed"; readonly source: RuntimeSource }
-  | { readonly type: "conversation.recheck.requested"; readonly source: ClassificationSource }
+  | { readonly type: "conversation.recheck.requested"; readonly source: ClassificationSource; readonly transcriptSnapshot?: string }
   | { readonly type: "child.turn.ended"; readonly source: RuntimeSource }
   | {
       readonly type: "transcript.updated";
@@ -861,6 +861,7 @@ export function reduceLessonRuntime(
       break;
     }
     case "conversation.recheck.requested": {
+      const exchange = closingTutorExchange(event.transcriptSnapshot);
       if (
         !lesson.conversationFirst ||
         !sameClassificationSource(state, event.source) ||
@@ -868,7 +869,7 @@ export function reduceLessonRuntime(
         state.childCandidate ||
         state.hasChildTranscript ||
         !state.interruptedExchange?.tutorOutputObserved ||
-        state.transcriptSource !== "tutor" ||
+        (state.transcriptSource !== "tutor" && !exchange?.complete) ||
         state.outputActivity !== "quiet"
       )
         return ignored;
@@ -877,7 +878,14 @@ export function reduceLessonRuntime(
         interruptedExchange: { ...state.interruptedExchange, ready: true },
         tutorOutputObserved: true,
         quietSinceMs: event.atMs,
-        // Recheck does not itself authorize navigation. Require a fresh exact-source proposal.
+        // Microphone-only activity suspends progression, but does not revoke a
+        // classified close of this unchanged exchange. New substantive words or
+        // tutor output already invalidate tutorClosure in transcript.updated.
+        conversationAdvanceRequested:
+          state.tutorClosure && exchange?.complete &&
+          exchange.messageIndex === state.tutorClosure.messageIndex && exchange.text === state.tutorClosure.text
+            ? "tutor" : state.conversationAdvanceRequested,
+        // Without a retained close, require a fresh exact-source proposal.
         consumedRevision: null,
       };
       break;

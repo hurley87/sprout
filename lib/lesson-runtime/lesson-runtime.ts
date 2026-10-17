@@ -187,7 +187,13 @@ export class LessonRuntime {
       Object.values(this.lessonDefinition.nodes).some(node => node.concepts?.length),
       this.lessonDefinition.conversationFirst
         ? source => {
-            this.dispatch({ type: "conversation.recheck.requested", source, atMs: this.now() });
+            this.dispatch({
+              type: "conversation.recheck.requested", source, transcriptSnapshot: this.transcript, atMs: this.now(),
+            });
+            // Dispatch may restore an accepted close and even commit its scene.
+            // Neither outcome may fall through to the recovery prompt callback.
+            if (this.state && (this.state.visitId !== source.visitId ||
+              hasCurrentCompletionEvidence(this.state, this.lessonDefinition))) return true;
             if (!this.state?.interruptedExchange?.ready) return false;
             this.log("conversation.recheck.started", null, source);
             this.scheduleClassification("missing_transcript_recheck");
@@ -720,7 +726,11 @@ export class LessonRuntime {
       this.tutorStabilization.cancel("terminal_close");
       return;
     }
-    if (this.state) this.answerRecovery.observe(this.state, this.status === "live" && !this.steering);
+    if (this.state) {
+      const closed = this.lessonDefinition.conversationFirst && hasCurrentCompletionEvidence(this.state, this.lessonDefinition);
+      if (closed) this.answerRecovery.cancel("conversation_closed");
+      else this.answerRecovery.observe(this.state, this.status === "live" && !this.steering);
+    }
     if (this.state) this.supportClarification.observe(this.state, this.status === "live" && !this.steering);
     if (this.state) this.tutorStabilization.observe(this.state, this.status === "live" && !this.steering, trigger);
   }
@@ -811,6 +821,7 @@ export class LessonRuntime {
       if (
         diagnostic?.outputs &&
         this.state &&
+        !(this.lessonDefinition.conversationFirst && hasCurrentCompletionEvidence(this.state, this.lessonDefinition)) &&
         diagnostic.nodeId === source.nodeId &&
         diagnostic.transcriptRevision === source.transcriptRevision &&
         (diagnostic.outcome === "hold_scene" ||
