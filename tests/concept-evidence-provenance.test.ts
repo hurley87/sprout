@@ -8,14 +8,7 @@ import {
   type ConversationStateOutputs,
 } from "../lib/lesson-runtime/conversation-observer-contract";
 import { parseConversationStateProposal } from "../lib/lesson-runtime/conversation-state-classifier";
-import {
-  classificationSource,
-  createLessonRuntime,
-  meetsAuthoredCompletionPolicy,
-  reduceLessonRuntime,
-  runtimeSource,
-  type LessonRuntimeEvent,
-} from "../lib/lesson-runtime/lesson-runtime-reducer";
+import { meetsAuthoredCompletionPolicy } from "../lib/lesson-runtime/lesson-runtime-reducer";
 import { answerRecoveryInstruction } from "../lib/lesson-runtime/live-context";
 import { transcriptMessages } from "../lib/lesson-runtime/tutor-observation";
 import { classifyConversationStateWithDiagnostics } from "../lib/lesson-runtime/jev-conversation-state-classifier";
@@ -23,30 +16,19 @@ import { JEV_MODEL } from "../lib/jev";
 import { TEST_CONCEPT_LESSON } from "./fixtures/concept-lesson";
 import { sourceOutputs } from "./fixtures/concept-source-outputs";
 import replay from "./fixtures/catching-unicorns-provenance-replay.json";
+import { createReducerHarness, prepareLearnerClassification } from "./helpers/runtime-harness";
 
 function harness(nodeId: string, definition = { ...lesson, initialNodeId: nodeId }) {
-  let state = createLessonRuntime("provenance-replay", { lesson: definition, quietDrainMs: 50 });
-  const send = (event: Record<string, unknown>) => {
-    const result = reduceLessonRuntime(state, { ...event, atMs: state.nowMs + 1 } as LessonRuntimeEvent, definition);
-    state = result.state;
-    return result;
-  };
+  const h = createReducerHarness("provenance-replay", { lesson: definition, quietDrainMs: 50 });
+  const { send } = h;
   const observe = (transcript: string, conceptObservations: readonly unknown[]) => {
-    send({ type: "child.turn.started", source: runtimeSource(state) });
-    send({
-      type: "transcript.updated",
-      source: runtimeSource(state),
-      revision: state.transcriptRevision + 1,
-      speaker: "child",
-    });
-    send({ type: "child.turn.ended", source: runtimeSource(state) });
-    const source = classificationSource(state)!;
+    const source = prepareLearnerClassification(h, h.state.transcriptRevision + 1);
     return send({
       type: "proposal.received",
       source,
       transcriptSnapshot: transcript,
       proposal: {
-        ...{ nodeId: state.nodeId, transcriptRevision: state.transcriptRevision },
+        ...{ nodeId: h.state.nodeId, transcriptRevision: h.state.transcriptRevision },
         childActivity: "unknown",
         answerOutcome: "unclear",
         supportState: "none",
@@ -57,7 +39,7 @@ function harness(nodeId: string, definition = { ...lesson, initialNodeId: nodeId
   };
   return {
     get state() {
-      return state;
+      return h.state;
     },
     observe,
     send,

@@ -11,16 +11,11 @@ import {
   normalizeConversationOutputs,
 } from "../lib/lesson-runtime/conversation-observer-contract";
 import { classifyConversationStateWithDiagnostics } from "../lib/lesson-runtime/jev-conversation-state-classifier";
-import {
-  classificationSource,
-  createLessonRuntime,
-  reduceLessonRuntime,
-  runtimeSource,
-  type LessonRuntimeEvent,
-} from "../lib/lesson-runtime/lesson-runtime-reducer";
+import { classificationSource } from "../lib/lesson-runtime/lesson-runtime-reducer";
 import type { ProposedConceptObservation } from "../lib/lesson-runtime/conversation-state-classifier";
 import { transcriptMessages } from "../lib/lesson-runtime/tutor-observation";
-import { providerEvents, useRuntimeFakeTimers } from "./helpers/runtime-harness";
+import { createReducerHarness, prepareLearnerClassification, providerEvents, useRuntimeFakeTimers } from "./helpers/runtime-harness";
+import { classifierProposal } from "./helpers/runtime-classifier";
 import trace from "./fixtures/catching-unicorns-attribution-oct17.json";
 
 const transport = vi.hoisted(() => ({
@@ -95,46 +90,28 @@ function mapped(transcript: string, selections: Record<string, Selection>, revis
   return mapConversationObservation(input(transcript, revision), outputs).proposal!.conceptObservations!;
 }
 function harness() {
-  let state = createLessonRuntime("fragment-attribution", { lesson: definition });
-  const send = (event: Record<string, unknown>) => {
-    const result = reduceLessonRuntime(state, { ...event, atMs: state.nowMs + 1 } as LessonRuntimeEvent, definition);
-    state = result.state;
-    return result;
-  };
+  const h = createReducerHarness("fragment-attribution", { lesson: definition });
+  const { send } = h;
   return {
     get state() {
-      return state;
+      return h.state;
     },
     send,
     prepare() {
-      send({ type: "child.turn.started", source: runtimeSource(state) });
-      send({
-        type: "transcript.updated",
-        source: runtimeSource(state),
-        speaker: "child",
-        revision: state.transcriptRevision + 1,
-      });
-      send({ type: "child.turn.ended", source: runtimeSource(state) });
-      return classificationSource(state)!;
+      return prepareLearnerClassification(h, h.state.transcriptRevision + 1);
     },
     apply(
       transcript: string,
       observations: readonly ProposedConceptObservation[],
-      source = classificationSource(state)!,
+      source = classificationSource(h.state)!,
     ) {
       return send({
         type: "proposal.received",
         source,
         transcriptSnapshot: transcript,
-        proposal: {
-          nodeId: state.nodeId,
-          transcriptRevision: source.transcriptRevision,
-          childActivity: "unknown",
-          answerOutcome: "unclear",
-          supportState: "none",
-          tutorState: "unknown",
-          conceptObservations: observations,
-        },
+        proposal: classifierProposal({ ...source, nodeId: h.state.nodeId }, {
+          answerOutcome: "unclear", tutorState: "unknown", conceptObservations: observations,
+        }),
       });
     },
   };

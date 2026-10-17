@@ -6,14 +6,13 @@ import { currentNodeContext } from "../lib/lesson-runtime/lesson-definition";
 import { transcriptMessages } from "../lib/lesson-runtime/tutor-observation";
 import {
   classificationSource,
-  createLessonRuntime,
   reduceLessonRuntime,
   runtimeSource,
   type LessonRuntimeState,
   type LessonRuntimeEvent,
 } from "../lib/lesson-runtime/lesson-runtime-reducer";
 import type { ClientCommand, ProviderEvent } from "../lib/events";
-import { useRuntimeFakeTimers, providerEvents } from "./helpers/runtime-harness";
+import { createReducerHarness, useRuntimeFakeTimers, providerEvents } from "./helpers/runtime-harness";
 import trace from "./fixtures/catching-unicorns-closure-oct16.json";
 
 const transport = vi.hoisted(() => ({
@@ -37,30 +36,22 @@ afterEach(() => {
 });
 
 function harness() {
-  let state = createLessonRuntime("closure", { lesson: definition, quietDrainMs: 500 });
-  const send = (event: Record<string, unknown>, delta = 1) => {
-    const result = reduceLessonRuntime(
-      state,
-      { ...event, atMs: state.nowMs + delta } as LessonRuntimeEvent,
-      definition,
-    );
-    state = result.state;
-    return result;
-  };
-  send({ type: "child.turn.started", source: runtimeSource(state) });
-  send({ type: "transcript.updated", source: runtimeSource(state), revision: 1, speaker: "child" });
-  send({ type: "child.turn.ended", source: runtimeSource(state) });
-  send({ type: "output.activity", source: runtimeSource(state), state: "active" });
-  send({ type: "transcript.updated", source: runtimeSource(state), revision: 2, speaker: "tutor" });
+  const h = createReducerHarness("closure", { lesson: definition, quietDrainMs: 500 });
+  const { send } = h;
+  send({ type: "child.turn.started", source: runtimeSource(h.state) });
+  send({ type: "transcript.updated", source: runtimeSource(h.state), revision: 1, speaker: "child" });
+  send({ type: "child.turn.ended", source: runtimeSource(h.state) });
+  send({ type: "output.activity", source: runtimeSource(h.state), state: "active" });
+  send({ type: "transcript.updated", source: runtimeSource(h.state), revision: 2, speaker: "tutor" });
   return {
     get state() {
-      return state;
+      return h.state;
     },
     send,
     close() {
       return send({
         type: "proposal.received",
-        source: classificationSource(state),
+        source: classificationSource(h.state)!,
         transcriptSnapshot: trace.initialTranscript + "\nTutor: That makes sense. We can move on.",
         proposal: { ...trace.closureProposal, transcriptRevision: 2 },
       });
@@ -180,7 +171,7 @@ it("accepts an in-flight exact closure during a candidate, then waits for audio 
   h.send({ type: "clock.tick", source: runtimeSource(h.state) });
   expect(h.state.phase).toBe("rendering");
 });
-it.each(["child.turn.confirmed", "transcript.updated"])(
+it.each(["child.turn.confirmed", "transcript.updated"] as const)(
   "revokes closure on genuine interruption via %s and rejects stale proposals",
   type => {
     const h = harness();
@@ -208,7 +199,7 @@ it("keeps ambiguous answers open for clarification without changing mastery", ()
   const h = harness();
   h.send({
     type: "proposal.received",
-    source: classificationSource(h.state),
+    source: classificationSource(h.state)!,
     transcriptSnapshot: trace.initialTranscript,
     proposal: { ...trace.closureProposal, transcriptRevision: 2, tutorState: "clarifying", conceptObservations: [] },
   });
@@ -290,7 +281,7 @@ it("keeps a learner navigation request across discarded energy without granting 
   const h = harness();
   h.send({
     type: "conversation.advance.requested",
-    source: classificationSource(h.state),
+    source: classificationSource(h.state)!,
     transcriptSnapshot: "Child: Next question, then",
   });
   h.send({ type: "child.candidate.started", source: runtimeSource(h.state) });

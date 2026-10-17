@@ -1,23 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { CATCHING_UNICORNS_LESSON as lesson } from "../lib/lesson-runtime/catching-unicorns-lesson";
 import { conversationStateQuestions, interpretConversationOutputs, learnerSourceOptions, mapConversationObservation, normalizeConversationOutputs, type ConversationStateOutputs } from "../lib/lesson-runtime/conversation-observer-contract";
-import { classificationSource, createLessonRuntime, reduceLessonRuntime, runtimeSource, type LessonRuntimeEvent } from "../lib/lesson-runtime/lesson-runtime-reducer";
 import { evidenceRecap } from "../lib/lesson-runtime/evidence-recap";
 import recording from "./fixtures/catching-unicorns-source-boundaries-oct16.json";
+import { createReducerHarness, prepareLearnerClassification } from "./helpers/runtime-harness";
 
 function harness(nodeId: string) {
   const definition = { ...lesson, initialNodeId: nodeId };
-  let state = createLessonRuntime("boundary-replay", { lesson: definition });
-  const send = (event: Record<string, unknown>) => {
-    state = reduceLessonRuntime(state, { ...event, atMs: state.nowMs + 1 } as LessonRuntimeEvent, definition).state;
-  };
+  const h = createReducerHarness("boundary-replay", { lesson: definition });
+  const { send } = h;
   return {
-    get evidence() { return state.conceptEvidence; },
+    get evidence() { return h.state.conceptEvidence; },
     observe(transcript: string, outputs: ConversationStateOutputs) {
-      send({ type: "child.turn.started", source: runtimeSource(state) });
-      send({ type: "transcript.updated", source: runtimeSource(state), speaker: "child", revision: state.transcriptRevision + 1 });
-      send({ type: "child.turn.ended", source: runtimeSource(state) });
-      const source = classificationSource(state)!;
+      const source = prepareLearnerClassification(h, h.state.transcriptRevision + 1);
       const decision = mapConversationObservation({ lesson, nodeId, transcript, transcriptRevision: source.transcriptRevision }, outputs);
       expect(decision.reason).not.toBe("invalid_outputs");
       if (!decision.proposal) return [];

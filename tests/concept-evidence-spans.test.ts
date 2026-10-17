@@ -8,32 +8,22 @@ import {
 } from "../lib/lesson-runtime/conversation-observer-contract";
 import { parseConversationStateProposal, type ProposedConceptObservation } from "../lib/lesson-runtime/conversation-state-classifier";
 import { CATCHING_UNICORNS_LESSON as lesson } from "../lib/lesson-runtime/catching-unicorns-lesson";
-import {
-  classificationSource, createLessonRuntime, reduceLessonRuntime, runtimeSource,
-  type LessonRuntimeEvent,
-} from "../lib/lesson-runtime/lesson-runtime-reducer";
 import { transcriptMessages } from "../lib/lesson-runtime/tutor-observation";
 import oct16 from "./fixtures/catching-unicorns-concept-evidence-oct16.json";
+import { createReducerHarness, prepareLearnerClassification } from "./helpers/runtime-harness";
+import { classifierProposal } from "./helpers/runtime-classifier";
 
 function harness(nodeId = "exographics") {
   const definition = { ...lesson, initialNodeId: nodeId };
-  let state = createLessonRuntime("span-replay", { lesson: definition });
-  const send = (event: Record<string, unknown>) => {
-    const result = reduceLessonRuntime(state, { ...event, atMs: state.nowMs + 1 } as LessonRuntimeEvent, definition);
-    state = result.state;
-    return result;
-  };
+  const h = createReducerHarness("span-replay", { lesson: definition });
+  const { send } = h;
   return {
-    get evidence() { return state.conceptEvidence; },
+    get evidence() { return h.state.conceptEvidence; },
     observe(transcript: string, observations: readonly ProposedConceptObservation[]) {
-      send({ type: "child.turn.started", source: runtimeSource(state) });
-      send({ type: "transcript.updated", source: runtimeSource(state), speaker: "child", revision: state.transcriptRevision + 1 });
-      send({ type: "child.turn.ended", source: runtimeSource(state) });
-      const source = classificationSource(state)!;
-      return send({ type: "proposal.received", source, transcriptSnapshot: transcript, proposal: {
-        nodeId, transcriptRevision: source.transcriptRevision, childActivity: "unknown", answerOutcome: "unclear",
-        supportState: "none", tutorState: "unknown", conceptObservations: observations,
-      } });
+      const source = prepareLearnerClassification(h, h.state.transcriptRevision + 1);
+      return send({ type: "proposal.received", source, transcriptSnapshot: transcript, proposal: classifierProposal(source, {
+        answerOutcome: "unclear", tutorState: "unknown", conceptObservations: observations,
+      }) });
     },
   };
 }

@@ -228,7 +228,7 @@ describe("reproducible provider comparison (all transports synthetic)", () => {
     const actual = await vi.importActual<typeof import("node:fs")>("node:fs");
     const path = change === "model" ? "lib/jev.ts" : "lib/lesson-runtime/conversation-observer-contract.ts";
     if (change === "model") simulatedActivePolicy.model = "jev-future-test-only";
-    else Object.assign(activeThresholds, { HIGH: originalThresholds.HIGH === 0.95 ? 0.96 : 0.95 });
+    else Object.assign(activeThresholds, { HIGH: Number(originalThresholds.HIGH) === 0.95 ? 0.96 : 0.95 });
     // Simulate the changed source bytes as well as the exported policy value,
     // without editing production files or the frozen snapshot.
     vi.mocked(readFileSync).mockImplementation(((file: string, encoding?: BufferEncoding) => {
