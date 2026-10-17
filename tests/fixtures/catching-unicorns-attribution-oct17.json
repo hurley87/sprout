@@ -1,0 +1,19 @@
+{
+  "provenance": "Synthetic reconstruction of the explanation described in the Commit 4 request, not a diagnostic replay. Original af06ed93-d150-4dc5-935e-f2db02934db6 export unavailable. Exact wording, provider envelopes, timestamps, neutral backchannel and all classifier scores are synthetic. The report describes mathematics, numbers/plus, abstraction, numerical relationships, and tutor-introduced shared meaning; it does not establish exact source indexes or rejection scores.",
+  "fragments": [
+    { "speaker": "sprout", "delta": "Can you explain exographics?", "startMs": 100, "endMs": 200 },
+    { "speaker": "child", "delta": "Mathematics is an example beyond prose. Numbers ", "startMs": 300, "endMs": 400 },
+    { "speaker": "child", "delta": "and the plus sign are meaningful visual symbols.", "startMs": 400, "endMs": 500 },
+    { "speaker": "sprout", "delta": "Mm-hmm.", "startMs": 600, "endMs": 700 },
+    { "speaker": "child", "delta": "These symbols express abstract concepts. ", "startMs": 800, "endMs": 900 },
+    { "speaker": "child", "delta": "Addition expresses relationships between numbers.", "startMs": 900, "endMs": 1000 },
+    {
+      "speaker": "sprout",
+      "delta": "The symbols also carry shared meaning because people agree on their meaning.",
+      "startMs": 1100,
+      "endMs": 1200
+    },
+    { "speaker": "child", "delta": "Okay.", "startMs": 1300, "endMs": 1400 }
+  ],
+  "expectedTranscript": "Tutor: Can you explain exographics?\nChild: Mathematics is an example beyond prose. Numbers and the plus sign are meaningful visual symbols.\nTutor: Mm-hmm.\nChild: These symbols express abstract concepts. Addition expresses relationships between numbers.\nTutor: The symbols also carry shared meaning because people agree on their meaning.\nChild: Okay."
+}
