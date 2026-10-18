@@ -896,3 +896,65 @@ it("requires playback of the acknowledgment's own item, not unrelated audio from
   expect(updates.at(-1)?.render).toBeUndefined();
   voice.stop();
 });
+
+it("reuses the acknowledged opening token through playback/completion duplicates and admits an immediate answer", async () => {
+  const { voice, socket, context, worklet } = await connected();
+  const original = socket.sent[0].session as { instructions: string };
+  socket.event({ type: "response.created", response: { id: "opening" } });
+  tutor(socket, "opening", "Hello, friend! I see a duck on the screen. How many ducks do you see?");
+  socket.event({ type: "response.done", response: { id: "opening", status: "completed" } });
+  socket.event({ type: "response.done", response: { id: "opening", status: "completed" } });
+  context.sources.at(-1)?.onended?.();
+  worklet.port.onmessage?.({ data: new Float32Array([0.1]) });
+  expect(socket.sent.at(-1)?.type).toBe("input_audio_buffer.append");
+  expect(socket.sent.filter(e => e.type === "session.update")).toHaveLength(1);
+  expect(updates.at(-1)?.status).toBe("listening");
+  expect((socket.sent[0].session as { instructions: string }).instructions).toBe(original.instructions);
+  learnerAnswer(socket);
+  propose(socket);
+  socket.event({ type: "response.done", response: { id: "tools", status: "completed" } });
+  expect(updates.at(-1)?.learnerAnswerAccepted).toBe(true);
+  expect(updates.at(-1)?.diagnostics?.some(d => d.code === "context.claimed")).toBe(true);
+  expect(socket.sent.filter(e => e.type === "session.update")).toHaveLength(1);
+  voice.stop();
+});
+it("keeps one pending reservation after a real turn and rotates only once before the next turn", async () => {
+  const { voice, socket, worklet } = await connected();
+  learnerAnswer(socket, "Two ducks.");
+  propose(socket, "wrong", { answer_outcome: "incorrect", supporting_text: "Two ducks." });
+  tutor(socket, "tools", "Please try counting again.", false);
+  socket.event({ type: "response.done", response: { id: "tools", status: "completed" } });
+  socket.event({ type: "response.done", response: { id: "tools", status: "completed" } });
+  const configs = socket.sent.filter(e => e.type === "session.update");
+  expect(configs).toHaveLength(2);
+  expect(configs[1].session).not.toEqual(configs[0].session);
+  const inputCount = () => socket.sent.filter(e => e.type === "input_audio_buffer.append").length;
+  const before = inputCount();
+  worklet.port.onmessage?.({ data: new Float32Array([1]) });
+  expect(inputCount()).toBe(before); // Actual turn rotation still awaits the new configuration.
+  socket.event({ type: "session.updated", session: configs[1].session });
+  socket.event({ type: "response.done", response: { id: "tools", status: "completed" } });
+  socket.event({ type: "session.updated", session: configs[1].session });
+  worklet.port.onmessage?.({ data: new Float32Array([1]) });
+  expect(inputCount()).toBe(before + 1);
+  expect(socket.sent.filter(e => e.type === "session.update")).toHaveLength(2);
+  expect(updates.at(-1)?.diagnostics?.filter(d => d.code === "context.issued")).toHaveLength(2);
+  voice.stop();
+});
+it("surfaces correction-based stale-context failure without logging learner text or token values", async () => {
+  const { voice, socket } = await connected();
+  learnerAnswer(socket);
+  socket.event({
+    type: "conversation.item.input_audio_transcription.completed",
+    item_id: "learner",
+    transcript: "One dog.",
+  });
+  propose(socket, "real-shaped", { answer_outcome: "incorrect", supporting_text: "One dog." });
+  expect(updates.at(-1)?.proposal).toBe("Rejected: stale context");
+  expect(updates.at(-1)?.diagnostics?.at(-1)?.code).toBe("transcript.final.corrected");
+  expect(JSON.stringify(updates.at(-1)?.diagnostics)).not.toMatch(
+    /One dog|One duck|context_token|supporting_text|real-shaped/,
+  );
+  expect(updates.at(-1)?.learnerAnswerAccepted).toBe(false);
+  voice.stop();
+});

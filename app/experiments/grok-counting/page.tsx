@@ -112,6 +112,17 @@ export default function GrokCounting() {
         {snapshot?.learnerAnswerAccepted ? "yes" : "no"} · Revision-bound answer:{" "}
         {snapshot?.answerAccepted ? "yes" : "no"}
       </p>
+      <details>
+        <summary>Correlation diagnostics</summary>
+        <ol aria-label="Correlation diagnostics">
+          {snapshot?.diagnostics?.map(entry => (
+            <li key={entry.sequence}>
+              {entry.sequence}: {entry.stage} → {entry.code} · visit {entry.visit}, turn {entry.turn}, revision{" "}
+              {entry.revision}
+            </li>
+          ))}
+        </ol>
+      </details>
       <section className="space-y-2 rounded border p-4" aria-label="Conversation transcript">
         <h2 className="font-semibold">Transcript</h2>
         <p className="text-sm">

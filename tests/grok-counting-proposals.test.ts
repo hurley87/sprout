@@ -1,8 +1,9 @@
 import { expect, it } from "vitest";
 import { CountingProposals, OUTCOME_TOOL } from "../lib/experiments/grok-counting/proposals";
 
-function fixture(text = "One duck.", tutor = "How many ducks do you see?") {
+function fixture(text = "One duck.", tutor = "How many ducks do you see?", nodeId = "count-1-duck") {
   const adapter = new CountingProposals();
+  adapter.state = { ...adapter.state, nodeId };
   adapter.transcript({ id: "a0", speaker: "Tutor", text: tutor, final: true });
   const context = adapter.issueContext()!;
   const token = JSON.parse(context).context_token;
@@ -389,4 +390,146 @@ it("does not bind a response created before VAD stop to the eventual finalized t
   });
   expect(adapter.drainResults()[0].status).toBe("rejected");
   expect(adapter.learnerAnswerAccepted).toBe(false);
+});
+
+it.each([
+  "Hello, friend! I see a duck on the screen. How many ducks do you see?",
+  "There is a duck on the screen. How many ducks are there?",
+  "Point to the duck. What do you get?",
+  "Take one moment to look at the duck, then count it.",
+  "Point to one duck at a time. How many ducks?",
+  "Only look at the duck and count it.",
+  "There is one butterfly. How many ducks do you see?",
+])("allows ordinary current-scene object/method language: %s", tutor => {
+  expect(fixture("One duck.", tutor).call()?.status).toBe("accepted");
+});
+it.each([
+  "There is one duck.",
+  "There is one duck swimming on the screen.",
+  "Say one duck.",
+  "Repeat 1 duck.",
+  "The total is one.",
+  "I see one duck on the screen.",
+  "There is only a duck here.",
+  "I see a single duck.",
+  "One duck.",
+  "One!",
+  "Is there one duck?",
+  "Maybe one duck?",
+  "Could it be one?",
+  "Do you see just one duck?",
+])("abstains on explicit or ambiguous tutor-supplied current answers: %s", tutor => {
+  expect(fixture("One duck.", tutor).call()?.status).toBe("rejected");
+});
+it.each([
+  ["count-2-ducks", "Two ducks.", "Point to a duck. Count one duck at a time.", "accepted"],
+  ["count-2-ducks", "Two ducks.", "There are two ducks.", "rejected"],
+  ["count-3-butterflies", "Three butterflies.", "Look at a butterfly, then count the group.", "accepted"],
+  ["count-3-butterflies", "Three butterflies.", "Maybe three butterflies?", "rejected"],
+  ["count-3-butterflies", "Three butterflies.", "There are two ducks.", "accepted"],
+])("scopes answer cues to authored node %s", (node, text, tutor, status) => {
+  expect(fixture(text, tutor, node).call()?.status).toBe(status);
+});
+it.each([
+  [undefined, "call.response_id.missing"],
+  ["wrong", "call.response_id.mismatch"],
+])("distinguishes call response identity failure %s", (response_id, code) => {
+  const f = fixture();
+  f.call({}, { response_id });
+  expect(f.adapter.correlationDiagnostics.at(-1)?.code).toBe(code);
+});
+it("distinguishes a changed final transcript from a provider token mismatch", () => {
+  const f = fixture();
+  f.adapter.transcript({ id: "u1", speaker: "Learner", text: "One dog.", final: true });
+  f.call();
+  expect(f.adapter.correlationDiagnostics.at(-1)?.code).toBe("transcript.final.corrected");
+  const other = fixture();
+  other.call({ context_token: "not-issued" });
+  expect(other.adapter.correlationDiagnostics.at(-1)?.code).toBe("call.token.mismatch");
+});
+it("identifies response creation before VAD stop without rebinding the response later", () => {
+  const a = new CountingProposals();
+  const token = JSON.parse(a.issueContext()!).context_token;
+  a.acknowledgeContext();
+  a.speechStarted("u");
+  a.responseCreated("r");
+  a.speechStopped("u");
+  a.transcript({ id: "u", speaker: "Learner", text: "One duck.", final: true });
+  a.call({
+    call_id: "c",
+    name: OUTCOME_TOOL.name,
+    response_id: "r",
+    arguments: JSON.stringify({
+      context_token: token,
+      supporting_text: "One duck.",
+      answer_outcome: "correct",
+      support_state: "none",
+    }),
+  });
+  expect(a.correlationDiagnostics.at(-1)?.code).toBe("response.before_turn_end");
+  expect(a.drainResults()[0].status).toBe("rejected");
+});
+it("identifies an unacknowledged reservation and wrong learner-turn identity", () => {
+  const a = new CountingProposals();
+  a.issueContext();
+  a.speechStarted("u");
+  expect(a.correlationDiagnostics.at(-1)?.code).toBe("turn.configuration.unacknowledged");
+  const f = fixture();
+  f.adapter.state = { ...f.adapter.state, childTurnId: 99 };
+  f.call();
+  expect(f.adapter.correlationDiagnostics.at(-1)?.code).toBe("turn.identity.mismatch");
+});
+it("keeps diagnostic data bounded and excludes all provider IDs, tokens and transcript content", () => {
+  const f = fixture("One duck.", "How many ducks?");
+  f.call({ context_token: "secret-token-personal-info" }, { response_id: "private-id" });
+  for (let i = 0; i < 100; i++) f.call({}, { call_id: `private-${i}`, response_id: "private-id" });
+  const trace = f.adapter.correlationDiagnostics;
+  expect(trace).toHaveLength(64);
+  expect(JSON.stringify(trace)).not.toMatch(/One duck|How many|private|secret-token|context_token|supporting_text/);
+  expect(trace.at(-1)?.sequence).toBeGreaterThan(100);
+  expect(Object.keys(trace[0]).sort()).toEqual(["code", "revision", "sequence", "stage", "turn", "visit"]);
+  trace[0].code = "context.issued";
+  expect(f.adapter.correlationDiagnostics[0].code).not.toBe("context.issued");
+});
+
+it("does not invalidate the turn for repeated identical final transcripts", () => {
+  const f = fixture();
+  f.adapter.transcript({ id: "u1", speaker: "Learner", text: "One duck.", final: true });
+  f.adapter.transcript({ id: "u1", speaker: "Learner", text: "One duck.", final: true });
+  expect(f.call()?.status).toBe("accepted");
+  expect(f.adapter.correlationDiagnostics.some(d => d.code === "transcript.final.corrected")).toBe(false);
+});
+it("reports missing IDs and absent/completed response scope without inferring IDs from the active connection", () => {
+  const f = fixture();
+  f.call({}, { call_id: undefined });
+  expect(f.adapter.correlationDiagnostics.at(-1)?.code).toBe("call.id.missing");
+  f.adapter.responseCreated();
+  expect(f.adapter.correlationDiagnostics.at(-1)?.code).toBe("response.id.missing");
+  f.adapter.responseDone("r1", "completed");
+  f.call({}, { call_id: "late" });
+  expect(f.adapter.correlationDiagnostics.at(-1)?.code).toBe("call.after_response_done");
+  f.adapter.speechStarted("u2");
+  f.call({}, { call_id: "old" });
+  expect(f.adapter.correlationDiagnostics.at(-1)?.code).toBe("call.response.missing");
+});
+it("reuses an unused pending/acknowledged reservation across response boundaries but consumes it on speech", () => {
+  const a = new CountingProposals();
+  const first = a.issueContext()!;
+  expect(a.hasReservedContext).toBe(true);
+  expect(a.issueContext()).toBeUndefined();
+  a.acknowledgeContext();
+  a.responseCreated("opening");
+  a.responseDone("opening", "completed");
+  expect(a.issueContext()).toBeUndefined();
+  expect(a.hasReservedContext).toBe(true);
+  a.speechStarted("u");
+  a.speechStopped("u");
+  expect(a.hasReservedContext).toBe(false);
+  a.transcript({ id: "u", speaker: "Learner", text: "Two ducks.", final: true });
+  a.responseCreated("turn");
+  a.responseDone("turn", "completed");
+  const next = a.issueContext();
+  expect(next).toBeDefined();
+  expect(next).not.toBe(first);
+  expect(a.issueContext()).toBeUndefined();
 });

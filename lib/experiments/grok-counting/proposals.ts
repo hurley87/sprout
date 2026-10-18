@@ -51,6 +51,72 @@ const navigation = /\b(stop|quit|move on|next|done|finish|finished)\b/i;
 const total =
   /^(?:(?:i see|there is|there are|it is|it's) )?(one|1|two|2|three|3|four|4|five|5|six|6|seven|7|eight|8|nine|9|ten|10)(?: (ducks?|butterfl(?:y|ies)))?$/;
 
+// Recognize bounded answer-giving constructions for this scene, not articles or
+// isolated counting-method words ("one at a time", "only look at the duck").
+function tutorAnswerCue(text: string, quantity: number, object: unknown): boolean {
+  const number = `(?:${["zero", "one", "two", "three"][quantity]}|${quantity}${quantity === 1 ? "|single" : ""})`;
+  const noun = object === "duck" ? "ducks?" : "butterfl(?:y|ies)";
+  const answer = `${number}(?: ${noun})?`;
+  const boundary = `(?=$|[.,!?;:"']| (?:on the screen|in the picture|in total|altogether)\\b)`;
+  const statedAnswer = `(?:${number} ${noun}\\b(?! at a time\\b)|${number}${boundary})`;
+  const supplied = new RegExp(
+    `\\b(?:there (?:is|are)|i (?:see|counted)|you counted|we counted|it is|it's|the (?:answer|total|count) is|say|repeat|answer with) (?:exactly |just |only )?${statedAnswer}`,
+    "i",
+  );
+  const ambiguous = new RegExp(
+    `\\b(?:maybe|perhaps|is there|are there|is it|could it be|do you see) (?:exactly |just |only )?${statedAnswer}`,
+    "i",
+  );
+  const standalone = new RegExp(`^(?:(?:yes|correct|that's right)[, ]+)?${answer}${boundary}`, "i");
+  const explicitSingle =
+    quantity === 1 && new RegExp(`\\b(?:only|just) (?:a |one |1 )${noun}\\b|\\ba single ${noun}\\b`, "i").test(text);
+  return (
+    supplied.test(text) ||
+    ambiguous.test(text) ||
+    explicitSingle ||
+    text.split(/[.!?;]/).some(clause => standalone.test(clause.trim()))
+  );
+}
+
+export type CorrelationCode =
+  | "context.issued"
+  | "context.acknowledged"
+  | "context.claimed"
+  | "turn.item_id.missing"
+  | "turn.stop_id.missing"
+  | "turn.stop_id.mismatch"
+  | "turn.reservation.missing"
+  | "turn.configuration.unacknowledged"
+  | "turn.identity.mismatch"
+  | "scope.identity.mismatch"
+  | "transcript.final.corrected"
+  | "response.id.missing"
+  | "response.id.duplicate"
+  | "response.bound"
+  | "response.before_turn_start"
+  | "response.before_turn_end"
+  | "response.turn.unbound"
+  | "call.id.missing"
+  | "call.id.duplicate"
+  | "call.response_id.missing"
+  | "call.response_id.mismatch"
+  | "call.response.missing"
+  | "call.after_response_done"
+  | "call.token.mismatch"
+  | "call.token.reused"
+  | "call.response_token.mismatch"
+  | "call.continuation.disallowed"
+  | "call.multiple.disallowed"
+  | "call.context.missing";
+export type CorrelationDiagnostic = {
+  sequence: number;
+  stage: "context" | "speech.started" | "speech.stopped" | "transcript.final" | "response.created" | "tool.call";
+  code: CorrelationCode;
+  visit: number;
+  turn: number;
+  revision: number;
+};
+
 /** Isolated evidence adapter. All progression authority stays in the shared reducer. */
 export class CountingProposals {
   state;
@@ -59,6 +125,7 @@ export class CountingProposals {
   private response?: {
     id: string;
     turnToken?: string;
+    bindingFailure?: CorrelationCode;
     source: Scope;
     done: boolean;
     completed: boolean;
@@ -75,6 +142,35 @@ export class CountingProposals {
   };
   private nextContext?: Context;
   private contextAcknowledged = false;
+  private contextFailure?: CorrelationCode;
+  private diagnostics: CorrelationDiagnostic[] = [];
+  private diagnosticSequence = 0;
+  get correlationDiagnostics(): CorrelationDiagnostic[] {
+    return this.diagnostics.map(entry => ({ ...entry }));
+  }
+  private diagnose(code: CorrelationCode, stage: CorrelationDiagnostic["stage"]) {
+    // Closed codes + application counters only. Never retain opaque provider IDs,
+    // tokens, arguments, captions, credentials or PCM in this bounded trace.
+    this.diagnostics.push({
+      sequence: ++this.diagnosticSequence,
+      code,
+      stage,
+      visit: this.state.visitId,
+      turn: this.state.childTurnId,
+      revision: this.state.transcriptRevision,
+    });
+    if (this.diagnostics.length > 64) this.diagnostics.shift();
+  }
+  private scopeFailure(source: Scope): CorrelationCode {
+    return source.childTurnId !== this.state.childTurnId ? "turn.identity.mismatch" : "scope.identity.mismatch";
+  }
+  get hasReservedContext(): boolean {
+    const expected = { ...this.scope(), childTurnId: this.state.childTurnId + 1 };
+    return (
+      !!this.nextContext &&
+      Object.keys(expected).every(key => expected[key as keyof Scope] === this.nextContext!.source[key as keyof Scope])
+    );
+  }
   private learnerRevision = 0;
   private observation?: { source: Scope; learnerRevision: number; outcome: ConversationStateProposal["answerOutcome"] };
   private continuationUsed = false;
@@ -136,13 +232,24 @@ export class CountingProposals {
     if (itemId && !this.messages.some(message => message.id === itemId))
       this.messages.push({ id: itemId, speaker: "Learner", text: "", final: false });
     this.dispatch({ type: "child.turn.started", source: runtimeSource(this.state) });
-    if (itemId && this.contextAcknowledged && this.nextContext && this.matches(this.nextContext.source))
+    if (!itemId) this.contextFailure = "turn.item_id.missing";
+    else if (!this.nextContext) this.contextFailure = "turn.reservation.missing";
+    else if (!this.contextAcknowledged) this.contextFailure = "turn.configuration.unacknowledged";
+    else if (!this.matches(this.nextContext.source)) this.contextFailure = this.scopeFailure(this.nextContext.source);
+    else {
       this.context = this.nextContext;
+      this.contextFailure = undefined;
+    }
+    this.diagnose(this.contextFailure ?? "context.claimed", "speech.started");
     this.nextContext = undefined;
     this.contextAcknowledged = false;
   }
   speechStopped(itemId?: string) {
-    if (this.stopped || !itemId || itemId !== this.learnerItem) return;
+    if (this.stopped) return;
+    if (!itemId || itemId !== this.learnerItem) {
+      this.diagnose(!itemId ? "turn.stop_id.missing" : "turn.stop_id.mismatch", "speech.stopped");
+      return;
+    }
     this.dispatch({ type: "child.turn.ended", source: runtimeSource(this.state) });
     this.settlePending();
   }
@@ -169,6 +276,8 @@ export class CountingProposals {
       // A first final transcript may settle an early call. A correction may not
       // retroactively relabel a call that already had finalized evidence.
       if (old?.final) {
+        this.contextFailure = "transcript.final.corrected";
+        this.diagnose(this.contextFailure, "transcript.final");
         this.rejectPending("learner transcript corrected");
         if (this.response) this.response.rejected = true;
         this.context = undefined;
@@ -186,7 +295,11 @@ export class CountingProposals {
     this.deliver();
   }
   responseCreated(id?: string) {
-    if (this.stopped || !id || this.seenResponses.has(id)) return false;
+    if (this.stopped) return false;
+    if (!id || this.seenResponses.has(id)) {
+      this.diagnose(!id ? "response.id.missing" : "response.id.duplicate", "response.created");
+      return false;
+    }
     this.rejectPending("superseded response");
     this.seenResponses.add(id);
     if (this.state.acknowledgmentObserved) {
@@ -198,8 +311,19 @@ export class CountingProposals {
         speaker: "tutor",
       });
     }
+    const bindingFailure = !this.state.hasChildTurn
+      ? "response.before_turn_start"
+      : this.state.childSpeaking
+        ? "response.before_turn_end"
+        : !this.context
+          ? (this.contextFailure ?? "response.turn.unbound")
+          : !this.matches(this.context.source)
+            ? this.scopeFailure(this.context.source)
+            : undefined;
+    this.diagnose(bindingFailure ?? "response.bound", "response.created");
     this.response = {
       id,
+      bindingFailure,
       turnToken:
         !this.state.childSpeaking && this.context && this.matches(this.context.source) ? this.context.token : undefined,
       source: this.scope(),
@@ -224,7 +348,7 @@ export class CountingProposals {
       this.learnerAnswerAccepted ||
       (this.state.hasChildTurn && (!this.response || !this.messages.find(m => m.id === this.learnerItem)?.final)) ||
       this.state.childSpeaking ||
-      this.nextContext ||
+      this.hasReservedContext ||
       this.hasPending ||
       this.continuationRequested ||
       (this.response && !this.response.done)
@@ -235,6 +359,7 @@ export class CountingProposals {
       source: { ...this.scope(), childTurnId: this.state.childTurnId + 1 },
     };
     this.contextAcknowledged = false;
+    this.diagnose("context.issued", "context");
     return JSON.stringify({ context_token: this.nextContext.token });
   }
   acknowledgeContext() {
@@ -242,9 +367,10 @@ export class CountingProposals {
     if (
       this.nextContext &&
       Object.keys(expected).every(key => expected[key as keyof Scope] === this.nextContext!.source[key as keyof Scope])
-    )
+    ) {
+      if (!this.contextAcknowledged) this.diagnose("context.acknowledged", "context");
       this.contextAcknowledged = true;
-    else this.nextContext = undefined;
+    } else this.nextContext = undefined;
   }
   drainResults(): Result[] {
     return this.results.splice(0);
@@ -261,14 +387,15 @@ export class CountingProposals {
     this.lastResult = `Rejected: ${reason}`;
   }
   call(event: ToolCall): void {
-    if (
-      this.stopped ||
-      typeof event.call_id !== "string" ||
-      !event.call_id ||
-      event.call_id.length > 256 ||
-      this.consumedCalls.has(event.call_id)
-    )
+    if (this.stopped) return;
+    if (typeof event.call_id !== "string" || !event.call_id || event.call_id.length > 256) {
+      this.diagnose("call.id.missing", "tool.call");
       return;
+    }
+    if (this.consumedCalls.has(event.call_id)) {
+      this.diagnose("call.id.duplicate", "tool.call");
+      return;
+    }
     if (this.consumedCalls.size >= 256) {
       this.context = undefined;
       if (this.response) this.response.rejected = true;
@@ -278,7 +405,8 @@ export class CountingProposals {
     this.consumedCalls.add(event.call_id);
     const r = this.response;
     const inResponse = !!r && event.response_id === r.id && !r.done && this.matches(r.source);
-    const reject = (reason: string) => {
+    const reject = (reason: string, diagnostic?: CorrelationCode) => {
+      if (diagnostic) this.diagnose(diagnostic, "tool.call");
       if (inResponse) {
         r.rejected = true;
         this.rejectPending("additional rejected call");
@@ -287,7 +415,19 @@ export class CountingProposals {
       this.results.push({ call_id: event.call_id as string, status: "rejected", reason });
     };
     if (inResponse) r.calls++;
-    if (!inResponse) return reject("stale response");
+    if (!inResponse)
+      return reject(
+        "stale response",
+        typeof event.response_id !== "string" || !event.response_id
+          ? "call.response_id.missing"
+          : !r
+            ? "call.response.missing"
+            : event.response_id !== r.id
+              ? "call.response_id.mismatch"
+              : r.done
+                ? "call.after_response_done"
+                : this.scopeFailure(r.source),
+      );
     if (event.name !== OUTCOME_TOOL.name) return reject("unknown tool");
     if (typeof event.arguments !== "string" || event.arguments.length > 4096) return reject("malformed arguments");
     let args: Arguments;
@@ -307,16 +447,24 @@ export class CountingProposals {
       args.supporting_text.length > 2000
     )
       return reject("malformed arguments");
-    if (
-      this.continuationUsed ||
-      !this.context ||
-      r.turnToken !== this.context.token ||
-      !this.matches(this.context.source) ||
-      args.context_token !== this.context.token ||
-      args.context_token === this.usedToken ||
-      r.calls !== 1
-    )
-      return reject("stale context");
+    const failure: CorrelationCode | undefined = this.continuationUsed
+      ? "call.continuation.disallowed"
+      : !this.context
+        ? (this.contextFailure ?? "call.context.missing")
+        : !this.matches(this.context.source)
+          ? this.scopeFailure(this.context.source)
+          : !r.turnToken
+            ? (r.bindingFailure ?? "response.turn.unbound")
+            : r.turnToken !== this.context.token
+              ? "call.response_token.mismatch"
+              : args.context_token !== this.context.token
+                ? "call.token.mismatch"
+                : args.context_token === this.usedToken
+                  ? "call.token.reused"
+                  : r.calls !== 1
+                    ? "call.multiple.disallowed"
+                    : undefined;
+    if (failure) return reject("stale context", failure);
     this.usedToken = args.context_token;
     const learner = this.messages.find(m => m.id === this.learnerItem && m.speaker === "Learner");
     r.pending = { callId: event.call_id, args, learnerRevision: learner?.final ? this.learnerRevision : undefined };
@@ -358,10 +506,7 @@ export class CountingProposals {
       (!correct ||
         args.support_state !== "none" ||
         navigation.test(text) ||
-        new RegExp(
-          `\\b(${words[Number(node.quantity)]}|${node.quantity})\\b${node.quantity === 1 ? "|\\b(single|only)\\b|\\ba duck\\b" : ""}`,
-          "i",
-        ).test(tutorBefore))
+        tutorAnswerCue(tutorBefore, Number(node.quantity), node.object))
     )
       return fail("unsupported settled answer");
     if (args.answer_outcome === "incorrect" && (!count || correct || help.test(text)))

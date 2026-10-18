@@ -2,7 +2,7 @@ import { COUNTING_LESSON } from "@/lib/lesson-runtime/counting-lesson";
 
 import type { RenderIdentity } from "@/lib/lesson-runtime/lesson-runtime-reducer";
 
-import { CountingProposals, OUTCOME_TOOL } from "./proposals";
+import { CountingProposals, OUTCOME_TOOL, type CorrelationDiagnostic } from "./proposals";
 
 // Providers may reorder object keys or add defaults when echoing configuration.
 function echoesConfiguration(actual: unknown, expected: unknown): boolean {
@@ -51,6 +51,7 @@ export type VoiceSnapshot = {
   nodeId?: string;
   render?: RenderIdentity;
   complete?: boolean;
+  diagnostics?: CorrelationDiagnostic[];
   proposal?: string;
   answerAccepted?: boolean;
   learnerAnswerAccepted?: boolean;
@@ -104,6 +105,7 @@ export class GrokVoice {
       nodeId: this.proposals.state.nodeId,
       render: this.proposals.state.pendingRender?.identity,
       complete: this.proposals.state.lessonComplete,
+      diagnostics: this.proposals.correlationDiagnostics,
       proposal: this.proposals.lastResult,
       answerAccepted: this.proposals.state.answerAccepted,
       learnerAnswerAccepted: this.proposals.learnerAnswerAccepted,
@@ -380,7 +382,10 @@ export class GrokVoice {
     this.emit();
   }
   private configureNextTurn() {
-    if (this.stopped || (!this.ready && this.pendingInstructions)) return;
+    // A response ending does not consume the next learner-turn reservation.
+    // Keep pending/acknowledged context and microphone readiness until speech
+    // claims it, or an explicit invalidation/scene transition replaces it.
+    if (this.stopped || this.proposals.hasReservedContext || (!this.ready && this.pendingInstructions)) return;
     const context = this.proposals.issueContext();
     if (!context) return;
     this.ready = false;
