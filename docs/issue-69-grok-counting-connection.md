@@ -255,3 +255,46 @@ Active microphone audio tracks now register `ended` listeners immediately after 
 New provider-free unit/browser regressions exercise premature/default/mismatched acknowledgment, successful configuration echo, duplicate events and exactly-once opening, the unchanged deadline, unexpected microphone termination, and intentional cleanup/listener removal. Browser device loss is a dispatched track event, not evidence of a physical unplug or operating-system permission revocation. The original live voice check above predates this corrective change; no new spoken walkthrough or physical device test is claimed.
 
 Corrective-commit validation: all 1,503 unit tests in 71 files passed in the working repository (historical benchmark tests require its Git objects). The 31 focused Grok auth/transport tests passed. In a clean source copy, all 12 selected browser tests (Grok, root Counting, and Catching Unicorns), typecheck, lint, and production build passed. Formatting and `git diff --check` passed. The four changed files were byte-compared with that copy before adding this results paragraph. The initial full-suite attempt in the temporary copy could not run historical benchmark assertions without `.git`; rerunning the complete suite in the working repository passed.
+
+## Recovery semantics
+
+The experiment distinguishes three settled-response recovery reasons:
+
+- **Missing report:** no usable counting proposal was received. The existing
+  bounded learner clarification remains limited to one missing-report retry per
+  scene. Only this path can report `No usable counting report`.
+- **Missing tutor acknowledgment:** a correct-answer proposal was validated, but
+  the current tutor response cannot establish acknowledgment. The validated
+  learner observation remains recorded; the learner is not asked to repeat it.
+- **Missing acknowledgment audio:** the existing recognizer accepts the tutor
+  text, but real playback evidence for that response's exact tutor item is absent.
+  Text or unrelated audio cannot supply that evidence.
+
+After local audio drains, unresolved acknowledgment gets a three-second grace
+period, then one tutor-only confirmation continuation if the turn's continuation
+budget is unused. That continuation requests no tools or learner repetition.
+There is still **one continuation total per learner turn**: if an accepted
+tool-only response already needed a continuation to produce speech, there is no
+second acknowledgment continuation. An unresolved completed continuation ends
+with `Tutor confirmation could not be verified` (or the specific confirmation
+audio error). The terminal diagnostic retains the recorded learner answer but
+awards no scene progression. Stop, cancellation, changed learner evidence, and
+new learner speech revoke pending progression; callbacks cannot revive it.
+
+Acknowledgment classification is unchanged and deliberately conservative. In the
+latest demo, `One duck. That's right!` still abstains. It now enters acknowledgment
+recovery and, if that fails or its budget was consumed, fails gracefully with a
+confirmation error instead of claiming that the accepted tool report was missing.
+A subsequent genuine recognized acknowledgment must have its own correlated
+real audio, local playback drain, and the reducer's quiet period before a render
+can be requested. `response.done` remains generation completion only. No
+acknowledgment or playback evidence is synthesized by recovery.
+
+Recovery-commit validation: 199 focused Grok unit tests and the full 1,671-test
+suite (72 files) passed in the working repository. All 13 focused provider-free
+Grok browser tests, typecheck, lint, and production build passed in a clean source
+copy excluding the pre-existing diagnostic-download edits. The copy avoids the
+active development server and ignored review-source artifacts under `test-results`
+that prevent the corresponding in-place checks. Formatting and diff checks passed.
+These regressions exercise fixtures and real local Web Audio drain; no new live
+Grok/classifier quality result is claimed.

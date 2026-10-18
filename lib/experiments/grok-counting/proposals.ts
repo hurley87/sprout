@@ -27,6 +27,7 @@ export const OUTCOME_TOOL = {
     required: ["context_token", "answer_outcome", "support_state", "supporting_text"],
   },
 };
+export type RecoveryReason = "missing-report" | "missing-acknowledgment" | "missing-acknowledgment-audio";
 export type ToolCall = { call_id?: unknown; name?: unknown; arguments?: unknown; response_id?: unknown };
 type Scope = Omit<ClassificationSource, "transcriptRevision">;
 type Context = { token: string; source: Scope };
@@ -142,6 +143,7 @@ export class CountingProposals {
     transcript?: string;
     tutor?: Message;
     audioItems?: Set<string>;
+    acknowledgmentRecognized?: boolean;
   };
   private nextContext?: Context;
   private contextAcknowledged = false;
@@ -229,6 +231,7 @@ export class CountingProposals {
     this.response = undefined;
     this.continuationRequested = false;
     this.continuationUsed = false;
+    this.recoveryExhausted = false;
     this.learner = { itemId, vadStopped: false, validated: false };
     // Preserve speech order even if its transcription arrives after tutor text.
     // The placeholder cannot ground a proposal until actual final text replaces it.
@@ -270,8 +273,10 @@ export class CountingProposals {
       this.response &&
       (!responseId || responseId === this.response.id) &&
       this.matches(this.response.source)
-    )
+    ) {
       this.response.tutor = { ...message };
+      this.response.acknowledgmentRecognized = undefined;
+    }
     if (message.speaker === "Learner") {
       this.observation = undefined;
       this.projectedAcknowledgment = undefined;
@@ -625,11 +630,8 @@ export class CountingProposals {
         "i",
       );
       const key = JSON.stringify([this.learnerRevision, tutor.id, tutor.text]);
-      if (
-        r.audioItems?.has(tutor.id) &&
-        acknowledgment.test(tutor.text.trim()) &&
-        key !== this.projectedAcknowledgment
-      ) {
+      r.acknowledgmentRecognized = acknowledgment.test(tutor.text.trim());
+      if (r.audioItems?.has(tutor.id) && r.acknowledgmentRecognized && key !== this.projectedAcknowledgment) {
         this.projectedAcknowledgment = key;
         if (!this.state.tutorOutputObserved) {
           // Retain the response-correlated real playback onset when its learner
@@ -685,39 +687,51 @@ export class CountingProposals {
     this.missingRetries = 0;
     return true;
   }
-  get missingEligible(): boolean {
+  /** Only settled, current responses can request recovery; playback is drained by transport. */
+  get recoveryReason(): RecoveryReason | undefined {
     const r = this.response;
     const learner = this.messages.find(m => m.id === this.learner?.itemId);
-    return (
-      !this.stopped &&
-      this.state.phase === "active" &&
-      !this.state.childSpeaking &&
-      !!learner?.final &&
-      (total.test(normalize(learner.text)) || help.test(learner.text)) &&
-      !!r?.done &&
-      r.completed &&
-      !!r.turnToken &&
-      this.matches(r.source) &&
-      !r.pending &&
-      ((r.calls === 0 && !this.continuationUsed) ||
-        (this.learnerAnswerAccepted &&
-          r.spoken &&
-          (!this.state.acknowledgmentObserved || !this.state.tutorOutputObserved))) &&
-      !this.recoveryExhausted
-    );
-  }
-  takeMissingRecovery(): boolean {
-    if (!this.missingEligible) return false;
-    if (this.missingRetries >= 1 || this.continuationUsed) {
-      this.recoveryExhausted = true;
-      this.lastResult = "No usable report after one retry. Stop or Start to restart.";
-      return false;
+    if (
+      this.stopped ||
+      this.recoveryExhausted ||
+      this.continuationRequested ||
+      this.state.phase !== "active" ||
+      this.state.childSpeaking ||
+      !learner?.final ||
+      !r?.done ||
+      !r.completed ||
+      !r.turnToken ||
+      !this.matches(r.source) ||
+      r.pending
+    )
+      return;
+    if (this.learnerAnswerAccepted) {
+      // Tool-only output gets its usual continuation before timed recovery.
+      if (!r.spoken && !this.continuationUsed) return;
+      if (!r.acknowledgmentRecognized) return "missing-acknowledgment";
+      if (!r.tutor || !r.audioItems?.has(r.tutor.id) || !this.state.tutorOutputObserved)
+        return "missing-acknowledgment-audio";
+      return;
     }
-    this.missingRetries++;
+    if (r.calls === 0 && !this.continuationUsed && (total.test(normalize(learner.text)) || help.test(learner.text)))
+      return "missing-report";
+  }
+  takeRecovery(): RecoveryReason | undefined {
+    const reason = this.recoveryReason;
+    if (!reason) return;
+    if (this.continuationUsed || (reason === "missing-report" && this.missingRetries >= 1)) {
+      this.recoveryExhausted = true;
+      // Preserve lastResult and the validated observation for acknowledgment failures.
+      if (reason === "missing-report") this.lastResult = "No usable counting report after one retry.";
+      return;
+    }
+    if (reason === "missing-report") {
+      this.missingRetries++;
+      this.lastResult = "No report; asking once for clarification. No success awarded.";
+    }
     this.continuationUsed = true;
     this.continuationRequested = true;
-    this.lastResult = "No report; asking once for clarification. No success awarded.";
-    return true;
+    return reason;
   }
   output(active: boolean, itemId?: string) {
     if (

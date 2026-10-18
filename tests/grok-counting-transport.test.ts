@@ -1035,3 +1035,103 @@ it("settles the exact live partial-completed sequence and progresses only after 
   expect(socket.sent.filter(e => (e.item as { type?: string })?.type === "function_call_output")).toHaveLength(1);
   voice.stop();
 });
+
+it.each(["recover", "abstain again", "no audio", "wrong item audio", "tool-only budget"])(
+  "separates the live accepted-answer acknowledgment failure: %s",
+  async outcome => {
+    vi.useFakeTimers();
+    const { voice, socket, context } = await connected();
+    learnerAnswer(socket);
+    propose(socket);
+    if (outcome === "tool-only budget") {
+      socket.event({ type: "response.done", response: { id: "tools", status: "completed" } });
+      socket.event({ type: "response.created", response: { id: "ack" } });
+    }
+    const response = outcome === "tool-only budget" ? "ack" : "tools";
+    tutor(socket, response, "One duck. That's right!");
+    socket.event({ type: "response.done", response: { id: response, status: "completed" } });
+    expect(updates.at(-1)).toMatchObject({ learnerAnswerAccepted: true, answerAccepted: false });
+    vi.advanceTimersByTime(5000); // Generation completion cannot stand in for local drain.
+    expect(socket.sent.filter(e => e.type === "response.create")).toHaveLength(outcome === "tool-only budget" ? 2 : 1);
+    context.sources.at(-1)?.onended?.();
+    vi.advanceTimersByTime(3000);
+    expect(updates.at(-1)?.learnerAnswerAccepted).toBe(true);
+    if (outcome !== "tool-only budget") {
+      const continuation = socket.sent.filter(e => e.type === "response.create");
+      expect(continuation).toHaveLength(2);
+      const instructions = (continuation.at(-1)!.response as { instructions: string }).instructions;
+      expect(instructions).toContain("correct answer was already validated");
+      expect(instructions).toContain("Do not call any tools");
+      expect(instructions).not.toContain("No usable report");
+      socket.event({ type: "response.created", response: { id: "retry-ack" } });
+      tutor(
+        socket,
+        "retry-ack",
+        outcome === "abstain again" ? "One duck. That's right!" : "Yes, one duck.",
+        outcome !== "no audio" && outcome !== "wrong item audio",
+      );
+      if (outcome === "wrong item audio")
+        socket.event({
+          type: "response.output_audio.delta",
+          response_id: "retry-ack",
+          item_id: "unrelated",
+          delta: btoa("\0\0".repeat(2400)),
+        });
+      socket.event({ type: "response.done", response: { id: "retry-ack", status: "completed" } });
+      expect(updates.at(-1)?.render).toBeUndefined();
+      context.sources.at(-1)?.onended?.();
+      vi.advanceTimersByTime(260);
+      if (outcome === "recover") expect(updates.at(-1)?.render?.nodeId).toBe("count-2-ducks");
+      else vi.advanceTimersByTime(3000);
+    }
+    if (outcome !== "recover") {
+      expect(updates.at(-1)).toMatchObject({ status: "error", learnerAnswerAccepted: true, nodeId: "count-1-duck" });
+      expect(updates.at(-1)?.error).toContain(
+        outcome.includes("audio")
+          ? "Tutor confirmation audio could not be verified"
+          : "Tutor confirmation could not be verified",
+      );
+      expect(updates.some(s => s.render || s.error?.includes("No usable counting report"))).toBe(false);
+    }
+    vi.advanceTimersByTime(60000);
+    expect(socket.sent.filter(e => e.type === "response.create")).toHaveLength(2);
+    voice.stop();
+  },
+);
+
+it.each(["Stop", "new learner speech", "cancel", "interrupt during recovery"])(
+  "revokes acknowledgment recovery safely on %s",
+  async action => {
+    vi.useFakeTimers();
+    const { voice, socket, context } = await connected();
+    learnerAnswer(socket);
+    propose(socket);
+    tutor(socket, "tools", "One duck. That's right!");
+    if (action === "cancel") {
+      socket.event({ type: "response.done", response: { id: "tools", status: "cancelled" } });
+    } else {
+      socket.event({ type: "response.done", response: { id: "tools", status: "completed" } });
+    }
+    context.sources.at(-1)?.onended?.();
+    if (action === "interrupt during recovery") {
+      vi.advanceTimersByTime(3000);
+      socket.event({ type: "response.created", response: { id: "ack" } });
+      tutor(socket, "ack", "Yes, one duck.");
+    }
+    if (action === "Stop") voice.stop();
+    if (action.includes("speech") || action.includes("interrupt"))
+      socket.event({ type: "input_audio_buffer.speech_started", item_id: "new-turn" });
+    if (action === "cancel") {
+      const config = socket.sent.filter(e => e.type === "session.update").at(-1)!;
+      socket.event({ type: "session.updated", session: config.session });
+    }
+    const sent = socket.sent.length;
+    socket.event({ type: "response.done", response: { id: "ack", status: "completed" } });
+    context.sources.at(-1)?.onended?.();
+    vi.advanceTimersByTime(60000);
+    expect(updates.at(-1)?.learnerAnswerAccepted).toBe(false);
+    expect(updates.some(s => s.render || s.error)).toBe(false);
+    expect(socket.sent).toHaveLength(sent);
+    voice.stop();
+  },
+);

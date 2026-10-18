@@ -70,6 +70,7 @@ export function encodePcm(samples: Float32Array) {
 export class GrokVoice {
   private proposals = new CountingProposals();
   private stopped = false;
+  private acceptedAtRecoveryFailure = false;
   private started = false;
   private abort = new AbortController();
   private socket?: WebSocket;
@@ -83,7 +84,7 @@ export class GrokVoice {
   private pendingInstructions?: string;
   private openingSent = false;
   private drainTimer?: ReturnType<typeof setTimeout>;
-  private missingTimer?: ReturnType<typeof setTimeout>;
+  private recoveryTimer?: ReturnType<typeof setTimeout>;
   private questionPending = false;
   private proposalTimer?: ReturnType<typeof setTimeout>;
   private microphoneEnded = () =>
@@ -108,7 +109,7 @@ export class GrokVoice {
       diagnostics: this.proposals.correlationDiagnostics,
       proposal: this.proposals.lastResult,
       answerAccepted: this.proposals.state.answerAccepted,
-      learnerAnswerAccepted: this.proposals.learnerAnswerAccepted,
+      learnerAnswerAccepted: this.acceptedAtRecoveryFailure || this.proposals.learnerAnswerAccepted,
       transcripts: this.state.transcripts.map(t => ({ ...t })),
     });
   }
@@ -459,22 +460,39 @@ export class GrokVoice {
       clearTimeout(this.proposalTimer);
       this.proposalTimer = undefined;
     }
-    if (!this.proposals.missingEligible || this.sources.size) {
-      clearTimeout(this.missingTimer);
-      this.missingTimer = undefined;
+    if (!this.proposals.recoveryReason || this.sources.size) {
+      clearTimeout(this.recoveryTimer);
+      this.recoveryTimer = undefined;
     } else {
-      if (!this.missingTimer)
-        this.missingTimer = setTimeout(() => {
-          this.missingTimer = undefined;
-          if (this.proposals.takeMissingRecovery())
+      if (!this.recoveryTimer)
+        this.recoveryTimer = setTimeout(() => {
+          this.recoveryTimer = undefined;
+          const reason = this.proposals.recoveryReason;
+          const recovery = this.proposals.takeRecovery();
+          if (recovery) {
+            const instruction =
+              recovery === "missing-report"
+                ? "No usable report arrived. Ask once for the learner to repeat or clarify, without giving a count or claiming success."
+                : "The learner's correct answer was already validated. Confirm that answer once with its number and object, then pause. Do not ask the learner to repeat or answer again.";
             this.send({
               type: "response.create",
               response: {
-                instructions: `${this.configurationInstructions}\nNo usable report arrived. Ask once for the learner to repeat or clarify, without giving a count, claiming success or calling tools.`,
+                instructions: `${this.configurationInstructions}\n${instruction} Do not call any tools. Do not announce a new scene.`,
               },
             });
-          else if (this.proposals.recoveryExhausted)
-            this.fail("No usable counting report after one retry. Press Start to restart, or leave the experiment.");
+          } else if (this.proposals.recoveryExhausted) {
+            const accepted = this.proposals.learnerAnswerAccepted;
+            const message =
+              reason === "missing-report"
+                ? "No usable counting report after one retry. Press Start to restart, or leave the experiment."
+                : reason === "missing-acknowledgment-audio"
+                  ? "Tutor confirmation audio could not be verified. The learner answer was recorded, but the scene cannot advance. Press Start to restart."
+                  : "Tutor confirmation could not be verified. The learner answer was recorded, but the scene cannot advance. Press Start to restart.";
+            this.fail(message);
+            // Diagnostic learner evidence survives this terminal recovery error only;
+            // Stop/cancellation still revoke all progression authority in the adapter.
+            this.acceptedAtRecoveryFailure = accepted;
+          }
           this.emit();
         }, 3000);
       return;
@@ -551,7 +569,7 @@ export class GrokVoice {
     clearTimeout(this.timer);
     clearTimeout(this.proposalTimer);
     clearTimeout(this.drainTimer);
-    clearTimeout(this.missingTimer);
+    clearTimeout(this.recoveryTimer);
     this.abort.abort();
     if (this.socket) {
       this.socket.onopen = this.socket.onmessage = this.socket.onerror = this.socket.onclose = null;

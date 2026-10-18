@@ -700,3 +700,58 @@ it("keeps the observed wrong-object ASR result rejected after settling the origi
   expect(adapter.correlationDiagnostics.at(-1)?.code).toBe("response.bound");
   expect(adapter.learnerAnswerAccepted).toBe(false);
 });
+
+it.each([
+  ["One duck. That's right!", true, "missing-acknowledgment"],
+  ["Yes, one duck.", false, "missing-acknowledgment-audio"],
+  ["Yes, one duck.", true, undefined],
+] as const)("distinguishes acknowledgment from correlated audio: %s / %s", (text, audio, reason) => {
+  const { adapter, call } = fixture();
+  call();
+  adapter.transcript({ id: "ack", speaker: "Tutor", text, final: true }, "r1");
+  adapter.spoken("r1");
+  if (audio) adapter.output(true, "ack");
+  adapter.responseDone("r1", "completed");
+  adapter.output(false);
+  adapter.tick();
+  expect(adapter.learnerAnswerAccepted).toBe(true);
+  expect(adapter.recoveryReason).toBe(reason);
+  expect(adapter.state.phase).toBe("active");
+  if (reason) {
+    expect(adapter.takeRecovery()).toBe(reason);
+    expect(adapter.takeRecovery()).toBeUndefined();
+    expect(adapter.recoveryReason).toBeUndefined();
+    expect(adapter.learnerAnswerAccepted).toBe(true);
+    expect(adapter.lastResult).toBe("Accepted: correct · none");
+  }
+});
+
+it("uses missing-report recovery only without a validated observation", () => {
+  const { adapter } = fixture();
+  adapter.responseDone("r1", "completed");
+  expect(adapter.recoveryReason).toBe("missing-report");
+  expect(adapter.takeRecovery()).toBe("missing-report");
+  expect(adapter.takeRecovery()).toBeUndefined();
+  expect(adapter.learnerAnswerAccepted).toBe(false);
+});
+
+it("retains the accepted observation when an already used continuation exhausts acknowledgment recovery", () => {
+  const { adapter, call } = fixture();
+  call();
+  adapter.responseDone("r1", "completed");
+  expect(adapter.takeContinuation()).toBe("accepted");
+  adapter.responseCreated("ack");
+  adapter.transcript({ id: "ack-item", speaker: "Tutor", text: "One duck. That's right!", final: true }, "ack");
+  adapter.output(true, "ack-item");
+  adapter.spoken("ack");
+  adapter.responseDone("ack", "completed");
+  adapter.output(false);
+  adapter.tick();
+  expect(adapter.recoveryReason).toBe("missing-acknowledgment");
+  expect(adapter.takeRecovery()).toBeUndefined();
+  expect(adapter.recoveryExhausted).toBe(true);
+  expect(adapter.recoveryReason).toBeUndefined();
+  expect(adapter.learnerAnswerAccepted).toBe(true);
+  expect(adapter.state).toMatchObject({ acknowledgmentObserved: false, phase: "active", conceptEvidence: {} });
+  expect(adapter.lastResult).toBe("Accepted: correct · none");
+});
