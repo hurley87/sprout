@@ -3,12 +3,20 @@ import { parseConversationStateProposal } from "./conversation-state-classifier"
 import { currentNodeContext, isLessonNodeId, type LessonDefinition } from "./lesson-definition";
 import { transcriptMessages } from "./tutor-observation";
 import {
+  learnerRequestedNext,
+  closingTutorExchange,
+  matchesTutorClosure,
+  tutorAcknowledgedClosure,
+  hasConversationCompletionEvidence,
+} from "./conversation-progression";
+import {
   applyConceptObservations,
   conceptKey,
   type ConceptEvidenceRecord,
   type ConceptRevealEffect,
 } from "./concept-evidence";
 
+export { learnerRequestedNext } from "./conversation-progression";
 export type { ConceptEvidenceReference, ConceptEvidenceRecord } from "./concept-evidence";
 
 /** App-owned identities, captured at the source/request boundary, never supplied by the classifier. */
@@ -190,46 +198,6 @@ export function createLessonRuntime(
   };
 }
 
-/** Recognize only complete navigation commands and short explanations surrounding them.
- * Every sentence must match the grammar; never search inside answers or quotations. */
-export function learnerRequestedNext(transcript: string) {
-  const text = transcriptMessages(transcript)
-    ?.findLast(message => message.speaker === "Child")
-    ?.text.trim().replace(/\s+/gu, " ");
-  if (!text) return false;
-  const sentences = text.split(/(?<=[.!?])\s+/u);
-  let requested = false;
-  for (const sentence of sentences) {
-    const command = sentence
-      .replace(/[.!?]+$/u, "")
-      .replace(/^i (?:don't|don’t|do not) know,\s+/iu, "")
-      .replace(/^(?:(?:yes|yeah|okay|ok|well|um|i am)[,.]?\s+)+/iu, "")
-      .replace(/^i think\s+/iu, "")
-      .replace(/^please[,.]?\s+/iu, "")
-      .replace(/,? please$/iu, "");
-    const directRequest = [
-      /^next(?: question)?(?:,? then)?$/iu,
-      /^(?:can|could) i (?:have|get) (?:the )?next question$/iu,
-      /^i(?:['’]d| would) like (?:the )?next question$/iu,
-      /^let['’]s do (?:the )?next question$/iu,
-      /^(?:(?:let['’]s|can we|could we|i(?:['’]d| would) like to)\s+)?(?:move on|(?:go|move|skip)(?: on)? to (?:the )?next(?: question)?|skip (?:this|that|the)(?: question)?)$/iu,
-    ].some(pattern => pattern.test(command));
-    if (directRequest) {
-      requested = true;
-      continue;
-    }
-    // Explanations alone never request navigation. Questions, disagreement and
-    // added answer content do not match and invalidate the entire utterance.
-    const explanation = sentence.replace(/[.!]+$/u, "");
-    if (![
-      /^i (?:don't|don’t|do not) know$/iu,
-      /^i(?: think i)?(?: have|['’]ve) answered (?:(?:this|that)(?: question)?|the question)$/iu,
-      /^i(?:['’]m| am) done with (?:this|that|the) question$/iu,
-    ].some(pattern => pattern.test(explanation))) return false;
-  }
-  return requested;
-}
-
 export function runtimeSource(state: LessonRuntimeState): RuntimeSource {
   return { runtimeId: state.runtimeId, visitId: state.visitId, childTurnId: state.childTurnId };
 }
@@ -274,11 +242,7 @@ export function meetsAuthoredCompletionPolicy(state: LessonRuntimeState, lesson:
 export function hasCurrentCompletionEvidence(state: LessonRuntimeState, lesson: LessonDefinition) {
   if (lesson.nodes[state.nodeId].completeAfterTutorOutput)
     return state.tutorOutputObserved && state.terminalTranscriptComplete === true && !state.terminalLearnerPending;
-  if (lesson.conversationFirst)
-    return (
-      state.conversationAdvanceRequested === "learner" ||
-      ((state.hasChildTranscript || state.interruptedExchange?.ready) && state.conversationAdvanceRequested === "tutor")
-    );
+  if (lesson.conversationFirst) return hasConversationCompletionEvidence(state);
   return (
     state.hasChildTranscript &&
     state.transcriptSource === "tutor" &&
@@ -288,21 +252,6 @@ export function hasCurrentCompletionEvidence(state: LessonRuntimeState, lesson: 
     state.acknowledgmentObserved &&
     meetsAuthoredCompletionPolicy(state, lesson)
   );
-}
-
-/** This only bounds what may follow a classified tutor close; it never establishes closure. */
-function closingTutorExchange(snapshot: string | undefined) {
-  const messages = snapshot === undefined ? null : transcriptMessages(snapshot);
-  if (!messages) return null;
-  const messageIndex = messages.findLastIndex(message => message.speaker === "Tutor");
-  if (messageIndex < 0) return null;
-  const suffix = messages.slice(messageIndex + 1).map(message => message.text.trim().replace(/\s+/gu, " "));
-  const acknowledgment = /^(?:great|okay|ok|sounds good|thanks|thank you)[.! ,]*$/iu;
-  const complete = suffix.every(text => acknowledgment.test(text));
-  // Provider fragments can split "Sounds good" or "Thank you". Keep authority
-  // suspended across the prefix; incomplete text cannot authorize progression.
-  return suffix.every(text => acknowledgment.test(text) || /^(?:sounds|thank)$/iu.test(text))
-    ? { messageIndex, text: messages[messageIndex].text, complete } : null;
 }
 
 function sameRender(expected: RenderIdentity, actual: RenderIdentity) {
@@ -659,9 +608,7 @@ export function reduceLessonRuntime(
       }
       const exchange = lesson.conversationFirst && event.speaker === "child"
         ? closingTutorExchange(event.transcriptSnapshot) : null;
-      const closure = exchange && state.tutorClosure &&
-        exchange.messageIndex === state.tutorClosure.messageIndex && exchange.text === state.tutorClosure.text
-        ? state.tutorClosure : null;
+      const closure = matchesTutorClosure(exchange, state.tutorClosure) ? state.tutorClosure : null;
       next = {
         ...next,
         ...(event.speaker === "tutor" ? {} : clearedEvidence),
@@ -714,8 +661,7 @@ export function reduceLessonRuntime(
         // classified close of this unchanged exchange. New substantive words or
         // tutor output already invalidate tutorClosure in transcript.updated.
         conversationAdvanceRequested:
-          state.tutorClosure && exchange?.complete &&
-          exchange.messageIndex === state.tutorClosure.messageIndex && exchange.text === state.tutorClosure.text
+          exchange?.complete && matchesTutorClosure(exchange, state.tutorClosure)
             ? "tutor" : state.conversationAdvanceRequested,
         // Without a retained close, require a fresh exact-source proposal.
         consumedRevision: null,
@@ -779,8 +725,7 @@ export function reduceLessonRuntime(
       additionalEffects = conceptResult.effects;
       if (lesson.conversationFirst) {
         const exchange = closingTutorExchange(event.transcriptSnapshot);
-        const tutorClosed = proposal.tutorState === "acknowledging" &&
-          (state.transcriptSource === "tutor" || (state.transcriptSource === "child" && exchange?.complete === true));
+        const tutorClosed = tutorAcknowledgedClosure(proposal.tutorState, state.transcriptSource, exchange);
         next = {
           ...next,
           tutorClosure: tutorClosed && exchange
