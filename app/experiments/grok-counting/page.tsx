@@ -74,6 +74,9 @@ export default function GrokCounting() {
         Requested model: {GROK_MODEL} · Server-echoed model:{" "}
         {snapshot?.echoedModel ?? "unavailable (serving identity unverified)"}
       </p>
+      <p aria-label="Tool proposal">
+        {snapshot?.proposal ?? "No proposal"} · Answer accepted: {snapshot?.answerAccepted ? "yes" : "no"}
+      </p>
       <section className="space-y-2 rounded border p-4" aria-label="Conversation transcript">
         <h2 className="font-semibold">Transcript</h2>
         <p className="text-sm">

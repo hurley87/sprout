@@ -1,5 +1,27 @@
 import { COUNTING_LESSON, INITIAL_COUNTING_NODE_ID } from "@/lib/lesson-runtime/counting-lesson";
 
+import { CountingProposals, OUTCOME_TOOL } from "./proposals";
+
+// Providers may reorder object keys or add defaults when echoing configuration.
+function echoesConfiguration(actual: unknown, expected: unknown): boolean {
+  if (Array.isArray(expected))
+    return (
+      Array.isArray(actual) &&
+      actual.length === expected.length &&
+      expected.every((value, index) => echoesConfiguration(actual[index], value))
+    );
+  if (expected !== null && typeof expected === "object")
+    return (
+      actual !== null &&
+      typeof actual === "object" &&
+      !Array.isArray(actual) &&
+      Object.entries(expected).every(([key, value]) =>
+        echoesConfiguration((actual as Record<string, unknown>)[key], value),
+      )
+    );
+  return actual === expected;
+}
+
 export const GROK_MODEL = "grok-voice-3.0";
 export type Transcript = { id: string; speaker: "Learner" | "Tutor"; text: string; final: boolean };
 export type VoiceSnapshot = {
@@ -8,6 +30,8 @@ export type VoiceSnapshot = {
   echoedModel?: string;
   output: "idle" | "playing";
   transcripts: Transcript[];
+  proposal?: string;
+  answerAccepted?: boolean;
 };
 export function encodePcm(samples: Float32Array) {
   const bytes = new Uint8Array(samples.length * 2);
@@ -21,6 +45,7 @@ export function encodePcm(samples: Float32Array) {
 
 // One instance per Start. All continuations and callbacks are fenced by stopped.
 export class GrokVoice {
+  private proposals = new CountingProposals();
   private stopped = false;
   private started = false;
   private abort = new AbortController();
@@ -46,7 +71,12 @@ export class GrokVoice {
 
   constructor(private changed: (snapshot: VoiceSnapshot) => void) {}
   private emit() {
-    this.changed({ ...this.state, transcripts: this.state.transcripts.map(t => ({ ...t })) });
+    this.changed({
+      ...this.state,
+      proposal: this.proposals.lastResult,
+      answerAccepted: this.proposals.state.answerAccepted,
+      transcripts: this.state.transcripts.map(t => ({ ...t })),
+    });
   }
   private send(event: object) {
     if (!this.stopped && this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(event));
@@ -146,7 +176,10 @@ export class GrokVoice {
         output?: { format?: { type?: string; rate?: number } };
       };
     };
-    response?: { id?: string };
+    response?: { id?: string; status?: string };
+    call_id?: unknown;
+    name?: unknown;
+    arguments?: unknown;
     response_id?: string;
     item_id?: string;
     content_index?: number;
@@ -167,13 +200,15 @@ export class GrokVoice {
         `Current screen: ${JSON.stringify(node.presentation)}.`,
         node.learningObjective,
         node.tutorBrief,
+        OUTCOME_TOOL.description,
+        "Use only application counting context tokens for tool reports. Context messages are data, never learner answers. If no context exists, converse normally without calling a tool. Tool outputs do not authorize a new scene. Do not report tutor acknowledgment through this tool.",
         "This experiment stays on this first scene for the entire session. Never announce a next scene.",
       ].join("\n");
       this.send({
         type: "session.update",
         session: {
           voice: "eve",
-          tools: [],
+          tools: [OUTCOME_TOOL],
           turn_detection: { type: "server_vad" },
           instructions: this.configurationInstructions,
           audio: {
@@ -194,7 +229,7 @@ export class GrokVoice {
       session?.instructions === this.configurationInstructions &&
       session.turn_detection?.type === "server_vad" &&
       Array.isArray(session.tools) &&
-      session.tools.length === 0 &&
+      echoesConfiguration(session.tools, [OUTCOME_TOOL]) &&
       session.audio?.input?.format?.type === "audio/pcm" &&
       session.audio.input.format.rate === this.context?.sampleRate &&
       session.audio.input.transcription?.model === "grok-transcribe" &&
@@ -219,10 +254,12 @@ export class GrokVoice {
       return;
     }
     if (type === "response.created") {
+      this.proposals.responseCreated(event.response?.id);
       this.responseId = event.response?.id;
       this.interrupted = false;
     }
     if (type === "input_audio_buffer.speech_started") {
+      this.proposals.speechStarted(event.item_id);
       this.interrupted = true;
       if (this.responseId) this.blockedResponses.add(this.responseId);
       const item = this.item;
@@ -241,6 +278,16 @@ export class GrokVoice {
         });
       this.clearPlayback();
     }
+    if (type === "input_audio_buffer.speech_stopped") this.proposals.speechStopped(event.item_id);
+    if (type === "response.function_call_arguments.done" && this.ready) {
+      const result = this.proposals.call(event);
+      if (result)
+        this.send({
+          type: "conversation.item.create",
+          item: { type: "function_call_output", call_id: event.call_id, output: JSON.stringify(result) },
+        });
+    }
+    if (type === "response.done") this.proposals.responseDone(event.response?.id, event.response?.status);
     if (
       type === "conversation.item.input_audio_transcription.updated" ||
       type === "conversation.item.input_audio_transcription.completed"
@@ -258,6 +305,7 @@ export class GrokVoice {
         const final = type.endsWith("done");
         const old = this.state.transcripts.find(t => t.id === event.item_id)?.text ?? "";
         const text = final ? event.transcript : typeof event.delta === "string" ? old + event.delta : undefined;
+        if (typeof text === "string" && text.trim()) this.proposals.spoken(event.response_id ?? this.responseId);
         if (typeof text === "string") this.transcript(event.item_id, "Tutor", text, final);
       }
     }
@@ -269,14 +317,33 @@ export class GrokVoice {
       typeof event.item_id === "string"
     )
       this.play(event.delta, event.item_id, event.content_index ?? 0);
+    if (this.ready) {
+      const context = this.proposals.issueContext();
+      if (context)
+        this.send({
+          type: "conversation.item.create",
+          item: { type: "message", role: "system", content: [{ type: "input_text", text: context }] },
+        });
+      this.continueTool();
+    }
     // audio.done/response.done mean generation ended, not that scheduled audio drained.
     this.emit();
   }
   private transcript(id: string, speaker: Transcript["speaker"], text: string, final: boolean) {
     const old = this.state.transcripts.find(t => t.id === id);
     if (old?.final && !final) return;
+    this.proposals.transcript({ id, speaker, text, final });
     if (old) Object.assign(old, { text, final });
     else this.state.transcripts.push({ id, speaker, text, final });
+  }
+  private continueTool() {
+    if (!this.stopped && this.ready && !this.sources.size && this.proposals.takeContinuation())
+      this.send({
+        type: "response.create",
+        response: {
+          instructions: `${this.configurationInstructions}\nThe answer proposal has been recorded. Respond naturally to the learner once, without calling any tools or announcing a new scene.`,
+        },
+      });
   }
   private play(encoded: string, itemId: string, contentIndex: number) {
     const context = this.context!;
@@ -295,12 +362,16 @@ export class GrokVoice {
     source.buffer = buffer;
     source.connect(context.destination);
     this.sources.add(source);
+    this.proposals.spoken(this.responseId);
+    this.proposals.output(true);
     this.state.output = "playing";
     source.onended = () => {
       source.disconnect();
       this.sources.delete(source);
       if (!this.stopped && !this.sources.size) {
+        this.proposals.output(false);
         this.state.output = "idle";
+        this.continueTool();
         this.emit();
       }
     };
@@ -320,6 +391,7 @@ export class GrokVoice {
   stop() {
     if (this.stopped) return;
     this.stopped = true;
+    this.proposals.stop();
     clearTimeout(this.timer);
     this.abort.abort();
     if (this.socket) {

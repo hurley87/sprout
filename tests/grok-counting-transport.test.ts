@@ -119,7 +119,7 @@ it("configures the fixed scene, starts once after acknowledgment and streams PCM
   expect(socket.protocols).toEqual(["xai-client-secret.ephemeral"]);
   expect(socket.sent[0]).toMatchObject({
     type: "session.update",
-    session: { tools: [], audio: { input: { format: { rate: 24000 } } } },
+    session: { tools: [{ name: "report_counting_answer" }], audio: { input: { format: { rate: 24000 } } } },
   });
   expect(JSON.stringify(socket.sent[0])).toContain("hello-duck");
   socket.event({ type: "session.updated", session: socket.sent[0].session });
@@ -296,6 +296,7 @@ it("ignores premature/default updates and gates microphone and opening until our
     { ...intended, instructions: "default" },
     { ...intended, turn_detection: { type: null } },
     { ...intended, tools: [{ type: "function" }] },
+    { ...intended, tools: [] },
     {
       ...intended,
       audio: {
@@ -326,7 +327,15 @@ it("ignores premature/default updates and gates microphone and opening until our
   // Real provider echoes may add defaults and omit voice; compare supported configuration fields.
   const { voice: omittedVoice, ...echo } = intended;
   void omittedVoice;
-  socket.event({ type: "session.updated", session: { ...echo, model: "echoed", extra_default: true } });
+  socket.event({
+    type: "session.updated",
+    session: {
+      ...echo,
+      tools: [...(echo.tools as object[])].map(tool => Object.fromEntries(Object.entries(tool).reverse())),
+      model: "echoed",
+      extra_default: true,
+    },
+  });
   expect(updates.at(-1)?.status).toBe("listening");
   expect(socket.sent.map(e => e.type)).toEqual(["session.update", "conversation.item.create", "response.create"]);
   worklet.port.onmessage?.({ data: new Float32Array([1]) });
@@ -393,4 +402,77 @@ it("rejects an already-ended microphone instead of waiting for an event", async 
   expect(updates.at(-1)?.error).toContain("microphone disconnected");
   expect(track.stop).toHaveBeenCalledOnce();
   expect(Socket.instances).toHaveLength(0);
+});
+
+function propose(socket: Socket, id = "call1", changes = {}) {
+  const context = socket.sent
+    .filter(e => e.type === "conversation.item.create")
+    .map(e => e.item as { role?: string; content?: { text: string }[] })
+    .findLast(item => item.role === "system")!;
+  const token = JSON.parse(context.content![0].text.match(/(\{.*\})/)![1]).context_token;
+  socket.event({
+    type: "response.function_call_arguments.done",
+    response_id: "tools",
+    call_id: id,
+    name: "report_counting_answer",
+    arguments: JSON.stringify({
+      context_token: token,
+      answer_outcome: "correct",
+      support_state: "none",
+      supporting_text: "One duck.",
+      ...changes,
+    }),
+  });
+}
+function learnerAnswer(socket: Socket) {
+  socket.event({ type: "input_audio_buffer.speech_started", item_id: "learner" });
+  socket.event({ type: "input_audio_buffer.speech_stopped", item_id: "learner" });
+  socket.event({ type: "response.created", response: { id: "tools" } });
+  socket.event({
+    type: "conversation.item.input_audio_transcription.completed",
+    item_id: "learner",
+    transcript: "One duck.",
+  });
+}
+it("delivers a wire tool proposal and acknowledges once, continuing only after completed tool-only output", async () => {
+  const { voice, socket } = await connected();
+  learnerAnswer(socket);
+  propose(socket);
+  expect(updates.at(-1)?.answerAccepted).toBe(false);
+  expect(updates.at(-1)?.proposal).toContain("Validated: correct");
+  const outputs = () => socket.sent.filter(e => (e.item as { type?: string })?.type === "function_call_output");
+  expect(outputs()).toHaveLength(1);
+  propose(socket);
+  expect(outputs()).toHaveLength(1);
+  expect(socket.sent.filter(e => e.type === "response.create")).toHaveLength(1);
+  socket.event({ type: "response.done", response: { id: "tools", status: "completed" } });
+  expect(socket.sent.filter(e => e.type === "response.create")).toHaveLength(2);
+  expect(updates.at(-1)?.answerAccepted).toBe(true);
+  socket.event({ type: "response.done", response: { id: "tools", status: "completed" } });
+  expect(socket.sent.filter(e => e.type === "response.create")).toHaveLength(2);
+  expect(fetch).toHaveBeenCalledTimes(1); // Only ephemeral authorization.
+  voice.stop();
+});
+it("acknowledges rejection without continuation and ignores delayed calls after Stop", async () => {
+  const { voice, socket } = await connected();
+  learnerAnswer(socket);
+  propose(socket, "wrong", { supporting_text: "Yes, one duck." });
+  socket.event({ type: "response.done", response: { id: "tools", status: "completed" } });
+  expect(updates.at(-1)?.answerAccepted).toBe(false);
+  expect(socket.sent.filter(e => e.type === "response.create")).toHaveLength(1);
+  const callback = socket.onmessage!;
+  voice.stop();
+  const count = socket.sent.length;
+  callback({ data: JSON.stringify({ type: "response.function_call_arguments.done", call_id: "late" }) });
+  expect(socket.sent).toHaveLength(count);
+});
+it("does not double-speak when a tool arrives alongside tutor audio", async () => {
+  const { voice, socket, context } = await connected();
+  learnerAnswer(socket);
+  propose(socket);
+  socket.event({ type: "response.output_audio.delta", response_id: "tools", item_id: "a", delta: "AAA=" });
+  socket.event({ type: "response.done", response: { id: "tools", status: "completed" } });
+  context.sources[0].onended?.();
+  expect(socket.sent.filter(e => e.type === "response.create")).toHaveLength(1);
+  voice.stop();
 });

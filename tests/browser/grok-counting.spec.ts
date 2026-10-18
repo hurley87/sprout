@@ -148,3 +148,63 @@ test("waits for matching configuration and reports unexpected microphone termina
   await expect.poll(() => closed).toBe(true);
   await expect(page.getByRole("button", { name: "Start", exact: true })).toBeEnabled();
 });
+
+test("wire tool proposal reaches the reducer adapter without secondary requests or scene progression", async ({
+  page,
+}) => {
+  const requests: string[] = [];
+  const sent: { type: string; item?: { type?: string; role?: string; output?: string } }[] = [];
+  let emit: ((event: object) => void) | undefined;
+  let token: string | undefined;
+  page.on("request", request => {
+    if (request.method() === "POST") requests.push(new URL(request.url()).pathname);
+  });
+  await page.route("**/api/experiments/grok-counting", route =>
+    route.fulfill({ json: { value: "offline-test", expires_at: Date.now() / 1000 + 60 } }),
+  );
+  await page.routeWebSocket("wss://api.x.ai/**", socket => {
+    emit = event => socket.send(JSON.stringify(event));
+    socket.onMessage(message => {
+      const e = JSON.parse(String(message));
+      sent.push(e);
+      if (e.type === "session.update") emit!({ type: "session.updated", session: e.session });
+      if (e.item?.role === "system") token = JSON.parse(e.item.content[0].text.match(/(\{.*\})/)[1]).context_token;
+    });
+    emit({ type: "session.created" });
+  });
+  await page.goto("/experiments/grok-counting");
+  await page.getByRole("button", { name: "Start", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("listening");
+  for (const event of [
+    { type: "input_audio_buffer.speech_started", item_id: "u1" },
+    { type: "input_audio_buffer.speech_stopped", item_id: "u1" },
+    { type: "response.created", response: { id: "r1" } },
+    { type: "conversation.item.input_audio_transcription.completed", item_id: "u1", transcript: "One duck." },
+  ])
+    emit!(event);
+  await expect.poll(() => Boolean(token)).toBe(true);
+  await expect(page.getByLabel("Tool proposal")).toContainText("Answer accepted: no");
+  const call = {
+    type: "response.function_call_arguments.done",
+    response_id: "r1",
+    call_id: "c1",
+    name: "report_counting_answer",
+    arguments: JSON.stringify({
+      context_token: token,
+      answer_outcome: "correct",
+      support_state: "none",
+      supporting_text: "One duck.",
+    }),
+  };
+  emit!(call);
+  await expect(page.getByLabel("Tool proposal")).toContainText("Validated: correct");
+  await expect(page.getByLabel("Tool proposal")).toContainText("Answer accepted: no");
+  emit!(call);
+  emit!({ type: "response.done", response: { id: "r1", status: "completed" } });
+  await expect.poll(() => sent.filter(e => e.type === "response.create").length).toBe(2);
+  await expect(page.getByLabel("Tool proposal")).toContainText("Answer accepted: yes");
+  expect(sent.filter(e => e.item?.type === "function_call_output")).toHaveLength(1);
+  expect(requests).toEqual(["/api/experiments/grok-counting"]);
+  await expect(page.locator('[data-node-id="count-1-duck"]')).toBeVisible();
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
+});
