@@ -11,7 +11,8 @@ import { SupportClarification } from "./support-clarification";
 import { AnswerRecovery } from "./answer-recovery";
 import { TutorStabilizationGate } from "./tutor-stabilization";
 import { parseClassifierEndpointCode } from "./classifier-failure";
-import { CLASSIFIER_VERSION } from "./conversation-observer-contract";
+import { DiagnosticJournal, type LessonDiagnostic, type LessonEventCursor } from "./diagnostic-journal";
+export type { LessonDiagnostic, LessonEventCursor } from "./diagnostic-journal";
 import { parseLiveClassificationDiagnostic } from "./live-classification-diagnostic";
 import {
   classificationSource,
@@ -47,20 +48,6 @@ export const LESSON_TIMING = {
 
 type Speaker = "child" | "tutor" | "unknown";
 type Fragment = { event: TranscriptEvent; source: RuntimeSource; order: number };
-export type LessonDiagnostic = {
-  timestamp: string;
-  atMs: number;
-  type: string;
-  runtimeId: string;
-  visitId: number | null;
-  childTurnId: number | null;
-  nodeId: string;
-  transcriptRevision: number;
-  transcriptSpeaker: Speaker;
-  classifierVersion?: typeof CLASSIFIER_VERSION;
-  detail: unknown;
-};
-export type LessonEventCursor = { runtimeId: string; offset: number };
 export type LessonObservation = {
   /** Sample of the report clock, taken in the same browser read as the journal. */
   nowMs: number;
@@ -110,7 +97,7 @@ export class LessonRuntime {
   private lastChildEndMs = 0;
   private childTurnFloorMs = 0;
   private readonly seenEventIds = new Set<string>();
-  private readonly events: LessonDiagnostic[] = [];
+  private readonly journal: DiagnosticJournal;
   private classification?: { abort: AbortController; source: ClassificationSource; speaker: Speaker };
   private lastClassifiedKey?: string;
   private readonly tutorStabilization: TutorStabilizationGate;
@@ -135,6 +122,7 @@ export class LessonRuntime {
     private readonly changed: (snapshot: LessonSnapshot) => void,
     private readonly lessonDefinition: LessonDefinition,
   ) {
+    this.journal = new DiagnosticJournal(this.runtimeId, () => this.now(), this.lessonDefinition.initialNodeId);
     if (this.lessonDefinition.nodes[this.lessonDefinition.initialNodeId].completeAfterTutorOutput)
       this.terminalText = evidenceRecap(this.lessonDefinition, null);
     this.display = {
@@ -230,20 +218,7 @@ export class LessonRuntime {
     return performance.now() - this.createdAt;
   }
   private log(type: string, detail: unknown = null, source?: ClassificationSource | RuntimeSource, speaker?: Speaker) {
-    this.events.push({
-      timestamp: new Date().toISOString(),
-      atMs: this.now(),
-      type,
-      ...(type.startsWith("classifier.") ? { classifierVersion: CLASSIFIER_VERSION } : {}),
-      runtimeId: source?.runtimeId ?? this.runtimeId,
-      visitId: source?.visitId ?? this.state?.visitId ?? null,
-      childTurnId: source?.childTurnId ?? this.state?.childTurnId ?? null,
-      nodeId:
-        source && "nodeId" in source ? source.nodeId : (this.state?.nodeId ?? this.lessonDefinition.initialNodeId),
-      transcriptRevision: source && "transcriptRevision" in source ? source.transcriptRevision : this.revision,
-      transcriptSpeaker: speaker ?? this.state?.transcriptSource ?? "unknown",
-      detail,
-    });
+    this.journal.append(type, detail, { state: this.state, revision: this.revision, source, speaker });
   }
 
   private publish() {
@@ -259,27 +234,14 @@ export class LessonRuntime {
       recapText: this.terminalText,
       error: this.error,
       awaitingSteering: Boolean(this.steering),
-      diagnostics: this.events.slice(-100),
+      diagnostics: this.journal.recent(),
       assessment: this.assessment,
     };
   }
 
   /** Read the complete journal independently of React publication; never return runtime references. */
   observe(after?: LessonEventCursor): LessonObservation {
-    if (
-      after &&
-      (after.runtimeId !== this.runtimeId ||
-        !Number.isSafeInteger(after.offset) ||
-        after.offset < 0 ||
-        after.offset > this.events.length)
-    )
-      throw new Error("Lesson observation cursor does not belong to this runtime journal");
-    return structuredClone({
-      nowMs: this.now(),
-      cursor: { runtimeId: this.runtimeId, offset: this.events.length },
-      snapshot: this.snapshot(),
-      events: this.events.slice(after?.offset ?? 0),
-    });
+    return this.journal.observe(after, () => this.snapshot());
   }
 
   /** Called from React's committed scene, never from render.requested handling. */
@@ -1074,23 +1036,14 @@ export class LessonRuntime {
   }
 
   report() {
-    const report = {
-      product: "sprout",
-      classifierVersion: CLASSIFIER_VERSION,
-      version: 1,
-      runtimeId: this.runtimeId,
-      clock: "browser.performance.now-relative-to-attempt",
+    return this.journal.report({
       timing: LESSON_TIMING,
       runtime: this.state,
       status: this.status,
       error: this.error,
       transcript: this.transcript,
-      events: [...this.events],
       conversation: [...this.conversationVisits.values()],
       assessment: this.assessment,
-    };
-    // Additive fields remain optional for older exported-report consumers.
-    return report as Omit<typeof report, "conversation" | "assessment"> &
-      Partial<Pick<typeof report, "conversation" | "assessment">>;
+    });
   }
 }
