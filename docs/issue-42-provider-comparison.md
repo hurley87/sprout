@@ -28,8 +28,8 @@ reported as historical presence only, never replayed into fresh observations.
 ## Identity and parity
 
 The loader checks v1's hard-pinned manifest hash, its checksum file, corpus,
-lessons, replay references, baseline Git blobs and current baseline source bytes,
-with two exact active-model compatibility exceptions described below.
+lessons, replay references, baseline Git blobs and the isolated historical source
+bytes described below. Active source hashes are recorded separately as provenance.
 It reproduces every input/question/projection hash and verifies the historical
 counting source blob. Baseline PR #68 is
 `fd40c9bc631770ab1220f85767ee2f6cdd56ab9a`; implementation baseline is reviewed

@@ -1,5 +1,11 @@
 # Commit 4: fragmented concept evidence attribution
 
+> Historical implementation/validation record. For the final behavior and current
+> check results, see the [demo contract](catching-unicorns-demo-validation.md).
+> Recaps now contain demonstrated topics only, with no learner quotations;
+> unresolved and partial evidence remains in diagnostics. Historical benchmark
+> failures recorded here predate the isolated Issue #42 contract.
+
 Starting commit: `de4b0b9`, branch `codex/issue-71-catching-unicorns-demo`, PR #72.
 
 ## What can be established about October 17

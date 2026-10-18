@@ -32,32 +32,24 @@ to return the requested version fails closed; no alias fallback is introduced.
 
 ## Benchmark compatibility boundary
 
-The immutable `classifier-benchmark-v1` files and their SHA-256 values remain
-untouched. The original PR #68 Git blobs, historical observations, inputs,
-criteria and mappings remain the benchmark baseline. The current active-source
-check accepts only exact implementation hashes for two files:
+The immutable `classifier-benchmark-v1` corpus, manifests, original Git blobs
+and historical reports remain unchanged. The comparison now executes an isolated,
+byte-verified Jev 1.13 contract under `lib/experiments/issue-42/historical-v1/`,
+including its historical questions, projections, source selection, mapping,
+executor and reducer. It does not use active lesson-runtime behavior.
 
-- `lib/jev.ts`: the active pin and its historical-version comment.
-- `lib/lesson-runtime/jev-conversation-state-classifier.ts`: the explicit 1.13/1.14
-  request type and identity comparison against the captured requested version.
+Active implementation upgrades do not require modifying the frozen benchmark.
+Actual active hashes are recorded under `activeRuntime.sourceHashes` as run
+provenance; the former `ACTIVE_MODEL_COMPATIBILITY` exception list is obsolete.
+Historical bytes still validate against their frozen hashes and original Git
+objects. See [Issue #42 identity and parity](issue-42-provider-comparison.md#identity-and-parity)
+for the maintained technical explanation and authorization rules.
 
-`ACTIVE_MODEL_COMPATIBILITY` in `benchmark-artifacts.ts` pins these exceptions;
-it does not disable checks for those files or permit arbitrary drift. Original
-baseline hashes still validate the original Git objects. All other baseline
-sources and the Decisions adapter retain their byte checks. Negative tests cover
-modified active source as well as changes to the frozen contract.
-
-The `baselineJev` bridge sends the manifest's 1.13 request through the same
-executor. Offline and network-shaped mocked tests verify the 1.13 request and
-rejection of substituted 1.14 answers. Validated results name the exact requested
-and returned version; mismatches yield no normalized observation. Plans record
-active model/source identity separately from the evaluation arm. New source and
-plan hashes invalidate previous exact-plan authorizations without rewriting
-historical reports.
-
-The baseline remains reproducible locally across all 71 snapshots. Reproducing
-fresh 1.13 provider measurements also depends on continued provider availability
-and the existing review/run gates; offline checks do not establish either.
+Mocked replay verifies local contract behavior, including rejection of a 1.14
+response to the 1.13 arm. It is not a live-provider accuracy measurement. Fresh
+provider comparison still depends on model availability and the existing reviewed
+plan/run gates. Changed tooling/provenance changes plan identities without
+rewriting historical results.
 
 ## Separate 1.14 comparison arm remains future work
 
@@ -73,7 +65,9 @@ transport delivery on old transcript examples.
 
 No factored questions, tuning, calibration or paid run is included here.
 
-## Validation
+## Historical upgrade validation (15 October 2026)
+
+These results predate benchmark isolation and are not current check results.
 
 All 1,155 unit tests across 55 files pass. Full source lint passes with ignored
 `test-results/**` excluded. Default `npm run lint` also scans old review copies

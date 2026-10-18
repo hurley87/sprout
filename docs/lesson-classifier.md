@@ -39,7 +39,11 @@ closed Choice scores, and retains every probability. Existing confidence bands
 are unchanged; ambiguous outcomes become `uncertain`, not mastered.
 
 This later assessment is separate from live `conceptEvidence` and visual reveals.
-It appears in a Conversation assessment panel at recap or after Stop. Exports
+It appears in a Conversation assessment panel at recap or after Stop only with
+`?debug=1`. The recap uses only demonstrated topics from the reducer ledger,
+without learner quotations; unresolved and partial concepts are omitted. Standalone
+conversational acknowledgments are excluded as concept-source candidates.
+Post-session diagnostic download is available without debug. Exports
 include `conversation` and `assessment`, with pending, complete, or unavailable
 status. Assessment errors do not affect question advancement. Requests are local
 only, bounded to 100 visits and 120,000 transcript characters, and time out after

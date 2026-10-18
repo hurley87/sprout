@@ -12,7 +12,7 @@
 ## Authority
 
 - GPT-Live owns conversation inside the current node's tutor brief.
-- Jev supplies semantic observations, including answer outcome, support need and tutor function.
+- Jev 1.14 supplies semantic observations and concept-source attribution, including answer outcome, support need and tutor function.
 - The authored graph and deterministic reducer own lesson/UI authority.
 - Local media state supplies choreography evidence; transcript text cannot manufacture it.
 
@@ -88,7 +88,9 @@ and known media/transcript limitations.
 
 For the four-question Catching Unicorns discussion, conversational closure or an
 explicit next request advances without requiring mastery. The terminal recap reads
-a deterministic projection of accepted concept evidence; cumulative grading is
+a deterministic projection of demonstrated topics from persisted session-local
+concept evidence, without learner quotations. Partial, unresolved and skipped
+concepts are omitted; advancement never establishes mastery. Cumulative grading is
 separate debug data. A complete matching closing transcript plus observed audio and
 1.5 seconds of sustained quiet permits terminal render confirmation and teardown.
 Missing or mismatched output ends with failure feedback after a 60-second deadline,
@@ -98,8 +100,10 @@ for tested cases and live-provider limitations.
 
 ## Diagnostics and prototype reset
 
-The page displays current gate state, current-visit transcript and recent runtime
-events. JSON export includes classification mapping, identity/staleness, stabilization,
+The counting page displays current gate state, current-visit transcript and recent
+runtime events. Catching Unicorns gates detailed diagnostics behind `?debug=1`,
+while Download diagnostics is available after completion, Stop or failure in the
+default view. JSON export includes classification mapping, identity/staleness, stabilization,
 local media and render/steering diagnostics. Credentials, SDP and raw provider bodies
 are excluded. Exports contain conversation text and remain under the user's control.
 
@@ -108,3 +112,7 @@ parent review or historical inspection stack. Convex and its project tooling hav
 been removed. Historical prototype data is disposable, with no compatibility or
 migration layer. New persistence will be designed only when a current requirement
 needs it. Behavioral calibration and broader evaluation remain in #57.
+
+Issue #42 uses an isolated frozen Jev 1.13 contract; active implementation hashes
+are recorded as provenance. See [benchmark identity](issue-42-provider-comparison.md#identity-and-parity).
+Runtime extraction is deferred to [Issue #73](https://github.com/hurley87/sprout/issues/73).

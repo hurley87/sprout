@@ -41,6 +41,138 @@ Diagnostic capture continues in the shared runtime for every session. The same c
 uses the accepted evidence ledger for both visual and spoken claims, as described
 below.
 
+## Final implementation contract (17 October 2026)
+
+GPT-Live conducts the conversation and supplies tutor speech. Active Jev 1.14
+classifies semantic state and selects concept-source boundaries; its observations
+are proposals. The reducer validates sources and owns navigation, conversational
+closure, media gates and scene transitions. Neither model authorizes transitions.
+
+A successful conversational interaction is distinct from demonstrated conceptual
+understanding. A learner may move on without meeting every concept criterion.
+Tutor-led closure can finish a sufficient discussion or one that has run its
+course with unresolved concepts. An explicit learner request such as `next` uses
+a separate navigation path, without requiring Jev approval or a further tutor
+question. Both paths retain identity, quiet-media and render gates; ordinary
+tutor closure also needs relevant observed tutor output. Advancing never establishes
+mastery or upgrades unresolved evidence. A useful follow-up may hold the scene.
+Brief supported learner acknowledgments can preserve a previously classified
+closure; substantive interruptions invalidate that authority.
+
+`evidence-recap.ts` deterministically projects the persisted, session-local reducer
+`conceptEvidence` ledger. This is in-memory evidence retained across question
+visits, not durable storage across reloads. **Only demonstrated topics appear.**
+Carried criteria appear once, with attribution from the earliest retained
+demonstration: independent, prompted, or prompting unclear. Prompting-unclear
+means demonstrated understanding with unknown attribution, not an unresolved
+concept. Partial, unresolved and skipped concepts are omitted. The recap contains
+no learner quotations. It ends with “Thanks for the discussion.”; an all-skipped
+session with no demonstrations receives only that sentence. Length depends on
+the evidence; a fixed two-to-four sentence or 15–20 second close is not guaranteed.
+
+The visual recap and one spoken closing instruction share the same frozen text.
+Asynchronous cumulative assessment remains diagnostic data in debug/export; it
+cannot rewrite the recap or grant transition authority. Detailed evidence and
+transcript sources remain inspectable there even when absent from the recap.
+
+Concept evidence requires both a qualifying semantic observation and valid learner
+source provenance in the exact grouped transcript revision. Standalone conversational
+acknowledgments (including combinations such as “Okay, great, thanks”) are excluded
+as concept-evidence sources. An acknowledgment followed by substantive explanation
+can remain eligible. Tutor words do not supply learner evidence; copied tutor
+content and intervening help remain subject to attribution checks. A positive
+concept score without a valid source is not persisted as demonstration.
+
+Terminal completion requires the full expected closing transcript, observed tutor
+output, at least 1,500 ms of sustained quiet after the latest closing text/audio,
+and exact terminal render confirmation. Punctuation/case normalization, identical
+same-interval retransmissions and one isolated opening-word restart are tolerated
+by `terminal-recap.ts`; missing, substituted or reordered words are not. Silence
+alone, absent media, stale events and a navigation request cannot complete recap.
+Missing or mismatched output fails after 60 seconds with teardown and failure
+feedback, leaving the visual recap available. Stop cancels that deadline. Decoded
+PCM quiet is a local boundary, not an authoritative provider playback-finished
+signal, so arbitrarily delayed audio remains a live-validation limitation.
+
+### Classifier and historical benchmark
+
+Active Sprout uses `jev-1.14.0`. Issue #42 remains pinned to `jev-1.13.0` and uses
+its isolated frozen question definitions, projections, mapping, executor and
+reducer under `lib/experiments/issue-42/historical-v1/`. Active upgrades do not
+require changing that historical contract. Actual active source hashes are run
+provenance, not compatibility exceptions or gates on historical replay. The
+frozen corpus, manifests and historical results remain unchanged. See
+[Issue #42 identity and parity](issue-42-provider-comparison.md#identity-and-parity)
+for the technical boundary. Replay and mocked transport tests measure application
+behavior, not live-provider accuracy.
+
+### Diagnostic visibility and acceptance differences
+
+`components/catching-unicorns-demo.tsx` exposes **Download diagnostics whenever
+snapshot status is ended**, including completion, Stop and failure, without
+`?debug=1`. Detailed evidence, transcript, assessment and debug controls still
+require exactly `?debug=1`. Capture runs for every session; the export is scrubbed
+of credentials, SDP and raw provider bodies but contains conversation text.
+
+Issue #71's original full-length preservation requirement was superseded by the
+approved permanent four-question scope. Its debug-only export wording also differs
+from the final UI: post-session download is intentionally available by default.
+Its recap wording about partial/unresolved ideas is superseded by demonstrated-
+topics-only output; those records remain diagnostic evidence. No visibility rule,
+lesson prompt or product behavior is changed by this documentation alignment.
+The authored recap scene prompt still mentions partial/revisit topics; the actual
+render and spoken close use the deterministic ledger projection above. That
+wording discrepancy is left intact under this commit's no-prompt-change constraint.
+
+Runtime extraction is deferred to the separate post-merge
+[Issue #73](https://github.com/hurley87/sprout/issues/73). Shared regression helpers
+are consolidated in `tests/helpers/runtime-harness.ts`; no refactor is started here.
+
+Source claims remain inherited from the reviewed Issue #65 inventory for
+*Catching Unicorns*, Introduction pp. 3–6. The underlying PDF was unavailable
+for independent verification during that review.
+
+## Commit 4 validation (17 October 2026)
+
+Checks ran against `c171056` plus documentation changes. No provider calls or live
+demo were performed. Earlier counts below describe earlier snapshots.
+
+| Command | Result |
+| --- | --- |
+| `npm test` | Passed: 1,472 tests in 69 files, including frozen benchmark replay checks. |
+| `npm run typecheck` (workspace) | Failed: 16 errors in ignored historical UI copies under `test-results/commit3-review/app` and `test-results/ui-review/app`. |
+| `npm run lint` (workspace) | Failed: 759 errors and 10,594 warnings from ignored review copies/generated outputs under `test-results/`. |
+| `npm run typecheck` (clean tracked-source copy) | Passed. |
+| `npm run lint` (clean tracked-source copy) | Passed. |
+| `npm run test:browser` (clean tracked-source copy) | Passed: all 25 provider-free tests (1.3 minutes). |
+| `git diff --check` | Passed. |
+
+The isolated copy was created with `git archive HEAD` and reused installed
+`node_modules` via a symlink, with no env files or historical review outputs.
+The only Playwright config adjustment there was the server command
+`npm run dev -- --webpack --port 3100`; server reuse stayed disabled and both
+provider credential overrides stayed empty. This avoided the existing checkout's
+Next.js dev lock. No source config or dependency was changed in the working tree.
+The workspace failures are environmental and left intact; no ignored review files
+were removed or edited. No new production build or screenshot review is claimed.
+
+Tutor adherence, naturalness, live Jev semantic/source accuracy, actual spoken
+recap duration and real provider playback/cleanup still need a fresh voice
+walkthrough. Controlled regressions and earlier recordings do not establish live
+acceptance of the final implementation.
+
+## Historical validation record
+
+The records below describe earlier lesson versions, including the former nine-scene
+flow and now-deleted arithmetic/culture/application/synthesis UI. They are historical
+session evidence, not the current lesson contract or a promise of current test counts.
+
+### Earlier four-question validation (15 October 2026)
+
+These counts, screenshots and production-build checks are retained as dated
+results; quotation and unresolved-topic recap behavior from that version has
+since been removed.
+
 Second-slice validation (15 October 2026): 1,188 unit tests and all 24 provider-free
 browser tests passed. After the final accessibility and debug assertions, all six
 demo browser tests also passed against the production build. Production build,
@@ -51,66 +183,6 @@ mobile debug details. Browser assertions cover 320px startup/failure layout and
 with local dependencies and no project env files, leaving the existing dev server
 alone. Local WebRTC peers and classifier/assessment fixtures were used; no new live
 provider session or spoken recap quality assessment was performed.
-
-The frozen issue #42 benchmark remains historical classifier evidence, including
-its original lesson snapshot and recorded transcripts. It is never registered as
-an application lesson or offered as a full-length lesson variant. Its source
-hash compatibility list records the shortened active lesson and terminal contract;
-its frozen corpus, manifests and replay bytes remain unchanged.
-
-Source claims for the retained concepts come from the reviewed issue #65 inventory
-for *Catching Unicorns*, Introduction pp. 3–6. `CU to Dave.pdf` was not available
-during that review, so these page claims remain inherited rather than independently
-verified.
-
-## Final recap and completion (15 October 2026)
-
-Final slice: `Polish evidence-based recap and completion`, based on
-`4c5d1795d708a270f9aa52c96c4fc9f1b7231a11` on
-`codex/issue-71-catching-unicorns-demo`.
-
-`evidence-recap.ts` deterministically projects accepted `conceptEvidence` from the
-current runtime. Its authored topic labels contain no hidden answer text. Carried
-criteria appear once: the earliest retained demonstration supplies its prompting
-attribution; if no demonstration exists, accepted partial evidence or an unresolved
-label is used. A demonstrated record with null attribution stays prompting-unclear.
-The asynchronous cumulative assessment retains its scores in debug/export but is
-not recap authority and cannot change a close already delivered. The October 16
-polish can quote one brief learner contribution from the accepted independent
-evidence source (6–22 words). Complete evidence spans supply only Child entries;
-tutor context, prompted/uncertain records and partial evidence cannot supply the
-quote. Unsuitable or missing text preserves the existing general recap. Attribution
-groups remain unchanged; personalized closes omit the extra thank-you sentence to
-stay within three sentences. Unconstrained conversation memory is never used.
-
-The default recap is one readable paragraph of two to four sentences. Typical
-complete and mixed examples are approximately 35–45 words (roughly 15–20 seconds
-at conversational pace; actual provider duration remains unmeasured). All-skipped
-sessions receive a shorter unresolved-only close. The identical text goes into one
-terminal steering append with a verbatim-reading instruction, no added question,
-exercise or follow-up. Verbose recap group cards and their unused metadata are
-removed; detailed accepted records and source transcripts remain in debug/export.
-
-Completion requires the whole normalized closing transcript (punctuation and case
-may differ), observed output audio and at least 1,500 ms of sustained quiet after
-the latest closing text/audio. Earlier transcript chunks, silent output, unavailable
-media, stale sources/timeline intervals, duplicate starts and unconfirmed terminal
-renders cannot complete the session. Ordinary counting drain behavior is unchanged.
-There is no recap retry, classification or recovery question. A missing, incomplete
-or differently worded provider close fails after 60 seconds, releases resources and
-leaves the visual recap available with failure feedback; it does not claim completion.
-Stop cancels that deadline. The terminal render still requires exact confirmation,
-then the provider close command and local teardown run once. All four progress
-segments are filled, with a Session complete label. The recap remains visible in
-larger type and Restart discussion replaces the initial start action; the inactive
-Stop button is removed after automatic completion.
-
-The durable tutor guidance forbids repeated confirmation of adequate answers and
-limits don't-know scaffolding to at most one useful clarification/hint before
-closing when the learner remains unsure. Bare `next`, `next question`, and explicit
-requests such as `I don't know. Next.` advance without mastery evidence. `I don't
-know` alone is not manufactured into a demonstration or an automatic skip. The
-existing current-scene classifier, skip/stop flow and evidence provenance remain.
 
 Final provider-free validation: 1,204 unit tests across 59 files, 25 production
 browser tests, production webpack build, TypeScript, lint and diff whitespace checks
@@ -123,43 +195,6 @@ output after stop/completion. Rendered desktop/mobile recap, mobile questions,
 unresolved-only recap and debug screenshots were inspected. React review found no
 new effect subscriptions, hook-order issues or unstable list keys. Inspected screenshots
 are retained locally under `test-results/issue-71-final-review/` (ignored artifacts).
-
-Build/browser/type checks ran in an isolated tracked-source verification copy,
-with local dependencies, no env files and empty provider credential overrides for
-Playwright. The user's running dev server was left alone. Historical benchmark
-corpus/manifests/replays are unchanged; only exact active-source compatibility hashes
-are refreshed for the current implementation.
-
-Remaining issue #71 acceptance limitations: no new live billed calls were made.
-Actual tutor adherence (no reconfirmation, at most one don't-know hint, verbatim
-once-only close and no added question), naturalness and 15–20 second duration need
-a fresh opt-in voice walkthrough. The current transport exposes transcript deltas
-and decoded PCM, not an authoritative response-finished/playback marker. The full
-text plus 1.5-second quiet gate prevents the tested premature chunk/pause close,
-but is a conservative local boundary, not proof against an arbitrarily delayed
-future audio chunk. Live provider playback and cleanup therefore remain unverified.
-The original full-length-variant criterion is explicitly superseded by user approval.
-
-Changed files for this slice (18; the unrelated issue-42 review JSON is untouched):
-
-- UI: `components/catching-unicorns-demo.tsx`,
-  `components/catching-unicorns/recap-presentation.tsx`.
-- Runtime/content: `lib/lesson-runtime/evidence-recap.ts` (new),
-  `catching-unicorns-lesson.ts`, `lesson-definition.ts`, `lesson-runtime-reducer.ts`,
-  `lesson-runtime.ts`, `live-context.ts` in the same directory.
-- Historical benchmark active-source compatibility only:
-  `lib/experiments/issue-42/benchmark-artifacts.ts`.
-- Tests: `tests/evidence-recap.test.ts` (new), `tests/conversation-first.test.ts`,
-  `tests/catching-unicorns-lesson.test.ts`, `tests/catching-unicorns-presentation.test.ts`,
-  `tests/browser/catching-unicorns.spec.ts`.
-- Documentation: this file, `docs/architecture.md`, `docs/browser-tests.md`,
-  `docs/lesson-runtime-reducer.md`.
-
-## Historical validation record
-
-The records below describe earlier lesson versions, including the former nine-scene
-flow and now-deleted arithmetic/culture/application/synthesis UI. They are historical
-session evidence, not the current lesson contract or a promise of current test counts.
 
 ## Live acceptance status
 

@@ -16,7 +16,9 @@ no transcript accumulator, provider calls, steering sends, or persistence.
 For `conversationFirst` lessons, conversational closure and mastery are separate.
 The reducer records a current tutor acknowledgment as a closure candidate without
 setting `answerAccepted`. New tutor text clears that candidate; new learner speech
-clears all conversational completion authority. The exact current classification
+suspends conversational completion authority. Supported brief acknowledgments can
+restore the preceding classified close once speech ends; substantive interruptions
+clear it. These acknowledgments are not concept-evidence sources. The exact current classification
 source and transcript guards still apply. Concept source validation and reveal
 rules remain unchanged.
 
@@ -94,7 +96,9 @@ copies prior tutor wording cannot be accepted as independent evidence and is
 retained as partial. This deterministic text overlap check is a guardrail, not a
 semantic classifier. Classifier accuracy still needs reviewed live evaluation.
 
-Concept nodes require an authored `completionPolicy`:
+Concept nodes require an authored `completionPolicy`. These mastery checks do not
+block `conversationFirst` navigation; closure or an explicit learner move-on
+request can advance with unresolved concepts and never establishes mastery:
 
 - `all_demonstrated` requires every current criterion to be demonstrated.
 - `all_independent` also requires independent rather than prompted understanding.

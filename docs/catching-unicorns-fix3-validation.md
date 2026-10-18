@@ -1,5 +1,11 @@
 # Fix 3: conversational closure and October 16 transition replay
 
+> Historical implementation/validation record. For the final behavior and current
+> check results, see the [demo contract](catching-unicorns-demo-validation.md).
+> Recaps now contain demonstrated topics only, with no learner quotations;
+> unresolved and partial evidence remains in diagnostics. Historical benchmark
+> failures recorded here predate the isolated Issue #42 contract.
+
 This change is based on `sprout-catching-unicorns-469a81f7-d59f-4d53-a1a3-a336279bf334.json`.
 The bounded source extract is `tests/fixtures/catching-unicorns-closure-oct16.json`;
 no historical issue #42 artifacts are changed.
