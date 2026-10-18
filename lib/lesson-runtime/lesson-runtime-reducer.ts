@@ -1,7 +1,23 @@
 import type { OutputActivityEvent } from "../events";
 import { parseConversationStateProposal } from "./conversation-state-classifier";
 import { currentNodeContext, isLessonNodeId, type LessonDefinition } from "./lesson-definition";
-import { transcriptMessages, substantiveLearnerText, neutralTutorAcknowledgment } from "./tutor-observation";
+import { transcriptMessages } from "./tutor-observation";
+import {
+  learnerRequestedNext,
+  closingTutorExchange,
+  matchesTutorClosure,
+  tutorAcknowledgedClosure,
+  hasConversationCompletionEvidence,
+} from "./conversation-progression";
+import {
+  applyConceptObservations,
+  conceptKey,
+  type ConceptEvidenceRecord,
+  type ConceptRevealEffect,
+} from "./concept-evidence";
+
+export { learnerRequestedNext } from "./conversation-progression";
+export type { ConceptEvidenceReference, ConceptEvidenceRecord } from "./concept-evidence";
 
 /** App-owned identities, captured at the source/request boundary, never supplied by the classifier. */
 export type RuntimeSource = {
@@ -26,39 +42,6 @@ export type CurrentNodeSteeringContext = {
   readonly completionCriteria?: readonly { readonly id: string; readonly description: string }[];
   readonly completionPolicy?: string;
 };
-export type ConceptEvidenceReference = {
-  readonly runtimeId: string;
-  readonly nodeId: string;
-  readonly visitId: number;
-  /** null for a historical utterance first seen in a later turn's snapshot. */
-  readonly childTurnId: number | null;
-  /** Revision where this exact quote was recorded, not a fabricated utterance timestamp. */
-  readonly transcriptRevision: number;
-  readonly childMessageIndex: number;
-  readonly childTranscript: string;
-  /** Present for multi-message evidence. Legacy fields above remain the first
-   * learner anchor; this ordered span is the authoritative complete provenance.
-   * Tutor entries are context only, never learner evidence. */
-  readonly childMessageEndIndex?: number;
-  readonly messages?: readonly {
-    readonly messageIndex: number;
-    readonly speaker: "Child" | "Tutor";
-    readonly text: string;
-  }[];
-};
-export type ConceptEvidenceRecord = {
-  readonly criterionId: string;
-  readonly status: "not_yet" | "partial" | "demonstrated";
-  readonly understanding: "independent" | "prompted" | null;
-  /** Advisory progress, never accepted demonstration or reveal authority. */
-  readonly tentative?: boolean;
-  readonly source: ConceptEvidenceReference | null;
-  readonly promptingHistory: readonly {
-    readonly source: ConceptEvidenceReference;
-    readonly prompted: boolean | null;
-  }[];
-};
-
 export type LessonRuntimeState = {
   readonly runtimeId: string;
   readonly lessonId: string;
@@ -158,7 +141,7 @@ export type LessonRuntimeEffect =
       readonly context: CurrentNodeSteeringContext;
     }
   | { readonly type: "lesson.completed"; readonly renderToken: string }
-  | { readonly type: "concept.revealed"; readonly nodeId: string; readonly criterionId: string };
+  | ConceptRevealEffect;
 export type LessonRuntimeResult = {
   readonly state: LessonRuntimeState;
   readonly effects: readonly LessonRuntimeEffect[];
@@ -215,46 +198,6 @@ export function createLessonRuntime(
   };
 }
 
-/** Recognize only complete navigation commands and short explanations surrounding them.
- * Every sentence must match the grammar; never search inside answers or quotations. */
-export function learnerRequestedNext(transcript: string) {
-  const text = transcriptMessages(transcript)
-    ?.findLast(message => message.speaker === "Child")
-    ?.text.trim().replace(/\s+/gu, " ");
-  if (!text) return false;
-  const sentences = text.split(/(?<=[.!?])\s+/u);
-  let requested = false;
-  for (const sentence of sentences) {
-    const command = sentence
-      .replace(/[.!?]+$/u, "")
-      .replace(/^i (?:don't|don’t|do not) know,\s+/iu, "")
-      .replace(/^(?:(?:yes|yeah|okay|ok|well|um|i am)[,.]?\s+)+/iu, "")
-      .replace(/^i think\s+/iu, "")
-      .replace(/^please[,.]?\s+/iu, "")
-      .replace(/,? please$/iu, "");
-    const directRequest = [
-      /^next(?: question)?(?:,? then)?$/iu,
-      /^(?:can|could) i (?:have|get) (?:the )?next question$/iu,
-      /^i(?:['’]d| would) like (?:the )?next question$/iu,
-      /^let['’]s do (?:the )?next question$/iu,
-      /^(?:(?:let['’]s|can we|could we|i(?:['’]d| would) like to)\s+)?(?:move on|(?:go|move|skip)(?: on)? to (?:the )?next(?: question)?|skip (?:this|that|the)(?: question)?)$/iu,
-    ].some(pattern => pattern.test(command));
-    if (directRequest) {
-      requested = true;
-      continue;
-    }
-    // Explanations alone never request navigation. Questions, disagreement and
-    // added answer content do not match and invalidate the entire utterance.
-    const explanation = sentence.replace(/[.!]+$/u, "");
-    if (![
-      /^i (?:don't|don’t|do not) know$/iu,
-      /^i(?: think i)?(?: have|['’]ve) answered (?:(?:this|that)(?: question)?|the question)$/iu,
-      /^i(?:['’]m| am) done with (?:this|that|the) question$/iu,
-    ].some(pattern => pattern.test(explanation))) return false;
-  }
-  return requested;
-}
-
 export function runtimeSource(state: LessonRuntimeState): RuntimeSource {
   return { runtimeId: state.runtimeId, visitId: state.visitId, childTurnId: state.childTurnId };
 }
@@ -299,11 +242,7 @@ export function meetsAuthoredCompletionPolicy(state: LessonRuntimeState, lesson:
 export function hasCurrentCompletionEvidence(state: LessonRuntimeState, lesson: LessonDefinition) {
   if (lesson.nodes[state.nodeId].completeAfterTutorOutput)
     return state.tutorOutputObserved && state.terminalTranscriptComplete === true && !state.terminalLearnerPending;
-  if (lesson.conversationFirst)
-    return (
-      state.conversationAdvanceRequested === "learner" ||
-      ((state.hasChildTranscript || state.interruptedExchange?.ready) && state.conversationAdvanceRequested === "tutor")
-    );
+  if (lesson.conversationFirst) return hasConversationCompletionEvidence(state);
   return (
     state.hasChildTranscript &&
     state.transcriptSource === "tutor" &&
@@ -313,21 +252,6 @@ export function hasCurrentCompletionEvidence(state: LessonRuntimeState, lesson: 
     state.acknowledgmentObserved &&
     meetsAuthoredCompletionPolicy(state, lesson)
   );
-}
-
-/** This only bounds what may follow a classified tutor close; it never establishes closure. */
-function closingTutorExchange(snapshot: string | undefined) {
-  const messages = snapshot === undefined ? null : transcriptMessages(snapshot);
-  if (!messages) return null;
-  const messageIndex = messages.findLastIndex(message => message.speaker === "Tutor");
-  if (messageIndex < 0) return null;
-  const suffix = messages.slice(messageIndex + 1).map(message => message.text.trim().replace(/\s+/gu, " "));
-  const acknowledgment = /^(?:great|okay|ok|sounds good|thanks|thank you)[.! ,]*$/iu;
-  const complete = suffix.every(text => acknowledgment.test(text));
-  // Provider fragments can split "Sounds good" or "Thank you". Keep authority
-  // suspended across the prefix; incomplete text cannot authorize progression.
-  return suffix.every(text => acknowledgment.test(text) || /^(?:sounds|thank)$/iu.test(text))
-    ? { messageIndex, text: messages[messageIndex].text, complete } : null;
 }
 
 function sameRender(expected: RenderIdentity, actual: RenderIdentity) {
@@ -424,149 +348,6 @@ function requestAuthoredTransition(
     },
     effects: [{ type: "render.requested", identity }],
   };
-}
-
-const conceptKey = (nodeId: string, criterionId: string) => `${nodeId}:${criterionId}`;
-
-function echoedByTutor(childText: string, tutorTexts: readonly string[]) {
-  const tokens = (value: string): string[] => value.toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
-  const child = tokens(childText);
-  if (!child.length) return false;
-  const childPhrase = child.join(" ");
-  return tutorTexts.some(text => {
-    // Tutor questions commonly contain the answer choices or the concept vocabulary.
-    // Compare against declarative utterances only, and require copied words in order.
-    const statements = text.split(/(?<=[.!?])\s+/u).filter(statement => !statement.trimEnd().endsWith("?"));
-    return statements.some(statement => {
-      const tutor = tokens(statement);
-      if (!tutor.length) return false;
-      if (childPhrase === tutor.join(" ")) return true;
-      // A single shared word is too common to establish copying unless it was the
-      // tutor's complete utterance. Multiword answer phrases must occur contiguously.
-      if (child.length < 2 || child.length > tutor.length) return false;
-      return tutor.some((_, index) => tutor.slice(index, index + child.length).join(" ") === childPhrase);
-    });
-  });
-}
-
-function applyConceptObservations(
-  state: LessonRuntimeState,
-  lesson: LessonDefinition,
-  source: ClassificationSource,
-  proposal: NonNullable<ReturnType<typeof parseConversationStateProposal>>,
-  transcriptSnapshot: string | undefined,
-): { state: LessonRuntimeState; effects: LessonRuntimeEffect[] } {
-  const node = lesson.nodes[state.nodeId];
-  if (!node.concepts?.length || !proposal.conceptObservations?.length || !transcriptSnapshot)
-    return { state, effects: [] };
-  const messages = transcriptMessages(transcriptSnapshot);
-  if (!messages) return { state, effects: [] };
-  const candidates = messages.flatMap((message, index) =>
-    message.speaker === "Child" && substantiveLearnerText(message.text) ? [index] : [],
-  );
-  const evidence = { ...state.conceptEvidence };
-  const effects: LessonRuntimeEffect[] = [];
-  for (const observation of proposal.conceptObservations) {
-    if (!node.concepts.some(concept => concept.id === observation.criterionId)) continue;
-    const key = conceptKey(node.id, observation.criterionId);
-    const previous = evidence[key];
-    // Absence has no supporting utterance and is never an independent attempt.
-    if (observation.observation === "not_yet") {
-      evidence[key] = previous ?? {
-        criterionId: observation.criterionId, status: "not_yet", understanding: null,
-        source: null, promptingHistory: [],
-      };
-      continue;
-    }
-    // Legacy proposals may identify a source only when there is one substantive
-    // learner utterance. Never guess the latest answer in a cumulative snapshot.
-    const childMessageIndex = observation.childMessageIndex === undefined
-      ? candidates.length === 1 ? candidates[0] : null
-      : observation.childMessageIndex;
-    if (childMessageIndex === null) continue;
-    const end = observation.childMessageEndIndex ?? childMessageIndex;
-    const spanning = end !== childMessageIndex;
-    if (spanning ? messages[childMessageIndex]?.speaker !== "Child" || messages[end]?.speaker !== "Child"
-      : !candidates.includes(childMessageIndex)) continue;
-    const selectedMessages = messages.slice(childMessageIndex, end + 1)
-      .map((message, offset) => ({ messageIndex: childMessageIndex + offset, ...message }));
-    const learnerMessages = selectedMessages.filter(message => message.speaker === "Child");
-    if (!learnerMessages.some(message => substantiveLearnerText(message.text))) continue;
-    const childTranscript = messages[childMessageIndex].text.trim();
-    const echoed = learnerMessages.filter(message => substantiveLearnerText(message.text)).every(message =>
-      echoedByTutor(message.text, messages.slice(0, message.messageIndex)
-        .filter(prior => prior.speaker === "Tutor").map(prior => prior.text)),
-    );
-    const interveningHelpUnresolved = spanning && selectedMessages.some(message =>
-      message.speaker === "Tutor" && !neutralTutorAcknowledgment(message.text),
-    ) && observation.observation === "demonstrated_independent";
-    const tentative = observation.observation === "partial_uncertain";
-    let status: ConceptEvidenceRecord["status"] =
-      observation.observation === "partial" || tentative ? "partial" : "demonstrated";
-    let understanding: ConceptEvidenceRecord["understanding"] =
-      observation.observation === "demonstrated_independent" ? "independent"
-        : observation.observation === "demonstrated_prompted" ? "prompted" : null;
-    if ((echoed || interveningHelpUnresolved) && status === "demonstrated") {
-      status = "partial";
-      understanding = null;
-    }
-    // Uncertain progress must never erase accepted mastery. Prompting belongs
-    // to the selected utterance, so a later tutor paraphrase cannot change it.
-    if (tentative && previous?.status === "demonstrated") continue;
-    const sameUtterance = (reference: ConceptEvidenceReference) =>
-      reference.runtimeId === source.runtimeId && reference.nodeId === source.nodeId &&
-      reference.visitId === source.visitId && reference.childMessageIndex === childMessageIndex;
-    const existingAttempt = previous?.promptingHistory.find(entry => sameUtterance(entry.source));
-    const contentKey = (text: string) => (text.replace(/\[[^\]]*(?:\]|$)/gu, " ").toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [])
-      .filter(word => !["uh", "um", "hmm", "well", "ah", "oh"].includes(word)).join(" ");
-    const spanKey = (span: ConceptEvidenceReference["messages"]) => JSON.stringify(span?.map(message =>
-      [message.messageIndex, message.speaker, contentKey(message.text)],
-    ));
-    // A later locator for an overlapping explanation must not truncate or
-    // shift accepted provenance. Extending a partial anchor is still allowed.
-    const acceptedSource = previous?.source;
-    if (previous?.status === "demonstrated" && acceptedSource &&
-      acceptedSource.runtimeId === source.runtimeId && acceptedSource.nodeId === source.nodeId &&
-      acceptedSource.visitId === source.visitId && acceptedSource.childMessageIndex <= end &&
-      (acceptedSource.childMessageEndIndex ?? acceptedSource.childMessageIndex) >= end &&
-      (acceptedSource.childMessageIndex !== childMessageIndex || (acceptedSource.childMessageEndIndex ?? acceptedSource.childMessageIndex) > end) &&
-      (previous.understanding === understanding || status !== "demonstrated" || understanding === null)) continue;
-    const unchanged = existingAttempt && (existingAttempt.source.childMessageEndIndex ?? existingAttempt.source.childMessageIndex) === end && contentKey(existingAttempt.source.childTranscript) === contentKey(childTranscript) &&
-      (!spanning || spanKey(existingAttempt.source.messages) === spanKey(selectedMessages));
-    const evidenceReference: ConceptEvidenceReference = unchanged ? existingAttempt.source : {
-      runtimeId: source.runtimeId, nodeId: source.nodeId, visitId: source.visitId,
-      childTurnId: !spanning && childMessageIndex === messages.findLastIndex(message => message.speaker === "Child")
-        ? source.childTurnId : null,
-      transcriptRevision: source.transcriptRevision, childMessageIndex, childTranscript,
-      ...(spanning ? { childMessageEndIndex: end, messages: selectedMessages } : {}),
-    };
-    // Reclassification of an unchanged utterance is not a fresh attempt. Once
-    // attribution is known, an ambiguous cumulative label cannot rewrite it.
-    if (unchanged && previous?.status === "demonstrated" &&
-      (status !== "demonstrated" || understanding === null || previous.understanding !== null)) continue;
-    const prompted = observation.observation === "demonstrated_independent" && !echoed && !interveningHelpUnresolved ? false
-      : observation.observation === "demonstrated_prompted" ? true : null;
-    const promptingHistory = existingAttempt
-      ? previous!.promptingHistory.map(entry => entry === existingAttempt
-        ? { source: evidenceReference, prompted } : entry)
-      : [...(previous?.promptingHistory ?? []), { source: evidenceReference, prompted }];
-    // Retain the strongest accepted evidence and its own attribution. Later
-    // uncertain or prompted attempts cannot erase an independent demonstration.
-    if (previous?.status === "demonstrated" && (status !== "demonstrated" ||
-      understanding === null || (previous.understanding === "independent" && understanding !== "independent"))) {
-      evidence[key] = { ...previous, promptingHistory };
-      continue;
-    }
-    evidence[key] = {
-      criterionId: observation.criterionId, status, understanding,
-      ...(tentative ? { tentative: true } : {}),
-      source: evidenceReference,
-      promptingHistory,
-    };
-    if (status === "demonstrated" && previous?.status !== "demonstrated")
-      effects.push({ type: "concept.revealed", nodeId: node.id, criterionId: observation.criterionId });
-  }
-  return { state: { ...state, conceptEvidence: evidence }, effects };
 }
 
 export function reduceLessonRuntime(
@@ -827,9 +608,7 @@ export function reduceLessonRuntime(
       }
       const exchange = lesson.conversationFirst && event.speaker === "child"
         ? closingTutorExchange(event.transcriptSnapshot) : null;
-      const closure = exchange && state.tutorClosure &&
-        exchange.messageIndex === state.tutorClosure.messageIndex && exchange.text === state.tutorClosure.text
-        ? state.tutorClosure : null;
+      const closure = matchesTutorClosure(exchange, state.tutorClosure) ? state.tutorClosure : null;
       next = {
         ...next,
         ...(event.speaker === "tutor" ? {} : clearedEvidence),
@@ -882,8 +661,7 @@ export function reduceLessonRuntime(
         // classified close of this unchanged exchange. New substantive words or
         // tutor output already invalidate tutorClosure in transcript.updated.
         conversationAdvanceRequested:
-          state.tutorClosure && exchange?.complete &&
-          exchange.messageIndex === state.tutorClosure.messageIndex && exchange.text === state.tutorClosure.text
+          exchange?.complete && matchesTutorClosure(exchange, state.tutorClosure)
             ? "tutor" : state.conversationAdvanceRequested,
         // Without a retained close, require a fresh exact-source proposal.
         consumedRevision: null,
@@ -938,14 +716,16 @@ export function reduceLessonRuntime(
       // A missing-turn recheck can establish conversational closure only. Do not
       // attribute historical child words or new mastery to the microphone-only turn.
       const conceptResult = state.hasChildTranscript
-        ? applyConceptObservations(next, lesson, event.source, proposal, event.transcriptSnapshot)
-        : { state: next, effects: [] };
-      next = conceptResult.state;
+        ? applyConceptObservations(
+            next.conceptEvidence, currentNode, event.source, proposal.conceptObservations, event.transcriptSnapshot,
+          )
+        : { conceptEvidence: next.conceptEvidence, effects: [] };
+      if (conceptResult.conceptEvidence !== next.conceptEvidence)
+        next = { ...next, conceptEvidence: conceptResult.conceptEvidence };
       additionalEffects = conceptResult.effects;
       if (lesson.conversationFirst) {
         const exchange = closingTutorExchange(event.transcriptSnapshot);
-        const tutorClosed = proposal.tutorState === "acknowledging" &&
-          (state.transcriptSource === "tutor" || (state.transcriptSource === "child" && exchange?.complete === true));
+        const tutorClosed = tutorAcknowledgedClosure(proposal.tutorState, state.transcriptSource, exchange);
         next = {
           ...next,
           tutorClosure: tutorClosed && exchange
