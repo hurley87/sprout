@@ -1,0 +1,1522 @@
+{
+  "applicationCommit": "0983af75b69faf243382e520807fa7f73884f442",
+  "evaluationDate": "2026-10-18",
+  "review": "Agent source-text review only; independent human review and audible listening pending.",
+  "units": "Milliseconds on each arm own browser performance clock; clocks are not shared between sessions.",
+  "fixtures": [
+    {
+      "file": "answer-one.wav",
+      "text": "I see one duck.",
+      "sha256": "d21c98e59987603f19e0ef10c76df82225f835535cc516fa4f7557ea1ef651b6",
+      "durationSeconds": 1.341167
+    },
+    {
+      "file": "answer-two.wav",
+      "text": "I see two ducks.",
+      "sha256": "ba3630f8e20ea731eb2877733012a2deaf10c541a46e04c2f326fd2fe731216b",
+      "durationSeconds": 1.480458
+    },
+    {
+      "file": "answer-three.wav",
+      "text": "I see three butterflies.",
+      "sha256": "45609faeafbb720f03c429c983391d1d18cf005b7c4971282d1b0c2e20067fa2",
+      "durationSeconds": 1.793708
+    }
+  ],
+  "baseline": {
+    "attempts": 1,
+    "outcome": "completed",
+    "completeEvidence": true,
+    "problems": [],
+    "configuredVoiceModel": "gpt-live-1",
+    "voiceServingEcho": "unavailable in retained harness",
+    "configuredObserver": "jev-1.14.0",
+    "observerVersion": "conversation-state-v2",
+    "observerEcho": "Exact-pin match enforced before each accepted response; raw echo not retained by route.",
+    "outboundPlayback": [
+      {
+        "fixture": "answer-one",
+        "startMs": 7931.800000071526,
+        "endMs": 9276.399999976158,
+        "result": "ended"
+      },
+      {
+        "fixture": "answer-two",
+        "startMs": 19233.399999976158,
+        "endMs": 20720.700000047684,
+        "result": "ended"
+      },
+      {
+        "fixture": "answer-three",
+        "startMs": 30066,
+        "endMs": 31863,
+        "result": "ended"
+      }
+    ],
+    "events": [
+      {
+        "ms": 24,
+        "type": "render.confirmed",
+        "visit": 1,
+        "turn": 0,
+        "revision": 0,
+        "node": "count-1-duck",
+        "renderedNode": "count-1-duck",
+        "initial": true
+      },
+      {
+        "ms": 36.8,
+        "type": "output.activity",
+        "visit": 1,
+        "turn": 0,
+        "revision": 0,
+        "node": "count-1-duck",
+        "detail": {
+          "state": "unavailable"
+        }
+      },
+      {
+        "ms": 1648.9,
+        "type": "output.activity",
+        "visit": 1,
+        "turn": 0,
+        "revision": 0,
+        "node": "count-1-duck",
+        "detail": {
+          "state": "unavailable"
+        }
+      },
+      {
+        "ms": 1651.1,
+        "type": "output.activity",
+        "visit": 1,
+        "turn": 0,
+        "revision": 0,
+        "node": "count-1-duck",
+        "detail": {
+          "state": "unavailable"
+        }
+      },
+      {
+        "ms": 2431,
+        "type": "session.started",
+        "visit": 1,
+        "turn": 0,
+        "revision": 0,
+        "node": "count-1-duck"
+      },
+      {
+        "ms": 2751.2,
+        "type": "output.activity",
+        "visit": 1,
+        "turn": 0,
+        "revision": 0,
+        "node": "count-1-duck",
+        "detail": {
+          "state": "quiet"
+        }
+      },
+      {
+        "ms": 4602.8,
+        "type": "output.activity",
+        "visit": 1,
+        "turn": 0,
+        "revision": 2,
+        "node": "count-1-duck",
+        "detail": {
+          "state": "active"
+        }
+      },
+      {
+        "ms": 4750.4,
+        "type": "output.activity",
+        "visit": 1,
+        "turn": 0,
+        "revision": 3,
+        "node": "count-1-duck",
+        "detail": {
+          "state": "quiet"
+        }
+      },
+      {
+        "ms": 4802.7,
+        "type": "output.activity",
+        "visit": 1,
+        "turn": 0,
+        "revision": 3,
+        "node": "count-1-duck",
+        "detail": {
+          "state": "active"
+        }
+      },
+      {
+        "ms": 4950.9,
+        "type": "output.activity",
+        "visit": 1,
+        "turn": 0,
+        "revision": 3,
+        "node": "count-1-duck",
+        "detail": {
+          "state": "quiet"
+        }
+      },
+      {
+        "ms": 5002.1,
+        "type": "output.activity",
+        "visit": 1,
+        "turn": 0,
+        "revision": 3,
+        "node": "count-1-duck",
+        "detail": {
+          "state": "active"
+        }
+      },
+      {
+        "ms": 5102.4,
+        "type": "output.activity",
+        "visit": 1,
+        "turn": 0,
+        "revision": 3,
+        "node": "count-1-duck",
+        "detail": {
+          "state": "quiet"
+        }
+      },
+      {
+        "ms": 5150.7,
+        "type": "output.activity",
+        "visit": 1,
+        "turn": 0,
+        "revision": 3,
+        "node": "count-1-duck",
+        "detail": {
+          "state": "active"
+        }
+      },
+      {
+        "ms": 5451.8,
+        "type": "output.activity",
+        "visit": 1,
+        "turn": 0,
+        "revision": 5,
+        "node": "count-1-duck",
+        "detail": {
+          "state": "quiet"
+        }
+      },
+      {
+        "ms": 5801.8,
+        "type": "output.activity",
+        "visit": 1,
+        "turn": 0,
+        "revision": 6,
+        "node": "count-1-duck",
+        "detail": {
+          "state": "active"
+        }
+      },
+      {
+        "ms": 6205.3,
+        "type": "output.activity",
+        "visit": 1,
+        "turn": 0,
+        "revision": 7,
+        "node": "count-1-duck",
+        "detail": {
+          "state": "quiet"
+        }
+      },
+      {
+        "ms": 6302.3,
+        "type": "output.activity",
+        "visit": 1,
+        "turn": 0,
+        "revision": 7,
+        "node": "count-1-duck",
+        "detail": {
+          "state": "active"
+        }
+      },
+      {
+        "ms": 6500.5,
+        "type": "output.activity",
+        "visit": 1,
+        "turn": 0,
+        "revision": 8,
+        "node": "count-1-duck",
+        "detail": {
+          "state": "quiet"
+        }
+      },
+      {
+        "ms": 6551.3,
+        "type": "output.activity",
+        "visit": 1,
+        "turn": 0,
+        "revision": 8,
+        "node": "count-1-duck",
+        "detail": {
+          "state": "active"
+        }
+      },
+      {
+        "ms": 6652.3,
+        "type": "output.activity",
+        "visit": 1,
+        "turn": 0,
+        "revision": 8,
+        "node": "count-1-duck",
+        "detail": {
+          "state": "quiet"
+        }
+      },
+      {
+        "ms": 6701.2,
+        "type": "output.activity",
+        "visit": 1,
+        "turn": 0,
+        "revision": 8,
+        "node": "count-1-duck",
+        "detail": {
+          "state": "active"
+        }
+      },
+      {
+        "ms": 7101.5,
+        "type": "output.activity",
+        "visit": 1,
+        "turn": 0,
+        "revision": 8,
+        "node": "count-1-duck",
+        "detail": {
+          "state": "quiet"
+        }
+      },
+      {
+        "ms": 7151.9,
+        "type": "output.activity",
+        "visit": 1,
+        "turn": 0,
+        "revision": 8,
+        "node": "count-1-duck",
+        "detail": {
+          "state": "active"
+        }
+      },
+      {
+        "ms": 7202.5,
+        "type": "output.activity",
+        "visit": 1,
+        "turn": 0,
+        "revision": 8,
+        "node": "count-1-duck",
+        "detail": {
+          "state": "quiet"
+        }
+      },
+      {
+        "ms": 10402.9,
+        "type": "output.activity",
+        "visit": 1,
+        "turn": 1,
+        "revision": 13,
+        "node": "count-1-duck",
+        "detail": {
+          "state": "active"
+        }
+      },
+      {
+        "ms": 10852.8,
+        "type": "output.activity",
+        "visit": 1,
+        "turn": 1,
+        "revision": 14,
+        "node": "count-1-duck",
+        "detail": {
+          "state": "quiet"
+        }
+      },
+      {
+        "ms": 11100.3,
+        "type": "output.activity",
+        "visit": 1,
+        "turn": 1,
+        "revision": 15,
+        "node": "count-1-duck",
+        "detail": {
+          "state": "active"
+        }
+      },
+      {
+        "ms": 11752.5,
+        "type": "output.activity",
+        "visit": 1,
+        "turn": 1,
+        "revision": 15,
+        "node": "count-1-duck",
+        "detail": {
+          "state": "quiet"
+        }
+      },
+      {
+        "ms": 11854.9,
+        "type": "output.activity",
+        "visit": 1,
+        "turn": 1,
+        "revision": 15,
+        "node": "count-1-duck",
+        "detail": {
+          "state": "active"
+        }
+      },
+      {
+        "ms": 11901.9,
+        "type": "output.activity",
+        "visit": 1,
+        "turn": 1,
+        "revision": 15,
+        "node": "count-1-duck",
+        "detail": {
+          "state": "quiet"
+        }
+      },
+      {
+        "ms": 12403.2,
+        "type": "classifier.started",
+        "visit": 1,
+        "turn": 1,
+        "revision": 15,
+        "node": "count-1-duck",
+        "detail": {
+          "trigger": "tutor_utterance_stable",
+          "transcript": "Tutor: Okay, let's start. How many ducks do you see?\nChild: I see one duck\nTutor: Yes, one duck!"
+        }
+      },
+      {
+        "ms": 12715.7,
+        "type": "classifier.mapping",
+        "visit": 1,
+        "turn": 1,
+        "revision": 15,
+        "node": "count-1-duck",
+        "detail": {
+          "classifierVersion": "conversation-state-v2",
+          "decision": "accepted",
+          "outcome": "allow_semantic_completion_evidence",
+          "outputs": {
+            "objectiveState": {
+              "choice": "completed",
+              "confidence": 1,
+              "probabilities": {
+                "completed": 1,
+                "incorrect": 0,
+                "unclear_or_incomplete": 0,
+                "unresolved_help": 0,
+                "no_attempt": 0
+              }
+            },
+            "tutorState": {
+              "choice": "confirmed_completion",
+              "confidence": 0.99,
+              "probabilities": {
+                "confirmed_completion": 0.99,
+                "clarifying": 0,
+                "helping": 0,
+                "asking": 0.01,
+                "other": 0
+              }
+            }
+          },
+          "labelCompletionEligible": true,
+          "thresholds": {
+            "HIGH": 0.9,
+            "LOW": 0.1,
+            "COMPETITOR_CEILING": 0.2,
+            "MIN_MARGIN": 0.7
+          },
+          "nodeId": "count-1-duck",
+          "transcriptRevision": 15,
+          "elapsedMs": 290.40799999999945
+        }
+      },
+      {
+        "ms": 12715.7,
+        "type": "classifier.result",
+        "visit": 1,
+        "turn": 1,
+        "revision": 15,
+        "node": "count-1-duck",
+        "detail": {
+          "proposal": {
+            "nodeId": "count-1-duck",
+            "transcriptRevision": 15,
+            "childActivity": "unknown",
+            "answerOutcome": "correct",
+            "supportState": "none",
+            "tutorState": "acknowledging"
+          },
+          "elapsedMs": 312.5
+        }
+      },
+      {
+        "ms": 12757.7,
+        "type": "render.confirmed",
+        "visit": 2,
+        "turn": 1,
+        "revision": 15,
+        "node": "count-2-ducks",
+        "renderedNode": "count-2-ducks",
+        "initial": false
+      },
+      {
+        "ms": 14550.6,
+        "type": "output.activity",
+        "visit": 2,
+        "turn": 1,
+        "revision": 16,
+        "node": "count-2-ducks",
+        "detail": {
+          "state": "active"
+        }
+      },
+      {
+        "ms": 14902.3,
+        "type": "output.activity",
+        "visit": 2,
+        "turn": 1,
+        "revision": 18,
+        "node": "count-2-ducks",
+        "detail": {
+          "state": "quiet"
+        }
+      },
+      {
+        "ms": 15001.8,
+        "type": "output.activity",
+        "visit": 2,
+        "turn": 1,
+        "revision": 19,
+        "node": "count-2-ducks",
+        "detail": {
+          "state": "active"
+        }
+      },
+      {
+        "ms": 15153.2,
+        "type": "output.activity",
+        "visit": 2,
+        "turn": 1,
+        "revision": 19,
+        "node": "count-2-ducks",
+        "detail": {
+          "state": "quiet"
+        }
+      },
+      {
+        "ms": 15201.4,
+        "type": "output.activity",
+        "visit": 2,
+        "turn": 1,
+        "revision": 19,
+        "node": "count-2-ducks",
+        "detail": {
+          "state": "active"
+        }
+      },
+      {
+        "ms": 15251.3,
+        "type": "output.activity",
+        "visit": 2,
+        "turn": 1,
+        "revision": 20,
+        "node": "count-2-ducks",
+        "detail": {
+          "state": "quiet"
+        }
+      },
+      {
+        "ms": 15403.3,
+        "type": "output.activity",
+        "visit": 2,
+        "turn": 1,
+        "revision": 20,
+        "node": "count-2-ducks",
+        "detail": {
+          "state": "active"
+        }
+      },
+      {
+        "ms": 15452.1,
+        "type": "output.activity",
+        "visit": 2,
+        "turn": 1,
+        "revision": 20,
+        "node": "count-2-ducks",
+        "detail": {
+          "state": "quiet"
+        }
+      },
+      {
+        "ms": 15552.2,
+        "type": "output.activity",
+        "visit": 2,
+        "turn": 1,
+        "revision": 20,
+        "node": "count-2-ducks",
+        "detail": {
+          "state": "active"
+        }
+      },
+      {
+        "ms": 15852.2,
+        "type": "output.activity",
+        "visit": 2,
+        "turn": 1,
+        "revision": 20,
+        "node": "count-2-ducks",
+        "detail": {
+          "state": "quiet"
+        }
+      },
+      {
+        "ms": 15952.2,
+        "type": "output.activity",
+        "visit": 2,
+        "turn": 1,
+        "revision": 21,
+        "node": "count-2-ducks",
+        "detail": {
+          "state": "active"
+        }
+      },
+      {
+        "ms": 16153,
+        "type": "output.activity",
+        "visit": 2,
+        "turn": 1,
+        "revision": 21,
+        "node": "count-2-ducks",
+        "detail": {
+          "state": "quiet"
+        }
+      },
+      {
+        "ms": 16701.6,
+        "type": "output.activity",
+        "visit": 2,
+        "turn": 1,
+        "revision": 23,
+        "node": "count-2-ducks",
+        "detail": {
+          "state": "active"
+        }
+      },
+      {
+        "ms": 17302.1,
+        "type": "output.activity",
+        "visit": 2,
+        "turn": 1,
+        "revision": 24,
+        "node": "count-2-ducks",
+        "detail": {
+          "state": "quiet"
+        }
+      },
+      {
+        "ms": 17352.2,
+        "type": "output.activity",
+        "visit": 2,
+        "turn": 1,
+        "revision": 25,
+        "node": "count-2-ducks",
+        "detail": {
+          "state": "active"
+        }
+      },
+      {
+        "ms": 17551.4,
+        "type": "output.activity",
+        "visit": 2,
+        "turn": 1,
+        "revision": 25,
+        "node": "count-2-ducks",
+        "detail": {
+          "state": "quiet"
+        }
+      },
+      {
+        "ms": 17652.8,
+        "type": "output.activity",
+        "visit": 2,
+        "turn": 1,
+        "revision": 25,
+        "node": "count-2-ducks",
+        "detail": {
+          "state": "active"
+        }
+      },
+      {
+        "ms": 18400.4,
+        "type": "output.activity",
+        "visit": 2,
+        "turn": 1,
+        "revision": 25,
+        "node": "count-2-ducks",
+        "detail": {
+          "state": "quiet"
+        }
+      },
+      {
+        "ms": 21952.9,
+        "type": "output.activity",
+        "visit": 2,
+        "turn": 2,
+        "revision": 31,
+        "node": "count-2-ducks",
+        "detail": {
+          "state": "active"
+        }
+      },
+      {
+        "ms": 22451.6,
+        "type": "output.activity",
+        "visit": 2,
+        "turn": 2,
+        "revision": 32,
+        "node": "count-2-ducks",
+        "detail": {
+          "state": "quiet"
+        }
+      },
+      {
+        "ms": 22650.9,
+        "type": "output.activity",
+        "visit": 2,
+        "turn": 2,
+        "revision": 32,
+        "node": "count-2-ducks",
+        "detail": {
+          "state": "active"
+        }
+      },
+      {
+        "ms": 23151.1,
+        "type": "output.activity",
+        "visit": 2,
+        "turn": 2,
+        "revision": 32,
+        "node": "count-2-ducks",
+        "detail": {
+          "state": "quiet"
+        }
+      },
+      {
+        "ms": 23202.6,
+        "type": "output.activity",
+        "visit": 2,
+        "turn": 2,
+        "revision": 32,
+        "node": "count-2-ducks",
+        "detail": {
+          "state": "active"
+        }
+      },
+      {
+        "ms": 23401.8,
+        "type": "output.activity",
+        "visit": 2,
+        "turn": 2,
+        "revision": 32,
+        "node": "count-2-ducks",
+        "detail": {
+          "state": "quiet"
+        }
+      },
+      {
+        "ms": 23902,
+        "type": "classifier.started",
+        "visit": 2,
+        "turn": 2,
+        "revision": 32,
+        "node": "count-2-ducks",
+        "detail": {
+          "trigger": "tutor_utterance_stable",
+          "transcript": "Tutor: Okay, look at the ducks. How many ducks do you see?\nChild: I see two ducks\nTutor: Yes, two ducks."
+        }
+      },
+      {
+        "ms": 24134.3,
+        "type": "classifier.mapping",
+        "visit": 2,
+        "turn": 2,
+        "revision": 32,
+        "node": "count-2-ducks",
+        "detail": {
+          "classifierVersion": "conversation-state-v2",
+          "decision": "accepted",
+          "outcome": "allow_semantic_completion_evidence",
+          "outputs": {
+            "objectiveState": {
+              "choice": "completed",
+              "confidence": 1,
+              "probabilities": {
+                "completed": 1,
+                "incorrect": 0,
+                "unclear_or_incomplete": 0,
+                "unresolved_help": 0,
+                "no_attempt": 0
+              }
+            },
+            "tutorState": {
+              "choice": "confirmed_completion",
+              "confidence": 0.99,
+              "probabilities": {
+                "confirmed_completion": 0.99,
+                "clarifying": 0,
+                "helping": 0,
+                "asking": 0.01,
+                "other": 0
+              }
+            }
+          },
+          "labelCompletionEligible": true,
+          "thresholds": {
+            "HIGH": 0.9,
+            "LOW": 0.1,
+            "COMPETITOR_CEILING": 0.2,
+            "MIN_MARGIN": 0.7
+          },
+          "nodeId": "count-2-ducks",
+          "transcriptRevision": 32,
+          "elapsedMs": 225.76937499999985
+        }
+      },
+      {
+        "ms": 24134.3,
+        "type": "classifier.result",
+        "visit": 2,
+        "turn": 2,
+        "revision": 32,
+        "node": "count-2-ducks",
+        "detail": {
+          "proposal": {
+            "nodeId": "count-2-ducks",
+            "transcriptRevision": 32,
+            "childActivity": "unknown",
+            "answerOutcome": "correct",
+            "supportState": "none",
+            "tutorState": "acknowledging"
+          },
+          "elapsedMs": 232.30000007152557
+        }
+      },
+      {
+        "ms": 24173.4,
+        "type": "render.confirmed",
+        "visit": 3,
+        "turn": 2,
+        "revision": 32,
+        "node": "count-3-butterflies",
+        "renderedNode": "count-3-butterflies",
+        "initial": false
+      },
+      {
+        "ms": 26257.2,
+        "type": "output.activity",
+        "visit": 3,
+        "turn": 2,
+        "revision": 35,
+        "node": "count-3-butterflies",
+        "detail": {
+          "state": "active"
+        }
+      },
+      {
+        "ms": 26401.5,
+        "type": "output.activity",
+        "visit": 3,
+        "turn": 2,
+        "revision": 35,
+        "node": "count-3-butterflies",
+        "detail": {
+          "state": "quiet"
+        }
+      },
+      {
+        "ms": 26512.2,
+        "type": "output.activity",
+        "visit": 3,
+        "turn": 2,
+        "revision": 35,
+        "node": "count-3-butterflies",
+        "detail": {
+          "state": "active"
+        }
+      },
+      {
+        "ms": 26803,
+        "type": "output.activity",
+        "visit": 3,
+        "turn": 2,
+        "revision": 36,
+        "node": "count-3-butterflies",
+        "detail": {
+          "state": "quiet"
+        }
+      },
+      {
+        "ms": 27201.6,
+        "type": "output.activity",
+        "visit": 3,
+        "turn": 2,
+        "revision": 37,
+        "node": "count-3-butterflies",
+        "detail": {
+          "state": "active"
+        }
+      },
+      {
+        "ms": 27700.8,
+        "type": "output.activity",
+        "visit": 3,
+        "turn": 2,
+        "revision": 37,
+        "node": "count-3-butterflies",
+        "detail": {
+          "state": "quiet"
+        }
+      },
+      {
+        "ms": 27751.7,
+        "type": "output.activity",
+        "visit": 3,
+        "turn": 2,
+        "revision": 37,
+        "node": "count-3-butterflies",
+        "detail": {
+          "state": "active"
+        }
+      },
+      {
+        "ms": 28051.6,
+        "type": "output.activity",
+        "visit": 3,
+        "turn": 2,
+        "revision": 39,
+        "node": "count-3-butterflies",
+        "detail": {
+          "state": "quiet"
+        }
+      },
+      {
+        "ms": 28102.9,
+        "type": "output.activity",
+        "visit": 3,
+        "turn": 2,
+        "revision": 39,
+        "node": "count-3-butterflies",
+        "detail": {
+          "state": "active"
+        }
+      },
+      {
+        "ms": 28501.7,
+        "type": "output.activity",
+        "visit": 3,
+        "turn": 2,
+        "revision": 40,
+        "node": "count-3-butterflies",
+        "detail": {
+          "state": "quiet"
+        }
+      },
+      {
+        "ms": 28550.8,
+        "type": "output.activity",
+        "visit": 3,
+        "turn": 2,
+        "revision": 40,
+        "node": "count-3-butterflies",
+        "detail": {
+          "state": "active"
+        }
+      },
+      {
+        "ms": 29052.2,
+        "type": "output.activity",
+        "visit": 3,
+        "turn": 2,
+        "revision": 40,
+        "node": "count-3-butterflies",
+        "detail": {
+          "state": "quiet"
+        }
+      },
+      {
+        "ms": 33302.7,
+        "type": "output.activity",
+        "visit": 3,
+        "turn": 3,
+        "revision": 46,
+        "node": "count-3-butterflies",
+        "detail": {
+          "state": "active"
+        }
+      },
+      {
+        "ms": 33752.2,
+        "type": "output.activity",
+        "visit": 3,
+        "turn": 3,
+        "revision": 48,
+        "node": "count-3-butterflies",
+        "detail": {
+          "state": "quiet"
+        }
+      },
+      {
+        "ms": 33954.6,
+        "type": "output.activity",
+        "visit": 3,
+        "turn": 3,
+        "revision": 48,
+        "node": "count-3-butterflies",
+        "detail": {
+          "state": "active"
+        }
+      },
+      {
+        "ms": 34250.2,
+        "type": "output.activity",
+        "visit": 3,
+        "turn": 3,
+        "revision": 49,
+        "node": "count-3-butterflies",
+        "detail": {
+          "state": "quiet"
+        }
+      },
+      {
+        "ms": 34400.5,
+        "type": "output.activity",
+        "visit": 3,
+        "turn": 3,
+        "revision": 49,
+        "node": "count-3-butterflies",
+        "detail": {
+          "state": "active"
+        }
+      },
+      {
+        "ms": 35150.9,
+        "type": "output.activity",
+        "visit": 3,
+        "turn": 3,
+        "revision": 49,
+        "node": "count-3-butterflies",
+        "detail": {
+          "state": "quiet"
+        }
+      },
+      {
+        "ms": 35202.7,
+        "type": "output.activity",
+        "visit": 3,
+        "turn": 3,
+        "revision": 49,
+        "node": "count-3-butterflies",
+        "detail": {
+          "state": "active"
+        }
+      },
+      {
+        "ms": 35601.1,
+        "type": "output.activity",
+        "visit": 3,
+        "turn": 3,
+        "revision": 49,
+        "node": "count-3-butterflies",
+        "detail": {
+          "state": "quiet"
+        }
+      },
+      {
+        "ms": 36101.6,
+        "type": "classifier.started",
+        "visit": 3,
+        "turn": 3,
+        "revision": 49,
+        "node": "count-3-butterflies",
+        "detail": {
+          "trigger": "tutor_utterance_stable",
+          "transcript": "Tutor: Take a look\u2014how many butterflies do you see?\nChild: I see three butterflies\nTutor: Yes, there are three butterflies."
+        }
+      },
+      {
+        "ms": 36343.7,
+        "type": "classifier.mapping",
+        "visit": 3,
+        "turn": 3,
+        "revision": 49,
+        "node": "count-3-butterflies",
+        "detail": {
+          "classifierVersion": "conversation-state-v2",
+          "decision": "accepted",
+          "outcome": "allow_semantic_completion_evidence",
+          "outputs": {
+            "objectiveState": {
+              "choice": "completed",
+              "confidence": 1,
+              "probabilities": {
+                "completed": 1,
+                "incorrect": 0,
+                "unclear_or_incomplete": 0,
+                "unresolved_help": 0,
+                "no_attempt": 0
+              }
+            },
+            "tutorState": {
+              "choice": "confirmed_completion",
+              "confidence": 0.99,
+              "probabilities": {
+                "confirmed_completion": 0.99,
+                "clarifying": 0,
+                "helping": 0,
+                "asking": 0.01,
+                "other": 0
+              }
+            }
+          },
+          "labelCompletionEligible": true,
+          "thresholds": {
+            "HIGH": 0.9,
+            "LOW": 0.1,
+            "COMPETITOR_CEILING": 0.2,
+            "MIN_MARGIN": 0.7
+          },
+          "nodeId": "count-3-butterflies",
+          "transcriptRevision": 49,
+          "elapsedMs": 235.72841699999844
+        }
+      },
+      {
+        "ms": 36343.7,
+        "type": "classifier.result",
+        "visit": 3,
+        "turn": 3,
+        "revision": 49,
+        "node": "count-3-butterflies",
+        "detail": {
+          "proposal": {
+            "nodeId": "count-3-butterflies",
+            "transcriptRevision": 49,
+            "childActivity": "unknown",
+            "answerOutcome": "correct",
+            "supportState": "none",
+            "tutorState": "acknowledging"
+          },
+          "elapsedMs": 242.10000002384186
+        }
+      },
+      {
+        "ms": 36372.9,
+        "type": "render.confirmed",
+        "visit": 4,
+        "turn": 3,
+        "revision": 49,
+        "node": "count-3-butterflies",
+        "renderedNode": null,
+        "initial": false
+      },
+      {
+        "ms": 36373.1,
+        "type": "lesson.ended",
+        "visit": 4,
+        "turn": 3,
+        "revision": 49,
+        "node": "count-3-butterflies",
+        "reason": "lesson_completed"
+      }
+    ],
+    "cleanup": "Existing live test assertions passed for closed peers, ended app microphone track, detached audio, closed app contexts; synthetic context closed in final harness disposal."
+  },
+  "grok": {
+    "attempts": 1,
+    "outcome": "blocked",
+    "startedUTC": "2026-10-18T19:42:54.290Z",
+    "finishedUTC": "2026-10-18T19:43:28.150Z",
+    "configuredAndEchoedModel": "grok-voice-3.0",
+    "events": [
+      {
+        "ms": 1243,
+        "type": "session.created",
+        "model": "grok-voice-3.0"
+      },
+      {
+        "ms": 1875,
+        "type": "session.updated",
+        "model": "grok-voice-3.0"
+      },
+      {
+        "ms": 1997,
+        "type": "response.created",
+        "status": "in_progress"
+      },
+      {
+        "ms": 2520,
+        "type": "audio.packet"
+      },
+      {
+        "ms": 2527,
+        "type": "playback.scheduled",
+        "durationMs": 489
+      },
+      {
+        "ms": 2721,
+        "type": "audio.packet"
+      },
+      {
+        "ms": 2727,
+        "type": "playback.scheduled",
+        "durationMs": 918
+      },
+      {
+        "ms": 2799,
+        "type": "audio.packet"
+      },
+      {
+        "ms": 2804,
+        "type": "playback.scheduled",
+        "durationMs": 979
+      },
+      {
+        "ms": 2807,
+        "type": "audio.packet"
+      },
+      {
+        "ms": 2807,
+        "type": "playback.scheduled",
+        "durationMs": 61
+      },
+      {
+        "ms": 2878,
+        "type": "audio.packet"
+      },
+      {
+        "ms": 2882,
+        "type": "playback.scheduled",
+        "durationMs": 581
+      },
+      {
+        "ms": 3017,
+        "type": "playback.ended"
+      },
+      {
+        "ms": 3166,
+        "type": "audio.packet"
+      },
+      {
+        "ms": 3170,
+        "type": "playback.scheduled",
+        "durationMs": 642
+      },
+      {
+        "ms": 3262,
+        "type": "audio.packet"
+      },
+      {
+        "ms": 3265,
+        "type": "playback.scheduled",
+        "durationMs": 275
+      },
+      {
+        "ms": 3269,
+        "type": "audio.packet"
+      },
+      {
+        "ms": 3270,
+        "type": "playback.scheduled",
+        "durationMs": 122
+      },
+      {
+        "ms": 3274,
+        "type": "audio.packet"
+      },
+      {
+        "ms": 3275,
+        "type": "playback.scheduled",
+        "durationMs": 72
+      },
+      {
+        "ms": 3275,
+        "type": "response.output_audio_transcript.done",
+        "text": "Hello! I see a duck on the screen. How many ducks do you see?"
+      },
+      {
+        "ms": 3278,
+        "type": "response.output_audio.done",
+        "status": null
+      },
+      {
+        "ms": 3278,
+        "type": "response.done",
+        "status": "completed"
+      },
+      {
+        "ms": 3929,
+        "type": "playback.ended"
+      },
+      {
+        "ms": 4911,
+        "type": "playback.ended"
+      },
+      {
+        "ms": 4969,
+        "type": "playback.ended"
+      },
+      {
+        "ms": 5551,
+        "type": "playback.ended"
+      },
+      {
+        "ms": 6196,
+        "type": "playback.ended"
+      },
+      {
+        "ms": 6468,
+        "type": "playback.ended"
+      },
+      {
+        "ms": 6591,
+        "type": "playback.ended"
+      },
+      {
+        "ms": 6666,
+        "type": "playback.ended"
+      },
+      {
+        "ms": 7322,
+        "type": "learner.fixture.start",
+        "durationMs": 1341
+      },
+      {
+        "ms": 7553,
+        "type": "input_audio_buffer.speech_started",
+        "status": null
+      },
+      {
+        "ms": 8008,
+        "type": "conversation.item.input_audio_transcription.completed",
+        "text": "I see"
+      },
+      {
+        "ms": 8665,
+        "type": "learner.fixture.ended"
+      },
+      {
+        "ms": 9004,
+        "type": "input_audio_buffer.speech_stopped",
+        "status": null
+      },
+      {
+        "ms": 9044,
+        "type": "conversation.item.input_audio_transcription.completed",
+        "text": "I see one duck."
+      },
+      {
+        "ms": 9057,
+        "type": "conversation.item.input_audio_transcription.completed",
+        "text": "I see one duck."
+      },
+      {
+        "ms": 9120,
+        "type": "response.created",
+        "status": "in_progress"
+      },
+      {
+        "ms": 9662,
+        "type": "conversation.item.input_audio_transcription.completed",
+        "text": "I see one duck."
+      },
+      {
+        "ms": 9667,
+        "type": "response.function_call_arguments.done",
+        "name": "report_counting_answer",
+        "answer_outcome": "correct",
+        "support_state": "none",
+        "supporting_text": "I see one duck."
+      },
+      {
+        "ms": 9668,
+        "type": "tool.result",
+        "output": {
+          "status": "rejected",
+          "reason": "stale context"
+        }
+      },
+      {
+        "ms": 9668,
+        "type": "response.done",
+        "status": "completed"
+      },
+      {
+        "ms": 9754,
+        "type": "response.created",
+        "status": "in_progress"
+      },
+      {
+        "ms": 10138,
+        "type": "audio.packet"
+      },
+      {
+        "ms": 10143,
+        "type": "playback.scheduled",
+        "durationMs": 489
+      },
+      {
+        "ms": 10223,
+        "type": "audio.packet"
+      },
+      {
+        "ms": 10229,
+        "type": "playback.scheduled",
+        "durationMs": 918
+      },
+      {
+        "ms": 10232,
+        "type": "audio.packet"
+      },
+      {
+        "ms": 10232,
+        "type": "playback.scheduled",
+        "durationMs": 61
+      },
+      {
+        "ms": 10538,
+        "type": "audio.packet"
+      },
+      {
+        "ms": 10542,
+        "type": "playback.scheduled",
+        "durationMs": 612
+      },
+      {
+        "ms": 10633,
+        "type": "playback.ended"
+      },
+      {
+        "ms": 10681,
+        "type": "audio.packet"
+      },
+      {
+        "ms": 10687,
+        "type": "playback.scheduled",
+        "durationMs": 948
+      },
+      {
+        "ms": 10773,
+        "type": "audio.packet"
+      },
+      {
+        "ms": 10778,
+        "type": "playback.scheduled",
+        "durationMs": 918
+      },
+      {
+        "ms": 10781,
+        "type": "audio.packet"
+      },
+      {
+        "ms": 10782,
+        "type": "playback.scheduled",
+        "durationMs": 122
+      },
+      {
+        "ms": 10783,
+        "type": "audio.packet"
+      },
+      {
+        "ms": 10784,
+        "type": "playback.scheduled",
+        "durationMs": 72
+      },
+      {
+        "ms": 10784,
+        "type": "response.output_audio_transcript.done",
+        "text": "Let's take another look. Can you tell me again how many ducks you see?"
+      },
+      {
+        "ms": 10784,
+        "type": "response.output_audio.done",
+        "status": null
+      },
+      {
+        "ms": 10784,
+        "type": "response.done",
+        "status": "completed"
+      },
+      {
+        "ms": 11280,
+        "type": "session.updated",
+        "model": "grok-voice-3.0"
+      },
+      {
+        "ms": 11545,
+        "type": "playback.ended"
+      },
+      {
+        "ms": 11609,
+        "type": "playback.ended"
+      },
+      {
+        "ms": 12217,
+        "type": "playback.ended"
+      },
+      {
+        "ms": 13167,
+        "type": "playback.ended"
+      },
+      {
+        "ms": 14084,
+        "type": "playback.ended"
+      },
+      {
+        "ms": 14207,
+        "type": "playback.ended"
+      },
+      {
+        "ms": 14282,
+        "type": "playback.ended"
+      }
+    ],
+    "correlationCodesInOrder": [
+      "context.issued",
+      "context.acknowledged",
+      "response.before_turn_start",
+      "context.claimed",
+      "transcript.final.corrected",
+      "transcript.final.corrected",
+      "transcript.final.corrected",
+      "transcript.final.corrected",
+      "context.issued",
+      "context.acknowledged"
+    ],
+    "failure": "locator.waitFor: Timeout 25000ms exceeded.",
+    "cleanup": {
+      "status": "stopped \u00b7 Audio: idle",
+      "tracks": [
+        "ended"
+      ],
+      "contexts": [
+        "closed",
+        "running"
+      ],
+      "sockets": [
+        1,
+        2
+      ]
+    },
+    "cleanupLimit": "Socket inventory included Next HMR. At 150ms one socket OPEN and one CLOSING; this does not prove app socket reached CLOSED. One synthetic context remained running at sample and was explicitly disposed before browser.close."
+  },
+  "excluded": "No credentials, request headers, protocol authentication strings, provider IDs, random tokens or audio payloads retained."
+}

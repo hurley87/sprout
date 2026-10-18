@@ -1,5 +1,9 @@
 # Grok counting experiment
 
+See the [bounded paired evaluation](issue-69-grok-counting-evaluation.md) for the
+fixed checklist, current live evidence, transcript-correction blocker and
+**insufficient evidence** recommendation. Earlier live results below are historical.
+
 ## Corrective review of commit 3a4bd6c
 
 ### Answer validation
