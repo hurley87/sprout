@@ -61,7 +61,10 @@ export function teachingInstruction(
   context: CurrentNodeSteeringContext,
   lesson: LessonDefinition,
   startLesson = false,
+  recapText?: string,
 ) {
+  if (lesson.nodes[context.nodeId].completeAfterTutorOutput)
+    return `Application screen confirmation: ${context.nodeId} is now rendered. This is the terminal recap, not a question. Read the following application-authored close verbatim once, then stop speaking; the application ends the session after audio drains. No additions, questions, exercises or further responses. This text is the sole authority for claims about the learner, never infer from conversation memory. Close: ${JSON.stringify(recapText ?? "Thanks for the discussion.")}`;
   if (Object.values(lesson.nodes).some(node => node.concepts?.length)) {
     const targets =
       context.completionCriteria?.map(concept => `${concept.id}: ${targetText(concept.description)}`).join("\n") ??

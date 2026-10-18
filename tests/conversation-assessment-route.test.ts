@@ -11,7 +11,7 @@ const visits = [
       "Tutor: What does it mean?\nChild: Visual marks represent information.\nTutor: Tell me more.\nChild: Math is a shared language for abstract ideas.",
   },
   {
-    nodeId: "why-exographics",
+    nodeId: "recap",
     visitId: 5,
     transcript: "Child: Seeing those symbols also helps us reason about ideas.\nTutor: We can move on.",
   },

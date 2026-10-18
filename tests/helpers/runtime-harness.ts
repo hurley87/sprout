@@ -1,5 +1,42 @@
 import { vi } from "vitest";
 import type { ClientCommand, ProviderEvent } from "../../lib/events";
+import {
+  classificationSource,
+  createLessonRuntime,
+  reduceLessonRuntime,
+  runtimeSource,
+  type LessonRuntimeEvent,
+} from "../../lib/lesson-runtime/lesson-runtime-reducer";
+
+// Distribute Omit over the event union so callers retain each event's payload checks.
+type UntimedEvent<Event = LessonRuntimeEvent> = Event extends LessonRuntimeEvent ? Omit<Event, "atMs"> : never;
+
+/** Only supplies the local clock. Tests explicitly own identities and event order. */
+export function createReducerHarness(runtimeId: string, options: Parameters<typeof createLessonRuntime>[1]) {
+  let state = createLessonRuntime(runtimeId, options);
+  return {
+    get state() { return state; },
+    send(event: UntimedEvent, deltaMs = 1) {
+      const result = reduceLessonRuntime(state, { ...event, atMs: state.nowMs + deltaMs }, options.lesson);
+      state = result.state;
+      return result;
+    },
+  };
+}
+
+/** An ordinary complete learner turn, not a substitute for stale-source or VAD tests.
+ * Revision is explicit; every event still passes through the reducer. */
+export function prepareLearnerClassification(
+  harness: ReturnType<typeof createReducerHarness>,
+  revision: number,
+) {
+  harness.send({ type: "child.turn.started", source: runtimeSource(harness.state) });
+  harness.send({ type: "transcript.updated", source: runtimeSource(harness.state), speaker: "child", revision });
+  harness.send({ type: "child.turn.ended", source: runtimeSource(harness.state) });
+  const source = classificationSource(harness.state);
+  if (!source) throw new Error("Learner turn is not eligible for classification");
+  return source;
+}
 
 type RuntimeTransport = {
   receive: ((event: ProviderEvent) => void) | undefined;

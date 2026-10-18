@@ -8,50 +8,27 @@ import {
   type ConversationStateOutputs,
 } from "../lib/lesson-runtime/conversation-observer-contract";
 import { parseConversationStateProposal } from "../lib/lesson-runtime/conversation-state-classifier";
-import {
-  classificationSource,
-  createLessonRuntime,
-  meetsAuthoredCompletionPolicy,
-  reduceLessonRuntime,
-  runtimeSource,
-  type LessonRuntimeEvent,
-} from "../lib/lesson-runtime/lesson-runtime-reducer";
+import { meetsAuthoredCompletionPolicy } from "../lib/lesson-runtime/lesson-runtime-reducer";
 import { answerRecoveryInstruction } from "../lib/lesson-runtime/live-context";
 import { transcriptMessages } from "../lib/lesson-runtime/tutor-observation";
-import { parseLiveClassificationDiagnostic } from "../lib/lesson-runtime/live-classification-diagnostic";
-import {
-  CLASSIFIER_VERSION,
-  CONVERSATION_CLASSIFICATION_THRESHOLDS,
-} from "../lib/lesson-runtime/conversation-observer-contract";
 import { classifyConversationStateWithDiagnostics } from "../lib/lesson-runtime/jev-conversation-state-classifier";
 import { JEV_MODEL } from "../lib/jev";
 import { TEST_CONCEPT_LESSON } from "./fixtures/concept-lesson";
 import { sourceOutputs } from "./fixtures/concept-source-outputs";
 import replay from "./fixtures/catching-unicorns-provenance-replay.json";
+import { createReducerHarness, prepareLearnerClassification } from "./helpers/runtime-harness";
 
 function harness(nodeId: string, definition = { ...lesson, initialNodeId: nodeId }) {
-  let state = createLessonRuntime("provenance-replay", { lesson: definition, quietDrainMs: 50 });
-  const send = (event: Record<string, unknown>) => {
-    const result = reduceLessonRuntime(state, { ...event, atMs: state.nowMs + 1 } as LessonRuntimeEvent, definition);
-    state = result.state;
-    return result;
-  };
+  const h = createReducerHarness("provenance-replay", { lesson: definition, quietDrainMs: 50 });
+  const { send } = h;
   const observe = (transcript: string, conceptObservations: readonly unknown[]) => {
-    send({ type: "child.turn.started", source: runtimeSource(state) });
-    send({
-      type: "transcript.updated",
-      source: runtimeSource(state),
-      revision: state.transcriptRevision + 1,
-      speaker: "child",
-    });
-    send({ type: "child.turn.ended", source: runtimeSource(state) });
-    const source = classificationSource(state)!;
+    const source = prepareLearnerClassification(h, h.state.transcriptRevision + 1);
     return send({
       type: "proposal.received",
       source,
       transcriptSnapshot: transcript,
       proposal: {
-        ...{ nodeId: state.nodeId, transcriptRevision: state.transcriptRevision },
+        ...{ nodeId: h.state.nodeId, transcriptRevision: h.state.transcriptRevision },
         childActivity: "unknown",
         answerOutcome: "unclear",
         supportState: "none",
@@ -62,7 +39,7 @@ function harness(nodeId: string, definition = { ...lesson, initialNodeId: nodeId
   };
   return {
     get state() {
-      return state;
+      return h.state;
     },
     observe,
     send,
@@ -100,8 +77,14 @@ describe("supporting learner utterance provenance", () => {
     expect(accepted.source?.childTranscript).toContain("Lives outside of the mind");
     expect(accepted.promptingHistory).toHaveLength(1);
     expect(accepted.promptingHistory[0].prompted).toBe(false);
-    h.observe(later.transcript + "\nTutor: Correct.\nChild: Yep.", decision.proposal!.conceptObservations!);
-    expect(h.state.conceptEvidence["exogram:exogram-non-biological"]).toEqual(accepted);
+    for (const acknowledgment of ["Yep.", "Great.", "Sounds good.", "Thank you very much."]) {
+      const transcript = later.transcript + `\nTutor: Correct.\nChild: ${acknowledgment}`;
+      h.observe(transcript, decision.proposal!.conceptObservations!);
+      expect(h.state.conceptEvidence["exogram:exogram-non-biological"]).toEqual(accepted);
+      h.observe(transcript, [{ criterionId: "exogram-non-biological", observation: "demonstrated_independent",
+        childMessageIndex: transcriptMessages(transcript)!.length - 1 }]);
+      expect(h.state.conceptEvidence["exogram:exogram-non-biological"]).toEqual(accepted);
+    }
   });
 
   it("attributes cultural agreement to shared understanding, before the quantities/music answer", () => {
@@ -127,6 +110,13 @@ describe("supporting learner utterance provenance", () => {
     "Yes",
     "Yep",
     "That's right",
+    "Great.",
+    "Sounds good.",
+    "That's great.",
+    "Okay, thanks.",
+    "Thank you very much.",
+    "Yes, exactly.",
+    "Right, I see.",
     "[inhale] [exhale]",
     "Um. Well...",
     "I",
@@ -139,6 +129,27 @@ describe("supporting learner utterance provenance", () => {
     ]);
     expect(h.state.conceptEvidence).toEqual({});
     expect(result.effects).toEqual([]);
+  });
+
+  it.each(["Great.", "Sounds good.", "That's great.", "Okay, thanks.", "Thank you very much.", "Yes, exactly.", "Right, I see."])(
+    "does not infer an acknowledgment through the legacy single-candidate fallback: %s", text => {
+      const h = harness("exogram");
+      h.observe(`Tutor: Explain.\nChild: ${text}`, [
+        { criterionId: "exogram-non-biological", observation: "demonstrated_independent" },
+      ]);
+      expect(h.state.conceptEvidence).toEqual({});
+    },
+  );
+
+  it("infers only the substantive source at its original index and still requires semantic evidence", () => {
+    const transcript = "Tutor: Explain.\nChild: Great.\nTutor: Go on.\nChild: An exogram stores memory outside the brain.\nTutor: Okay.\nChild: Thanks.";
+    const h = harness("exogram");
+    h.observe(transcript, []);
+    expect(h.state.conceptEvidence).toEqual({});
+    h.observe(transcript, [{ criterionId: "exogram-non-biological", observation: "demonstrated_independent" }]);
+    expect(h.state.conceptEvidence["exogram:exogram-non-biological"]).toMatchObject({
+      status: "demonstrated", source: { childMessageIndex: 3, childTranscript: "An exogram stores memory outside the brain." },
+    });
   });
 
   it("rejects tutor/out-of-range references and refuses to guess in ambiguous legacy snapshots", () => {
@@ -182,81 +193,23 @@ describe("supporting learner utterance provenance", () => {
 });
 
 describe("tentative progress remains a hold", () => {
-  it("retains recorded literacy/education partial scores for private acknowledgment while all four criteria remain incomplete", () => {
-    const checkpoint = replay.checkpoints[3];
-    const h = harness(checkpoint.nodeId);
-    const outputs = {
-      ...checkpoint.outputs,
-      sources: sourceOutputs(checkpoint.transcript, {
-        "widespread-literacy": 5,
-        "education-system": 5,
-        "idea-discoverers": null,
-        "social-coordination": null,
-      }),
-    } as unknown as ConversationStateOutputs;
-    const decision = mapConversationObservation({ ...checkpoint, lesson }, outputs);
-    expect(decision.outcome).toBe("hold_scene");
-    const result = h.observe(checkpoint.transcript, decision.proposal!.conceptObservations!);
-    for (const id of ["widespread-literacy", "education-system"])
-      expect(h.state.conceptEvidence[`${checkpoint.nodeId}:${id}`]).toMatchObject({
-        status: "partial",
-        tentative: true,
-        understanding: null,
-        source: { childMessageIndex: 5 },
-      });
+  it("retains tentative partial evidence without demonstrating a retained concept", () => {
+    const h = harness("exographics");
+    const result = h.observe("Child: It is writing things down.", [
+      { criterionId: "visual-symbols", observation: "partial_uncertain", childMessageIndex: 0 },
+    ]);
+    expect(h.state.conceptEvidence["exographics:visual-symbols"]).toMatchObject({
+      status: "partial",
+      tentative: true,
+      understanding: null,
+      source: { childMessageIndex: 0 },
+    });
     expect(result.effects).toEqual([]);
     expect(meetsAuthoredCompletionPolicy(h.state, h.definition)).toBe(false);
-    expect(lesson.nodes[checkpoint.nodeId].concepts).toHaveLength(4);
     const instruction = answerRecoveryInstruction({ ...h.definition, conversationFirst: false }, h.state);
     expect(instruction).toContain("Private learner progress (not demonstration)");
-    expect(instruction).toContain("If you want to read, you have to be literate");
-    expect(instruction).toContain("using tentative language");
+    expect(instruction).toContain("writing things down");
     expect(instruction).toContain("completion is not authorized");
-    expect(instruction).toContain("Keep targets private; never supply answers");
-    const diagnostic = {
-      classifierVersion: CLASSIFIER_VERSION,
-      decision: decision.status,
-      outcome: decision.outcome,
-      outputs: decision.outputs,
-      labelCompletionEligible: false,
-      thresholds: CONVERSATION_CLASSIFICATION_THRESHOLDS,
-      nodeId: checkpoint.nodeId,
-      transcriptRevision: checkpoint.transcriptRevision,
-      elapsedMs: 1,
-    };
-    expect(parseLiveClassificationDiagnostic(diagnostic, lesson, checkpoint.nodeId)).toEqual(diagnostic);
-    // Even a fully confident generic completion/acknowledgment cannot satisfy
-    // the authored four-criterion gate using tentative progress.
-    h.send({
-      type: "transcript.updated",
-      source: runtimeSource(h.state),
-      revision: h.state.transcriptRevision + 1,
-      speaker: "tutor",
-    });
-    const source = classificationSource(h.state)!;
-    h.send({
-      type: "proposal.received",
-      source,
-      transcriptSnapshot: checkpoint.transcript + "\nTutor: Yes, complete.",
-      proposal: {
-        nodeId: checkpoint.nodeId,
-        transcriptRevision: source.transcriptRevision,
-        childActivity: "unknown",
-        answerOutcome: "correct",
-        supportState: "none",
-        tutorState: "acknowledging",
-        conceptObservations: [],
-      },
-    });
-    h.send({ type: "output.activity", source: runtimeSource(h.state), state: "active" });
-    h.send({ type: "output.activity", source: runtimeSource(h.state), state: "quiet" });
-    h.send({ type: "clock.tick", source: runtimeSource(h.state), atMs: h.state.nowMs + 100 });
-    expect(h.state).toMatchObject({
-      nodeId: checkpoint.nodeId,
-      phase: "active",
-      transitionReady: false,
-      lessonComplete: false,
-    });
   });
 
   it("deduplicates tentative observations and cannot erase established mastery", () => {

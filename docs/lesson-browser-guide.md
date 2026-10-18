@@ -3,7 +3,9 @@
 This guide retains reproduction instructions and diagnostic interpretation for
 [continued behavioral evaluation (#57)](https://github.com/hurley87/sprout/issues/57).
 
-The production prototype serves the lesson only at `/`. It uses `BrowserTransport`,
+The production counting lesson is served at `/`; the four-question adult demo is
+at `/demos/catching-unicorns` (see its [current contract](catching-unicorns-demo-validation.md)).
+Both use `BrowserTransport`,
 the local microphone detector, PCM output observer, and supported
 `session.instructions.append` command. It does not record audio or persist sessions.
 

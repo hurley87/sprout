@@ -8,8 +8,8 @@ import {
   abstain,
   type ChoiceOutput,
   type ConversationStateDecision,
-} from "../../lesson-runtime/conversation-observer-contract";
-import { substantiveLearnerText, transcriptMessages } from "../../lesson-runtime/tutor-observation";
+} from "./historical-v1/lib/lesson-runtime/conversation-observer-contract";
+import { substantiveLearnerText, transcriptMessages } from "./historical-v1/lib/lesson-runtime/tutor-observation";
 import {
   decisionsRequest,
   type DecisionsRequest,

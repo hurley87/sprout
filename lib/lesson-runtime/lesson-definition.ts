@@ -6,6 +6,8 @@ export type LessonNodeDefinition = {
   readonly tutorBrief: string;
   /** Assess the saved conversation when this scene's render is confirmed, before steering. */
   readonly assessConversationOnEntry?: boolean;
+  /** Terminal presentation: complete after observed tutor output drains, without a learner answer. */
+  readonly completeAfterTutorOutput?: boolean;
   readonly concepts?: readonly ConceptCriterionDefinition[];
   /** `allow_unresolved` is an explicit early-exit policy; unresolved concepts stay unresolved. */
   readonly completionPolicy?: "all_demonstrated" | "all_independent" | "allow_unresolved";
@@ -26,6 +28,8 @@ export type LessonDefinition = {
   readonly requirePresentationConfirmation?: boolean;
   /** Conversational closure advances independently of assessment/mastery. */
   readonly conversationFirst?: boolean;
+  /** Concise topic labels for an accepted-evidence terminal close. No answer text. */
+  readonly recapTopics?: Readonly<Record<string, string>>;
   readonly nodes: Readonly<Record<string, LessonNodeDefinition>>;
   readonly recovery: {
     readonly supportClarificationInstruction: string;
@@ -61,6 +65,8 @@ export function validateLessonDefinition(value: LessonDefinition): LessonDefinit
     if (id !== node.id) throw new Error(`Lesson node key does not match node identity: ${id}`);
     if (node.onSuccess.kind === "node" && !Object.hasOwn(value.nodes, node.onSuccess.nodeId))
       throw new Error(`Lesson edge from ${id} targets an unknown node`);
+    if (node.completeAfterTutorOutput && (node.onSuccess.kind !== "complete" || node.concepts?.length))
+      throw new Error(`Lesson node ${id} must be terminal and have no criteria to complete after tutor output`);
     if ((node.concepts?.length ?? 0) > 0 && !node.completionPolicy)
       throw new Error(`Lesson node ${id} needs an authored concept completion policy`);
     if (

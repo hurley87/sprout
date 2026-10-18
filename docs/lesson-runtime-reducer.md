@@ -16,7 +16,9 @@ no transcript accumulator, provider calls, steering sends, or persistence.
 For `conversationFirst` lessons, conversational closure and mastery are separate.
 The reducer records a current tutor acknowledgment as a closure candidate without
 setting `answerAccepted`. New tutor text clears that candidate; new learner speech
-clears all conversational completion authority. The exact current classification
+suspends conversational completion authority. Supported brief acknowledgments can
+restore the preceding classified close once speech ends; substantive interruptions
+clear it. These acknowledgments are not concept-evidence sources. The exact current classification
 source and transcript guards still apply. Concept source validation and reveal
 rules remain unchanged.
 
@@ -27,6 +29,23 @@ still requires relevant observed tutor audio to drain. Active or unavailable aud
 pending learner speech, stale sources, stopped sessions, and unconfirmed rendering
 cannot authorize advancement. Render confirmation still precedes next-question
 steering. Optional presentation confirmation remains supported.
+
+A node may explicitly set `completeAfterTutorOutput` for a terminal presentation
+with no concept criteria and a `complete` edge. Catching Unicorns uses it for recap.
+It needs no learner turn or classifier proposal. The browser runtime checks the
+assembled tutor transcript against the deterministic accepted-evidence close and
+supplies `terminal.transcript.checked` with the current runtime/visit/turn identity.
+The reducer requires that full-text check, a fresh observed tutor audio onset and
+at least 1,500 ms of sustained quiet after the latest text/audio before requesting
+the terminal render. Transcript chunks, quiet alone and navigation/skip requests
+cannot finish the recap. New text revokes the full-text check until rechecked;
+unavailable audio revokes the audio observation, and learner speech blocks drain.
+Completion still requires exact terminal render confirmation. Recovery/classifier
+prompts are disabled for the terminal close; missing or mismatched output hits a
+60-second runtime failure deadline with teardown and no completion claim. Stop
+cancels the deadline. This local transcript/PCM boundary is not a provider
+response-finished signal. The option is rejected on question nodes and is absent
+from the counting lesson, whose ordinary drain threshold remains unchanged.
 
 Post-conversation grading lives in the browser runtime and `/api/assess`, outside
 this reducer. It cannot reveal concepts, change live mastery, or choose a scene.
@@ -77,7 +96,9 @@ copies prior tutor wording cannot be accepted as independent evidence and is
 retained as partial. This deterministic text overlap check is a guardrail, not a
 semantic classifier. Classifier accuracy still needs reviewed live evaluation.
 
-Concept nodes require an authored `completionPolicy`:
+Concept nodes require an authored `completionPolicy`. These mastery checks do not
+block `conversationFirst` navigation; closure or an explicit learner move-on
+request can advance with unresolved concepts and never establishes mastery:
 
 - `all_demonstrated` requires every current criterion to be demonstrated.
 - `all_independent` also requires independent rather than prompted understanding.

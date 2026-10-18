@@ -105,7 +105,7 @@ it.each(replays)("replays $recordingId through a fresh closure check and one dra
   expect(classificationSource(runtime.snapshot().runtime!)).toBeNull();
   const evidence = structuredClone(runtime.snapshot().runtime?.conceptEvidence);
   await vi.advanceTimersByTimeAsync(5000);
-  expect(runtime.snapshot().display.nodeId).toBe(replay.nodeId === "engram" ? "exogram" : "why-exographics");
+  expect(runtime.snapshot().display.nodeId).toBe(replay.nodeId === "engram" ? "exogram" : "recap");
   expect(
     Object.fromEntries(
       Object.entries(runtime.snapshot().runtime!.conceptEvidence).filter(([key]) =>

@@ -16,7 +16,10 @@ Catching Unicorns opts into `LessonDefinition.conversationFirst`. For that lesso
 confident tutor closure is a conversational observation, independent of the
 objective and concept scores. It permits the app to follow its authored edge
 once tutor audio drains; it does not accept an answer or upgrade concept evidence.
-A useful follow-up still holds the question. A revised tutor snapshot revokes the
+The four questions are engram, exogram, compare and exographics, followed directly
+by a terminal recap. Recap uses `completeAfterTutorOutput`, so it requires no
+learner answer or classifier closure; observed output drains before completion.
+A useful follow-up still holds a question. A revised tutor snapshot revokes the
 previous closure until the current snapshot is classified again.
 
 A standalone latest learner request such as “Next question, then” takes a separate
@@ -36,7 +39,11 @@ closed Choice scores, and retains every probability. Existing confidence bands
 are unchanged; ambiguous outcomes become `uncertain`, not mastered.
 
 This later assessment is separate from live `conceptEvidence` and visual reveals.
-It appears in a Conversation assessment panel at recap or after Stop. Exports
+It appears in a Conversation assessment panel at recap or after Stop only with
+`?debug=1`. The recap uses only demonstrated topics from the reducer ledger,
+without learner quotations; unresolved and partial concepts are omitted. Standalone
+conversational acknowledgments are excluded as concept-source candidates.
+Post-session diagnostic download is available without debug. Exports
 include `conversation` and `assessment`, with pending, complete, or unavailable
 status. Assessment errors do not affect question advancement. Requests are local
 only, bounded to 100 visits and 120,000 transcript characters, and time out after

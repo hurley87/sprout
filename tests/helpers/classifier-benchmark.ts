@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import type { LessonDefinition } from "../../lib/lesson-runtime/lesson-definition";
-import { transcriptMessages, substantiveLearnerText } from "../../lib/lesson-runtime/tutor-observation";
+import { transcriptMessages, substantiveLearnerText } from "../../lib/experiments/issue-42/historical-v1/lib/lesson-runtime/tutor-observation";
 
 export type OutcomeLabel = {
   demonstration: "demonstrated" | "no_demonstration";

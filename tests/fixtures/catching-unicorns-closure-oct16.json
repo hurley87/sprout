@@ -1,0 +1,1451 @@
+{
+  "source": "sprout-catching-unicorns-469a81f7-d59f-4d53-a1a3-a336279bf334.json",
+  "startAtMs": 191197.6,
+  "initialState": {
+    "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+    "lessonId": "catching-unicorns",
+    "nodeId": "exographics",
+    "visitId": 4,
+    "childTurnId": 58,
+    "hasChildTurn": true,
+    "hasChildTranscript": true,
+    "childSpeaking": true,
+    "childCandidate": null,
+    "interruptedExchange": null,
+    "transcriptRevision": 245,
+    "transcriptSource": "child",
+    "consumedRevision": null,
+    "acceptedAnswerRevision": null,
+    "answerAccepted": false,
+    "acknowledgmentObserved": false,
+    "tutorOutputObserved": false,
+    "tutorOutputDrained": false,
+    "quietSinceMs": null,
+    "transitionReady": false,
+    "conversationAdvanceRequested": false,
+    "outputActivity": "quiet",
+    "quietDrainMs": 500,
+    "nowMs": 191197.60000002384,
+    "phase": "active",
+    "lessonComplete": false,
+    "conceptEvidence": {
+      "exogram:engram-biological": {
+        "criterionId": "engram-biological",
+        "status": "not_yet",
+        "understanding": null,
+        "source": null,
+        "promptingHistory": []
+      },
+      "compare:exogram-shareability": {
+        "criterionId": "exogram-shareability",
+        "status": "demonstrated",
+        "understanding": "independent",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "nodeId": "compare",
+          "visitId": 3,
+          "childTurnId": 24,
+          "transcriptRevision": 106,
+          "childMessageIndex": 3,
+          "childTranscript": "they are more durable\n. they're easier to edit\nand easier to share\nthan engrams\n. Engrams are mostly short-term memory\n, which makes managing that information harder"
+        },
+        "promptingHistory": [
+          {
+            "source": {
+              "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+              "nodeId": "compare",
+              "visitId": 3,
+              "childTurnId": 24,
+              "transcriptRevision": 106,
+              "childMessageIndex": 3,
+              "childTranscript": "they are more durable\n. they're easier to edit\nand easier to share\nthan engrams\n. Engrams are mostly short-term memory\n, which makes managing that information harder"
+            },
+            "prompted": false
+          }
+        ]
+      },
+      "compare:engram-biological": {
+        "criterionId": "engram-biological",
+        "status": "not_yet",
+        "understanding": null,
+        "source": null,
+        "promptingHistory": []
+      },
+      "compare:exogram-durability": {
+        "criterionId": "exogram-durability",
+        "status": "demonstrated",
+        "understanding": "independent",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "nodeId": "compare",
+          "visitId": 3,
+          "childTurnId": 24,
+          "transcriptRevision": 106,
+          "childMessageIndex": 3,
+          "childTranscript": "they are more durable\n. they're easier to edit\nand easier to share\nthan engrams\n. Engrams are mostly short-term memory\n, which makes managing that information harder"
+        },
+        "promptingHistory": [
+          {
+            "source": {
+              "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+              "nodeId": "compare",
+              "visitId": 3,
+              "childTurnId": 24,
+              "transcriptRevision": 106,
+              "childMessageIndex": 3,
+              "childTranscript": "they are more durable\n. they're easier to edit\nand easier to share\nthan engrams\n. Engrams are mostly short-term memory\n, which makes managing that information harder"
+            },
+            "prompted": false
+          }
+        ]
+      },
+      "compare:exogram-revisability": {
+        "criterionId": "exogram-revisability",
+        "status": "demonstrated",
+        "understanding": "independent",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "nodeId": "compare",
+          "visitId": 3,
+          "childTurnId": 24,
+          "transcriptRevision": 106,
+          "childMessageIndex": 3,
+          "childTranscript": "they are more durable\n. they're easier to edit\nand easier to share\nthan engrams\n. Engrams are mostly short-term memory\n, which makes managing that information harder"
+        },
+        "promptingHistory": [
+          {
+            "source": {
+              "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+              "nodeId": "compare",
+              "visitId": 3,
+              "childTurnId": 24,
+              "transcriptRevision": 106,
+              "childMessageIndex": 3,
+              "childTranscript": "they are more durable\n. they're easier to edit\nand easier to share\nthan engrams\n. Engrams are mostly short-term memory\n, which makes managing that information harder"
+            },
+            "prompted": false
+          }
+        ]
+      }
+    },
+    "pendingRender": null
+  },
+  "initialTranscript": "Tutor: What does exographics mean?\nChild: So exo graphics, are the\nChild: subset of\nChild: ideas that are only discoverable through exograms\nChild: or through writing and math\nChild: - You know, externally representing, abstract ideas, allows us to discover new ideas. And those are exographics\nTutor: Could you give an example of an exographic representation?\nTutor: Maybe not in\nTutor: prose, though.\nChild: Sure. Math is a good example\nChild: . one, two, and three are abstract concepts, but we have a shared understanding or a set of symbols that represent those numbers, one, two, and three",
+  "providerEvents": [
+    {
+      "atMs": 191269.5,
+      "event": {
+        "type": "microphone.speech_stopped",
+        "quietMs": 916.6000000000058
+      }
+    },
+    {
+      "atMs": 191319,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 191402.8,
+      "event": {
+        "type": "microphone.speech_started"
+      }
+    },
+    {
+      "atMs": 192319.5,
+      "event": {
+        "type": "microphone.speech_stopped",
+        "quietMs": 900
+      }
+    },
+    {
+      "atMs": 192619.4,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 192852.8,
+      "event": {
+        "type": "microphone.activity_discarded"
+      }
+    },
+    {
+      "atMs": 193852.7,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 193856.8,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " That makes",
+        "startMs": 204000,
+        "endMs": 204200
+      }
+    },
+    {
+      "atMs": 193998,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " sense.",
+        "startMs": 204200,
+        "endMs": 204400
+      }
+    },
+    {
+      "atMs": 194052.8,
+      "event": {
+        "type": "microphone.activity_discarded"
+      }
+    },
+    {
+      "atMs": 194151.3,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 194350,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    },
+    {
+      "atMs": 194359.1,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " We",
+        "startMs": 204600,
+        "endMs": 204800
+      }
+    },
+    {
+      "atMs": 194401.4,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 194536,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " can move",
+        "startMs": 204800,
+        "endMs": 205000
+      }
+    },
+    {
+      "atMs": 194900,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    },
+    {
+      "atMs": 194949.9,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " on.",
+        "startMs": 205200,
+        "endMs": 205400
+      }
+    },
+    {
+      "atMs": 195100.5,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 195102.8,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 195302.8,
+      "event": {
+        "type": "microphone.activity_discarded"
+      }
+    },
+    {
+      "atMs": 195801.4,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    },
+    {
+      "atMs": 196336.2,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 196552.8,
+      "event": {
+        "type": "microphone.activity_discarded"
+      }
+    },
+    {
+      "atMs": 197636.2,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 197869.4,
+      "event": {
+        "type": "microphone.activity_discarded"
+      }
+    },
+    {
+      "atMs": 200101.8,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 200302.9,
+      "event": {
+        "type": "microphone.activity_discarded"
+      }
+    },
+    {
+      "atMs": 202702.9,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 202919.5,
+      "event": {
+        "type": "microphone.activity_discarded"
+      }
+    },
+    {
+      "atMs": 203819.5,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 204002.8,
+      "event": {
+        "type": "microphone.speech_started"
+      }
+    },
+    {
+      "atMs": 204843.7,
+      "event": {
+        "type": "transcript",
+        "speaker": "child",
+        "delta": " Sounds",
+        "startMs": 215400,
+        "endMs": 215600
+      }
+    },
+    {
+      "atMs": 205236.1,
+      "event": {
+        "type": "microphone.speech_stopped",
+        "quietMs": 900.1000000000058
+      }
+    },
+    {
+      "atMs": 205402.8,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 205441.6,
+      "event": {
+        "type": "transcript",
+        "speaker": "child",
+        "delta": " good",
+        "startMs": 216000,
+        "endMs": 216200
+      }
+    },
+    {
+      "atMs": 205486.2,
+      "event": {
+        "type": "microphone.speech_started"
+      }
+    },
+    {
+      "atMs": 206419.5,
+      "event": {
+        "type": "microphone.speech_stopped",
+        "quietMs": 916.6999999999825
+      }
+    },
+    {
+      "atMs": 207919.4,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 208136.2,
+      "event": {
+        "type": "microphone.activity_discarded"
+      }
+    },
+    {
+      "atMs": 209202.8,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 209286.2,
+      "event": {
+        "type": "microphone.speech_started"
+      }
+    },
+    {
+      "atMs": 210219.5,
+      "event": {
+        "type": "microphone.speech_stopped",
+        "quietMs": 900
+      }
+    },
+    {
+      "atMs": 210518.6,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 210719.4,
+      "event": {
+        "type": "microphone.activity_discarded"
+      }
+    },
+    {
+      "atMs": 212019.5,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 212102.8,
+      "event": {
+        "type": "microphone.speech_started"
+      }
+    },
+    {
+      "atMs": 213204.7,
+      "event": {
+        "type": "transcript",
+        "speaker": "child",
+        "delta": " . Will we",
+        "startMs": 223800,
+        "endMs": 224000
+      }
+    },
+    {
+      "atMs": 213542.3,
+      "event": {
+        "type": "transcript",
+        "speaker": "child",
+        "delta": " move",
+        "startMs": 224200,
+        "endMs": 224400
+      }
+    },
+    {
+      "atMs": 213729.1,
+      "event": {
+        "type": "transcript",
+        "speaker": "child",
+        "delta": " on",
+        "startMs": 224400,
+        "endMs": 224600
+      }
+    },
+    {
+      "atMs": 214119.4,
+      "event": {
+        "type": "microphone.speech_stopped",
+        "quietMs": 916.6000000000058
+      }
+    },
+    {
+      "atMs": 214369.5,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 214586.2,
+      "event": {
+        "type": "microphone.activity_discarded"
+      }
+    },
+    {
+      "atMs": 214994.5,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " Yes,",
+        "startMs": 225600,
+        "endMs": 225800
+      }
+    },
+    {
+      "atMs": 215185.3,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " let's",
+        "startMs": 225800,
+        "endMs": 226000
+      }
+    },
+    {
+      "atMs": 215302.8,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 215401.2,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 215469.5,
+      "event": {
+        "type": "microphone.activity_discarded"
+      }
+    },
+    {
+      "atMs": 215786.2,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 215827.3,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " move",
+        "startMs": 226400,
+        "endMs": 226600
+      }
+    },
+    {
+      "atMs": 215850,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    },
+    {
+      "atMs": 215949.8,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 216017,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " on.",
+        "startMs": 226600,
+        "endMs": 226800
+      }
+    },
+    {
+      "atMs": 216019.4,
+      "event": {
+        "type": "microphone.activity_discarded"
+      }
+    },
+    {
+      "atMs": 216150.5,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    },
+    {
+      "atMs": 216200,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 216836.1,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 216851.4,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    },
+    {
+      "atMs": 217052.8,
+      "event": {
+        "type": "microphone.activity_discarded"
+      }
+    }
+  ],
+  "recordedReducerEvents": [
+    {
+      "type": "child.turn.ended",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 58
+      },
+      "atMs": 191269.5
+    },
+    {
+      "type": "child.candidate.started",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 58
+      },
+      "atMs": 191319
+    },
+    {
+      "type": "child.turn.confirmed",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 59
+      },
+      "atMs": 191402.79999995232
+    },
+    {
+      "type": "child.turn.ended",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 59
+      },
+      "atMs": 192319.5
+    },
+    {
+      "type": "child.candidate.started",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 59
+      },
+      "atMs": 192619.39999997616
+    },
+    {
+      "type": "child.candidate.discarded",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 60
+      },
+      "atMs": 192852.79999995232
+    },
+    {
+      "type": "child.candidate.started",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 60
+      },
+      "atMs": 193852.79999995232
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 61
+      },
+      "revision": 246,
+      "speaker": "tutor",
+      "atMs": 193856.79999995232
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 61
+      },
+      "revision": 247,
+      "speaker": "tutor",
+      "atMs": 193998
+    },
+    {
+      "type": "child.candidate.discarded",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 61
+      },
+      "atMs": 194052.79999995232
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 61
+      },
+      "state": "active",
+      "atMs": 194151.29999995232
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 61
+      },
+      "state": "quiet",
+      "atMs": 194350
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 61
+      },
+      "revision": 248,
+      "speaker": "tutor",
+      "atMs": 194359.10000002384
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 61
+      },
+      "state": "active",
+      "atMs": 194401.39999997616
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 61
+      },
+      "revision": 249,
+      "speaker": "tutor",
+      "atMs": 194536
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 61
+      },
+      "state": "quiet",
+      "atMs": 194900
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 61
+      },
+      "revision": 250,
+      "speaker": "tutor",
+      "atMs": 194949.89999997616
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 61
+      },
+      "state": "active",
+      "atMs": 195100.5
+    },
+    {
+      "type": "child.candidate.started",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 61
+      },
+      "atMs": 195102.79999995232
+    },
+    {
+      "type": "child.candidate.discarded",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 62
+      },
+      "atMs": 195302.79999995232
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 62
+      },
+      "state": "quiet",
+      "atMs": 195801.39999997616
+    },
+    {
+      "type": "child.candidate.started",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 62
+      },
+      "atMs": 196336.19999992847
+    },
+    {
+      "type": "child.candidate.discarded",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 63
+      },
+      "atMs": 196552.79999995232
+    },
+    {
+      "type": "child.candidate.started",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 63
+      },
+      "atMs": 197636.19999992847
+    },
+    {
+      "type": "child.candidate.discarded",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 64
+      },
+      "atMs": 197869.5
+    },
+    {
+      "type": "conversation.recheck.requested",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 64,
+        "nodeId": "exographics",
+        "transcriptRevision": 250
+      },
+      "atMs": 199801.79999995232
+    },
+    {
+      "type": "child.candidate.started",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 64
+      },
+      "atMs": 200101.89999997616
+    },
+    {
+      "type": "child.candidate.discarded",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 65
+      },
+      "atMs": 200302.89999997616
+    },
+    {
+      "type": "child.candidate.started",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 65
+      },
+      "atMs": 202702.89999997616
+    },
+    {
+      "type": "child.candidate.discarded",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 66
+      },
+      "atMs": 202919.5
+    },
+    {
+      "type": "child.candidate.started",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 66
+      },
+      "atMs": 203819.5
+    },
+    {
+      "type": "child.turn.confirmed",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 67
+      },
+      "atMs": 204002.79999995232
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 67
+      },
+      "revision": 251,
+      "speaker": "child",
+      "atMs": 204843.69999992847
+    },
+    {
+      "type": "child.turn.ended",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 67
+      },
+      "atMs": 205236.10000002384
+    },
+    {
+      "type": "child.candidate.started",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 67
+      },
+      "atMs": 205402.79999995232
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 68
+      },
+      "revision": 252,
+      "speaker": "child",
+      "atMs": 205441.60000002384
+    },
+    {
+      "type": "child.turn.confirmed",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 68
+      },
+      "atMs": 205486.19999992847
+    },
+    {
+      "type": "child.turn.ended",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 68
+      },
+      "atMs": 206419.5
+    },
+    {
+      "type": "proposal.received",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 68,
+        "nodeId": "exographics",
+        "transcriptRevision": 252
+      },
+      "proposal": {
+        "nodeId": "exographics",
+        "transcriptRevision": 252,
+        "childActivity": "unknown",
+        "answerOutcome": "correct",
+        "supportState": "none",
+        "tutorState": "acknowledging",
+        "conceptObservations": [
+          {
+            "criterionId": "cultural-agreement",
+            "observation": "demonstrated_independent",
+            "childMessageIndex": 3
+          },
+          {
+            "criterionId": "beyond-prose",
+            "observation": "demonstrated_unattributed",
+            "childMessageIndex": null
+          },
+          {
+            "criterionId": "abstract-concepts",
+            "observation": "demonstrated_independent",
+            "childMessageIndex": null
+          }
+        ]
+      },
+      "transcriptSnapshot": "Tutor: What does exographics mean?\nChild: So exo graphics, are the\nChild: subset of\nChild: ideas that are only discoverable through exograms\nChild: or through writing and math\nChild: - You know, externally representing, abstract ideas, allows us to discover new ideas. And those are exographics\nTutor: Could you give an example of an exographic representation?\nTutor: Maybe not in\nTutor: prose, though.\nChild: Sure. Math is a good example\nChild: . one, two, and three are abstract concepts, but we have a shared understanding or a set of symbols that represent those numbers, one, two, and three\nTutor: That makes sense. We can move on.\nChild: Sounds\nChild: good",
+      "atMs": 207111.79999995232
+    },
+    {
+      "type": "child.candidate.started",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 68
+      },
+      "atMs": 207919.5
+    },
+    {
+      "type": "child.candidate.discarded",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 69
+      },
+      "atMs": 208136.19999992847
+    },
+    {
+      "type": "proposal.received",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 69,
+        "nodeId": "exographics",
+        "transcriptRevision": 252
+      },
+      "proposal": {
+        "nodeId": "exographics",
+        "transcriptRevision": 252,
+        "childActivity": "unknown",
+        "answerOutcome": "correct",
+        "supportState": "none",
+        "tutorState": "acknowledging",
+        "conceptObservations": [
+          {
+            "criterionId": "cultural-agreement",
+            "observation": "demonstrated_independent",
+            "childMessageIndex": 3
+          },
+          {
+            "criterionId": "beyond-prose",
+            "observation": "demonstrated_unattributed",
+            "childMessageIndex": null
+          },
+          {
+            "criterionId": "abstract-concepts",
+            "observation": "demonstrated_unattributed",
+            "childMessageIndex": null
+          }
+        ]
+      },
+      "transcriptSnapshot": "Tutor: What does exographics mean?\nChild: So exo graphics, are the\nChild: subset of\nChild: ideas that are only discoverable through exograms\nChild: or through writing and math\nChild: - You know, externally representing, abstract ideas, allows us to discover new ideas. And those are exographics\nTutor: Could you give an example of an exographic representation?\nTutor: Maybe not in\nTutor: prose, though.\nChild: Sure. Math is a good example\nChild: . one, two, and three are abstract concepts, but we have a shared understanding or a set of symbols that represent those numbers, one, two, and three\nTutor: That makes sense. We can move on.\nChild: Sounds\nChild: good",
+      "atMs": 208726.79999995232
+    },
+    {
+      "type": "child.candidate.started",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 69
+      },
+      "atMs": 209202.79999995232
+    },
+    {
+      "type": "child.turn.confirmed",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 70
+      },
+      "atMs": 209286.19999992847
+    },
+    {
+      "type": "child.turn.ended",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 70
+      },
+      "atMs": 210219.5
+    },
+    {
+      "type": "child.candidate.started",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 70
+      },
+      "atMs": 210518.60000002384
+    },
+    {
+      "type": "child.candidate.discarded",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 71
+      },
+      "atMs": 210719.5
+    },
+    {
+      "type": "child.candidate.started",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 71
+      },
+      "atMs": 212019.5
+    },
+    {
+      "type": "child.turn.confirmed",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 72
+      },
+      "atMs": 212102.79999995232
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 72
+      },
+      "revision": 253,
+      "speaker": "child",
+      "atMs": 213204.69999992847
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 72
+      },
+      "revision": 254,
+      "speaker": "child",
+      "atMs": 213542.29999995232
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 72
+      },
+      "revision": 255,
+      "speaker": "child",
+      "atMs": 213729.19999992847
+    },
+    {
+      "type": "child.turn.ended",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 72
+      },
+      "atMs": 214119.5
+    },
+    {
+      "type": "child.candidate.started",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 72
+      },
+      "atMs": 214369.60000002384
+    },
+    {
+      "type": "child.candidate.discarded",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 73
+      },
+      "atMs": 214586.19999992847
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 73
+      },
+      "revision": 256,
+      "speaker": "tutor",
+      "atMs": 214994.5
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 73
+      },
+      "revision": 257,
+      "speaker": "tutor",
+      "atMs": 215185.29999995232
+    },
+    {
+      "type": "child.candidate.started",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 73
+      },
+      "atMs": 215302.89999997616
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 74
+      },
+      "state": "active",
+      "atMs": 215401.19999992847
+    },
+    {
+      "type": "child.candidate.discarded",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 74
+      },
+      "atMs": 215469.5
+    },
+    {
+      "type": "child.candidate.started",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 74
+      },
+      "atMs": 215786.19999992847
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 75
+      },
+      "revision": 258,
+      "speaker": "tutor",
+      "atMs": 215827.29999995232
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 75
+      },
+      "state": "quiet",
+      "atMs": 215850
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 75
+      },
+      "state": "active",
+      "atMs": 215949.79999995232
+    },
+    {
+      "type": "transcript.updated",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 75
+      },
+      "revision": 259,
+      "speaker": "tutor",
+      "atMs": 216017
+    },
+    {
+      "type": "child.candidate.discarded",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 75
+      },
+      "atMs": 216019.39999997616
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 75
+      },
+      "state": "quiet",
+      "atMs": 216150.5
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 75
+      },
+      "state": "active",
+      "atMs": 216200
+    },
+    {
+      "type": "child.candidate.started",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 75
+      },
+      "atMs": 216836.29999995232
+    },
+    {
+      "type": "output.activity",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 76
+      },
+      "state": "quiet",
+      "atMs": 216851.39999997616
+    },
+    {
+      "type": "child.candidate.discarded",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 76
+      },
+      "atMs": 217052.89999997616
+    },
+    {
+      "type": "proposal.received",
+      "source": {
+        "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+        "visitId": 4,
+        "childTurnId": 76,
+        "nodeId": "exographics",
+        "transcriptRevision": 259
+      },
+      "proposal": {
+        "nodeId": "exographics",
+        "transcriptRevision": 259,
+        "childActivity": "unknown",
+        "answerOutcome": "unclear",
+        "supportState": "none",
+        "tutorState": "acknowledging",
+        "conceptObservations": [
+          {
+            "criterionId": "cultural-agreement",
+            "observation": "demonstrated_independent",
+            "childMessageIndex": 3
+          },
+          {
+            "criterionId": "beyond-prose",
+            "observation": "demonstrated_unattributed",
+            "childMessageIndex": null
+          },
+          {
+            "criterionId": "abstract-concepts",
+            "observation": "demonstrated_independent",
+            "childMessageIndex": null
+          }
+        ]
+      },
+      "transcriptSnapshot": "Tutor: What does exographics mean?\nChild: So exo graphics, are the\nChild: subset of\nChild: ideas that are only discoverable through exograms\nChild: or through writing and math\nChild: - You know, externally representing, abstract ideas, allows us to discover new ideas. And those are exographics\nTutor: Could you give an example of an exographic representation?\nTutor: Maybe not in\nTutor: prose, though.\nChild: Sure. Math is a good example\nChild: . one, two, and three are abstract concepts, but we have a shared understanding or a set of symbols that represent those numbers, one, two, and three\nTutor: That makes sense. We can move on.\nChild: Sounds\nChild: good\nChild: . Will we move on\nTutor: Yes, let's\nTutor: move on.",
+      "atMs": 217785.79999995232
+    }
+  ],
+  "closureProposal": {
+    "nodeId": "exographics",
+    "transcriptRevision": 259,
+    "childActivity": "unknown",
+    "answerOutcome": "unclear",
+    "supportState": "none",
+    "tutorState": "acknowledging",
+    "conceptObservations": [
+      {
+        "criterionId": "cultural-agreement",
+        "observation": "demonstrated_independent",
+        "childMessageIndex": 3
+      },
+      {
+        "criterionId": "beyond-prose",
+        "observation": "demonstrated_unattributed",
+        "childMessageIndex": null
+      },
+      {
+        "criterionId": "abstract-concepts",
+        "observation": "demonstrated_independent",
+        "childMessageIndex": null
+      }
+    ]
+  },
+  "classifierLatencyMs": 349.4,
+  "recordedRenderRequestedAtMs": 217786,
+  "recordedRenderConfirmedAtMs": 217819.5,
+  "acceptedLearnerEvidence": {
+    "criterionId": "cultural-agreement",
+    "status": "demonstrated",
+    "understanding": "independent",
+    "source": {
+      "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+      "nodeId": "exographics",
+      "visitId": 4,
+      "childTurnId": null,
+      "transcriptRevision": 252,
+      "childMessageIndex": 3,
+      "childTranscript": "Sure. Math is a good example\n. one, two, and three are abstract concepts, but we have a shared understanding or a set of symbols that represent those numbers, one, two, and three"
+    },
+    "promptingHistory": [
+      {
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "nodeId": "exographics",
+          "visitId": 4,
+          "childTurnId": null,
+          "transcriptRevision": 252,
+          "childMessageIndex": 3,
+          "childTranscript": "Sure. Math is a good example\n. one, two, and three are abstract concepts, but we have a shared understanding or a set of symbols that represent those numbers, one, two, and three"
+        },
+        "prompted": false
+      }
+    ]
+  },
+  "note": "Exact local-clock microphone/output events and transcript text deltas after the final learner explanation. Replay serves the recorded final closure proposal at its recorded 349.4ms latency for earlier identical conversational acts; earlier canceled calls have no captured result. This is a controlled scheduler comparison, not a provider prediction."
+}

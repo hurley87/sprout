@@ -12,7 +12,7 @@ import {
 import {
   conversationObserverState,
   conversationStateQuestions,
-} from "../lib/lesson-runtime/conversation-observer-contract";
+} from "../lib/experiments/issue-42/historical-v1/lib/lesson-runtime/conversation-observer-contract";
 import { CATCHING_UNICORNS_LESSON } from "../lib/lesson-runtime/catching-unicorns-lesson";
 import { COUNTING_LESSON } from "../lib/lesson-runtime/counting-lesson";
 import {
@@ -54,7 +54,7 @@ function body(request = decisionsRequest(input)!) {
           ? "completed"
           : q.name === "tutorState"
             ? "confirmed_completion"
-            : q.name.startsWith("source_")
+            : (q.name.startsWith("source_") || q.name.startsWith("sourceEnd_"))
               ? "message_1"
               : "demonstrated_independent",
       ),

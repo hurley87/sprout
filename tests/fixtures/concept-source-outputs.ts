@@ -10,17 +10,18 @@ export function sourceOutputs(
 ): NonNullable<ConversationStateOutputs["sources"]> {
   const options = Object.keys(learnerSourceOptions(transcript));
   return Object.fromEntries(
-    Object.entries(selections).map(([criterionId, index]) => {
+    Object.entries(selections).flatMap(([criterionId, index]) => {
       const choice = index === null ? "none" : `message_${index}`;
       if (!options.includes(choice)) throw new Error(`Invalid controlled source ${choice}`);
-      return [
+      const answer = [
         `source_${criterionId}`,
         {
           choice,
           confidence: 1,
           probabilities: Object.fromEntries(options.map(option => [option, option === choice ? 1 : 0])),
         },
-      ];
+      ] as const;
+      return [answer, [`sourceEnd_${criterionId}`, answer[1]]];
     }),
   );
 }

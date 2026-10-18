@@ -1,0 +1,1798 @@
+{
+  "source": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+  "note": "Recap-only October 16 journal replay. Deltas reconstructed from consecutive transcript snapshots; raw data-channel packets/audio were not exported. Initial evidence omitted; no classification is replayed.",
+  "expected": "You independently explained durability, sharing, revision, and shared meanings. Unresolved or skipped: engrams, exograms, visual symbols, examples beyond prose, and abstract ideas. Thanks for the discussion.",
+  "initialState": {
+    "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+    "lessonId": "catching-unicorns",
+    "nodeId": "recap",
+    "visitId": 5,
+    "childTurnId": 76,
+    "hasChildTurn": false,
+    "hasChildTranscript": false,
+    "childSpeaking": false,
+    "childCandidate": null,
+    "interruptedExchange": null,
+    "transcriptRevision": 259,
+    "transcriptSource": "tutor",
+    "consumedRevision": null,
+    "acceptedAnswerRevision": null,
+    "answerAccepted": false,
+    "acknowledgmentObserved": false,
+    "tutorOutputObserved": false,
+    "tutorOutputDrained": false,
+    "quietSinceMs": null,
+    "transitionReady": false,
+    "conversationAdvanceRequested": false,
+    "outputActivity": "quiet",
+    "quietDrainMs": 500,
+    "nowMs": 217819.5,
+    "phase": "active",
+    "lessonComplete": false,
+    "conceptEvidence": {},
+    "pendingRender": null
+  },
+  "events": [
+    {
+      "atMs": 218102.89999997616,
+      "event": {
+        "type": "child.candidate.started",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 76
+        },
+        "atMs": 218102.89999997616
+      }
+    },
+    {
+      "atMs": 218302.89999997616,
+      "event": {
+        "type": "child.candidate.discarded",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "atMs": 218302.79999995232
+      }
+    },
+    {
+      "atMs": 218495.19999992847,
+      "fragment": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": "You",
+        "startMs": 229200,
+        "endMs": 229400
+      }
+    },
+    {
+      "atMs": 218495.29999995232,
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "revision": 260,
+        "speaker": "tutor",
+        "atMs": 218495.19999992847
+      }
+    },
+    {
+      "atMs": 218496,
+      "event": {
+        "type": "terminal.transcript.checked",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "complete": false,
+        "atMs": 218495.89999997616
+      }
+    },
+    {
+      "atMs": 218799.79999995232,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "state": "active",
+        "atMs": 218799.79999995232
+      }
+    },
+    {
+      "atMs": 218850.60000002384,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "state": "quiet",
+        "atMs": 218850.5
+      }
+    },
+    {
+      "atMs": 220021,
+      "fragment": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": "You",
+        "startMs": 230800,
+        "endMs": 231000
+      }
+    },
+    {
+      "atMs": 220021,
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "revision": 261,
+        "speaker": "tutor",
+        "atMs": 220021
+      }
+    },
+    {
+      "atMs": 220021.19999992847,
+      "event": {
+        "type": "terminal.transcript.checked",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "complete": false,
+        "atMs": 220021.10000002384
+      }
+    },
+    {
+      "atMs": 220211.60000002384,
+      "fragment": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " independently",
+        "startMs": 231000,
+        "endMs": 231200
+      }
+    },
+    {
+      "atMs": 220211.60000002384,
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "revision": 262,
+        "speaker": "tutor",
+        "atMs": 220211.60000002384
+      }
+    },
+    {
+      "atMs": 220211.60000002384,
+      "event": {
+        "type": "terminal.transcript.checked",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "complete": false,
+        "atMs": 220211.60000002384
+      }
+    },
+    {
+      "atMs": 220401.29999995232,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "state": "active",
+        "atMs": 220401.19999992847
+      }
+    },
+    {
+      "atMs": 220736,
+      "fragment": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " explained",
+        "startMs": 231600,
+        "endMs": 231800
+      }
+    },
+    {
+      "atMs": 220736,
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "revision": 263,
+        "speaker": "tutor",
+        "atMs": 220736
+      }
+    },
+    {
+      "atMs": 220736.19999992847,
+      "event": {
+        "type": "terminal.transcript.checked",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "complete": false,
+        "atMs": 220736.19999992847
+      }
+    },
+    {
+      "atMs": 221000,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "state": "quiet",
+        "atMs": 221000
+      }
+    },
+    {
+      "atMs": 221050,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "state": "active",
+        "atMs": 221050
+      }
+    },
+    {
+      "atMs": 221400.79999995232,
+      "fragment": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " durability,",
+        "startMs": 232200,
+        "endMs": 232400
+      }
+    },
+    {
+      "atMs": 221400.79999995232,
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "revision": 264,
+        "speaker": "tutor",
+        "atMs": 221400.79999995232
+      }
+    },
+    {
+      "atMs": 221400.89999997616,
+      "event": {
+        "type": "terminal.transcript.checked",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "complete": false,
+        "atMs": 221400.89999997616
+      }
+    },
+    {
+      "atMs": 221600.5,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "state": "quiet",
+        "atMs": 221600.5
+      }
+    },
+    {
+      "atMs": 221649.89999997616,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "state": "active",
+        "atMs": 221649.89999997616
+      }
+    },
+    {
+      "atMs": 221750.5,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "state": "quiet",
+        "atMs": 221750.5
+      }
+    },
+    {
+      "atMs": 221850.5,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "state": "active",
+        "atMs": 221850.5
+      }
+    },
+    {
+      "atMs": 222307.5,
+      "fragment": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " sharing,",
+        "startMs": 233200,
+        "endMs": 233400
+      }
+    },
+    {
+      "atMs": 222307.5,
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "revision": 265,
+        "speaker": "tutor",
+        "atMs": 222307.5
+      }
+    },
+    {
+      "atMs": 222307.69999992847,
+      "event": {
+        "type": "terminal.transcript.checked",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "complete": false,
+        "atMs": 222307.69999992847
+      }
+    },
+    {
+      "atMs": 222500.5,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "state": "quiet",
+        "atMs": 222500.5
+      }
+    },
+    {
+      "atMs": 222550.60000002384,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "state": "active",
+        "atMs": 222550.5
+      }
+    },
+    {
+      "atMs": 222843.69999992847,
+      "fragment": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " revision,",
+        "startMs": 233800,
+        "endMs": 234000
+      }
+    },
+    {
+      "atMs": 222843.79999995232,
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "revision": 266,
+        "speaker": "tutor",
+        "atMs": 222843.69999992847
+      }
+    },
+    {
+      "atMs": 222843.89999997616,
+      "event": {
+        "type": "terminal.transcript.checked",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "complete": false,
+        "atMs": 222843.89999997616
+      }
+    },
+    {
+      "atMs": 223050.39999997616,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "state": "quiet",
+        "atMs": 223050.39999997616
+      }
+    },
+    {
+      "atMs": 223100.60000002384,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "state": "active",
+        "atMs": 223100.5
+      }
+    },
+    {
+      "atMs": 223508,
+      "fragment": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " and",
+        "startMs": 234400,
+        "endMs": 234600
+      }
+    },
+    {
+      "atMs": 223508,
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "revision": 267,
+        "speaker": "tutor",
+        "atMs": 223508
+      }
+    },
+    {
+      "atMs": 223508.10000002384,
+      "event": {
+        "type": "terminal.transcript.checked",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "complete": false,
+        "atMs": 223508.10000002384
+      }
+    },
+    {
+      "atMs": 223881.39999997616,
+      "fragment": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " shared",
+        "startMs": 234800,
+        "endMs": 235000
+      }
+    },
+    {
+      "atMs": 223881.39999997616,
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "revision": 268,
+        "speaker": "tutor",
+        "atMs": 223881.39999997616
+      }
+    },
+    {
+      "atMs": 223881.5,
+      "event": {
+        "type": "terminal.transcript.checked",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "complete": false,
+        "atMs": 223881.5
+      }
+    },
+    {
+      "atMs": 224224.19999992847,
+      "fragment": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " meanings.",
+        "startMs": 235200,
+        "endMs": 235400
+      }
+    },
+    {
+      "atMs": 224224.29999995232,
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "revision": 269,
+        "speaker": "tutor",
+        "atMs": 224224.19999992847
+      }
+    },
+    {
+      "atMs": 224224.29999995232,
+      "event": {
+        "type": "terminal.transcript.checked",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "complete": false,
+        "atMs": 224224.29999995232
+      }
+    },
+    {
+      "atMs": 224400.5,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "state": "quiet",
+        "atMs": 224400.39999997616
+      }
+    },
+    {
+      "atMs": 224419.60000002384,
+      "event": {
+        "type": "child.candidate.started",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 77
+        },
+        "atMs": 224419.5
+      }
+    },
+    {
+      "atMs": 224500.5,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 78
+        },
+        "state": "active",
+        "atMs": 224500.5
+      }
+    },
+    {
+      "atMs": 224618.5,
+      "event": {
+        "type": "child.candidate.discarded",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 78
+        },
+        "atMs": 224618.5
+      }
+    },
+    {
+      "atMs": 225056.5,
+      "fragment": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": "Unresolved",
+        "startMs": 236000,
+        "endMs": 236200
+      }
+    },
+    {
+      "atMs": 225056.5,
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 78
+        },
+        "revision": 270,
+        "speaker": "tutor",
+        "atMs": 225056.5
+      }
+    },
+    {
+      "atMs": 225056.69999992847,
+      "event": {
+        "type": "terminal.transcript.checked",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 78
+        },
+        "complete": false,
+        "atMs": 225056.69999992847
+      }
+    },
+    {
+      "atMs": 225700.79999995232,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 78
+        },
+        "state": "quiet",
+        "atMs": 225700.79999995232
+      }
+    },
+    {
+      "atMs": 225813.69999992847,
+      "fragment": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " or",
+        "startMs": 236800,
+        "endMs": 237000
+      }
+    },
+    {
+      "atMs": 225813.69999992847,
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 78
+        },
+        "revision": 271,
+        "speaker": "tutor",
+        "atMs": 225813.69999992847
+      }
+    },
+    {
+      "atMs": 225813.89999997616,
+      "event": {
+        "type": "terminal.transcript.checked",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 78
+        },
+        "complete": false,
+        "atMs": 225813.89999997616
+      }
+    },
+    {
+      "atMs": 226100.10000002384,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 78
+        },
+        "state": "active",
+        "atMs": 226100.10000002384
+      }
+    },
+    {
+      "atMs": 226311.79999995232,
+      "fragment": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " skipped:",
+        "startMs": 237000,
+        "endMs": 237200
+      }
+    },
+    {
+      "atMs": 226311.79999995232,
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 78
+        },
+        "revision": 272,
+        "speaker": "tutor",
+        "atMs": 226311.79999995232
+      }
+    },
+    {
+      "atMs": 226311.89999997616,
+      "event": {
+        "type": "terminal.transcript.checked",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 78
+        },
+        "complete": false,
+        "atMs": 226311.89999997616
+      }
+    },
+    {
+      "atMs": 226503.10000002384,
+      "fragment": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " engrams",
+        "startMs": 237400,
+        "endMs": 237600
+      }
+    },
+    {
+      "atMs": 226503.10000002384,
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 78
+        },
+        "revision": 273,
+        "speaker": "tutor",
+        "atMs": 226503.10000002384
+      }
+    },
+    {
+      "atMs": 226503.19999992847,
+      "event": {
+        "type": "terminal.transcript.checked",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 78
+        },
+        "complete": false,
+        "atMs": 226503.19999992847
+      }
+    },
+    {
+      "atMs": 226609.19999992847,
+      "fragment": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": ",",
+        "startMs": 237600,
+        "endMs": 237800
+      }
+    },
+    {
+      "atMs": 226609.19999992847,
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 78
+        },
+        "revision": 274,
+        "speaker": "tutor",
+        "atMs": 226609.19999992847
+      }
+    },
+    {
+      "atMs": 226609.39999997616,
+      "event": {
+        "type": "terminal.transcript.checked",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 78
+        },
+        "complete": false,
+        "atMs": 226609.39999997616
+      }
+    },
+    {
+      "atMs": 226750,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 78
+        },
+        "state": "quiet",
+        "atMs": 226750
+      }
+    },
+    {
+      "atMs": 226800.60000002384,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 78
+        },
+        "state": "active",
+        "atMs": 226800.60000002384
+      }
+    },
+    {
+      "atMs": 227000.60000002384,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 78
+        },
+        "state": "quiet",
+        "atMs": 227000.60000002384
+      }
+    },
+    {
+      "atMs": 227049.89999997616,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 78
+        },
+        "state": "active",
+        "atMs": 227049.89999997616
+      }
+    },
+    {
+      "atMs": 227200.60000002384,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 78
+        },
+        "state": "quiet",
+        "atMs": 227200.60000002384
+      }
+    },
+    {
+      "atMs": 227233.19999992847,
+      "fragment": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " exograms",
+        "startMs": 238200,
+        "endMs": 238400
+      }
+    },
+    {
+      "atMs": 227233.19999992847,
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 78
+        },
+        "revision": 275,
+        "speaker": "tutor",
+        "atMs": 227233.19999992847
+      }
+    },
+    {
+      "atMs": 227233.29999995232,
+      "event": {
+        "type": "terminal.transcript.checked",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 78
+        },
+        "complete": false,
+        "atMs": 227233.29999995232
+      }
+    },
+    {
+      "atMs": 227301,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 78
+        },
+        "state": "active",
+        "atMs": 227301
+      }
+    },
+    {
+      "atMs": 227350,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 78
+        },
+        "state": "quiet",
+        "atMs": 227350
+      }
+    },
+    {
+      "atMs": 227431.5,
+      "fragment": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": ",",
+        "startMs": 238400,
+        "endMs": 238600
+      }
+    },
+    {
+      "atMs": 227431.5,
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 78
+        },
+        "revision": 276,
+        "speaker": "tutor",
+        "atMs": 227431.5
+      }
+    },
+    {
+      "atMs": 227431.69999992847,
+      "event": {
+        "type": "terminal.transcript.checked",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 78
+        },
+        "complete": false,
+        "atMs": 227431.69999992847
+      }
+    },
+    {
+      "atMs": 227500.19999992847,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 78
+        },
+        "state": "active",
+        "atMs": 227500.19999992847
+      }
+    },
+    {
+      "atMs": 227536.19999992847,
+      "event": {
+        "type": "child.candidate.started",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 78
+        },
+        "atMs": 227536.19999992847
+      }
+    },
+    {
+      "atMs": 227752.89999997616,
+      "event": {
+        "type": "child.candidate.discarded",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 79
+        },
+        "atMs": 227752.89999997616
+      }
+    },
+    {
+      "atMs": 227946.89999997616,
+      "fragment": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": "visual",
+        "startMs": 239000,
+        "endMs": 239200
+      }
+    },
+    {
+      "atMs": 227946.89999997616,
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 79
+        },
+        "revision": 277,
+        "speaker": "tutor",
+        "atMs": 227946.89999997616
+      }
+    },
+    {
+      "atMs": 227947,
+      "event": {
+        "type": "terminal.transcript.checked",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 79
+        },
+        "complete": false,
+        "atMs": 227947
+      }
+    },
+    {
+      "atMs": 228350.5,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 79
+        },
+        "state": "quiet",
+        "atMs": 228350.5
+      }
+    },
+    {
+      "atMs": 228400.79999995232,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 79
+        },
+        "state": "active",
+        "atMs": 228400.69999992847
+      }
+    },
+    {
+      "atMs": 228409.60000002384,
+      "fragment": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " symbols,",
+        "startMs": 239400,
+        "endMs": 239600
+      }
+    },
+    {
+      "atMs": 228409.60000002384,
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 79
+        },
+        "revision": 278,
+        "speaker": "tutor",
+        "atMs": 228409.60000002384
+      }
+    },
+    {
+      "atMs": 228409.79999995232,
+      "event": {
+        "type": "terminal.transcript.checked",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 79
+        },
+        "complete": false,
+        "atMs": 228409.79999995232
+      }
+    },
+    {
+      "atMs": 229981.10000002384,
+      "fragment": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " examples",
+        "startMs": 241000,
+        "endMs": 241200
+      }
+    },
+    {
+      "atMs": 229981.10000002384,
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 79
+        },
+        "revision": 279,
+        "speaker": "tutor",
+        "atMs": 229981.10000002384
+      }
+    },
+    {
+      "atMs": 229981.29999995232,
+      "event": {
+        "type": "terminal.transcript.checked",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 79
+        },
+        "complete": false,
+        "atMs": 229981.29999995232
+      }
+    },
+    {
+      "atMs": 230173.10000002384,
+      "fragment": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " beyond",
+        "startMs": 241200,
+        "endMs": 241400
+      }
+    },
+    {
+      "atMs": 230173.19999992847,
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 79
+        },
+        "revision": 280,
+        "speaker": "tutor",
+        "atMs": 230173.10000002384
+      }
+    },
+    {
+      "atMs": 230173.39999997616,
+      "event": {
+        "type": "terminal.transcript.checked",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 79
+        },
+        "complete": false,
+        "atMs": 230173.29999995232
+      }
+    },
+    {
+      "atMs": 230200.10000002384,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 79
+        },
+        "state": "quiet",
+        "atMs": 230200.10000002384
+      }
+    },
+    {
+      "atMs": 230537,
+      "fragment": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " prose,",
+        "startMs": 241600,
+        "endMs": 241800
+      }
+    },
+    {
+      "atMs": 230537,
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 79
+        },
+        "revision": 281,
+        "speaker": "tutor",
+        "atMs": 230537
+      }
+    },
+    {
+      "atMs": 230537.19999992847,
+      "event": {
+        "type": "terminal.transcript.checked",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 79
+        },
+        "complete": false,
+        "atMs": 230537.19999992847
+      }
+    },
+    {
+      "atMs": 230600.79999995232,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 79
+        },
+        "state": "active",
+        "atMs": 230600.69999992847
+      }
+    },
+    {
+      "atMs": 230899.60000002384,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 79
+        },
+        "state": "quiet",
+        "atMs": 230899.60000002384
+      }
+    },
+    {
+      "atMs": 230950.69999992847,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 79
+        },
+        "state": "active",
+        "atMs": 230950.69999992847
+      }
+    },
+    {
+      "atMs": 231099.60000002384,
+      "fragment": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " and",
+        "startMs": 242200,
+        "endMs": 242400
+      }
+    },
+    {
+      "atMs": 231099.69999992847,
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 79
+        },
+        "revision": 282,
+        "speaker": "tutor",
+        "atMs": 231099.69999992847
+      }
+    },
+    {
+      "atMs": 231099.69999992847,
+      "event": {
+        "type": "terminal.transcript.checked",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 79
+        },
+        "complete": false,
+        "atMs": 231099.69999992847
+      }
+    },
+    {
+      "atMs": 231400.5,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 79
+        },
+        "state": "quiet",
+        "atMs": 231400.39999997616
+      }
+    },
+    {
+      "atMs": 231500.10000002384,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 79
+        },
+        "state": "active",
+        "atMs": 231500.10000002384
+      }
+    },
+    {
+      "atMs": 231563.39999997616,
+      "fragment": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " abstract",
+        "startMs": 242600,
+        "endMs": 242800
+      }
+    },
+    {
+      "atMs": 231563.39999997616,
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 79
+        },
+        "revision": 283,
+        "speaker": "tutor",
+        "atMs": 231563.39999997616
+      }
+    },
+    {
+      "atMs": 231563.60000002384,
+      "event": {
+        "type": "terminal.transcript.checked",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 79
+        },
+        "complete": false,
+        "atMs": 231563.60000002384
+      }
+    },
+    {
+      "atMs": 231929.19999992847,
+      "fragment": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " ideas.",
+        "startMs": 243000,
+        "endMs": 243200
+      }
+    },
+    {
+      "atMs": 231929.19999992847,
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 79
+        },
+        "revision": 284,
+        "speaker": "tutor",
+        "atMs": 231929.19999992847
+      }
+    },
+    {
+      "atMs": 231929.29999995232,
+      "event": {
+        "type": "terminal.transcript.checked",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 79
+        },
+        "complete": false,
+        "atMs": 231929.29999995232
+      }
+    },
+    {
+      "atMs": 231949.69999992847,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 79
+        },
+        "state": "quiet",
+        "atMs": 231949.69999992847
+      }
+    },
+    {
+      "atMs": 232000.60000002384,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 79
+        },
+        "state": "active",
+        "atMs": 232000.60000002384
+      }
+    },
+    {
+      "atMs": 232402.89999997616,
+      "event": {
+        "type": "child.candidate.started",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 79
+        },
+        "atMs": 232402.89999997616
+      }
+    },
+    {
+      "atMs": 232486.29999995232,
+      "event": {
+        "type": "child.turn.confirmed",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 80
+        },
+        "atMs": 232486.19999992847
+      }
+    },
+    {
+      "atMs": 232628.39999997616,
+      "fragment": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": "Thanks",
+        "startMs": 243800,
+        "endMs": 244000
+      }
+    },
+    {
+      "atMs": 232628.5,
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 80
+        },
+        "revision": 285,
+        "speaker": "tutor",
+        "atMs": 232628.5
+      }
+    },
+    {
+      "atMs": 232628.60000002384,
+      "event": {
+        "type": "terminal.transcript.checked",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 80
+        },
+        "complete": false,
+        "atMs": 232628.60000002384
+      }
+    },
+    {
+      "atMs": 233032.69999992847,
+      "fragment": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " for",
+        "startMs": 244200,
+        "endMs": 244400
+      }
+    },
+    {
+      "atMs": 233032.69999992847,
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 80
+        },
+        "revision": 286,
+        "speaker": "tutor",
+        "atMs": 233032.69999992847
+      }
+    },
+    {
+      "atMs": 233033,
+      "event": {
+        "type": "terminal.transcript.checked",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 80
+        },
+        "complete": false,
+        "atMs": 233033
+      }
+    },
+    {
+      "atMs": 233218,
+      "fragment": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": " the discussion",
+        "startMs": 244400,
+        "endMs": 244600
+      }
+    },
+    {
+      "atMs": 233218,
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 80
+        },
+        "revision": 287,
+        "speaker": "tutor",
+        "atMs": 233218
+      }
+    },
+    {
+      "atMs": 233218.10000002384,
+      "event": {
+        "type": "terminal.transcript.checked",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 80
+        },
+        "complete": false,
+        "atMs": 233218.10000002384
+      }
+    },
+    {
+      "atMs": 233350.5,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 80
+        },
+        "state": "quiet",
+        "atMs": 233350.5
+      }
+    },
+    {
+      "atMs": 233451.69999992847,
+      "fragment": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": ".",
+        "startMs": 244600,
+        "endMs": 244800
+      }
+    },
+    {
+      "atMs": 233451.69999992847,
+      "event": {
+        "type": "transcript.updated",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 80
+        },
+        "revision": 288,
+        "speaker": "tutor",
+        "atMs": 233451.69999992847
+      }
+    },
+    {
+      "atMs": 233451.79999995232,
+      "event": {
+        "type": "terminal.transcript.checked",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 80
+        },
+        "complete": false,
+        "atMs": 233451.79999995232
+      }
+    },
+    {
+      "atMs": 233801.39999997616,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 80
+        },
+        "state": "active",
+        "atMs": 233801.39999997616
+      }
+    },
+    {
+      "atMs": 234302.89999997616,
+      "event": {
+        "type": "child.turn.ended",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 80
+        },
+        "atMs": 234302.89999997616
+      }
+    },
+    {
+      "atMs": 234750.5,
+      "event": {
+        "type": "output.activity",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 80
+        },
+        "state": "quiet",
+        "atMs": 234750.5
+      }
+    },
+    {
+      "atMs": 235419.5,
+      "event": {
+        "type": "child.candidate.started",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 80
+        },
+        "atMs": 235419.5
+      }
+    },
+    {
+      "atMs": 235586.19999992847,
+      "event": {
+        "type": "child.candidate.discarded",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 81
+        },
+        "atMs": 235586.19999992847
+      }
+    },
+    {
+      "atMs": 237369.60000002384,
+      "event": {
+        "type": "child.candidate.started",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 81
+        },
+        "atMs": 237369.60000002384
+      }
+    },
+    {
+      "atMs": 237586.10000002384,
+      "event": {
+        "type": "child.candidate.discarded",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 82
+        },
+        "atMs": 237586.10000002384
+      }
+    },
+    {
+      "atMs": 237602.79999995232,
+      "event": {
+        "type": "child.candidate.started",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 82
+        },
+        "atMs": 237602.79999995232
+      }
+    },
+    {
+      "atMs": 237819.69999992847,
+      "event": {
+        "type": "child.candidate.discarded",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 83
+        },
+        "atMs": 237819.69999992847
+      }
+    },
+    {
+      "atMs": 238750.89999997616,
+      "event": {
+        "type": "terminal.learner.resolved",
+        "source": {
+          "runtimeId": "469a81f7-d59f-4d53-a1a3-a336279bf334",
+          "visitId": 5,
+          "childTurnId": 83,
+          "nodeId": "recap",
+          "transcriptRevision": 288
+        },
+        "atMs": 238750.89999997616
+      }
+    }
+  ]
+}

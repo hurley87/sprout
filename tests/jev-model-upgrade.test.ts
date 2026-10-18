@@ -9,6 +9,7 @@ import {
   conversationObserverState,
   conversationStateQuestions,
   CONVERSATION_CLASSIFICATION_THRESHOLDS,
+  learnerSourceOptions,
 } from "../lib/lesson-runtime/conversation-observer-contract";
 import { COUNTING_LESSON } from "../lib/lesson-runtime/counting-lesson";
 import { CATCHING_UNICORNS_LESSON } from "../lib/lesson-runtime/catching-unicorns-lesson";
@@ -38,7 +39,7 @@ function response(input: (typeof snapshots)[number], model: string = JEV_MODEL) 
             ? "completed"
             : name === "tutorState"
               ? "confirmed_completion"
-              : name.startsWith("source_")
+              : (name.startsWith("source_") || name.startsWith("sourceEnd_"))
                 ? "message_1"
                 : "demonstrated_independent";
         return [
@@ -143,4 +144,18 @@ it("captures the requested model before callers can mutate an in-flight baseline
   request.model = JEV_MODEL;
   finish(Response.json(response(input, "jev-1.13.0")));
   expect((await pending).status).toBe("accepted");
+});
+
+it("keeps the current acknowledgment filter and evidenceMessages projection", () => {
+  const input = { lesson: CATCHING_UNICORNS_LESSON, nodeId: "exographics", transcriptRevision: 7,
+    transcript: "Tutor: Explain.\nChild: Symbols represent abstract ideas.\nTutor: Okay.\nChild: Sounds good." };
+  expect(Object.keys(learnerSourceOptions(input.transcript))).toEqual(["none", "message_1"]);
+  expect(conversationObserverState(input)).toHaveProperty("evidenceMessages", [
+    { messageIndex: 0, speaker: "Tutor", text: "Explain." },
+    { messageIndex: 1, speaker: "Child", text: "Symbols represent abstract ideas." },
+    { messageIndex: 2, speaker: "Tutor", text: "Okay." },
+    { messageIndex: 3, speaker: "Child", text: "Sounds good." },
+  ]);
+  expect(Object.keys(conversationStateQuestions(input.lesson, input.nodeId, input.transcript)["source_abstract-concepts"].criteria))
+    .toEqual(["none", "message_1"]);
 });

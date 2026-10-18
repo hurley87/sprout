@@ -1,14 +1,14 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import { COUNTING_LESSON } from "../lib/lesson-runtime/counting-lesson";
-import { CATCHING_UNICORNS_LESSON } from "../lib/lesson-runtime/catching-unicorns-lesson";
+import type { CATCHING_UNICORNS_LESSON } from "../lib/lesson-runtime/catching-unicorns-lesson";
+import { JEV_MODEL as HISTORICAL_JEV_MODEL } from "../lib/experiments/issue-42/historical-v1/lib/jev";
 import {
   conversationObserverState,
   conversationStateQuestions,
   CLASSIFIER_VERSION,
   CONVERSATION_CLASSIFICATION_THRESHOLDS,
-} from "../lib/lesson-runtime/conversation-observer-contract";
+} from "../lib/experiments/issue-42/historical-v1/lib/lesson-runtime/conversation-observer-contract";
 import {
   benchmarkDirectory as dir,
   jsonPointer,
@@ -18,7 +18,8 @@ import {
   valueHash,
 } from "./helpers/classifier-benchmark";
 
-const lessons = [COUNTING_LESSON, CATCHING_UNICORNS_LESSON];
+// Benchmark v1 is historical evidence; its hashes must not follow the active lesson.
+const lessons = readJson(dir + "lessons.json") as (typeof CATCHING_UNICORNS_LESSON)[];
 const corpus = readJson(dir + "corpus.json");
 validateBenchmarkCorpus(corpus, lessons);
 const manifest = JSON.parse(readFileSync(dir + "manifest.json", "utf8"));
@@ -44,6 +45,10 @@ describe("frozen classifier benchmark v1 (no provider calls)", () => {
     const old = manifest.historicalCounting;
     expect(sha256(execFileSync("git", ["show", `${old.gitRef}:${old.path}`]))).toBe(old.sha256);
     expect(readJson(dir + "lessons.json")).toEqual(lessons);
+    expect(HISTORICAL_JEV_MODEL).toBe("jev-1.13.0");
+    expect(CONVERSATION_CLASSIFICATION_THRESHOLDS).toEqual({
+      HIGH: 0.9, LOW: 0.1, COMPETITOR_CEILING: 0.2, MIN_MARGIN: 0.7,
+    });
     expect(manifest.jev).toEqual({
       model: "jev-1.13.0",
       endpoint: "https://api.typesafe.ai/v1/systemone",
