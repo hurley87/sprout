@@ -6,6 +6,7 @@ import {
   runtimeSource,
   type ClassificationSource,
   type LessonRuntimeEvent,
+  type RenderIdentity,
 } from "@/lib/lesson-runtime/lesson-runtime-reducer";
 import type { ConversationStateProposal } from "@/lib/lesson-runtime/conversation-state-classifier";
 
@@ -13,7 +14,7 @@ export const OUTCOME_TOOL = {
   type: "function",
   name: "report_counting_answer",
   description:
-    "Report the latest settled learner answer using the application token reserved for this learner turn and the ENTIRE verbatim learner utterance. Never report mastery. Do not call without a context token. Never treat assent, a tutor answer, an echo, help, stop or move-on as success. Call at most once per learner turn, before speaking your response. Use only the token configured before that turn; never reuse it for another turn.",
+    "Report the latest settled learner answer using the application token reserved for this learner turn and the ENTIRE verbatim learner utterance. Never report mastery. Do not call without a context token. Never treat assent, a tutor answer, an echo, help, stop or move-on as success. Call at most once per learner turn, and acknowledge a settled correct answer for the current scene, then pause. Use only the token configured before that turn; never reuse it for another turn.",
   parameters: {
     type: "object",
     additionalProperties: false,
@@ -46,11 +47,11 @@ const normalize = (text: string) =>
     .replace(/\s+/g, " ");
 const help = /\b(help|don'?t know|do not know|can'?t|cannot|not sure)\b/i;
 const navigation = /\b(stop|quit|move on|next|done|finish|finished)\b/i;
-// Intentionally bounded to the fixed first scene; unknown paraphrases abstain.
+// Deliberately narrow current-scene grammar; unknown paraphrases abstain.
 const total =
-  /^(?:(?:i see|there is|there are|it is|it's) )?(one|1|two|2|three|3|four|4|five|5|six|6|seven|7|eight|8|nine|9|ten|10)(?: ducks?)?$/;
+  /^(?:(?:i see|there is|there are|it is|it's) )?(one|1|two|2|three|3|four|4|five|5|six|6|seven|7|eight|8|nine|9|ten|10)(?: (ducks?|butterfl(?:y|ies)))?$/;
 
-/** Isolated adapter. No classifier/network effects and no automatic progression events. */
+/** Isolated evidence adapter. All progression authority stays in the shared reducer. */
 export class CountingProposals {
   state;
   private messages: Message[] = [];
@@ -69,6 +70,8 @@ export class CountingProposals {
     proposal?: ConversationStateProposal;
     proposalSource?: ClassificationSource;
     transcript?: string;
+    tutor?: Message;
+    audioItems?: Set<string>;
   };
   private nextContext?: Context;
   private contextAcknowledged = false;
@@ -83,6 +86,10 @@ export class CountingProposals {
   private usedToken?: string;
   private seenLearnerItems = new Set<string>();
   private stopped = false;
+  private projectedAcknowledgment?: string;
+  private missingRetries = 0;
+  recoveryExhausted = false;
+  endRequested = false;
   lastResult = "No proposal";
   constructor(private readonly connectionId = crypto.randomUUID()) {
     this.state = createLessonRuntime(connectionId, { lesson: COUNTING_LESSON });
@@ -119,6 +126,7 @@ export class CountingProposals {
     this.rejectPending("superseded learner turn");
     this.context = undefined;
     this.observation = undefined;
+    this.projectedAcknowledgment = undefined;
     this.response = undefined;
     this.continuationRequested = false;
     this.continuationUsed = false;
@@ -138,15 +146,25 @@ export class CountingProposals {
     this.dispatch({ type: "child.turn.ended", source: runtimeSource(this.state) });
     this.settlePending();
   }
-  transcript(message: Message) {
+  transcript(message: Message, responseId?: string) {
     if (this.stopped) return;
     if (message.speaker === "Learner" && message.id !== this.learnerItem) return;
     const old = this.messages.find(m => m.id === message.id);
     if (old && old.speaker !== message.speaker) return;
     if (old?.final && !message.final) return;
     if (old?.text === message.text && old.final === message.final) return;
+    if (
+      message.speaker === "Tutor" &&
+      this.response &&
+      (!responseId || responseId === this.response.id) &&
+      this.matches(this.response.source)
+    )
+      this.response.tutor = { ...message };
     if (message.speaker === "Learner") {
       this.observation = undefined;
+      this.projectedAcknowledgment = undefined;
+      if (message.final && /^(?:please )?(?:move on|stop|quit|finish)(?: please)?[.!]?$/i.test(message.text.trim()))
+        this.endRequested = true;
       this.learnerRevision++;
       // A first final transcript may settle an early call. A correction may not
       // retroactively relabel a call that already had finalized evidence.
@@ -168,9 +186,18 @@ export class CountingProposals {
     this.deliver();
   }
   responseCreated(id?: string) {
-    if (this.stopped || !id || this.seenResponses.has(id)) return;
+    if (this.stopped || !id || this.seenResponses.has(id)) return false;
     this.rejectPending("superseded response");
     this.seenResponses.add(id);
+    if (this.state.acknowledgmentObserved) {
+      this.projectedAcknowledgment = undefined;
+      this.dispatch({
+        type: "transcript.updated",
+        source: runtimeSource(this.state),
+        revision: this.state.transcriptRevision + 1,
+        speaker: "tutor",
+      });
+    }
     this.response = {
       id,
       turnToken:
@@ -183,6 +210,7 @@ export class CountingProposals {
       rejected: false,
     };
     this.continuationRequested = false;
+    return true;
   }
   spoken(id?: string) {
     if (id && this.response?.id === id) this.response.spoken = true;
@@ -191,7 +219,10 @@ export class CountingProposals {
   issueContext(): string | undefined {
     if (
       this.stopped ||
-      (this.state.hasChildTurn && !this.response) ||
+      this.recoveryExhausted ||
+      this.state.phase !== "active" ||
+      this.learnerAnswerAccepted ||
+      (this.state.hasChildTurn && (!this.response || !this.messages.find(m => m.id === this.learnerItem)?.final)) ||
       this.state.childSpeaking ||
       this.nextContext ||
       this.hasPending ||
@@ -313,8 +344,13 @@ export class CountingProposals {
         .filter(m => m.speaker === "Tutor")
         .at(-1)?.text ?? "";
     const text = normalize(learner.text);
-    const count = total.exec(text)?.[1];
-    const correct = count === "one" || count === "1";
+    const match = total.exec(text);
+    const count = match?.[1];
+    const node = COUNTING_LESSON.nodes[this.state.nodeId].presentation;
+    const words = ["zero", "one", "two", "three"];
+    const objectMatches =
+      !match?.[2] || (node.object === "duck" ? /^ducks?$/.test(match[2]) : /^butterfl(y|ies)$/.test(match[2]));
+    const correct = objectMatches && (count === words[Number(node.quantity)] || count === String(node.quantity));
     if (args.support_state === "none" && help.test(text)) return fail("unresolved help");
     if (args.support_state === "needs_help" && !help.test(text)) return fail("unsupported help judgment");
     if (
@@ -322,7 +358,10 @@ export class CountingProposals {
       (!correct ||
         args.support_state !== "none" ||
         navigation.test(text) ||
-        /\b(one|1|single|only)\b|\ba duck\b/i.test(tutorBefore))
+        new RegExp(
+          `\\b(${words[Number(node.quantity)]}|${node.quantity})\\b${node.quantity === 1 ? "|\\b(single|only)\\b|\\ba duck\\b" : ""}`,
+          "i",
+        ).test(tutorBefore))
     )
       return fail("unsupported settled answer");
     if (args.answer_outcome === "incorrect" && (!count || correct || help.test(text)))
@@ -351,13 +390,15 @@ export class CountingProposals {
       COUNTING_LESSON,
     );
     if (validation.state.consumedRevision !== source.transcriptRevision) return fail("reducer rejected proposal");
+    this.missingRetries = 0;
     r.validatedLearnerRevision = this.learnerRevision;
     r.pending = undefined;
     this.lastResult = `Validated: ${args.answer_outcome} · ${args.support_state}`;
     this.results.push({
       call_id: pending.callId,
       status: "accepted",
-      reason: "proposal grounded; awaiting response completion; no tutor acknowledgment or transition",
+      reason:
+        "proposal grounded; application still requires current tutor acknowledgment, playback drain and render confirmation",
     });
     this.deliver();
   }
@@ -387,6 +428,7 @@ export class CountingProposals {
     r.done = true;
     r.completed = status === "completed";
     if (!r.completed) {
+      this.observation = undefined;
       this.rejectPending("cancelled response");
       r.rejected = true;
     }
@@ -411,7 +453,127 @@ export class CountingProposals {
     this.continuationRequested = true;
     return r.rejected || !r.proposal ? "recovery" : "accepted";
   }
-  output(active: boolean) {
+  /** Revalidate the exact ordered exchange, never infer acknowledgment from a tool. */
+  tick() {
+    if (this.stopped || this.state.phase !== "active") return;
+    const r = this.response;
+    const tutor = r?.tutor;
+    if (this.learnerAnswerAccepted && r?.done && r.completed && !r.rejected && this.matches(r.source) && tutor?.final) {
+      const node = COUNTING_LESSON.nodes[this.state.nodeId].presentation;
+      const number = ["zero", "one", "two", "three"][Number(node.quantity)];
+      const object = node.object === "duck" ? "ducks?" : "butterfl(?:y|ies)";
+      // Full utterance recognition is intentionally conservative. Generic praise,
+      // questions, hints and a count supplied before the learner do not qualify.
+      const acknowledgment = new RegExp(
+        `^(?:(?:yes|correct|that's right|that is right|well done|great)[,! .]+)?(?:there (?:is|are) |you (?:saw|counted) )?(?:${number}|${node.quantity}) ${object}[.!]*$`,
+        "i",
+      );
+      const key = JSON.stringify([this.learnerRevision, tutor.id, tutor.text]);
+      if (
+        r.audioItems?.has(tutor.id) &&
+        acknowledgment.test(tutor.text.trim()) &&
+        key !== this.projectedAcknowledgment
+      ) {
+        this.projectedAcknowledgment = key;
+        if (!this.state.tutorOutputObserved) {
+          // Retain the response-correlated real playback onset when its learner
+          // final arrived late. Conservatively begin fresh quiet after projection.
+          const wasQuiet = this.state.outputActivity === "quiet";
+          // Replay the real post-interruption quiet -> onset boundary when the
+          // reducer saw it before finalized learner text made it eligible.
+          if (!wasQuiet) this.dispatch({ type: "output.activity", source: runtimeSource(this.state), state: "quiet" });
+          this.dispatch({ type: "output.activity", source: runtimeSource(this.state), state: "active" });
+          if (wasQuiet) this.dispatch({ type: "output.activity", source: runtimeSource(this.state), state: "quiet" });
+        }
+        // Provider finals can arrive out of order. Re-project the actual final
+        // tutor message after finalized learner evidence into the reducer's
+        // ordered snapshot; this is a new validation, not retagging an old call.
+        this.dispatch({
+          type: "transcript.updated",
+          source: runtimeSource(this.state),
+          revision: this.state.transcriptRevision + 1,
+          speaker: "tutor",
+        });
+        const source = classificationSource(this.state);
+        if (source)
+          this.dispatch({
+            type: "proposal.received",
+            source,
+            proposal: {
+              nodeId: source.nodeId,
+              transcriptRevision: source.transcriptRevision,
+              childActivity: "unknown",
+              answerOutcome: "correct",
+              supportState: "none",
+              tutorState: "acknowledging",
+            },
+            transcriptSnapshot: this.messages
+              .map(m => `${m.speaker === "Learner" ? "Child" : "Tutor"}: ${m.text}`)
+              .join("\n"),
+          });
+      }
+    }
+    this.dispatch({ type: "clock.tick", source: runtimeSource(this.state) });
+  }
+  confirmRender(identity: RenderIdentity): boolean {
+    const before = this.state.phase;
+    this.dispatch({ type: "render.confirmed", runtimeId: this.state.runtimeId, identity });
+    if (before !== "rendering" || this.state.phase === "rendering") return false;
+    this.nextContext = undefined;
+    this.context = undefined;
+    this.response = undefined;
+    this.observation = undefined;
+    this.projectedAcknowledgment = undefined;
+    this.continuationUsed = false;
+    this.continuationRequested = false;
+    this.missingRetries = 0;
+    return true;
+  }
+  get missingEligible(): boolean {
+    const r = this.response;
+    const learner = this.messages.find(m => m.id === this.learnerItem);
+    return (
+      !this.stopped &&
+      this.state.phase === "active" &&
+      !this.state.childSpeaking &&
+      !!learner?.final &&
+      (total.test(normalize(learner.text)) || help.test(learner.text)) &&
+      !!r?.done &&
+      r.completed &&
+      !!r.turnToken &&
+      this.matches(r.source) &&
+      !r.pending &&
+      ((r.calls === 0 && !this.continuationUsed) ||
+        (this.learnerAnswerAccepted &&
+          r.spoken &&
+          (!this.state.acknowledgmentObserved || !this.state.tutorOutputObserved))) &&
+      !this.recoveryExhausted
+    );
+  }
+  takeMissingRecovery(): boolean {
+    if (!this.missingEligible) return false;
+    if (this.missingRetries >= 1 || this.continuationUsed) {
+      this.recoveryExhausted = true;
+      this.lastResult = "No usable report after one retry. Stop or Start to restart.";
+      return false;
+    }
+    this.missingRetries++;
+    this.continuationUsed = true;
+    this.continuationRequested = true;
+    this.lastResult = "No report; asking once for clarification. No success awarded.";
+    return true;
+  }
+  output(active: boolean, itemId?: string) {
+    if (
+      active &&
+      itemId &&
+      this.response?.turnToken &&
+      this.matches(this.response.source) &&
+      !this.state.childSpeaking
+    ) {
+      this.response.audioItems ??= new Set();
+      this.response.audioItems.add(itemId);
+    }
     this.dispatch({ type: "output.activity", source: runtimeSource(this.state), state: active ? "active" : "quiet" });
   }
   stop() {

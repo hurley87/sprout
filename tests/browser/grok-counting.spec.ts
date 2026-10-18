@@ -288,3 +288,122 @@ test("rejected tool-only response recovers once with speech and no accepted evid
   await expect(page.locator('[data-node-id="count-1-duck"]')).toBeVisible();
   await page.getByRole("button", { name: "Stop", exact: true }).click();
 });
+
+test("three authored scenes wait for real Web Audio drain, React render and matching new context before each question", async ({
+  page,
+}) => {
+  const posts: string[] = [];
+  const sent: { type: string; session?: { instructions: string }; item?: { type?: string } }[] = [];
+  let emit!: (event: object) => void;
+  let acknowledge!: () => void;
+  let closed = false;
+  page.on("request", request => {
+    if (request.method() === "POST") posts.push(new URL(request.url()).pathname);
+  });
+  await page.route("**/api/experiments/grok-counting", route =>
+    route.fulfill({ json: { value: "offline", expires_at: Date.now() / 1000 + 60 } }),
+  );
+  await page.routeWebSocket("wss://api.x.ai/**", socket => {
+    emit = event => socket.send(JSON.stringify(event));
+    socket.onClose(() => {
+      closed = true;
+    });
+    socket.onMessage(message => {
+      const event = JSON.parse(String(message));
+      sent.push(event);
+      if (event.type === "session.update") {
+        acknowledge = () =>
+          emit({
+            type: "session.updated",
+            session: {
+              ...event.session,
+              tools: event.session.tools.map(
+                (tool: { type: string; name: string; description: string; parameters: unknown }) => {
+                  const { type, ...definition } = tool;
+                  return { type, function: definition };
+                },
+              ),
+            },
+          });
+        if (sent.filter(e => e.type === "session.update").length === 1) acknowledge();
+      }
+    });
+    emit({ type: "session.created" });
+  });
+  await page.goto("/experiments/grok-counting");
+  await page.getByRole("button", { name: "Start", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("listening");
+  for (const [i, text, current, next] of [
+    [1, "One duck.", "count-1-duck", "count-2-ducks"],
+    [2, "Two ducks.", "count-2-ducks", "count-3-butterflies"],
+    [3, "Three butterflies.", "count-3-butterflies", null],
+  ] as const) {
+    const config = sent.filter(e => e.type === "session.update").at(-1)!;
+    const token = JSON.parse(config.session!.instructions.match(/(\{"context_token".*?\})/)![1]).context_token;
+    emit({ type: "input_audio_buffer.speech_started", item_id: `u${i}` });
+    emit({ type: "input_audio_buffer.speech_stopped", item_id: `u${i}` });
+    emit({ type: "conversation.item.input_audio_transcription.completed", item_id: `u${i}`, transcript: text });
+    emit({ type: "response.created", response: { id: `r${i}` } });
+    const call = {
+      type: "response.function_call_arguments.done",
+      name: "report_counting_answer",
+      response_id: `r${i}`,
+      call_id: `c${i}`,
+      arguments: JSON.stringify({
+        context_token: token,
+        supporting_text: text,
+        answer_outcome: "correct",
+        support_state: "none",
+      }),
+    };
+    if (i === 2) emit(call);
+    emit({
+      type: "response.output_audio_transcript.done",
+      response_id: `r${i}`,
+      item_id: `a${i}`,
+      transcript: `Yes, ${text.toLowerCase()}`,
+    });
+    emit({
+      type: "response.output_audio.delta",
+      response_id: `r${i}`,
+      item_id: `a${i}`,
+      delta: Buffer.alloc(48000).toString("base64"),
+    });
+    if (i !== 2) emit(call);
+    emit(call);
+    emit({ type: "response.done", response: { id: `r${i}`, status: "completed" } });
+    await expect(page.getByRole("status")).toContainText("playing");
+    await expect(page.locator(`[data-node-id="${current}"]`)).toBeVisible();
+    expect(sent.filter(e => e.type === "session.update")).toHaveLength(i);
+    const questions = sent.filter(e => e.type === "response.create").length;
+    if (next) {
+      await expect(page.locator(`[data-node-id="${next}"]`)).toBeVisible();
+      await expect.poll(() => sent.filter(e => e.type === "session.update").length).toBe(i + 1);
+      await expect(page.getByRole("status")).toContainText("connecting");
+      expect(sent.filter(e => e.type === "response.create")).toHaveLength(questions);
+      emit({ type: "session.updated", session: config.session }); // Obsolete echo cannot ask.
+      await page.waitForTimeout(50);
+      expect(sent.filter(e => e.type === "response.create")).toHaveLength(questions);
+      acknowledge();
+      acknowledge();
+      await expect.poll(() => sent.filter(e => e.type === "response.create").length).toBe(questions + 1);
+      await expect(page.getByRole("status")).toContainText("listening");
+      emit(call); // Previous visit cannot establish a new observation.
+      emit({
+        type: "response.output_audio_transcript.done",
+        response_id: `r${i}`,
+        item_id: `old${i}`,
+        transcript: "Stale question?",
+      });
+      await expect(page.getByText("Stale question?", { exact: false })).toHaveCount(0);
+    } else {
+      await expect(page.locator('[data-complete="true"]')).toContainText("Lesson complete");
+      await expect(page.getByRole("status")).toContainText("complete · Audio: idle");
+      await expect.poll(() => closed).toBe(true);
+      expect(sent.filter(e => e.type === "response.create")).toHaveLength(questions);
+      await expect(page.getByRole("button", { name: "Start", exact: true })).toBeEnabled();
+    }
+  }
+  expect(posts).toEqual(["/api/experiments/grok-counting"]);
+  expect(sent.filter(e => e.item?.type === "function_call_output")).toHaveLength(3); // duplicate and consumed stale IDs never get a second result
+});

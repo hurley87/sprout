@@ -1,4 +1,6 @@
-import { COUNTING_LESSON, INITIAL_COUNTING_NODE_ID } from "@/lib/lesson-runtime/counting-lesson";
+import { COUNTING_LESSON } from "@/lib/lesson-runtime/counting-lesson";
+
+import type { RenderIdentity } from "@/lib/lesson-runtime/lesson-runtime-reducer";
 
 import { CountingProposals, OUTCOME_TOOL } from "./proposals";
 
@@ -22,14 +24,33 @@ function echoesConfiguration(actual: unknown, expected: unknown): boolean {
   return actual === expected;
 }
 
+// The live Voice API may echo flat request tools inside a `function` envelope.
+// Normalize that envelope only; every required definition field must still match.
+function echoesTools(tools: unknown[]): boolean {
+  if (tools.length !== 1) return false;
+  const tool = tools[0] as Record<string, unknown> | null;
+  if (!tool || typeof tool !== "object" || tool.type !== "function") return false;
+  if (!("function" in tool)) return echoesConfiguration(tool, OUTCOME_TOOL);
+  if (["name", "description", "parameters"].some(key => key in tool)) return false;
+  const definition = {
+    name: OUTCOME_TOOL.name,
+    description: OUTCOME_TOOL.description,
+    parameters: OUTCOME_TOOL.parameters,
+  };
+  return echoesConfiguration(tool.function, definition);
+}
+
 export const GROK_MODEL = "grok-voice-3.0";
 export type Transcript = { id: string; speaker: "Learner" | "Tutor"; text: string; final: boolean };
 export type VoiceSnapshot = {
-  status: "connecting" | "listening" | "stopped" | "error";
+  status: "connecting" | "listening" | "stopped" | "error" | "complete";
   error?: string;
   echoedModel?: string;
   output: "idle" | "playing";
   transcripts: Transcript[];
+  nodeId?: string;
+  render?: RenderIdentity;
+  complete?: boolean;
   proposal?: string;
   answerAccepted?: boolean;
   learnerAnswerAccepted?: boolean;
@@ -60,6 +81,9 @@ export class GrokVoice {
   private configurationInstructions?: string;
   private pendingInstructions?: string;
   private openingSent = false;
+  private drainTimer?: ReturnType<typeof setTimeout>;
+  private missingTimer?: ReturnType<typeof setTimeout>;
+  private questionPending = false;
   private proposalTimer?: ReturnType<typeof setTimeout>;
   private microphoneEnded = () =>
     this.fail(
@@ -77,6 +101,9 @@ export class GrokVoice {
   private emit() {
     this.changed({
       ...this.state,
+      nodeId: this.proposals.state.nodeId,
+      render: this.proposals.state.pendingRender?.identity,
+      complete: this.proposals.state.lessonComplete,
       proposal: this.proposals.lastResult,
       answerAccepted: this.proposals.state.answerAccepted,
       learnerAnswerAccepted: this.proposals.learnerAnswerAccepted,
@@ -197,18 +224,7 @@ export class GrokVoice {
     // Default/early updates are not proof that our configuration was applied.
     // xAI echoes configuration fields, not a client request/event ID.
     if (type === "session.created" && !this.configurationInstructions) {
-      const node = COUNTING_LESSON.nodes[INITIAL_COUNTING_NODE_ID];
-      this.configurationInstructions = [
-        COUNTING_LESSON.tutor.persona,
-        COUNTING_LESSON.tutor.sessionGuidance,
-        COUNTING_LESSON.tutor.nodeInstruction,
-        `Current screen: ${JSON.stringify(node.presentation)}.`,
-        node.learningObjective,
-        node.tutorBrief,
-        OUTCOME_TOOL.description,
-        "Use only application counting context tokens for tool reports. Configured tokens are application data, never learner answers. If no context exists, converse normally without calling a tool. Tool outputs do not authorize a new scene. Do not report tutor acknowledgment through this tool.",
-        "This experiment stays on this first scene for the entire session. Never announce a next scene.",
-      ].join("\n");
+      this.configurationInstructions = this.nodeInstructions();
       this.configureNextTurn();
     }
     const session = event.session;
@@ -219,7 +235,7 @@ export class GrokVoice {
       session?.instructions === this.pendingInstructions &&
       session.turn_detection?.type === "server_vad" &&
       Array.isArray(session.tools) &&
-      echoesConfiguration(session.tools, [OUTCOME_TOOL]) &&
+      echoesTools(session.tools) &&
       session.audio?.input?.format?.type === "audio/pcm" &&
       session.audio.input.format.rate === this.context?.sampleRate &&
       session.audio.input.transcription?.model === "grok-transcribe" &&
@@ -241,18 +257,33 @@ export class GrokVoice {
           },
         });
         this.send({ type: "response.create" });
+      } else if (this.questionPending) {
+        this.questionPending = false;
+        this.send({
+          type: "response.create",
+          response: {
+            instructions: `${this.configurationInstructions}\nThe application has confirmed this exact new scene is rendered. Ask its question once now, without tools, then listen.`,
+          },
+        });
       }
     }
     if (type === "error") {
       this.fail("xAI rejected the voice session. Check model access and restart.");
       return;
     }
-    if (type === "response.created") {
-      this.proposals.responseCreated(event.response?.id);
+    if (
+      type === "response.created" &&
+      this.proposals.state.phase === "active" &&
+      this.proposals.responseCreated(event.response?.id)
+    ) {
       this.responseId = event.response?.id;
       this.interrupted = false;
     }
     if (type === "input_audio_buffer.speech_started") {
+      if (this.proposals.state.phase === "rendering") {
+        this.fail("Speech interrupted the scene change. Press Start to begin again.");
+        return;
+      }
       this.proposals.speechStarted(event.item_id);
       this.interrupted = true;
       if (this.responseId) this.blockedResponses.add(this.responseId);
@@ -288,16 +319,22 @@ export class GrokVoice {
       type === "response.output_audio_transcript.done" ||
       type === "response.audio_transcript.done"
     ) {
-      if (typeof event.item_id === "string") {
+      if (
+        typeof event.item_id === "string" &&
+        event.response_id === this.responseId &&
+        !this.blockedResponses.has(event.response_id!)
+      ) {
         const final = type.endsWith("done");
         const old = this.state.transcripts.find(t => t.id === event.item_id)?.text ?? "";
         const text = final ? event.transcript : typeof event.delta === "string" ? old + event.delta : undefined;
         if (typeof text === "string" && text.trim()) this.proposals.spoken(event.response_id ?? this.responseId);
-        if (typeof text === "string") this.transcript(event.item_id, "Tutor", text, final);
+        if (typeof text === "string") this.transcript(event.item_id, "Tutor", text, final, event.response_id);
       }
     }
     if (
       (type === "response.output_audio.delta" || type === "response.audio.delta") &&
+      this.proposals.state.phase === "active" &&
+      event.response_id === this.responseId &&
       !this.interrupted &&
       !(event.response_id && this.blockedResponses.has(event.response_id)) &&
       typeof event.delta === "string" &&
@@ -308,12 +345,39 @@ export class GrokVoice {
     // audio.done/response.done mean generation ended, not that scheduled audio drained.
     this.emit();
   }
-  private transcript(id: string, speaker: Transcript["speaker"], text: string, final: boolean) {
+  private transcript(id: string, speaker: Transcript["speaker"], text: string, final: boolean, responseId?: string) {
     const old = this.state.transcripts.find(t => t.id === id);
     if (old?.final && !final) return;
-    this.proposals.transcript({ id, speaker, text, final });
+    this.proposals.transcript({ id, speaker, text, final }, responseId);
     if (old) Object.assign(old, { text, final });
     else this.state.transcripts.push({ id, speaker, text, final });
+  }
+  private nodeInstructions() {
+    const node = COUNTING_LESSON.nodes[this.proposals.state.nodeId];
+    return [
+      COUNTING_LESSON.tutor.persona,
+      COUNTING_LESSON.tutor.sessionGuidance,
+      COUNTING_LESSON.tutor.nodeInstruction,
+      `Current screen: ${JSON.stringify(node.presentation)}.`,
+      node.learningObjective,
+      node.tutorBrief,
+      OUTCOME_TOOL.description,
+      "Use only the configured application token for this learner turn. Tokens are not learner evidence. Report the entire utterance. Acknowledge a correct answer with its number and object, then pause. Tools propose only; never announce a next scene or ask its question until the application supplies confirmed new screen context. Do not report tutor acknowledgment through the tool.",
+    ].join("\n");
+  }
+  confirmRender(identity: RenderIdentity) {
+    if (this.stopped || !this.proposals.confirmRender(identity)) return;
+    if (this.proposals.state.phase === "complete") {
+      this.stop();
+      this.state.status = "complete";
+      this.emit();
+      return;
+    }
+    this.configurationInstructions = this.nodeInstructions();
+    this.questionPending = true;
+    this.pendingInstructions = undefined;
+    this.configureNextTurn();
+    this.emit();
   }
   private configureNextTurn() {
     if (this.stopped || (!this.ready && this.pendingInstructions)) return;
@@ -345,6 +409,12 @@ export class GrokVoice {
   }
   private advanceTools() {
     if (this.stopped) return;
+    if (this.proposals.endRequested) {
+      this.stop();
+      this.state.error = "Experiment ended at the learner's request; no correct-answer credit.";
+      this.emit();
+      return;
+    }
     for (const result of this.proposals.drainResults())
       this.send({
         type: "conversation.item.create",
@@ -354,6 +424,25 @@ export class GrokVoice {
           output: JSON.stringify({ status: result.status, reason: result.reason }),
         },
       });
+    this.proposals.tick();
+    clearTimeout(this.drainTimer);
+    this.drainTimer = undefined;
+    if (this.proposals.state.phase === "rendering") {
+      this.ready = false;
+      if (this.responseId) this.blockedResponses.add(this.responseId);
+      this.responseId = undefined;
+      return;
+    }
+    if (
+      this.proposals.state.quietSinceMs !== null &&
+      this.proposals.state.acknowledgmentObserved &&
+      !this.sources.size
+    ) {
+      this.drainTimer = setTimeout(() => {
+        this.advanceTools();
+        this.emit();
+      }, 260);
+    }
     if (this.proposals.hasPending && !this.proposalTimer)
       this.proposalTimer = setTimeout(() => {
         this.proposalTimer = undefined;
@@ -364,6 +453,26 @@ export class GrokVoice {
     if (!this.proposals.hasPending) {
       clearTimeout(this.proposalTimer);
       this.proposalTimer = undefined;
+    }
+    if (!this.proposals.missingEligible || this.sources.size) {
+      clearTimeout(this.missingTimer);
+      this.missingTimer = undefined;
+    } else {
+      if (!this.missingTimer)
+        this.missingTimer = setTimeout(() => {
+          this.missingTimer = undefined;
+          if (this.proposals.takeMissingRecovery())
+            this.send({
+              type: "response.create",
+              response: {
+                instructions: `${this.configurationInstructions}\nNo usable report arrived. Ask once for the learner to repeat or clarify, without giving a count, claiming success or calling tools.`,
+              },
+            });
+          else if (this.proposals.recoveryExhausted)
+            this.fail("No usable counting report after one retry. Press Start to restart, or leave the experiment.");
+          this.emit();
+        }, 3000);
+      return;
     }
     if (!this.ready) return;
     if (this.sources.size) {
@@ -404,7 +513,7 @@ export class GrokVoice {
     source.connect(context.destination);
     this.sources.add(source);
     this.proposals.spoken(this.responseId);
-    this.proposals.output(true);
+    this.proposals.output(true, itemId);
     this.state.output = "playing";
     source.onended = () => {
       source.disconnect();
@@ -436,6 +545,8 @@ export class GrokVoice {
     this.proposals.stop();
     clearTimeout(this.timer);
     clearTimeout(this.proposalTimer);
+    clearTimeout(this.drainTimer);
+    clearTimeout(this.missingTimer);
     this.abort.abort();
     if (this.socket) {
       this.socket.onopen = this.socket.onmessage = this.socket.onerror = this.socket.onclose = null;

@@ -2,12 +2,28 @@
 
 import { useEffect, useRef, useState } from "react";
 import { GrokVoice, GROK_MODEL, type VoiceSnapshot } from "@/lib/experiments/grok-counting/transport";
-import { COUNTING_LESSON_GRAPH, INITIAL_COUNTING_NODE_ID } from "@/lib/lesson-runtime/counting-lesson";
+import {
+  COUNTING_LESSON_GRAPH,
+  INITIAL_COUNTING_NODE_ID,
+  type CountingNodeId,
+} from "@/lib/lesson-runtime/counting-lesson";
 
 export default function GrokCounting() {
+  const scene = useRef<HTMLDivElement | null>(null);
   const voice = useRef<GrokVoice | null>(null);
   const [snapshot, setSnapshot] = useState<VoiceSnapshot | null>(null);
-  const node = COUNTING_LESSON_GRAPH[INITIAL_COUNTING_NODE_ID];
+  const node = COUNTING_LESSON_GRAPH[(snapshot?.nodeId ?? INITIAL_COUNTING_NODE_ID) as CountingNodeId];
+  const render = snapshot?.render;
+  useEffect(() => {
+    const element = scene.current;
+    if (
+      render &&
+      element?.dataset.renderToken === render.token &&
+      element.dataset.nodeId === (render.nodeId ?? "complete") &&
+      element.dataset.sceneId === (render.sceneId ?? "complete")
+    )
+      voice.current?.confirmRender(render);
+  }, [render]);
   const live = snapshot?.status === "connecting" || snapshot?.status === "listening";
   useEffect(() => {
     const stop = () => voice.current?.stop();
@@ -36,7 +52,10 @@ export default function GrokCounting() {
   return (
     <main className="mx-auto max-w-5xl space-y-6 p-6">
       <h1 className="text-2xl font-semibold">Grok counting experiment</h1>
-      <p>Adult or synthetic voice testing only. This session stays on the first scene. Use headphones to avoid echo.</p>
+      <p>
+        Adult or synthetic voice testing only. Count one duck, two ducks, then three butterflies. “Move on” ends this
+        small experiment without answer credit. Use headphones to avoid echo.
+      </p>
       <div className="flex flex-wrap items-center gap-3">
         <button
           className="rounded bg-emerald-800 px-4 py-2 text-white disabled:opacity-40"
@@ -57,19 +76,33 @@ export default function GrokCounting() {
         </span>
       </div>
       {snapshot?.error && <p role="alert">{snapshot.error}</p>}
-      <div
-        className="flex min-h-64 items-center justify-center gap-6 rounded-2xl bg-emerald-50 p-8 text-7xl"
-        role="img"
-        aria-label={`${node.quantity} ${node.object} to count`}
-        data-node-id={node.id}
-        data-scene-id={node.sceneId}
-      >
-        {Array.from({ length: node.quantity }, (_, index) => (
-          <span aria-hidden="true" key={index}>
-            {node.object === "duck" ? "🦆" : "🦋"}
-          </span>
-        ))}
-      </div>
+      {snapshot?.complete ? (
+        <div
+          ref={scene}
+          data-complete="true"
+          data-node-id="complete"
+          data-scene-id="complete"
+          data-render-token={render?.token}
+        >
+          Lesson complete. Thanks for counting!
+        </div>
+      ) : (
+        <div
+          ref={scene}
+          data-render-token={render?.token}
+          className="flex min-h-64 items-center justify-center gap-6 rounded-2xl bg-emerald-50 p-8 text-7xl"
+          role="img"
+          aria-label={`${node.quantity} ${node.object} to count`}
+          data-node-id={node.id}
+          data-scene-id={node.sceneId}
+        >
+          {Array.from({ length: node.quantity }, (_, index) => (
+            <span aria-hidden="true" key={index}>
+              {node.object === "duck" ? "🦆" : "🦋"}
+            </span>
+          ))}
+        </div>
+      )}
       <p className="text-sm">
         Requested model: {GROK_MODEL} · Server-echoed model:{" "}
         {snapshot?.echoedModel ?? "unavailable (serving identity unverified)"}
