@@ -1,0 +1,85 @@
+import { expect, test } from "@playwright/test";
+
+test("provider-free voice scene, captions, interruption, Stop/restart and page exit", async ({ page }) => {
+  let connections = 0;
+  let closed = 0;
+  const sent: { type: string; [key: string]: unknown }[] = [];
+  await page.route("**/api/experiments/grok-counting", route =>
+    route.fulfill({ json: { value: "offline-test", expires_at: Date.now() / 1000 + 60 } }),
+  );
+  await page.routeWebSocket("wss://api.x.ai/**", socket => {
+    connections++;
+    socket.onClose(() => closed++);
+    socket.onMessage(message => {
+      const event = JSON.parse(String(message));
+      sent.push(event);
+      if (event.type === "session.update")
+        socket.send(JSON.stringify({ type: "session.updated", session: { model: "offline-fixture" } }));
+      if (event.type === "response.create") {
+        for (const fixture of [
+          { type: "response.created", response: { id: "r1" } },
+          { type: "conversation.item.input_audio_transcription.updated", item_id: "u1", transcript: "won" },
+          { type: "conversation.item.input_audio_transcription.completed", item_id: "u1", transcript: "One duck." },
+          { type: "response.output_audio_transcript.done", item_id: "a1", transcript: "Yes, one duck." },
+          {
+            type: "response.output_audio.delta",
+            item_id: "a1",
+            response_id: "r1",
+            delta: Buffer.alloc(24000 * 2 * 4).toString("base64"),
+          },
+          { type: "response.output_audio.done" },
+          { type: "response.done" },
+        ])
+          socket.send(JSON.stringify(fixture));
+        // Barge-in is a fixture; this is not evidence of real model behavior.
+        setTimeout(() => socket.send(JSON.stringify({ type: "input_audio_buffer.speech_started" })), 200);
+      }
+    });
+  });
+  await page.addInitScript(() => {
+    const original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    const tracks: MediaStreamTrack[] = [];
+    Object.assign(window, { grokTestTracks: tracks });
+    navigator.mediaDevices.getUserMedia = async constraints => {
+      const stream = await original(constraints);
+      tracks.push(...stream.getTracks());
+      return stream;
+    };
+  });
+  await page.goto("/experiments/grok-counting");
+  await expect(page.getByRole("img", { name: "1 duck to count" })).toBeVisible();
+  await page.getByRole("button", { name: "Start", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("listening");
+  await expect(page.getByText("Learner:")).toBeVisible();
+  await expect(page.getByText("One duck.", { exact: false }).first()).toBeVisible();
+  await expect.poll(() => sent.some(e => e.type === "input_audio_buffer.append")).toBe(true);
+  await expect.poll(() => sent.some(e => e.type === "conversation.item.truncate")).toBe(true);
+  await expect(page.getByRole("status")).toContainText("Audio: idle");
+  await expect(page.locator('[data-node-id="count-1-duck"]')).toBeVisible();
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("stopped");
+  await expect.poll(() => closed).toBe(1);
+  expect(
+    await page.evaluate(() =>
+      (window as unknown as { grokTestTracks: MediaStreamTrack[] }).grokTestTracks.every(t => t.readyState === "ended"),
+    ),
+  ).toBe(true);
+  const count = sent.length;
+  await page.waitForTimeout(150);
+  expect(sent).toHaveLength(count);
+  await page.getByRole("button", { name: "Start", exact: true }).click();
+  await expect.poll(() => connections).toBe(2);
+  await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide")));
+  await expect.poll(() => closed).toBe(2);
+  await expect(page.getByRole("status")).toContainText("stopped");
+});
+
+test("shows authorization errors and permits a new attempt", async ({ page }) => {
+  await page.route("**/api/experiments/grok-counting", route =>
+    route.fulfill({ status: 503, json: { error: "Configure the test voice key." } }),
+  );
+  await page.goto("/experiments/grok-counting");
+  await page.getByRole("button", { name: "Start", exact: true }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toHaveText("Configure the test voice key.");
+  await expect(page.getByRole("button", { name: "Start", exact: true })).toBeEnabled();
+});
