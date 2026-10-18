@@ -4,14 +4,15 @@ import { CountingProposals, OUTCOME_TOOL } from "../lib/experiments/grok-countin
 function fixture(text = "One duck.", tutor = "How many ducks do you see?") {
   const adapter = new CountingProposals();
   adapter.transcript({ id: "a0", speaker: "Tutor", text: tutor, final: true });
+  const context = adapter.issueContext()!;
+  const token = JSON.parse(context).context_token;
+  adapter.acknowledgeContext();
   adapter.speechStarted("u1");
   adapter.speechStopped("u1");
   adapter.transcript({ id: "u1", speaker: "Learner", text, final: true });
   adapter.responseCreated("r1");
-  const context = adapter.issueContext()!;
-  const token = context ? JSON.parse(context.match(/(\{.*\})/)![1]).context_token : "no-issued-context";
   const args = { context_token: token, answer_outcome: "correct", support_state: "none", supporting_text: text };
-  const call = (changes = {}, envelope = {}) =>
+  const call = (changes = {}, envelope = {}) => {
     adapter.call({
       call_id: "c1",
       name: OUTCOME_TOOL.name,
@@ -19,6 +20,8 @@ function fixture(text = "One duck.", tutor = "How many ducks do you see?") {
       arguments: JSON.stringify({ ...args, ...changes }),
       ...envelope,
     });
+    return adapter.drainResults().at(-1);
+  };
   return { adapter, call, args };
 }
 it.each(["One duck.", "one", "1", "I see one duck.", "There is one duck!"])(
@@ -96,46 +99,37 @@ it("consumes invalid and valid call IDs once, including unknown tools", () => {
   expect(call({}, { name: "advance_scene" })?.reason).toBe("unknown tool");
   expect(call()).toBeUndefined();
   expect(adapter.state.answerAccepted).toBe(false);
-  expect(call({}, { call_id: "c2" })?.status).toBe("accepted");
+  expect(call({}, { call_id: "c2" })?.status).toBe("rejected");
   expect(call({}, { call_id: "c2" })).toBeUndefined();
   expect(call({}, { call_id: "c3" })?.status).toBe("rejected");
 });
-it.each(["runtimeId", "visitId", "childTurnId", "nodeId", "transcriptRevision"] as const)(
-  "rejects stale application identity %s",
-  key => {
-    const { adapter, call } = fixture();
-    adapter.state = {
-      ...adapter.state,
-      [key]: typeof adapter.state[key] === "number" ? Number(adapter.state[key]) + 1 : "other",
-    };
-    expect(call()?.reason).toBe("stale context");
-  },
-);
-it("rejects an old revision after a correction, then accepts a newly issued context", () => {
-  const { adapter, call } = fixture("Two ducks.");
-  adapter.transcript({ id: "u1", speaker: "Learner", text: "One duck.", final: true });
-  expect(call()?.reason).toBe("stale context");
-  adapter.responseCreated("r2");
-  const context = adapter.issueContext()!;
-  const token = JSON.parse(context.match(/(\{.*\})/)![1]).context_token;
-  expect(
-    call({ context_token: token, supporting_text: "One duck." }, { call_id: "c2", response_id: "r2" })?.status,
-  ).toBe("accepted");
-  adapter.responseDone("r2", "completed");
-  expect(adapter.state.answerAccepted).toBe(true);
-  adapter.transcript({ id: "u1", speaker: "Learner", text: "One or two?", final: true });
-  expect(adapter.state.answerAccepted).toBe(false);
+it.each(["runtimeId", "visitId", "childTurnId", "nodeId"] as const)("rejects stale application identity %s", key => {
+  const { adapter, call } = fixture();
+  adapter.state = {
+    ...adapter.state,
+    [key]: typeof adapter.state[key] === "number" ? Number(adapter.state[key]) + 1 : "other",
+  };
+  expect(call()?.status).toBe("rejected");
 });
-it("does not issue context for interim text or while the learner is speaking", () => {
+it("invalidates corrected transcripts without relabeling an old token", () => {
+  const { adapter, call } = fixture();
+  call();
+  adapter.transcript({ id: "u1", speaker: "Learner", text: "Two ducks.", final: true });
+  adapter.responseDone("r1", "completed");
+  expect(adapter.state.answerAccepted).toBe(false);
+  expect(adapter.learnerAnswerAccepted).toBe(false);
+  expect(call({}, { call_id: "c2" })?.status).toBe("rejected");
+});
+it("issues context before a turn, and never retrofits context during an active response", () => {
   const a = new CountingProposals();
+  expect(a.issueContext()).toBeDefined();
+  a.acknowledgeContext();
   a.speechStarted("u");
   a.responseCreated("r");
-  a.transcript({ id: "u", speaker: "Learner", text: "one", final: false });
-  expect(a.issueContext()).toBeUndefined();
   a.transcript({ id: "u", speaker: "Learner", text: "one", final: true });
   expect(a.issueContext()).toBeUndefined();
   a.speechStopped("u");
-  expect(a.issueContext()).toBeDefined();
+  expect(a.issueContext()).toBeUndefined();
 });
 it("rejects old learner items and repeated speech starts across turns", () => {
   const { adapter, call } = fixture();
@@ -155,7 +149,7 @@ it("rejects out-of-order calls after response completion or cancellation", () =>
     const { adapter, call } = fixture();
     adapter.responseDone("r1", status);
     expect(call()?.status).toBe("rejected");
-    expect(adapter.takeContinuation()).toBe(false);
+    expect(adapter.takeContinuation()).toBeUndefined();
   }
 });
 it("ignores late callbacks after stop and rejects tokens from a prior connection", () => {
@@ -168,22 +162,20 @@ it("ignores late callbacks after stop and rejects tokens from a prior connection
   const fresh = fixture();
   expect(fresh.call({ context_token: old.args.context_token })?.status).toBe("rejected");
 });
-it("continues a tool-only response exactly once after completed, never on rejection, cancellation or spoken feedback", () => {
+it("continues a tool-only response exactly once after completed, never on cancellation or spoken feedback", () => {
   const { adapter, call } = fixture();
   call();
-  expect(adapter.takeContinuation()).toBe(false);
+  expect(adapter.takeContinuation()).toBeUndefined();
   adapter.responseDone("r1", "completed");
-  expect(adapter.takeContinuation()).toBe(true);
-  expect(adapter.takeContinuation()).toBe(false);
-  for (const fault of ["spoken", "cancelled", "rejected", "new turn", "revision"]) {
+  expect(adapter.takeContinuation()).toBe("accepted");
+  expect(adapter.takeContinuation()).toBeUndefined();
+  for (const fault of ["spoken", "cancelled", "new turn"]) {
     const f = fixture();
     f.call();
     if (fault === "spoken") f.adapter.spoken("r1");
-    if (fault === "rejected") f.call({}, { call_id: "c2", name: "other" });
     if (fault === "new turn") f.adapter.speechStarted("u2");
-    if (fault === "revision") f.adapter.transcript({ id: "a1", speaker: "Tutor", text: "Great", final: true });
     f.adapter.responseDone("r1", fault === "cancelled" ? "cancelled" : "completed");
-    expect(f.adapter.takeContinuation()).toBe(false);
+    expect(f.adapter.takeContinuation()).toBeUndefined();
   }
 });
 it("bounds calls per connection and cannot award an answer without a call", () => {
@@ -201,4 +193,200 @@ it("does not deliver a validated answer from a subsequently cancelled response",
   expect(adapter.state.answerAccepted).toBe(false);
   adapter.responseDone("r1", "cancelled");
   expect(adapter.state.answerAccepted).toBe(false);
+});
+
+it.each(["before", "after"])(
+  "preserves a reducer-validated learner observation through tutor speech %s response completion",
+  timing => {
+    const { adapter, call } = fixture();
+    call();
+    if (timing === "after") adapter.responseDone("r1", "completed");
+    adapter.transcript({ id: "a1", speaker: "Tutor", text: "Yes, one duck.", final: true });
+    if (timing === "before") adapter.responseDone("r1", "completed");
+    expect(adapter.learnerAnswerAccepted).toBe(true);
+    expect(adapter.state).toMatchObject({
+      answerAccepted: false,
+      acknowledgmentObserved: false,
+      transitionReady: false,
+    });
+    adapter.responseCreated("continuation");
+    adapter.transcript({ id: "a2", speaker: "Tutor", text: "Great work!", final: false });
+    adapter.transcript({ id: "a2", speaker: "Tutor", text: "Great work!", final: true });
+    expect(adapter.learnerAnswerAccepted).toBe(true);
+    adapter.speechStarted("u2");
+    expect(adapter.learnerAnswerAccepted).toBe(false);
+  },
+);
+it.each(["runtimeId", "nodeId", "visitId", "childTurnId"] as const)(
+  "invalidates diagnostic observation when %s changes",
+  key => {
+    const { adapter, call } = fixture();
+    call();
+    adapter.responseDone("r1", "completed");
+    adapter.state = {
+      ...adapter.state,
+      [key]: typeof adapter.state[key] === "number" ? Number(adapter.state[key]) + 1 : "other",
+    };
+    expect(adapter.learnerAnswerAccepted).toBe(false);
+  },
+);
+function early() {
+  const adapter = new CountingProposals();
+  const token = JSON.parse(adapter.issueContext()!).context_token;
+  adapter.acknowledgeContext();
+  adapter.speechStarted("u");
+  adapter.speechStopped("u");
+  adapter.responseCreated("r");
+  const event = {
+    name: OUTCOME_TOOL.name,
+    call_id: "c",
+    response_id: "r",
+    arguments: JSON.stringify({
+      context_token: token,
+      answer_outcome: "correct",
+      support_state: "none",
+      supporting_text: "One duck.",
+    }),
+  };
+  return { adapter, event };
+}
+it.each(["before done", "after done"])("grounds an early call against delayed final transcription %s", timing => {
+  const { adapter, event } = early();
+  adapter.call(event);
+  expect(adapter.hasPending).toBe(true);
+  expect(adapter.drainResults()).toEqual([]);
+  if (timing === "after done") adapter.responseDone("r", "completed");
+  expect(adapter.takeContinuation()).toBeUndefined();
+  adapter.transcript({ id: "u", speaker: "Learner", text: "one", final: false });
+  adapter.transcript({ id: "u", speaker: "Learner", text: "One duck.", final: true });
+  expect(adapter.drainResults()[0].status).toBe("accepted");
+  if (timing === "before done") adapter.responseDone("r", "completed");
+  expect(adapter.learnerAnswerAccepted).toBe(true);
+  expect(adapter.takeContinuation()).toBe("accepted");
+});
+it("rejects absent final transcription at the bounded deadline and cannot later accept the same call", () => {
+  const { adapter, event } = early();
+  adapter.call(event);
+  adapter.responseDone("r", "completed");
+  adapter.expirePending();
+  expect(adapter.drainResults()[0].status).toBe("rejected");
+  expect(adapter.takeContinuation()).toBe("recovery");
+  adapter.transcript({ id: "u", speaker: "Learner", text: "One duck.", final: true });
+  adapter.call(event);
+  expect(adapter.learnerAnswerAccepted).toBe(false);
+});
+it("rejects fabricated early evidence against the eventual transcript", () => {
+  const { adapter, event } = early();
+  adapter.call(event);
+  adapter.transcript({ id: "u", speaker: "Learner", text: "Two ducks.", final: true });
+  expect(adapter.drainResults()[0].reason).toBe("unmatched learner evidence");
+});
+it("requires the ahead-of-turn configuration acknowledgment and never rebinds a late acknowledgment", () => {
+  const a = new CountingProposals();
+  const token = JSON.parse(a.issueContext()!).context_token;
+  a.speechStarted("u");
+  a.acknowledgeContext();
+  a.speechStopped("u");
+  a.responseCreated("r");
+  a.transcript({ id: "u", speaker: "Learner", text: "One duck.", final: true });
+  a.call({
+    call_id: "c",
+    name: OUTCOME_TOOL.name,
+    response_id: "r",
+    arguments: JSON.stringify({
+      context_token: token,
+      supporting_text: "One duck.",
+      answer_outcome: "correct",
+      support_state: "none",
+    }),
+  });
+  expect(a.drainResults()[0].status).toBe("rejected");
+});
+it("recovers a rejected tool-only response once and does not loop if recovery calls tools again", () => {
+  const { adapter, call } = fixture();
+  call({}, { name: "wrong" });
+  adapter.responseDone("r1", "completed");
+  expect(adapter.takeContinuation()).toBe("recovery");
+  expect(adapter.takeContinuation()).toBeUndefined();
+  adapter.responseCreated("recovery");
+  call({}, { call_id: "c2", response_id: "recovery" });
+  adapter.responseDone("recovery", "completed");
+  expect(adapter.takeContinuation()).toBeUndefined();
+  expect(adapter.learnerAnswerAccepted).toBe(false);
+});
+it("never recovers an already spoken rejection, interrupted response or a no-call response", () => {
+  for (const fault of ["spoken", "interrupted", "missing call"]) {
+    const { adapter, call } = fixture();
+    if (fault !== "missing call") call({}, { name: "wrong" });
+    if (fault === "spoken") adapter.spoken("r1");
+    if (fault === "interrupted") adapter.speechStarted("u2");
+    adapter.responseDone("r1", "completed");
+    expect(adapter.takeContinuation()).toBeUndefined();
+  }
+});
+it("revokes a retained observation on a later final learner correction and cannot restore it from tutor text", () => {
+  const { adapter, call } = fixture();
+  call();
+  adapter.responseDone("r1", "completed");
+  expect(adapter.learnerAnswerAccepted).toBe(true);
+  adapter.transcript({ id: "u1", speaker: "Learner", text: "Two ducks.", final: true });
+  adapter.transcript({ id: "a2", speaker: "Tutor", text: "Try again", final: true });
+  expect(adapter.learnerAnswerAccepted).toBe(false);
+  expect(adapter.state.answerAccepted).toBe(false);
+});
+it("cannot stamp a response created before learner speech with the new turn identity", () => {
+  const adapter = new CountingProposals();
+  const token = JSON.parse(adapter.issueContext()!).context_token;
+  adapter.acknowledgeContext();
+  adapter.responseCreated("old");
+  adapter.speechStarted("u");
+  adapter.speechStopped("u");
+  adapter.transcript({ id: "u", speaker: "Learner", text: "One duck.", final: true });
+  adapter.call({
+    call_id: "c",
+    name: OUTCOME_TOOL.name,
+    response_id: "old",
+    arguments: JSON.stringify({
+      context_token: token,
+      supporting_text: "One duck.",
+      answer_outcome: "correct",
+      support_state: "none",
+    }),
+  });
+  expect(adapter.drainResults()[0].status).toBe("rejected");
+  expect(adapter.learnerAnswerAccepted).toBe(false);
+});
+it("orders delayed learner text at its speech boundary rather than treating subsequent tutor words as an earlier answer cue", () => {
+  const { adapter, event } = early();
+  adapter.call(event);
+  adapter.spoken("r");
+  adapter.transcript({ id: "a", speaker: "Tutor", text: "Yes, one duck.", final: true });
+  adapter.responseDone("r", "completed");
+  adapter.transcript({ id: "u", speaker: "Learner", text: "One duck.", final: true });
+  expect(adapter.drainResults()[0].status).toBe("accepted");
+  expect(adapter.learnerAnswerAccepted).toBe(true);
+  expect(adapter.state.acknowledgmentObserved).toBe(false);
+  expect(adapter.takeContinuation()).toBeUndefined();
+});
+it("does not bind a response created before VAD stop to the eventual finalized turn", () => {
+  const adapter = new CountingProposals();
+  const token = JSON.parse(adapter.issueContext()!).context_token;
+  adapter.acknowledgeContext();
+  adapter.speechStarted("u");
+  adapter.responseCreated("too-early");
+  adapter.speechStopped("u");
+  adapter.transcript({ id: "u", speaker: "Learner", text: "One duck.", final: true });
+  adapter.call({
+    call_id: "c",
+    name: OUTCOME_TOOL.name,
+    response_id: "too-early",
+    arguments: JSON.stringify({
+      context_token: token,
+      supporting_text: "One duck.",
+      answer_outcome: "correct",
+      support_state: "none",
+    }),
+  });
+  expect(adapter.drainResults()[0].status).toBe("rejected");
+  expect(adapter.learnerAnswerAccepted).toBe(false);
 });

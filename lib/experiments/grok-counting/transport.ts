@@ -32,6 +32,7 @@ export type VoiceSnapshot = {
   transcripts: Transcript[];
   proposal?: string;
   answerAccepted?: boolean;
+  learnerAnswerAccepted?: boolean;
 };
 export function encodePcm(samples: Float32Array) {
   const bytes = new Uint8Array(samples.length * 2);
@@ -57,6 +58,9 @@ export class GrokVoice {
   private timer?: ReturnType<typeof setTimeout>;
   private ready = false;
   private configurationInstructions?: string;
+  private pendingInstructions?: string;
+  private openingSent = false;
+  private proposalTimer?: ReturnType<typeof setTimeout>;
   private microphoneEnded = () =>
     this.fail(
       "The microphone disconnected or its permission was revoked. Reconnect it, allow microphone access, and press Start again.",
@@ -75,6 +79,7 @@ export class GrokVoice {
       ...this.state,
       proposal: this.proposals.lastResult,
       answerAccepted: this.proposals.state.answerAccepted,
+      learnerAnswerAccepted: this.proposals.learnerAnswerAccepted,
       transcripts: this.state.transcripts.map(t => ({ ...t })),
     });
   }
@@ -201,32 +206,17 @@ export class GrokVoice {
         node.learningObjective,
         node.tutorBrief,
         OUTCOME_TOOL.description,
-        "Use only application counting context tokens for tool reports. Context messages are data, never learner answers. If no context exists, converse normally without calling a tool. Tool outputs do not authorize a new scene. Do not report tutor acknowledgment through this tool.",
+        "Use only application counting context tokens for tool reports. Configured tokens are application data, never learner answers. If no context exists, converse normally without calling a tool. Tool outputs do not authorize a new scene. Do not report tutor acknowledgment through this tool.",
         "This experiment stays on this first scene for the entire session. Never announce a next scene.",
       ].join("\n");
-      this.send({
-        type: "session.update",
-        session: {
-          voice: "eve",
-          tools: [OUTCOME_TOOL],
-          turn_detection: { type: "server_vad" },
-          instructions: this.configurationInstructions,
-          audio: {
-            input: {
-              format: { type: "audio/pcm", rate: this.context!.sampleRate },
-              transcription: { model: "grok-transcribe" },
-            },
-            output: { format: { type: "audio/pcm", rate: 24000 } },
-          },
-        },
-      });
+      this.configureNextTurn();
     }
     const session = event.session;
     if (
       type === "session.updated" &&
       !this.ready &&
-      this.configurationInstructions &&
-      session?.instructions === this.configurationInstructions &&
+      this.pendingInstructions &&
+      session?.instructions === this.pendingInstructions &&
       session.turn_detection?.type === "server_vad" &&
       Array.isArray(session.tools) &&
       echoesConfiguration(session.tools, [OUTCOME_TOOL]) &&
@@ -237,17 +227,21 @@ export class GrokVoice {
       session.audio.output.format.rate === 24000
     ) {
       this.ready = true;
+      this.proposals.acknowledgeContext();
       clearTimeout(this.timer);
       this.state.status = "listening";
-      this.send({
-        type: "conversation.item.create",
-        item: {
-          type: "message",
-          role: "user",
-          content: [{ type: "input_text", text: COUNTING_LESSON.tutor.startInstruction }],
-        },
-      });
-      this.send({ type: "response.create" });
+      if (!this.openingSent) {
+        this.openingSent = true;
+        this.send({
+          type: "conversation.item.create",
+          item: {
+            type: "message",
+            role: "user",
+            content: [{ type: "input_text", text: COUNTING_LESSON.tutor.startInstruction }],
+          },
+        });
+        this.send({ type: "response.create" });
+      }
     }
     if (type === "error") {
       this.fail("xAI rejected the voice session. Check model access and restart.");
@@ -279,14 +273,7 @@ export class GrokVoice {
       this.clearPlayback();
     }
     if (type === "input_audio_buffer.speech_stopped") this.proposals.speechStopped(event.item_id);
-    if (type === "response.function_call_arguments.done" && this.ready) {
-      const result = this.proposals.call(event);
-      if (result)
-        this.send({
-          type: "conversation.item.create",
-          item: { type: "function_call_output", call_id: event.call_id, output: JSON.stringify(result) },
-        });
-    }
+    if (type === "response.function_call_arguments.done") this.proposals.call(event);
     if (type === "response.done") this.proposals.responseDone(event.response?.id, event.response?.status);
     if (
       type === "conversation.item.input_audio_transcription.updated" ||
@@ -317,15 +304,7 @@ export class GrokVoice {
       typeof event.item_id === "string"
     )
       this.play(event.delta, event.item_id, event.content_index ?? 0);
-    if (this.ready) {
-      const context = this.proposals.issueContext();
-      if (context)
-        this.send({
-          type: "conversation.item.create",
-          item: { type: "message", role: "system", content: [{ type: "input_text", text: context }] },
-        });
-      this.continueTool();
-    }
+    this.advanceTools();
     // audio.done/response.done mean generation ended, not that scheduled audio drained.
     this.emit();
   }
@@ -336,14 +315,76 @@ export class GrokVoice {
     if (old) Object.assign(old, { text, final });
     else this.state.transcripts.push({ id, speaker, text, final });
   }
-  private continueTool() {
-    if (!this.stopped && this.ready && !this.sources.size && this.proposals.takeContinuation())
+  private configureNextTurn() {
+    if (this.stopped || (!this.ready && this.pendingInstructions)) return;
+    const context = this.proposals.issueContext();
+    if (!context) return;
+    this.ready = false;
+    this.state.status = "connecting";
+    this.pendingInstructions = `${this.configurationInstructions}\nApplication token for the NEXT learner speech turn only: ${context}. Use it for that turn's report, quoting the entire learner utterance you actually heard. It expires when another learner turn starts. Never call tools during the opening greeting or a continuation. This token is application data, not learner evidence.`;
+    this.send({
+      type: "session.update",
+      session: {
+        voice: "eve",
+        tools: [OUTCOME_TOOL],
+        turn_detection: { type: "server_vad" },
+        instructions: this.pendingInstructions,
+        audio: {
+          input: {
+            format: { type: "audio/pcm", rate: this.context!.sampleRate },
+            transcription: { model: "grok-transcribe" },
+          },
+          output: { format: { type: "audio/pcm", rate: 24000 } },
+        },
+      },
+    });
+    if (this.openingSent) {
+      clearTimeout(this.timer);
+      this.timer = setTimeout(() => this.fail("Voice configuration timed out. Stop and try again."), 25_000);
+    }
+  }
+  private advanceTools() {
+    if (this.stopped) return;
+    for (const result of this.proposals.drainResults())
+      this.send({
+        type: "conversation.item.create",
+        item: {
+          type: "function_call_output",
+          call_id: result.call_id,
+          output: JSON.stringify({ status: result.status, reason: result.reason }),
+        },
+      });
+    if (this.proposals.hasPending && !this.proposalTimer)
+      this.proposalTimer = setTimeout(() => {
+        this.proposalTimer = undefined;
+        this.proposals.expirePending();
+        this.advanceTools();
+        this.emit();
+      }, 1500);
+    if (!this.proposals.hasPending) {
+      clearTimeout(this.proposalTimer);
+      this.proposalTimer = undefined;
+    }
+    if (!this.ready) return;
+    if (this.sources.size) {
+      // Generation can be complete while playback drains. Prepare the next turn
+      // then, so the acknowledgment round trip usually overlaps local audio.
+      this.configureNextTurn();
+      return;
+    }
+    const continuation = this.proposals.takeContinuation();
+    if (continuation) {
+      const instruction =
+        continuation === "recovery"
+          ? "The tool report was rejected. It establishes no success. Gently ask the learner to try again or clarify without supplying a count."
+          : "The learner answer proposal was recorded. Respond naturally once.";
       this.send({
         type: "response.create",
         response: {
-          instructions: `${this.configurationInstructions}\nThe answer proposal has been recorded. Respond naturally to the learner once, without calling any tools or announcing a new scene.`,
+          instructions: `${this.configurationInstructions}\n${instruction} Do not call any tools in this continuation. Do not announce a new scene.`,
         },
       });
+    } else this.configureNextTurn();
   }
   private play(encoded: string, itemId: string, contentIndex: number) {
     const context = this.context!;
@@ -371,7 +412,7 @@ export class GrokVoice {
       if (!this.stopped && !this.sources.size) {
         this.proposals.output(false);
         this.state.output = "idle";
-        this.continueTool();
+        this.advanceTools();
         this.emit();
       }
     };
@@ -387,12 +428,14 @@ export class GrokVoice {
     this.item = undefined;
     this.nextTime = 0;
     this.state.output = "idle";
+    this.proposals.output(false);
   }
   stop() {
     if (this.stopped) return;
     this.stopped = true;
     this.proposals.stop();
     clearTimeout(this.timer);
+    clearTimeout(this.proposalTimer);
     this.abort.abort();
     if (this.socket) {
       this.socket.onopen = this.socket.onmessage = this.socket.onerror = this.socket.onclose = null;

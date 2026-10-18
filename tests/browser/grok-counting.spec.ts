@@ -167,8 +167,10 @@ test("wire tool proposal reaches the reducer adapter without secondary requests 
     socket.onMessage(message => {
       const e = JSON.parse(String(message));
       sent.push(e);
-      if (e.type === "session.update") emit!({ type: "session.updated", session: e.session });
-      if (e.item?.role === "system") token = JSON.parse(e.item.content[0].text.match(/(\{.*\})/)[1]).context_token;
+      if (e.type === "session.update") {
+        token = JSON.parse(e.session.instructions.match(/(\{"context_token".*?\})/)[1]).context_token;
+        emit!({ type: "session.updated", session: e.session });
+      }
     });
     emit({ type: "session.created" });
   });
@@ -183,7 +185,7 @@ test("wire tool proposal reaches the reducer adapter without secondary requests 
   ])
     emit!(event);
   await expect.poll(() => Boolean(token)).toBe(true);
-  await expect(page.getByLabel("Tool proposal")).toContainText("Answer accepted: no");
+  await expect(page.getByLabel("Tool proposal")).toContainText("Revision-bound answer: no");
   const call = {
     type: "response.function_call_arguments.done",
     response_id: "r1",
@@ -198,13 +200,91 @@ test("wire tool proposal reaches the reducer adapter without secondary requests 
   };
   emit!(call);
   await expect(page.getByLabel("Tool proposal")).toContainText("Validated: correct");
-  await expect(page.getByLabel("Tool proposal")).toContainText("Answer accepted: no");
+  await expect(page.getByLabel("Tool proposal")).toContainText("Revision-bound answer: no");
   emit!(call);
   emit!({ type: "response.done", response: { id: "r1", status: "completed" } });
   await expect.poll(() => sent.filter(e => e.type === "response.create").length).toBe(2);
-  await expect(page.getByLabel("Tool proposal")).toContainText("Answer accepted: yes");
+  await expect(page.getByLabel("Tool proposal")).toContainText("Revision-bound answer: yes");
   expect(sent.filter(e => e.item?.type === "function_call_output")).toHaveLength(1);
+  emit!({ type: "response.created", response: { id: "continuation" } });
+  emit!({ type: "response.output_audio_transcript.delta", response_id: "continuation", item_id: "a2", delta: "Yes, " });
+  emit!({
+    type: "response.output_audio_transcript.done",
+    response_id: "continuation",
+    item_id: "a2",
+    transcript: "Yes, one duck.",
+  });
+  await expect(page.getByLabel("Tool proposal")).toContainText("Learner answer recorded: yes");
+  await expect(page.getByLabel("Tool proposal")).toContainText("Revision-bound answer: no");
+  emit!({ type: "input_audio_buffer.speech_started", item_id: "u2" });
+  await expect(page.getByLabel("Tool proposal")).toContainText("Learner answer recorded: no");
   expect(requests).toEqual(["/api/experiments/grok-counting"]);
+  await expect(page.locator('[data-node-id="count-1-duck"]')).toBeVisible();
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
+});
+
+test("rejected tool-only response recovers once with speech and no accepted evidence", async ({ page }) => {
+  const sent: { type: string }[] = [];
+  let emit!: (e: object) => void;
+  let token = "";
+  await page.route("**/api/experiments/grok-counting", route =>
+    route.fulfill({ json: { value: "offline", expires_at: Date.now() / 1000 + 60 } }),
+  );
+  await page.routeWebSocket("wss://api.x.ai/**", socket => {
+    emit = e => socket.send(JSON.stringify(e));
+    socket.onMessage(message => {
+      const e = JSON.parse(String(message));
+      sent.push(e);
+      if (e.type === "session.update") {
+        token = JSON.parse(e.session.instructions.match(/(\{"context_token".*?\})/)[1]).context_token;
+        emit({ type: "session.updated", session: e.session });
+      }
+    });
+    emit({ type: "session.created" });
+  });
+  await page.goto("/experiments/grok-counting");
+  await page.getByRole("button", { name: "Start", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("listening");
+  for (const e of [
+    { type: "input_audio_buffer.speech_started", item_id: "u" },
+    { type: "input_audio_buffer.speech_stopped", item_id: "u" },
+    { type: "response.created", response: { id: "r" } },
+    { type: "conversation.item.input_audio_transcription.completed", item_id: "u", transcript: "Two ducks." },
+  ])
+    emit(e);
+  const call = {
+    type: "response.function_call_arguments.done",
+    response_id: "r",
+    call_id: "bad",
+    name: "report_counting_answer",
+    arguments: JSON.stringify({
+      context_token: token,
+      answer_outcome: "correct",
+      support_state: "none",
+      supporting_text: "One duck.",
+    }),
+  };
+  emit(call);
+  emit(call);
+  emit({ type: "response.done", response: { id: "r", status: "completed" } });
+  await expect.poll(() => sent.filter(e => e.type === "response.create").length).toBe(2);
+  emit({ type: "response.created", response: { id: "recovery" } });
+  emit({
+    type: "response.output_audio_transcript.done",
+    response_id: "recovery",
+    item_id: "a",
+    transcript: "Can you try again?",
+  });
+  emit({
+    type: "response.output_audio.delta",
+    response_id: "recovery",
+    item_id: "a",
+    delta: Buffer.alloc(4800).toString("base64"),
+  });
+  emit({ type: "response.done", response: { id: "recovery", status: "completed" } });
+  await expect(page.getByText("Can you try again?", { exact: false })).toBeVisible();
+  await expect(page.getByLabel("Tool proposal")).toContainText("Learner answer recorded: no");
+  expect(sent.filter(e => e.type === "response.create")).toHaveLength(2);
   await expect(page.locator('[data-node-id="count-1-duck"]')).toBeVisible();
   await page.getByRole("button", { name: "Stop", exact: true }).click();
 });

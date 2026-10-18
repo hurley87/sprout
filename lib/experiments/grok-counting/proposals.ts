@@ -13,7 +13,7 @@ export const OUTCOME_TOOL = {
   type: "function",
   name: "report_counting_answer",
   description:
-    "Report the latest settled learner answer using the latest application context token and the ENTIRE verbatim learner utterance. Never report mastery. Do not call without a context token. Never treat assent, a tutor answer, an echo, help, stop or move-on as success. Call at most once per context, before speaking your response.",
+    "Report the latest settled learner answer using the application token reserved for this learner turn and the ENTIRE verbatim learner utterance. Never report mastery. Do not call without a context token. Never treat assent, a tutor answer, an echo, help, stop or move-on as success. Call at most once per learner turn, before speaking your response. Use only the token configured before that turn; never reuse it for another turn.",
   parameters: {
     type: "object",
     additionalProperties: false,
@@ -27,14 +27,15 @@ export const OUTCOME_TOOL = {
   },
 };
 export type ToolCall = { call_id?: unknown; name?: unknown; arguments?: unknown; response_id?: unknown };
-type Context = {
-  token: string;
-  source: ClassificationSource;
-  responseId: string;
-  learner: string;
-  tutorBefore: string;
-  transcript: string;
+type Scope = Omit<ClassificationSource, "transcriptRevision">;
+type Context = { token: string; source: Scope };
+type Arguments = {
+  context_token: string;
+  answer_outcome: ConversationStateProposal["answerOutcome"];
+  support_state: ConversationStateProposal["supportState"];
+  supporting_text: string;
 };
+type Result = { call_id: string; status: "accepted" | "rejected"; reason: string };
 type AdapterEvent = LessonRuntimeEvent extends infer E ? (E extends { atMs: number } ? Omit<E, "atMs"> : never) : never;
 type Message = { id: string; speaker: "Learner" | "Tutor"; text: string; final: boolean };
 const normalize = (text: string) =>
@@ -56,13 +57,26 @@ export class CountingProposals {
   private learnerItem?: string;
   private response?: {
     id: string;
+    turnToken?: string;
+    source: Scope;
     done: boolean;
+    completed: boolean;
     spoken: boolean;
     calls: number;
-    accepted?: Context;
-    proposal?: ConversationStateProposal;
     rejected: boolean;
+    pending?: { callId: string; args: Arguments; learnerRevision?: number };
+    validatedLearnerRevision?: number;
+    proposal?: ConversationStateProposal;
+    proposalSource?: ClassificationSource;
+    transcript?: string;
   };
+  private nextContext?: Context;
+  private contextAcknowledged = false;
+  private learnerRevision = 0;
+  private observation?: { source: Scope; learnerRevision: number; outcome: ConversationStateProposal["answerOutcome"] };
+  private continuationUsed = false;
+  private continuationRequested = false;
+  private results: Result[] = [];
   private seenResponses = new Set<string>();
   private consumedCalls = new Set<string>();
   private context?: Context;
@@ -80,17 +94,49 @@ export class CountingProposals {
       COUNTING_LESSON,
     ).state;
   }
+  private scope(): Scope {
+    return { ...runtimeSource(this.state), nodeId: this.state.nodeId };
+  }
+  private matches(source: Scope): boolean {
+    const current = this.scope();
+    return Object.keys(source).every(key => source[key as keyof Scope] === current[key as keyof Scope]);
+  }
+  get learnerAnswerAccepted(): boolean {
+    return (
+      !!this.observation &&
+      this.matches(this.observation.source) &&
+      this.observation.learnerRevision === this.learnerRevision &&
+      this.observation.outcome === "correct" &&
+      !this.stopped
+    );
+  }
+  get hasPending(): boolean {
+    return !!this.response?.pending;
+  }
   speechStarted(itemId?: string) {
     if (this.stopped || (itemId && this.seenLearnerItems.has(itemId))) return;
     if (itemId) this.seenLearnerItems.add(itemId);
+    this.rejectPending("superseded learner turn");
     this.context = undefined;
+    this.observation = undefined;
     this.response = undefined;
+    this.continuationRequested = false;
+    this.continuationUsed = false;
     this.learnerItem = itemId;
+    // Preserve speech order even if its transcription arrives after tutor text.
+    // The placeholder cannot ground a proposal until actual final text replaces it.
+    if (itemId && !this.messages.some(message => message.id === itemId))
+      this.messages.push({ id: itemId, speaker: "Learner", text: "", final: false });
     this.dispatch({ type: "child.turn.started", source: runtimeSource(this.state) });
+    if (itemId && this.contextAcknowledged && this.nextContext && this.matches(this.nextContext.source))
+      this.context = this.nextContext;
+    this.nextContext = undefined;
+    this.contextAcknowledged = false;
   }
   speechStopped(itemId?: string) {
     if (this.stopped || !itemId || itemId !== this.learnerItem) return;
     this.dispatch({ type: "child.turn.ended", source: runtimeSource(this.state) });
+    this.settlePending();
   }
   transcript(message: Message) {
     if (this.stopped) return;
@@ -99,59 +145,91 @@ export class CountingProposals {
     if (old && old.speaker !== message.speaker) return;
     if (old?.final && !message.final) return;
     if (old?.text === message.text && old.final === message.final) return;
+    if (message.speaker === "Learner") {
+      this.observation = undefined;
+      this.learnerRevision++;
+      // A first final transcript may settle an early call. A correction may not
+      // retroactively relabel a call that already had finalized evidence.
+      if (old?.final) {
+        this.rejectPending("learner transcript corrected");
+        if (this.response) this.response.rejected = true;
+        this.context = undefined;
+      }
+    }
     if (old) Object.assign(old, message);
     else this.messages.push({ ...message });
-    this.context = undefined;
     this.dispatch({
       type: "transcript.updated",
       source: runtimeSource(this.state),
       revision: this.state.transcriptRevision + 1,
       speaker: message.speaker === "Learner" ? "child" : "tutor",
     });
+    this.settlePending();
+    this.deliver();
   }
   responseCreated(id?: string) {
     if (this.stopped || !id || this.seenResponses.has(id)) return;
+    this.rejectPending("superseded response");
     this.seenResponses.add(id);
-    this.response = { id, done: false, spoken: false, calls: 0, rejected: false };
-    this.context = undefined;
+    this.response = {
+      id,
+      turnToken:
+        !this.state.childSpeaking && this.context && this.matches(this.context.source) ? this.context.token : undefined,
+      source: this.scope(),
+      done: false,
+      completed: false,
+      spoken: false,
+      calls: 0,
+      rejected: false,
+    };
+    this.continuationRequested = false;
   }
   spoken(id?: string) {
     if (id && this.response?.id === id) this.response.spoken = true;
   }
-  /** Snapshot and opaque capability are captured BEFORE sending context to the model. */
+  /** Reserve the NEXT learner turn before audio is admitted, never during a response. */
   issueContext(): string | undefined {
-    const source = classificationSource(this.state);
-    const learnerIndex = this.messages.findIndex(m => m.id === this.learnerItem && m.speaker === "Learner");
-    const learner = this.messages[learnerIndex];
     if (
       this.stopped ||
-      !source ||
-      this.state.consumedRevision === source.transcriptRevision ||
-      !learner?.final ||
-      !learner.text.trim() ||
-      !this.response ||
-      this.response.done ||
-      this.response.spoken ||
-      this.response.calls > 0 ||
-      this.context
+      (this.state.hasChildTurn && !this.response) ||
+      this.state.childSpeaking ||
+      this.nextContext ||
+      this.hasPending ||
+      this.continuationRequested ||
+      (this.response && !this.response.done)
     )
       return;
-    const tutorBefore =
-      this.messages
-        .slice(0, learnerIndex)
-        .filter(m => m.speaker === "Tutor")
-        .at(-1)?.text ?? "";
-    this.context = {
+    this.nextContext = {
       token: crypto.randomUUID(),
-      source: { ...source },
-      responseId: this.response.id,
-      learner: learner.text,
-      tutorBefore,
-      transcript: this.messages.map(m => `${m.speaker === "Learner" ? "Child" : "Tutor"}: ${m.text}`).join("\n"),
+      source: { ...this.scope(), childTurnId: this.state.childTurnId + 1 },
     };
-    return `Application counting context (data, not learner speech): ${JSON.stringify({ context_token: this.context.token, node: source.nodeId, learner_text: learner.text })}. Report the latest answer once with report_counting_answer, copying this token and the entire learner_text. Stay on this scene. If context arrived too late, do not guess a token.`;
+    this.contextAcknowledged = false;
+    return JSON.stringify({ context_token: this.nextContext.token });
   }
-  call(event: ToolCall): { status: "accepted" | "rejected"; reason: string } | undefined {
+  acknowledgeContext() {
+    const expected = { ...this.scope(), childTurnId: this.state.childTurnId + 1 };
+    if (
+      this.nextContext &&
+      Object.keys(expected).every(key => expected[key as keyof Scope] === this.nextContext!.source[key as keyof Scope])
+    )
+      this.contextAcknowledged = true;
+    else this.nextContext = undefined;
+  }
+  drainResults(): Result[] {
+    return this.results.splice(0);
+  }
+  expirePending() {
+    this.rejectPending("final learner transcript unavailable");
+  }
+  private rejectPending(reason: string) {
+    const r = this.response;
+    if (!r?.pending) return;
+    this.results.push({ call_id: r.pending.callId, status: "rejected", reason });
+    r.pending = undefined;
+    r.rejected = true;
+    this.lastResult = `Rejected: ${reason}`;
+  }
+  call(event: ToolCall): void {
     if (
       this.stopped ||
       typeof event.call_id !== "string" ||
@@ -166,16 +244,22 @@ export class CountingProposals {
       this.lastResult = "Proposal limit reached; restart the experiment";
       return;
     }
-    this.consumedCalls.add(event.call_id); // Invalid calls consume their ID too.
+    this.consumedCalls.add(event.call_id);
+    const r = this.response;
+    const inResponse = !!r && event.response_id === r.id && !r.done && this.matches(r.source);
     const reject = (reason: string) => {
-      if (this.response) this.response.rejected = true;
+      if (inResponse) {
+        r.rejected = true;
+        this.rejectPending("additional rejected call");
+      }
       this.lastResult = `Rejected: ${reason}`;
-      return { status: "rejected" as const, reason };
+      this.results.push({ call_id: event.call_id as string, status: "rejected", reason });
     };
-    if (this.response) this.response.calls++;
+    if (inResponse) r.calls++;
+    if (!inResponse) return reject("stale response");
     if (event.name !== OUTCOME_TOOL.name) return reject("unknown tool");
     if (typeof event.arguments !== "string" || event.arguments.length > 4096) return reject("malformed arguments");
-    let args: Record<string, unknown>;
+    let args: Arguments;
     try {
       args = JSON.parse(event.arguments);
     } catch {
@@ -186,111 +270,146 @@ export class CountingProposals {
       typeof args !== "object" ||
       Array.isArray(args) ||
       Object.keys(args).sort().join(",") !== "answer_outcome,context_token,support_state,supporting_text" ||
-      !["none", "correct", "incorrect", "unclear"].includes(args.answer_outcome as string) ||
-      !["none", "needs_help"].includes(args.support_state as string) ||
+      !["none", "correct", "incorrect", "unclear"].includes(args.answer_outcome) ||
+      !["none", "needs_help"].includes(args.support_state) ||
       typeof args.supporting_text !== "string" ||
       args.supporting_text.length > 2000
     )
       return reject("malformed arguments");
-    const context = this.context;
-    const source = classificationSource(this.state);
     if (
-      !context ||
-      !source ||
-      args.context_token !== context.token ||
-      context.token === this.usedToken ||
-      event.response_id !== context.responseId ||
-      this.response?.id !== context.responseId ||
-      this.response.done ||
-      Object.keys(context.source).some(
-        key => context.source[key as keyof ClassificationSource] !== source[key as keyof ClassificationSource],
-      )
+      this.continuationUsed ||
+      !this.context ||
+      r.turnToken !== this.context.token ||
+      !this.matches(this.context.source) ||
+      args.context_token !== this.context.token ||
+      args.context_token === this.usedToken ||
+      r.calls !== 1
     )
       return reject("stale context");
-    if (args.supporting_text !== context.learner) return reject("unmatched learner evidence");
-    const text = normalize(context.learner);
+    this.usedToken = args.context_token;
+    const learner = this.messages.find(m => m.id === this.learnerItem && m.speaker === "Learner");
+    r.pending = { callId: event.call_id, args, learnerRevision: learner?.final ? this.learnerRevision : undefined };
+    this.lastResult = "Waiting for finalized learner evidence";
+    this.settlePending();
+  }
+  private settlePending() {
+    const r = this.response;
+    const pending = r?.pending;
+    if (!r || !pending) return;
+    const fail = (reason: string) => this.rejectPending(reason);
+    if (r.rejected || !this.context || !this.matches(this.context.source) || !this.matches(r.source))
+      return fail("stale context");
+    const source = classificationSource(this.state);
+    const learnerIndex = this.messages.findIndex(m => m.id === this.learnerItem && m.speaker === "Learner");
+    const learner = this.messages[learnerIndex];
+    if (!source || !learner?.final) return;
+    if (pending.learnerRevision !== undefined && pending.learnerRevision !== this.learnerRevision)
+      return fail("learner transcript corrected");
+    const args = pending.args;
+    if (args.supporting_text !== learner.text || !learner.text.trim()) return fail("unmatched learner evidence");
+    const tutorBefore =
+      this.messages
+        .slice(0, learnerIndex)
+        .filter(m => m.speaker === "Tutor")
+        .at(-1)?.text ?? "";
+    const text = normalize(learner.text);
     const count = total.exec(text)?.[1];
     const correct = count === "one" || count === "1";
-    if (args.support_state === "none" && help.test(text)) return reject("unresolved help");
-    if (args.support_state === "needs_help" && !help.test(text)) return reject("unsupported help judgment");
+    if (args.support_state === "none" && help.test(text)) return fail("unresolved help");
+    if (args.support_state === "needs_help" && !help.test(text)) return fail("unsupported help judgment");
     if (
       args.answer_outcome === "correct" &&
       (!correct ||
         args.support_state !== "none" ||
         navigation.test(text) ||
-        /\b(one|1|single|only)\b|\ba duck\b/i.test(context.tutorBefore))
+        /\b(one|1|single|only)\b|\ba duck\b/i.test(tutorBefore))
     )
-      return reject("unsupported settled answer");
+      return fail("unsupported settled answer");
     if (args.answer_outcome === "incorrect" && (!count || correct || help.test(text)))
-      return reject("unsupported incorrect answer");
-    if (args.answer_outcome === "none" && count) return reject("unsupported no-attempt judgment");
-    if (args.answer_outcome === "unclear" && count) return reject("unsupported unclear judgment");
-    const proposal: ConversationStateProposal = {
-      nodeId: context.source.nodeId,
-      transcriptRevision: context.source.transcriptRevision,
+      return fail("unsupported incorrect answer");
+    if (args.answer_outcome === "none" && count) return fail("unsupported no-attempt judgment");
+    if (args.answer_outcome === "unclear" && count) return fail("unsupported unclear judgment");
+    r.proposal = {
+      nodeId: source.nodeId,
+      transcriptRevision: source.transcriptRevision,
       childActivity: "unknown",
-      answerOutcome: args.answer_outcome as ConversationStateProposal["answerOutcome"],
-      supportState: args.support_state as ConversationStateProposal["supportState"],
+      answerOutcome: args.answer_outcome,
+      supportState: args.support_state,
       tutorState: "unknown",
     };
-    this.usedToken = context.token;
-    this.response.accepted = context;
-    this.response.proposal = proposal;
-    this.lastResult = `Validated: ${proposal.answerOutcome} · ${proposal.supportState}`;
-    return {
+    r.proposalSource = source;
+    r.transcript = this.messages.map(m => `${m.speaker === "Learner" ? "Child" : "Tutor"}: ${m.text}`).join("\n");
+    const validation = reduceLessonRuntime(
+      this.state,
+      {
+        type: "proposal.received",
+        source,
+        proposal: r.proposal,
+        transcriptSnapshot: r.transcript,
+        atMs: performance.now(),
+      },
+      COUNTING_LESSON,
+    );
+    if (validation.state.consumedRevision !== source.transcriptRevision) return fail("reducer rejected proposal");
+    r.validatedLearnerRevision = this.learnerRevision;
+    r.pending = undefined;
+    this.lastResult = `Validated: ${args.answer_outcome} · ${args.support_state}`;
+    this.results.push({
+      call_id: pending.callId,
       status: "accepted",
-      reason: "proposal validated; awaiting successful response completion; no transition or tutor acknowledgment",
-    };
+      reason: "proposal grounded; awaiting response completion; no tutor acknowledgment or transition",
+    });
+    this.deliver();
+  }
+  private deliver() {
+    const r = this.response;
+    if (!r?.done || !r.completed || r.rejected || r.calls !== 1 || !r.proposal || !r.proposalSource || this.observation)
+      return;
+    const source = classificationSource(this.state);
+    if (!source || !this.matches(r.source) || r.validatedLearnerRevision !== this.learnerRevision) return;
+    // Tutor revisions may supersede conversation state before delivery. The
+    // grounded learner observation remains diagnostic, never transition authority.
+    if (source.transcriptRevision === r.proposalSource.transcriptRevision) {
+      this.dispatch({
+        type: "proposal.received",
+        source: r.proposalSource,
+        proposal: r.proposal,
+        transcriptSnapshot: r.transcript,
+      });
+      if (this.state.consumedRevision !== source.transcriptRevision) return;
+    }
+    this.observation = { source: r.source, learnerRevision: this.learnerRevision, outcome: r.proposal.answerOutcome };
+    this.lastResult = `Accepted: ${r.proposal.answerOutcome} · ${r.proposal.supportState}`;
   }
   responseDone(id?: string, status?: string) {
     const r = this.response;
     if (!id || r?.id !== id || r.done) return;
     r.done = true;
-    const c = r.accepted;
-    const source = classificationSource(this.state);
-    if (
-      status !== "completed" ||
-      r.rejected ||
-      r.calls !== 1 ||
-      !c ||
-      !r.proposal ||
-      !source ||
-      Object.keys(c.source).some(
-        key => c.source[key as keyof ClassificationSource] !== source[key as keyof ClassificationSource],
-      )
-    ) {
+    r.completed = status === "completed";
+    if (!r.completed) {
+      this.rejectPending("cancelled response");
       r.rejected = true;
-      if (c) this.lastResult = "Rejected: cancelled or superseded response";
-      return;
     }
-    this.lastResult = `Accepted: ${r.proposal.answerOutcome} · ${r.proposal.supportState}`;
-    this.dispatch({
-      type: "proposal.received",
-      source: c.source,
-      proposal: r.proposal,
-      transcriptSnapshot: c.transcript,
-    });
-    if (this.state.consumedRevision !== c.source.transcriptRevision) r.rejected = true;
+    this.deliver();
   }
-  /** Only a single accepted tool-only response may continue; never duplicate spoken feedback. */
-  takeContinuation(): boolean {
+  /** One continuation total per learner turn, including any rejected-tool recovery. */
+  takeContinuation(): "accepted" | "recovery" | undefined {
     const r = this.response;
-    const c = r?.accepted;
-    const source = classificationSource(this.state);
     if (
+      this.stopped ||
       !r?.done ||
-      !c ||
+      !r.completed ||
       r.spoken ||
-      r.rejected ||
-      r.calls !== 1 ||
-      !source ||
-      Object.keys(c.source).some(
-        key => c.source[key as keyof ClassificationSource] !== source[key as keyof ClassificationSource],
-      )
+      r.calls === 0 ||
+      r.pending ||
+      !this.matches(r.source) ||
+      this.state.childSpeaking ||
+      this.continuationUsed
     )
-      return false;
-    r.accepted = undefined;
-    return true;
+      return;
+    this.continuationUsed = true;
+    this.continuationRequested = true;
+    return r.rejected || !r.proposal ? "recovery" : "accepted";
   }
   output(active: boolean) {
     this.dispatch({ type: "output.activity", source: runtimeSource(this.state), state: active ? "active" : "quiet" });
@@ -298,6 +417,9 @@ export class CountingProposals {
   stop() {
     this.stopped = true;
     this.context = undefined;
+    this.nextContext = undefined;
+    this.observation = undefined;
+    this.results = [];
     this.response = undefined;
     this.dispatch({ type: "stop", runtimeId: this.state.runtimeId });
   }

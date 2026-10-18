@@ -75,7 +75,9 @@ export default function GrokCounting() {
         {snapshot?.echoedModel ?? "unavailable (serving identity unverified)"}
       </p>
       <p aria-label="Tool proposal">
-        {snapshot?.proposal ?? "No proposal"} · Answer accepted: {snapshot?.answerAccepted ? "yes" : "no"}
+        {snapshot?.proposal ?? "No proposal"} · Learner answer recorded:{" "}
+        {snapshot?.learnerAnswerAccepted ? "yes" : "no"} · Revision-bound answer:{" "}
+        {snapshot?.answerAccepted ? "yes" : "no"}
       </p>
       <section className="space-y-2 rounded border p-4" aria-label="Conversation transcript">
         <h2 className="font-semibold">Transcript</h2>
