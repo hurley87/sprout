@@ -31,6 +31,11 @@ export class GrokVoice {
   private worklet?: AudioWorkletNode;
   private timer?: ReturnType<typeof setTimeout>;
   private ready = false;
+  private configurationInstructions?: string;
+  private microphoneEnded = () =>
+    this.fail(
+      "The microphone disconnected or its permission was revoked. Reconnect it, allow microphone access, and press Start again.",
+    );
   private sources = new Set<AudioBufferSourceNode>();
   private nextTime = 0;
   private item?: { id: string; contentIndex: number; segments: { start: number; duration: number }[] };
@@ -71,6 +76,12 @@ export class GrokVoice {
         return;
       }
       this.stream = stream;
+      const tracks = stream.getAudioTracks();
+      tracks.forEach(track => track.addEventListener("ended", this.microphoneEnded));
+      if (!tracks.length || tracks.some(track => track.readyState === "ended")) {
+        this.microphoneEnded();
+        return;
+      }
       await context.audioWorklet.addModule("/experiments/grok-counting/microphone.js");
       if (this.stopped) return;
       this.microphone = context.createMediaStreamSource(stream);
@@ -109,34 +120,6 @@ export class GrokVoice {
       const socket = (this.socket = new WebSocket(`wss://api.x.ai/v1/realtime?model=${GROK_MODEL}`, [
         `xai-client-secret.${credential.value}`,
       ]));
-      socket.onopen = () => {
-        if (this.stopped) return;
-        const node = COUNTING_LESSON.nodes[INITIAL_COUNTING_NODE_ID];
-        this.send({
-          type: "session.update",
-          session: {
-            voice: "eve",
-            tools: [],
-            turn_detection: { type: "server_vad" },
-            instructions: [
-              COUNTING_LESSON.tutor.persona,
-              COUNTING_LESSON.tutor.sessionGuidance,
-              COUNTING_LESSON.tutor.nodeInstruction,
-              `Current screen: ${JSON.stringify(node.presentation)}.`,
-              node.learningObjective,
-              node.tutorBrief,
-              "This experiment stays on this first scene for the entire session. Never announce a next scene.",
-            ].join("\n"),
-            audio: {
-              input: {
-                format: { type: "audio/pcm", rate: context.sampleRate },
-                transcription: { model: "grok-transcribe" },
-              },
-              output: { format: { type: "audio/pcm", rate: 24000 } },
-            },
-          },
-        });
-      };
       socket.onmessage = event => {
         if (this.stopped) return;
         try {
@@ -153,7 +136,16 @@ export class GrokVoice {
   }
   private receive(event: {
     type?: string;
-    session?: { model?: string };
+    session?: {
+      model?: string;
+      instructions?: string;
+      turn_detection?: { type?: string | null };
+      tools?: unknown[];
+      audio?: {
+        input?: { format?: { type?: string; rate?: number }; transcription?: { model?: string } };
+        output?: { format?: { type?: string; rate?: number } };
+      };
+    };
     response?: { id?: string };
     response_id?: string;
     item_id?: string;
@@ -164,7 +156,51 @@ export class GrokVoice {
     const type = event.type ?? "";
     if ((type === "session.created" || type === "session.updated") && typeof event.session?.model === "string")
       this.state.echoedModel = event.session.model;
-    if (type === "session.updated" && !this.ready) {
+    // Default/early updates are not proof that our configuration was applied.
+    // xAI echoes configuration fields, not a client request/event ID.
+    if (type === "session.created" && !this.configurationInstructions) {
+      const node = COUNTING_LESSON.nodes[INITIAL_COUNTING_NODE_ID];
+      this.configurationInstructions = [
+        COUNTING_LESSON.tutor.persona,
+        COUNTING_LESSON.tutor.sessionGuidance,
+        COUNTING_LESSON.tutor.nodeInstruction,
+        `Current screen: ${JSON.stringify(node.presentation)}.`,
+        node.learningObjective,
+        node.tutorBrief,
+        "This experiment stays on this first scene for the entire session. Never announce a next scene.",
+      ].join("\n");
+      this.send({
+        type: "session.update",
+        session: {
+          voice: "eve",
+          tools: [],
+          turn_detection: { type: "server_vad" },
+          instructions: this.configurationInstructions,
+          audio: {
+            input: {
+              format: { type: "audio/pcm", rate: this.context!.sampleRate },
+              transcription: { model: "grok-transcribe" },
+            },
+            output: { format: { type: "audio/pcm", rate: 24000 } },
+          },
+        },
+      });
+    }
+    const session = event.session;
+    if (
+      type === "session.updated" &&
+      !this.ready &&
+      this.configurationInstructions &&
+      session?.instructions === this.configurationInstructions &&
+      session.turn_detection?.type === "server_vad" &&
+      Array.isArray(session.tools) &&
+      session.tools.length === 0 &&
+      session.audio?.input?.format?.type === "audio/pcm" &&
+      session.audio.input.format.rate === this.context?.sampleRate &&
+      session.audio.input.transcription?.model === "grok-transcribe" &&
+      session.audio.output?.format?.type === "audio/pcm" &&
+      session.audio.output.format.rate === 24000
+    ) {
       this.ready = true;
       clearTimeout(this.timer);
       this.state.status = "listening";
@@ -290,6 +326,7 @@ export class GrokVoice {
       this.socket.onopen = this.socket.onmessage = this.socket.onerror = this.socket.onclose = null;
       this.socket.close();
     }
+    this.stream?.getAudioTracks().forEach(track => track.removeEventListener("ended", this.microphoneEnded));
     this.stream?.getTracks().forEach(track => track.stop());
     if (this.worklet) {
       this.worklet.port.onmessage = null;

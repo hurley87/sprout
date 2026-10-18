@@ -14,7 +14,9 @@ test("provider-free voice scene, captions, interruption, Stop/restart and page e
       const event = JSON.parse(String(message));
       sent.push(event);
       if (event.type === "session.update")
-        socket.send(JSON.stringify({ type: "session.updated", session: { model: "offline-fixture" } }));
+        socket.send(
+          JSON.stringify({ type: "session.updated", session: { ...event.session, model: "offline-fixture" } }),
+        );
       if (event.type === "response.create") {
         for (const fixture of [
           { type: "response.created", response: { id: "r1" } },
@@ -35,6 +37,7 @@ test("provider-free voice scene, captions, interruption, Stop/restart and page e
         setTimeout(() => socket.send(JSON.stringify({ type: "input_audio_buffer.speech_started" })), 200);
       }
     });
+    socket.send(JSON.stringify({ type: "session.created", session: { instructions: "" } }));
   });
   await page.addInitScript(() => {
     const original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
@@ -58,6 +61,7 @@ test("provider-free voice scene, captions, interruption, Stop/restart and page e
   await expect(page.locator('[data-node-id="count-1-duck"]')).toBeVisible();
   await page.getByRole("button", { name: "Stop", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("stopped");
+  await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0);
   await expect.poll(() => closed).toBe(1);
   expect(
     await page.evaluate(() =>
@@ -72,6 +76,7 @@ test("provider-free voice scene, captions, interruption, Stop/restart and page e
   await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide")));
   await expect.poll(() => closed).toBe(2);
   await expect(page.getByRole("status")).toContainText("stopped");
+  await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0);
 });
 
 test("shows authorization errors and permits a new attempt", async ({ page }) => {
@@ -81,5 +86,65 @@ test("shows authorization errors and permits a new attempt", async ({ page }) =>
   await page.goto("/experiments/grok-counting");
   await page.getByRole("button", { name: "Start", exact: true }).click();
   await expect(page.getByRole("main").getByRole("alert")).toHaveText("Configure the test voice key.");
+  await expect(page.getByRole("button", { name: "Start", exact: true })).toBeEnabled();
+});
+
+test("waits for matching configuration and reports unexpected microphone termination", async ({ page }) => {
+  const sent: { type: string }[] = [];
+  let acknowledge: (() => void) | undefined;
+  let closed = false;
+  await page.route("**/api/experiments/grok-counting", route =>
+    route.fulfill({ json: { value: "offline-test", expires_at: Date.now() / 1000 + 60 } }),
+  );
+  await page.routeWebSocket("wss://api.x.ai/**", socket => {
+    socket.onClose(() => {
+      closed = true;
+    });
+    socket.onMessage(message => {
+      const event = JSON.parse(String(message));
+      sent.push(event);
+      if (event.type === "session.update") {
+        socket.send(
+          JSON.stringify({ type: "session.updated", session: { ...event.session, instructions: "default" } }),
+        );
+        acknowledge = () => {
+          socket.send(JSON.stringify({ type: "session.updated", session: event.session }));
+          socket.send(JSON.stringify({ type: "session.updated", session: event.session }));
+          socket.send(JSON.stringify({ type: "session.created" }));
+        };
+      }
+    });
+    socket.send(JSON.stringify({ type: "session.updated", session: { instructions: "default" } }));
+    socket.send(JSON.stringify({ type: "session.created" }));
+  });
+  await page.addInitScript(() => {
+    const original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    navigator.mediaDevices.getUserMedia = async constraints => {
+      const stream = await original(constraints);
+      Object.assign(window, { grokTestTracks: stream.getTracks() });
+      return stream;
+    };
+  });
+  await page.goto("/experiments/grok-counting");
+  await page.getByRole("button", { name: "Start", exact: true }).click();
+  await expect.poll(() => Boolean(acknowledge)).toBe(true);
+  await expect(page.getByRole("status")).toContainText("connecting");
+  await page.waitForTimeout(150); // Allow multiple microphone worklet batches while acknowledgment is pending.
+  expect(sent.map(event => event.type)).toEqual(["session.update"]);
+  acknowledge!();
+  await expect(page.getByRole("status")).toContainText("listening");
+  await expect.poll(() => sent.some(event => event.type === "input_audio_buffer.append")).toBe(true);
+  expect(sent.filter(event => event.type === "response.create")).toHaveLength(1);
+  expect(sent.filter(event => event.type === "conversation.item.create")).toHaveLength(1);
+  expect(sent.filter(event => event.type === "session.update")).toHaveLength(1);
+  // Simulate the browser's device-loss event; this is not a physical unplug/permission test.
+  await page.evaluate(() => {
+    const tracks = (window as unknown as { grokTestTracks: MediaStreamTrack[] }).grokTestTracks;
+    tracks[0].stop();
+    tracks[0].dispatchEvent(new Event("ended"));
+  });
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("microphone disconnected");
+  await expect(page.getByRole("status")).toContainText("error");
+  await expect.poll(() => closed).toBe(true);
   await expect(page.getByRole("button", { name: "Start", exact: true })).toBeEnabled();
 });

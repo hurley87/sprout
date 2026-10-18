@@ -24,8 +24,21 @@ class Socket {
     this.onmessage?.({ data: JSON.stringify(value) });
   }
 }
-const track = { stop: vi.fn() };
-const stream = { getTracks: () => [track] };
+function microphoneTrack() {
+  const events = new EventTarget();
+  return {
+    readyState: "live",
+    stop: vi.fn(),
+    addEventListener: vi.fn(events.addEventListener.bind(events)),
+    removeEventListener: vi.fn(events.removeEventListener.bind(events)),
+    end() {
+      this.readyState = "ended";
+      events.dispatchEvent(new Event("ended"));
+    },
+  };
+}
+let track = microphoneTrack();
+const stream = { getTracks: () => [track], getAudioTracks: () => [track] };
 const node = () => ({ connect: vi.fn(), disconnect: vi.fn() });
 const sourceNode = () => ({
   ...node(),
@@ -77,7 +90,7 @@ beforeEach(() => {
   Socket.instances = [];
   Context.instances = [];
   Worklet.instances = [];
-  track.stop.mockClear();
+  track = microphoneTrack();
   vi.stubGlobal("WebSocket", Socket);
   vi.stubGlobal("AudioContext", Context);
   vi.stubGlobal("AudioWorkletNode", Worklet);
@@ -96,7 +109,8 @@ async function connected() {
   await voice.start();
   const socket = Socket.instances[0];
   socket.onopen?.();
-  socket.event({ type: "session.updated", session: { model: "echoed-model" } });
+  socket.event({ type: "session.created", session: { model: "echoed-model" } });
+  socket.event({ type: "session.updated", session: socket.sent[0].session });
   return { voice, socket, context: Context.instances[0], worklet: Worklet.instances[0] };
 }
 it("configures the fixed scene, starts once after acknowledgment and streams PCM", async () => {
@@ -108,7 +122,10 @@ it("configures the fixed scene, starts once after acknowledgment and streams PCM
     session: { tools: [], audio: { input: { format: { rate: 24000 } } } },
   });
   expect(JSON.stringify(socket.sent[0])).toContain("hello-duck");
-  socket.event({ type: "session.updated" });
+  socket.event({ type: "session.updated", session: socket.sent[0].session });
+  socket.event({ type: "session.created" });
+  expect(socket.sent.filter(e => e.type === "session.update")).toHaveLength(1);
+  expect(socket.sent.filter(e => e.type === "conversation.item.create")).toHaveLength(1);
   expect(socket.sent.filter(e => e.type === "response.create")).toHaveLength(1);
   worklet.port.onmessage?.({ data: new Float32Array([0, 1, -1]) });
   expect(socket.sent.at(-1)).toEqual({
@@ -259,4 +276,121 @@ it("does not restart a stopped or already-started instance", async () => {
   await voice.start();
   expect(Socket.instances).toHaveLength(1);
   expect(Context.instances).toHaveLength(1);
+});
+
+it("ignores premature/default updates and gates microphone and opening until our configuration is acknowledged", async () => {
+  const voice = new GrokVoice(s => updates.push(s));
+  await voice.start();
+  const socket = Socket.instances[0];
+  const worklet = Worklet.instances[0];
+  socket.onopen?.();
+  socket.event({ type: "session.updated", session: { instructions: "default" } });
+  worklet.port.onmessage?.({ data: new Float32Array([1]) });
+  expect(socket.sent).toHaveLength(0);
+  expect(updates.at(-1)?.status).toBe("connecting");
+  socket.event({ type: "session.created", session: { instructions: "" } });
+  expect(socket.sent).toHaveLength(1);
+  const intended = socket.sent[0].session as Record<string, unknown>;
+  for (const session of [
+    {},
+    { ...intended, instructions: "default" },
+    { ...intended, turn_detection: { type: null } },
+    { ...intended, tools: [{ type: "function" }] },
+    {
+      ...intended,
+      audio: {
+        input: { format: { type: "audio/pcm", rate: 48000 } },
+        output: { format: { type: "audio/pcm", rate: 24000 } },
+      },
+    },
+    {
+      ...intended,
+      audio: {
+        input: { format: { type: "audio/pcm", rate: 24000 }, transcription: { model: "grok-transcribe" } },
+        output: { format: { type: "audio/pcmu" } },
+      },
+    },
+    {
+      ...intended,
+      audio: {
+        input: { format: { type: "audio/pcm", rate: 24000 } },
+        output: { format: { type: "audio/pcm", rate: 24000 } },
+      },
+    },
+  ]) {
+    socket.event({ type: "session.updated", session });
+    worklet.port.onmessage?.({ data: new Float32Array([1]) });
+    expect(socket.sent).toHaveLength(1);
+    expect(updates.at(-1)?.status).toBe("connecting");
+  }
+  // Real provider echoes may add defaults and omit voice; compare supported configuration fields.
+  const { voice: omittedVoice, ...echo } = intended;
+  void omittedVoice;
+  socket.event({ type: "session.updated", session: { ...echo, model: "echoed", extra_default: true } });
+  expect(updates.at(-1)?.status).toBe("listening");
+  expect(socket.sent.map(e => e.type)).toEqual(["session.update", "conversation.item.create", "response.create"]);
+  worklet.port.onmessage?.({ data: new Float32Array([1]) });
+  expect(socket.sent.at(-1)?.type).toBe("input_audio_buffer.append");
+  voice.stop();
+});
+it("keeps the startup deadline active after an unacknowledged update", async () => {
+  vi.useFakeTimers();
+  const voice = new GrokVoice(s => updates.push(s));
+  await voice.start();
+  const socket = Socket.instances[0];
+  socket.event({ type: "session.created" });
+  socket.event({ type: "session.updated", session: { instructions: "default" } });
+  vi.advanceTimersByTime(25_000);
+  expect(updates.at(-1)?.error).toContain("timed out");
+  expect(socket.close).toHaveBeenCalledOnce();
+});
+it("ends the session and disposes playback, connection and microphone listeners when a track ends unexpectedly", async () => {
+  const { voice, socket, context, worklet } = await connected();
+  socket.event({ type: "response.output_audio.delta", item_id: "a", delta: "AAA=" });
+  track.end();
+  expect(updates.at(-1)?.status).toBe("error");
+  expect(updates.at(-1)?.error).toContain("microphone disconnected");
+  expect(track.stop).toHaveBeenCalledOnce();
+  expect(track.removeEventListener).toHaveBeenCalledWith("ended", track.addEventListener.mock.calls[0][1]);
+  expect(socket.close).toHaveBeenCalledOnce();
+  expect(context.close).toHaveBeenCalledOnce();
+  expect(context.sources[0].stop).toHaveBeenCalledOnce();
+  expect(worklet.port.close).toHaveBeenCalledOnce();
+  voice.stop();
+});
+it("removes the ended listener before intentional Stop and ignores queued termination callbacks", async () => {
+  const { voice } = await connected();
+  const handler = track.addEventListener.mock.calls[0][1] as () => void;
+  track.stop.mockImplementation(() => track.end());
+  voice.stop();
+  handler();
+  expect(track.removeEventListener).toHaveBeenCalledOnce();
+  expect(updates.at(-1)?.status).toBe("stopped");
+  expect(updates.at(-1)?.error).toBeUndefined();
+});
+it("handles microphone termination while startup is pending", async () => {
+  let release!: () => void;
+  vi.stubGlobal(
+    "fetch",
+    () =>
+      new Promise<Response>(resolve => {
+        release = () => resolve(Response.json({ value: "late", expires_at: Date.now() / 1000 + 60 }));
+      }),
+  );
+  const voice = new GrokVoice(s => updates.push(s));
+  const pending = voice.start();
+  await flush();
+  track.end();
+  release();
+  await pending;
+  expect(updates.at(-1)?.error).toContain("microphone disconnected");
+  expect(Socket.instances).toHaveLength(0);
+});
+it("rejects an already-ended microphone instead of waiting for an event", async () => {
+  track.readyState = "ended";
+  const voice = new GrokVoice(s => updates.push(s));
+  await voice.start();
+  expect(updates.at(-1)?.error).toContain("microphone disconnected");
+  expect(track.stop).toHaveBeenCalledOnce();
+  expect(Socket.instances).toHaveLength(0);
 });
