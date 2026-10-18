@@ -89,6 +89,9 @@ export type CorrelationCode =
   | "turn.configuration.unacknowledged"
   | "turn.identity.mismatch"
   | "scope.identity.mismatch"
+  | "transcript.provisional"
+  | "transcript.provisional.replaced"
+  | "transcript.settled.replaced"
   | "transcript.final.corrected"
   | "response.id.missing"
   | "response.id.duplicate"
@@ -121,7 +124,7 @@ export type CorrelationDiagnostic = {
 export class CountingProposals {
   state;
   private messages: Message[] = [];
-  private learnerItem?: string;
+  private learner?: { itemId?: string; vadStopped: boolean; validated: boolean };
   private response?: {
     id: string;
     turnToken?: string;
@@ -132,7 +135,7 @@ export class CountingProposals {
     spoken: boolean;
     calls: number;
     rejected: boolean;
-    pending?: { callId: string; args: Arguments; learnerRevision?: number };
+    pending?: { callId: string; args: Arguments };
     validatedLearnerRevision?: number;
     proposal?: ConversationStateProposal;
     proposalSource?: ClassificationSource;
@@ -226,7 +229,7 @@ export class CountingProposals {
     this.response = undefined;
     this.continuationRequested = false;
     this.continuationUsed = false;
-    this.learnerItem = itemId;
+    this.learner = { itemId, vadStopped: false, validated: false };
     // Preserve speech order even if its transcription arrives after tutor text.
     // The placeholder cannot ground a proposal until actual final text replaces it.
     if (itemId && !this.messages.some(message => message.id === itemId))
@@ -246,16 +249,18 @@ export class CountingProposals {
   }
   speechStopped(itemId?: string) {
     if (this.stopped) return;
-    if (!itemId || itemId !== this.learnerItem) {
+    if (!itemId || itemId !== this.learner?.itemId) {
       this.diagnose(!itemId ? "turn.stop_id.missing" : "turn.stop_id.mismatch", "speech.stopped");
       return;
     }
+    if (!this.learner || this.learner.vadStopped) return;
+    this.learner.vadStopped = true;
     this.dispatch({ type: "child.turn.ended", source: runtimeSource(this.state) });
     this.settlePending();
   }
   transcript(message: Message, responseId?: string) {
     if (this.stopped) return;
-    if (message.speaker === "Learner" && message.id !== this.learnerItem) return;
+    if (message.speaker === "Learner" && message.id !== this.learner?.itemId) return;
     const old = this.messages.find(m => m.id === message.id);
     if (old && old.speaker !== message.speaker) return;
     if (old?.final && !message.final) return;
@@ -273,14 +278,22 @@ export class CountingProposals {
       if (message.final && /^(?:please )?(?:move on|stop|quit|finish)(?: please)?[.!]?$/i.test(message.text.trim()))
         this.endRequested = true;
       this.learnerRevision++;
-      // A first final transcript may settle an early call. A correction may not
-      // retroactively relabel a call that already had finalized evidence.
-      if (old?.final) {
+      // A provider "completed" before VAD stop is provisional. Until a proposal
+      // actually validates, same-item replacements retain the original turn token
+      // and are checked afresh against the tool's entire supporting text. VAD stop
+      // makes the latest completed text eligible; it cannot bind an early response.
+      // Once validated (even before response.done), a correction must revoke it,
+      // including when a continuation has since replaced this.response.
+      if (old?.final && this.learner?.validated) {
         this.contextFailure = "transcript.final.corrected";
         this.diagnose(this.contextFailure, "transcript.final");
         this.rejectPending("learner transcript corrected");
         if (this.response) this.response.rejected = true;
         this.context = undefined;
+      } else if (message.final) {
+        if (!this.learner?.vadStopped)
+          this.diagnose(old?.final ? "transcript.provisional.replaced" : "transcript.provisional", "transcript.final");
+        else if (old?.final) this.diagnose("transcript.settled.replaced", "transcript.final");
       }
     }
     if (old) Object.assign(old, message);
@@ -346,7 +359,7 @@ export class CountingProposals {
       this.recoveryExhausted ||
       this.state.phase !== "active" ||
       this.learnerAnswerAccepted ||
-      (this.state.hasChildTurn && (!this.response || !this.messages.find(m => m.id === this.learnerItem)?.final)) ||
+      (this.state.hasChildTurn && (!this.response || !this.messages.find(m => m.id === this.learner?.itemId)?.final)) ||
       this.state.childSpeaking ||
       this.hasReservedContext ||
       this.hasPending ||
@@ -466,8 +479,7 @@ export class CountingProposals {
                     : undefined;
     if (failure) return reject("stale context", failure);
     this.usedToken = args.context_token;
-    const learner = this.messages.find(m => m.id === this.learnerItem && m.speaker === "Learner");
-    r.pending = { callId: event.call_id, args, learnerRevision: learner?.final ? this.learnerRevision : undefined };
+    r.pending = { callId: event.call_id, args };
     this.lastResult = "Waiting for finalized learner evidence";
     this.settlePending();
   }
@@ -479,11 +491,9 @@ export class CountingProposals {
     if (r.rejected || !this.context || !this.matches(this.context.source) || !this.matches(r.source))
       return fail("stale context");
     const source = classificationSource(this.state);
-    const learnerIndex = this.messages.findIndex(m => m.id === this.learnerItem && m.speaker === "Learner");
+    const learnerIndex = this.messages.findIndex(m => m.id === this.learner?.itemId && m.speaker === "Learner");
     const learner = this.messages[learnerIndex];
-    if (!source || !learner?.final) return;
-    if (pending.learnerRevision !== undefined && pending.learnerRevision !== this.learnerRevision)
-      return fail("learner transcript corrected");
+    if (!source || !this.learner?.vadStopped || !learner?.final) return;
     const args = pending.args;
     if (args.supporting_text !== learner.text || !learner.text.trim()) return fail("unmatched learner evidence");
     const tutorBefore =
@@ -536,6 +546,7 @@ export class CountingProposals {
     );
     if (validation.state.consumedRevision !== source.transcriptRevision) return fail("reducer rejected proposal");
     this.missingRetries = 0;
+    this.learner.validated = true;
     r.validatedLearnerRevision = this.learnerRevision;
     r.pending = undefined;
     this.lastResult = `Validated: ${args.answer_outcome} · ${args.support_state}`;
@@ -676,7 +687,7 @@ export class CountingProposals {
   }
   get missingEligible(): boolean {
     const r = this.response;
-    const learner = this.messages.find(m => m.id === this.learnerItem);
+    const learner = this.messages.find(m => m.id === this.learner?.itemId);
     return (
       !this.stopped &&
       this.state.phase === "active" &&

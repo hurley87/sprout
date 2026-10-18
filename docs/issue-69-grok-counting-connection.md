@@ -1,10 +1,126 @@
 # Grok counting experiment
 
 See the [bounded paired evaluation](issue-69-grok-counting-evaluation.md) for the
-fixed checklist, current live evidence, transcript-correction blocker and
+fixed checklist, historical live evidence, transcript-correction blocker and
 **insufficient evidence** recommendation. Earlier live results below are historical.
 
-## Corrective review of commit 3a4bd6c
+## Same-item settlement correction (after `3711cc3`)
+
+The Grok adapter now tracks the current learner item's VAD-stop and proposal-validation
+state. A `completed` transcription before its matching VAD stop is provisional.
+The latest same-item completed text becomes eligible when VAD stops; a completed
+text first received after stop is immediately eligible. Further completed replacements
+before validation update the evidence without discarding that turn's original
+acknowledged token. Identical repeated finals and repeated matching VAD stops are
+idempotent. Interim-after-completed events retain the existing ignore policy; only
+actual completed text can ground a report. Older learner items remain fenced.
+
+No stabilization timer or provider round trip was added. Event-driven settlement
+is sufficient for the observed order: VAD stop gates eligibility, the response must
+have been created after that stop, and the existing bounded early-call wait still
+requires actual final text. Acceptance checks the latest entire learner text,
+current item/turn/scope, captured response ID and its originally bound token,
+followed by the unchanged current-scene answer grammar and reducer validation.
+An early response never acquires a token later. A mismatched quote, wrong object,
+wrong total, help, stale/missing IDs, old token or duplicate/extra call cannot grant
+success. Replacing unvalidated text does not relabel an already accepted proposal.
+
+Once **any proposal has validated**, a changed completed learner transcription
+invalidates the claimed context and revokes pending/retained success, even before
+`response.done` or after the response has been replaced by its continuation. The
+validation marker belongs to the learner item, not the active response. Returning
+to the earlier text cannot resurrect its token. A fresh configured learner turn is
+required. This preserves conservative correction behavior after acceptance.
+
+The 64-entry session-local diagnostic ring adds `transcript.provisional`,
+`transcript.provisional.replaced` and `transcript.settled.replaced` for pre-validation
+evidence. Existing `transcript.final.corrected` now identifies invalidation after
+validation. All entries remain closed codes and application counters; no captions,
+provider IDs, tokens or credentials enter the trace. There is no diagnostic persistence
+or new logging in the application.
+
+Progression still requires one validated report from a completed response, a separate
+current tutor acknowledgment, playback of that acknowledgment's own item, local
+drain and 250 ms quiet, followed by exact React render confirmation. No tool can
+supply acknowledgment, choose a node or award mastery. Missing-evidence timeout,
+one recovery continuation, new-turn/interruption/cancellation fences and Stop remain
+unchanged. Shared reducer, GPT-Live/Jev, curriculum and Catching Unicorns were not
+modified. The earlier evaluation and its failed result are preserved verbatim.
+
+### Corrective validation
+
+The new fake-clock transport regression reproduces the evaluation's exact order:
+partial completed at 8008, matching VAD stop at 9004, full completed at 9044,
+identical repeats at 9057 and 9662, response creation at 9120 and correct tool call
+at 9667 ms. It failed with `rejected` on the parent code; it now accepts the full
+answer. It also requires an actual separate acknowledgment/audio source to drain,
+then the reducer's quiet interval and exact render confirmation before the second
+scene's configuration. A browser regression verifies this with real Web Audio and
+React; it is provider-free and not a claim about live model reliability.
+
+Additional fixtures cover replacement before/after VAD stop and response creation,
+VAD-only promotion without a timer, identical events, wrong stop IDs, pre-stop
+responses, correction before/after validation and during continuation, correct-to-wrong
+and correct-to-correct revisions, supporting-text mismatch, stale tokens, wrong
+response/item, new turns, cancellation, interruption, Stop and wrong-object ASR.
+
+Final full unit suite: **1,657 tests in 72 files passed**, including 185 focused
+Grok auth/proposal/transport cases. Typecheck, lint and production build passed in
+an isolated tracked-source copy with identical installed dependencies and no
+credential files, avoiding the workspace's historical ignored build/review copies.
+All four changed TypeScript files were byte-compared with that final validation
+copy. All **18 selected provider-free browser tests** passed (Grok, root Counting
+and Catching Unicorns), including nine focused Grok browser cases. Changed-file
+Prettier, final diff checks and the staged configured-credential scan passed;
+retained provider evidence contains no opaque IDs, tokens, headers or audio.
+No real-service success is inferred from those provider-free checks.
+
+### One bounded live first-scene attempt
+
+October 18, 2026, 16:10–16:11 America/Toronto: **one provider session, one checksum-verified
+`answer-one` utterance, zero paid retries**, no other learner scenarios. Requested
+and server-echoed identity: `grok-voice-3.0`. The runtime was parent `3711cc3` plus
+this correction; the [sanitized live extract](evidence/issue-69-grok-settlement-live.json)
+records the exact adapter source SHA-256 so it can be checked against this commit.
+A temporary Playwright probe supplied only the existing adult synthetic WAV through
+a silent synthetic microphone, never physical/child audio or injected provider events.
+Only the first scene was exercised; no second-scene learner input was sent.
+
+| Browser ms | Actual observation |
+| --- | --- |
+| 7868 | Partial completed “I see”; `transcript.provisional` |
+| 8464 | Local `answer-one` playback ended |
+| 9061 | Matching provider VAD stop |
+| 9065 | Full completed “I see one dog.” (twice), then response creation; `transcript.settled.replaced` and `response.bound` |
+| 9475 | Identical final repeated |
+| 9480–9481 | One `incorrect` report quoting “I see one dog.”; rejected `unsupported incorrect answer`, **not stale context** |
+
+The synthetic source says “I see one duck.”; the final ASR said dog. The unchanged
+narrow number/object grammar abstained on that report. The one permitted recovery
+asked the learner to look again without giving the count or praising success.
+No credit or transition occurred through the 25-second post-answer render wait.
+The probe stopped and disposed the synthetic stream/browser; app track ended,
+app audio context closed and output was idle. The provider socket was still CLOSING
+at the bounded 1.5-second close sample; browser closure ended the attempt. Nineteen
+received output packets scheduled 19 sources and produced 19 source-ended callbacks.
+Those observations are not a human audible-playback or voice-quality assessment.
+Usage/billing totals were unavailable; no dollar estimate or cost advantage is claimed.
+
+**Result:** the original transcript-lifecycle rejection is fixed in the exact
+provider-free replay, and the live replacement reached a bound response without
+stale-context failure. **Live first-scene completion is not verified**: the single
+attempt was blocked by wrong-object transcription/unsupported evidence instead.
+No prompt, answer grammar or safety check was relaxed to force a pass, and no paid
+retry was made. Remaining edges include ASR fidelity, arbitrary late corrections
+(they still revoke accepted evidence before committed progression), provider
+misordering/missing IDs (safe rejection), and semantic/acknowledgment paraphrases
+outside the existing narrow recognizers. A future separately scoped live attempt
+would need the full correct final transcript, accepted report and genuine drained
+acknowledgment before it could establish live first-scene success. This correction
+does not establish general model reliability or change the earlier insufficient-evidence
+recommendation.
+
+## Corrective review of commit 3a4bd6c (historical)
 
 ### Answer validation
 

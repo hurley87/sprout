@@ -409,7 +409,7 @@ test("three authored scenes wait for real Web Audio drain, React render and matc
 });
 
 for (const corrected of [false, true]) {
-  test(`real-shaped opening keeps its token ready and ${corrected ? "diagnoses a corrected final" : "accepts an immediate settled answer"}`, async ({
+  test(`real-shaped opening keeps its token ready and ${corrected ? "revokes a validated answer on correction" : "accepts an immediate settled answer"}`, async ({
     page,
   }) => {
     const sent: { type: string; session?: { instructions: string } }[] = [];
@@ -458,24 +458,27 @@ for (const corrected of [false, true]) {
       item_id: "private-learner-id",
       transcript: "One duck.",
     });
-    if (corrected)
-      emit({
-        type: "conversation.item.input_audio_transcription.completed",
-        item_id: "private-learner-id",
-        transcript: "One dog.",
-      });
-    emit({
+    const call = {
       type: "response.function_call_arguments.done",
       call_id: "private-call-id",
       response_id: "private-response-id",
       name: "report_counting_answer",
       arguments: JSON.stringify({
         context_token: token,
-        answer_outcome: corrected ? "incorrect" : "correct",
+        answer_outcome: "correct",
         support_state: "none",
-        supporting_text: corrected ? "One dog." : "One duck.",
+        supporting_text: "One duck.",
       }),
-    });
+    };
+    emit(call);
+    if (corrected) {
+      emit({
+        type: "conversation.item.input_audio_transcription.completed",
+        item_id: "private-learner-id",
+        transcript: "One dog.",
+      });
+      emit({ ...call, call_id: "private-corrected-call-id" });
+    }
     emit({ type: "response.done", response: { id: "private-response-id", status: "completed" } });
     await expect(page.getByLabel("Tool proposal")).toContainText(
       `Learner answer recorded: ${corrected ? "no" : "yes"}`,
@@ -489,3 +492,86 @@ for (const corrected of [false, true]) {
     await page.getByRole("button", { name: "Stop", exact: true }).click();
   });
 }
+
+test("same-item provisional completed text settles without delay and advances only after actual acknowledgment drain", async ({
+  page,
+}) => {
+  const sent: { type: string; item?: { type?: string; output?: string }; session?: { instructions: string } }[] = [];
+  let emit!: (event: object) => void;
+  let token = "";
+  await page.route("**/api/experiments/grok-counting", route =>
+    route.fulfill({ json: { value: "offline", expires_at: Date.now() / 1000 + 60 } }),
+  );
+  await page.routeWebSocket("wss://api.x.ai/**", socket => {
+    emit = e => socket.send(JSON.stringify(e));
+    socket.onMessage(message => {
+      const e = JSON.parse(String(message));
+      sent.push(e);
+      if (e.type === "session.update") {
+        token = JSON.parse(e.session.instructions.match(/(\{"context_token".*?\})/)[1]).context_token;
+        emit({ type: "session.updated", session: e.session });
+      }
+    });
+    emit({ type: "session.created" });
+  });
+  await page.goto("/experiments/grok-counting");
+  await page.getByRole("button", { name: "Start", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("listening");
+  const final = (text: string) => ({
+    type: "conversation.item.input_audio_transcription.completed",
+    item_id: "private-learner",
+    transcript: text,
+  });
+  emit({ type: "input_audio_buffer.speech_started", item_id: "private-learner" });
+  emit(final("I see"));
+  emit({ type: "input_audio_buffer.speech_stopped", item_id: "private-learner" });
+  emit(final("I see one duck."));
+  emit(final("I see one duck."));
+  emit({ type: "response.created", response: { id: "private-answer" } });
+  emit(final("I see one duck."));
+  const call = {
+    type: "response.function_call_arguments.done",
+    call_id: "private-call",
+    response_id: "private-answer",
+    name: "report_counting_answer",
+    arguments: JSON.stringify({
+      context_token: token,
+      answer_outcome: "correct",
+      support_state: "none",
+      supporting_text: "I see one duck.",
+    }),
+  };
+  emit(call);
+  emit({ type: "response.done", response: { id: "private-answer", status: "completed" } });
+  emit(call);
+  await expect(page.getByLabel("Tool proposal")).toContainText("Learner answer recorded: yes");
+  await expect(page.locator('[data-node-id="count-1-duck"]')).toBeVisible();
+  expect(sent.filter(e => e.item?.type === "function_call_output")).toHaveLength(1);
+  expect(JSON.parse(sent.find(e => e.item?.type === "function_call_output")!.item!.output!).status).toBe("accepted");
+  // The tool-only response needs its real continuation, own-item acknowledgment
+  // and Web Audio playback; the tool alone cannot request a render.
+  emit({ type: "response.created", response: { id: "private-ack" } });
+  emit({
+    type: "response.output_audio_transcript.done",
+    response_id: "private-ack",
+    item_id: "private-ack-item",
+    transcript: "Yes, one duck.",
+  });
+  emit({
+    type: "response.output_audio.delta",
+    response_id: "private-ack",
+    item_id: "private-ack-item",
+    delta: Buffer.alloc(48000).toString("base64"),
+  });
+  emit({ type: "response.done", response: { id: "private-ack", status: "completed" } });
+  await expect(page.getByRole("status")).toContainText("Audio: playing");
+  await expect(page.locator('[data-node-id="count-1-duck"]')).toBeVisible();
+  expect(sent.filter(e => e.type === "session.update")).toHaveLength(1);
+  await expect(page.locator('[data-node-id="count-2-ducks"]')).toBeVisible();
+  await expect.poll(() => sent.filter(e => e.type === "session.update").length).toBe(2);
+  const diagnostics = await page.getByLabel("Correlation diagnostics", { exact: true }).textContent();
+  expect(diagnostics).toContain("transcript.provisional");
+  expect(diagnostics).toContain("transcript.settled.replaced");
+  expect(diagnostics).not.toMatch(/private-|I see|context_token|supporting_text/);
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
+});

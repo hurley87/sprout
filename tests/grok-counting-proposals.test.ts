@@ -440,8 +440,9 @@ it.each([
 });
 it("distinguishes a changed final transcript from a provider token mismatch", () => {
   const f = fixture();
+  expect(f.call()?.status).toBe("accepted");
   f.adapter.transcript({ id: "u1", speaker: "Learner", text: "One dog.", final: true });
-  f.call();
+  f.call({}, { call_id: "after-correction" });
   expect(f.adapter.correlationDiagnostics.at(-1)?.code).toBe("transcript.final.corrected");
   const other = fixture();
   other.call({ context_token: "not-issued" });
@@ -532,4 +533,170 @@ it("reuses an unused pending/acknowledged reservation across response boundaries
   expect(next).toBeDefined();
   expect(next).not.toBe(first);
   expect(a.issueContext()).toBeUndefined();
+});
+
+function settlingTurn() {
+  const adapter = new CountingProposals();
+  adapter.transcript({ id: "prompt", speaker: "Tutor", text: "How many ducks do you see?", final: true });
+  const token = JSON.parse(adapter.issueContext()!).context_token;
+  adapter.acknowledgeContext();
+  adapter.speechStarted("settling-item");
+  const transcript = (text: string, id = "settling-item") =>
+    adapter.transcript({ id, speaker: "Learner", text, final: true });
+  const event = (changes = {}, envelope = {}) => ({
+    call_id: "settling-call",
+    response_id: "settling-response",
+    name: OUTCOME_TOOL.name,
+    arguments: JSON.stringify({
+      context_token: token,
+      answer_outcome: "correct",
+      support_state: "none",
+      supporting_text: "I see one duck.",
+      ...changes,
+    }),
+    ...envelope,
+  });
+  return { adapter, transcript, event };
+}
+
+it.each(["before VAD stop", "after VAD stop", "after response creation"])(
+  "replaces unvalidated same-item completed evidence %s without rotating the token",
+  boundary => {
+    const { adapter, transcript, event } = settlingTurn();
+    transcript("I see");
+    if (boundary === "before VAD stop") transcript("I see one duck.");
+    adapter.speechStopped("settling-item");
+    if (boundary === "after VAD stop") transcript("I see one duck.");
+    adapter.responseCreated("settling-response");
+    if (boundary === "after response creation") transcript("I see one duck.");
+    const revision = adapter.state.transcriptRevision;
+    const diagnostics = adapter.correlationDiagnostics;
+    transcript("I see one duck.");
+    transcript("I see one duck.");
+    adapter.speechStopped("settling-item"); // Duplicate boundary is also idempotent.
+    expect(adapter.state.transcriptRevision).toBe(revision);
+    expect(adapter.correlationDiagnostics).toEqual(diagnostics);
+    adapter.call(event());
+    expect(adapter.drainResults()[0].status).toBe("accepted");
+    adapter.responseDone("settling-response", "completed");
+    expect(adapter.learnerAnswerAccepted).toBe(true);
+    expect(adapter.state.acknowledgmentObserved).toBe(false);
+    expect(adapter.state.conceptEvidence).toEqual({});
+    expect(adapter.issueContext()).toBeUndefined();
+    const trace = JSON.stringify(adapter.correlationDiagnostics);
+    expect(trace).toContain(
+      boundary === "before VAD stop" ? "transcript.provisional.replaced" : "transcript.settled.replaced",
+    );
+    expect(trace).not.toMatch(/I see|settling-item|settling-response|context_token|supporting_text/);
+  },
+);
+
+it("settles a complete pre-stop transcript on matching VAD stop without a timer or a repeated final", () => {
+  const { adapter, transcript, event } = settlingTurn();
+  transcript("I see one duck.");
+  expect(adapter.learnerAnswerAccepted).toBe(false);
+  adapter.speechStopped("wrong-item");
+  expect(adapter.state.childSpeaking).toBe(true);
+  adapter.speechStopped("settling-item");
+  adapter.responseCreated("settling-response");
+  adapter.call(event());
+  expect(adapter.drainResults()[0].status).toBe("accepted");
+});
+
+it("never lets provisional text retrofit a response created before VAD stop", () => {
+  const { adapter, transcript, event } = settlingTurn();
+  transcript("I see one duck.");
+  adapter.responseCreated("settling-response");
+  adapter.speechStopped("settling-item");
+  transcript("I see one duck.");
+  adapter.call(event());
+  expect(adapter.drainResults()[0].status).toBe("rejected");
+  expect(adapter.correlationDiagnostics.at(-1)?.code).toBe("response.before_turn_end");
+});
+
+it.each(["before response done", "after response done", "during continuation"])(
+  "revokes validated evidence on a changed final %s, including correct-to-correct text changes",
+  boundary => {
+    const { adapter, transcript, event } = settlingTurn();
+    transcript("I see");
+    adapter.speechStopped("settling-item");
+    transcript("I see one duck.");
+    adapter.responseCreated("settling-response");
+    adapter.call(event());
+    expect(adapter.drainResults()[0].status).toBe("accepted");
+    if (boundary !== "before response done") adapter.responseDone("settling-response", "completed");
+    if (boundary === "during continuation") {
+      expect(adapter.takeContinuation()).toBe("accepted");
+      adapter.responseCreated("continuation");
+    }
+    transcript("One duck."); // Same meaning still cannot relabel accepted evidence.
+    expect(adapter.correlationDiagnostics.at(-1)?.code).toBe("transcript.final.corrected");
+    adapter.responseDone(boundary === "during continuation" ? "continuation" : "settling-response", "completed");
+    expect(adapter.learnerAnswerAccepted).toBe(false);
+    expect(adapter.state.answerAccepted).toBe(false);
+    expect(adapter.state.acknowledgmentObserved).toBe(false);
+    transcript("I see one duck."); // Returning to old words cannot resurrect the token.
+    adapter.call(event({}, { call_id: "second-call" }));
+    expect(adapter.drainResults()[0].status).toBe("rejected");
+    expect(adapter.learnerAnswerAccepted).toBe(false);
+  },
+);
+
+it.each([{ supporting_text: "I see" }, { context_token: "stale-token" }])(
+  "still rejects mismatched evidence/token after provisional replacement: %j",
+  changes => {
+    const { adapter, transcript, event } = settlingTurn();
+    transcript("I see");
+    adapter.speechStopped("settling-item");
+    transcript("I see one duck.");
+    adapter.responseCreated("settling-response");
+    adapter.call(event(changes));
+    expect(adapter.drainResults()[0].status).toBe("rejected");
+    adapter.responseDone("settling-response", "completed");
+    expect(adapter.learnerAnswerAccepted).toBe(false);
+  },
+);
+
+it("uses the latest wrong correction rather than an earlier correct provisional answer", () => {
+  const { adapter, transcript, event } = settlingTurn();
+  transcript("I see one duck.");
+  adapter.speechStopped("settling-item");
+  transcript("Two ducks.");
+  adapter.responseCreated("settling-response");
+  adapter.call(event({ supporting_text: "Two ducks." }));
+  expect(adapter.drainResults()[0].reason).toBe("unsupported settled answer");
+  expect(adapter.learnerAnswerAccepted).toBe(false);
+});
+
+it.each(["new item", "wrong response", "cancelled", "partial total"])(
+  "cannot reuse provisional evidence across %s",
+  fault => {
+    const { adapter, transcript, event } = settlingTurn();
+    transcript("I see");
+    adapter.speechStopped("settling-item");
+    if (fault !== "partial total") transcript("I see one duck.");
+    if (fault === "new item") {
+      adapter.speechStarted("new-item");
+      adapter.speechStopped("new-item");
+      transcript("I see one duck.", "new-item");
+      transcript("Two ducks."); // Old item's callback cannot overwrite the new item.
+    }
+    adapter.responseCreated("settling-response");
+    if (fault === "cancelled") adapter.responseDone("settling-response", "cancelled");
+    adapter.call(event({}, fault === "wrong response" ? { response_id: "other-response" } : {}));
+    expect(adapter.drainResults()[0].status).toBe("rejected");
+    expect(adapter.learnerAnswerAccepted).toBe(false);
+  },
+);
+
+it("keeps the observed wrong-object ASR result rejected after settling the original turn", () => {
+  const { adapter, transcript, event } = settlingTurn();
+  transcript("I see");
+  adapter.speechStopped("settling-item");
+  transcript("I see one dog.");
+  adapter.responseCreated("settling-response");
+  adapter.call(event({ answer_outcome: "incorrect", supporting_text: "I see one dog." }));
+  expect(adapter.drainResults()[0].reason).toBe("unsupported incorrect answer");
+  expect(adapter.correlationDiagnostics.at(-1)?.code).toBe("response.bound");
+  expect(adapter.learnerAnswerAccepted).toBe(false);
 });

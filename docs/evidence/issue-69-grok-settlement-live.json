@@ -1,0 +1,173 @@
+{
+  "applicationParent": "3711cc3708e62ad67cfcd88046e10ec7cffa04a3",
+  "applicationSourceSHA256": "b1a4778447bd7659af2d0caea568460fbe682967fba0aaa6aeeb7b85f1cfc279",
+  "date": "2026-10-18",
+  "scenario": "Synthetic answer-one, first scene only",
+  "providerAttempts": 1,
+  "learnerUtterances": 1,
+  "paidRetries": 0,
+  "startedUTC": "2026-10-18T20:10:27.137Z",
+  "finishedUTC": "2026-10-18T20:11:02.124Z",
+  "configuredAndEchoedModel": "grok-voice-3.0",
+  "fixture": {
+    "name": "answer-one",
+    "text": "I see one duck.",
+    "sha256": "d21c98e59987603f19e0ef10c76df82225f835535cc516fa4f7557ea1ef651b6"
+  },
+  "clock": "Each ms is browser performance.now(), rounded to 1ms.",
+  "outcome": "Lifecycle replacement and original-turn binding succeeded; no scene transition because final ASR supplied dog instead of duck and the unchanged grammar rejected the incorrect report.",
+  "events": [
+    {
+      "ms": 1571,
+      "type": "session.created",
+      "model": "grok-voice-3.0"
+    },
+    {
+      "ms": 2661,
+      "type": "session.updated",
+      "model": "grok-voice-3.0"
+    },
+    {
+      "ms": 2771,
+      "type": "response.created",
+      "status": "in_progress"
+    },
+    {
+      "ms": 3820,
+      "type": "response.output_audio_transcript.done",
+      "text": "Hello, friend! How many ducks do you see?"
+    },
+    {
+      "ms": 3820,
+      "type": "response.output_audio.done",
+      "status": null
+    },
+    {
+      "ms": 3820,
+      "type": "response.done",
+      "status": "completed"
+    },
+    {
+      "ms": 7126,
+      "type": "learner.fixture.start",
+      "durationMs": 1341
+    },
+    {
+      "ms": 7342,
+      "type": "input_audio_buffer.speech_started",
+      "status": null
+    },
+    {
+      "ms": 7868,
+      "type": "conversation.item.input_audio_transcription.completed",
+      "text": "I see"
+    },
+    {
+      "ms": 8464,
+      "type": "learner.fixture.ended"
+    },
+    {
+      "ms": 9061,
+      "type": "input_audio_buffer.speech_stopped",
+      "status": null
+    },
+    {
+      "ms": 9065,
+      "type": "conversation.item.input_audio_transcription.completed",
+      "text": "I see one dog."
+    },
+    {
+      "ms": 9065,
+      "type": "conversation.item.input_audio_transcription.completed",
+      "text": "I see one dog."
+    },
+    {
+      "ms": 9065,
+      "type": "response.created",
+      "status": "in_progress"
+    },
+    {
+      "ms": 9475,
+      "type": "conversation.item.input_audio_transcription.completed",
+      "text": "I see one dog."
+    },
+    {
+      "ms": 9480,
+      "type": "response.function_call_arguments.done",
+      "name": "report_counting_answer",
+      "answer_outcome": "incorrect",
+      "support_state": "none",
+      "supporting_text": "I see one dog."
+    },
+    {
+      "ms": 9481,
+      "type": "tool.result",
+      "output": {
+        "status": "rejected",
+        "reason": "unsupported incorrect answer"
+      }
+    },
+    {
+      "ms": 9481,
+      "type": "response.done",
+      "status": "completed"
+    },
+    {
+      "ms": 9682,
+      "type": "response.created",
+      "status": "in_progress"
+    },
+    {
+      "ms": 11150,
+      "type": "response.output_audio_transcript.done",
+      "text": "Hmm, that sounds like a different animal. Can you look at the picture again and tell me what you see?"
+    },
+    {
+      "ms": 11150,
+      "type": "response.output_audio.done",
+      "status": null
+    },
+    {
+      "ms": 11150,
+      "type": "response.done",
+      "status": "completed"
+    },
+    {
+      "ms": 11785,
+      "type": "session.updated",
+      "model": "grok-voice-3.0"
+    }
+  ],
+  "correlationCodesInOrder": [
+    "context.issued",
+    "context.acknowledged",
+    "response.before_turn_start",
+    "context.claimed",
+    "transcript.provisional",
+    "transcript.settled.replaced",
+    "response.bound",
+    "response.bound",
+    "context.issued",
+    "context.acknowledged"
+  ],
+  "audioCounts": {
+    "audio.packet": 19,
+    "playback.scheduled": 19,
+    "playback.ended": 19
+  },
+  "cleanup": {
+    "status": "stopped \u00b7 Audio: idle",
+    "tracks": [
+      "ended"
+    ],
+    "contexts": [
+      "closed",
+      "running"
+    ],
+    "sockets": [
+      2
+    ]
+  },
+  "cleanupLimit": "Provider socket still CLOSING after bounded 1.5s wait; browser closed. Synthetic context running at sample was explicitly disposed before browser close. No physical microphone.",
+  "privacy": "Only synthetic fixture/tutor text and closed stage codes; no opaque IDs, tokens, headers, credentials or audio payloads. Correlation diagnostics contain no transcripts."
+}
