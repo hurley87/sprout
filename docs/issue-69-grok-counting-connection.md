@@ -43,7 +43,9 @@ and quiet state, then owns the existing 250 ms quiet-period decision and pending
 render. Exact React render confirmation remains mandatory before configuring the
 next scene, including final lesson completion. This is an explicit opt-in for the
 authored counting lesson; default GPT-Live/Jev and Catching Unicorns policies and
-default state shape remain unchanged.
+default state shape remain unchanged. Feedback invalidation also explicitly checks
+the current runtime, visit and learner turn using the reducer's existing source
+helper; stale invalidations cannot clear current accepted-answer or feedback evidence.
 
 ### Feedback policy and bounded recovery
 
@@ -53,13 +55,19 @@ feedback. There is no positive acknowledgment grammar. Empty or annotation-only
 text and a question-only utterance are missing feedback. A small deterministic
 veto holds explicit negatives such as “wrong”, “incorrect”, “not correct”, “try
 again”, and clear mismatched numbered duck/butterfly or direct total statements.
+Explicit negations such as “There aren't two ducks”, “That's not two ducks” and
+“There are not two ducks” also hold progression (straight or curly apostrophes).
 Thus “No, that's wrong.” and “Actually, there are three ducks.” with an accepted
-answer of two cannot automatically advance.
+answer of two cannot automatically advance. A narrow individual-object exception
+allows “Two ducks! You saw one duck, then another.”, including “and then” or
+“you counted”. It only exempts a reference to one of the expected objects followed
+by “then another” at the end of a sentence, when the authored total exceeds one;
+other mismatched totals and objects remain blocked.
 
 This guard is deliberately limited: it can miss paraphrases, other languages and
-implicit contradictions, and can reject benign references to another count or
-negated negative wording. It is not a semantic classifier or evidence of live
-model reliability. Generic encouragement is permitted only after independently
+implicit contradictions, and can reject other benign counting explanations or
+negated negative wording outside the narrow individual-object exception. It is not
+a semantic classifier or evidence of live model reliability. Generic encouragement is permitted only after independently
 validated correct learner evidence and actual completed feedback playback.
 
 Recovery distinguishes missing/invalid learner reports, `missing-feedback`,

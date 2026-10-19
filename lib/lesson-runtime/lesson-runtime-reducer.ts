@@ -809,7 +809,7 @@ export function reduceLessonRuntime(
       break;
     }
     case "tutor.feedback.invalidated":
-      if (state.feedbackPolicy !== "validated-answer") return ignored;
+      if (state.feedbackPolicy !== "validated-answer" || !sameSource(state, event.source)) return ignored;
       next = {
         ...next,
         feedbackDelivered: null,

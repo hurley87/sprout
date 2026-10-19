@@ -62,7 +62,7 @@ for (const outcome of ["recognized", "abstain", "missing audio", "budget consume
       response = "ack";
       emit({ type: "response.created", response: { id: response } });
     }
-    speak(response, "No, that is wrong.");
+    speak(response, "No, there isn't one duck.");
     await expect(page.getByLabel("Tool proposal")).toContainText("Learner answer recorded: yes");
     await expect(page.getByRole("status")).toContainText("Audio: idle");
     await expect(page.locator('[data-node-id="count-1-duck"]')).toBeVisible();

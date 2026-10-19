@@ -8,6 +8,7 @@ import {
   createLessonRuntime,
   reduceLessonRuntime,
   classificationSource,
+  runtimeSource,
   type LessonRuntimeEvent,
 } from "../lib/lesson-runtime/lesson-runtime-reducer";
 afterEach(() => vi.useRealTimers());
@@ -132,44 +133,51 @@ it("does not await Jev, and late results after transition cannot mutate state", 
   expect(f.a.state).toBe(state);
   expect(f.a.decisionTimeline.some(e => e.type === "classification.stale")).toBe(true);
 });
-it.each(["Great job!", "Two ducks.", "That's right, two ducks! Great counting!"])(
-  "permits non-contradictory delivered feedback without acknowledgment semantics: %s",
-  text => {
-    const f = fixture("grok-only", "count-2-ducks", "Two");
-    f.tutor(text);
-    f.audio();
-    f.a.responseDone("r", "completed");
-    f.drain();
-    f.quiet();
-    expect(f.a.state.pendingRender?.identity.nodeId).toBe("count-3-butterflies");
-  },
-);
-it.each(["No, that's wrong.", "Actually, there are three ducks.", "Yes, three ducks.", "Two butterflies."])(
-  "withholds contradictory feedback and bounds recovery: %s",
-  text => {
-    const f = fixture("grok-only", "count-2-ducks", "Two");
-    f.tutor(text);
-    f.audio();
-    f.a.responseDone("r", "completed");
-    f.drain();
-    f.quiet();
-    expect(f.a.state.phase).toBe("active");
-    expect(f.a.learnerAnswerAccepted).toBe(true);
-    expect(f.a.recoveryReason).toBe("contradictory-feedback");
-    expect(f.a.takeRecovery()).toBe("contradictory-feedback");
-    expect(f.a.takeRecovery()).toBeUndefined();
-    f.a.responseCreated("retry");
-    f.a.spoken("retry");
-    f.a.transcript({ id: "retry-t", speaker: "Tutor", text, final: true }, "retry");
-    f.a.output(true, "retry-t");
-    f.a.responseDone("retry", "completed");
-    f.a.output(false);
-    f.a.playbackDrained(f.a.playbackIdentity("retry-t"));
-    f.a.tick();
-    expect(f.a.takeRecovery()).toBeUndefined();
-    expect(f.a.recoveryExhausted).toBe(true);
-  },
-);
+it.each([
+  "Great job!",
+  "Two ducks.",
+  "Two ducks! You saw one duck, and then another.",
+  "That's right, two ducks! Great counting!",
+])("permits non-contradictory delivered feedback without acknowledgment semantics: %s", text => {
+  const f = fixture("grok-only", "count-2-ducks", "Two");
+  f.tutor(text);
+  f.audio();
+  f.a.responseDone("r", "completed");
+  f.drain();
+  f.quiet();
+  expect(f.a.state.pendingRender?.identity.nodeId).toBe("count-3-butterflies");
+});
+it.each([
+  "No, that's wrong.",
+  "No, there aren't two ducks.",
+  "That's not two ducks.",
+  "There are not two ducks.",
+  "Actually, there are three ducks.",
+  "Yes, three ducks.",
+  "Two butterflies.",
+])("withholds contradictory feedback and bounds recovery: %s", text => {
+  const f = fixture("grok-only", "count-2-ducks", "Two");
+  f.tutor(text);
+  f.audio();
+  f.a.responseDone("r", "completed");
+  f.drain();
+  f.quiet();
+  expect(f.a.state.phase).toBe("active");
+  expect(f.a.learnerAnswerAccepted).toBe(true);
+  expect(f.a.recoveryReason).toBe("contradictory-feedback");
+  expect(f.a.takeRecovery()).toBe("contradictory-feedback");
+  expect(f.a.takeRecovery()).toBeUndefined();
+  f.a.responseCreated("retry");
+  f.a.spoken("retry");
+  f.a.transcript({ id: "retry-t", speaker: "Tutor", text, final: true }, "retry");
+  f.a.output(true, "retry-t");
+  f.a.responseDone("retry", "completed");
+  f.a.output(false);
+  f.a.playbackDrained(f.a.playbackIdentity("retry-t"));
+  f.a.tick();
+  expect(f.a.takeRecovery()).toBeUndefined();
+  expect(f.a.recoveryExhausted).toBe(true);
+});
 it.each(["tool-only", "no audio", "never drained", "cleared audio"])("withholds progression for %s", kind => {
   const f = fixture();
   if (kind !== "tool-only") f.tutor();
@@ -317,3 +325,94 @@ it("cannot opt Catching Unicorns into counting feedback progression", () => {
     }),
   ).toThrow();
 });
+
+it.each([
+  ["Two ducks.", undefined],
+  ["Two ducks! Great job!", undefined],
+  ["Two ducks! You saw one duck, then another.", undefined],
+  ["Two ducks! You saw one duck, and then another.", undefined],
+  ["No, there aren't two ducks.", "contradictory-feedback"],
+  ["No, there aren’t two ducks.", "contradictory-feedback"],
+  ["That's not two ducks.", "contradictory-feedback"],
+  ["There are not two ducks.", "contradictory-feedback"],
+  ["No, two is wrong.", "contradictory-feedback"],
+  ["Actually, there are three ducks.", "contradictory-feedback"],
+  ["That's incorrect. Try again.", "contradictory-feedback"],
+  ["Yes, three ducks.", "contradictory-feedback"],
+  ["No, that's wrong.", "contradictory-feedback"],
+  ["Two butterflies.", "contradictory-feedback"],
+  ["Two ducks! You saw one butterfly, then another.", "contradictory-feedback"],
+  ["Two ducks! You saw three ducks, then another.", "contradictory-feedback"],
+  ["Two ducks! There is one duck.", "contradictory-feedback"],
+  ["Two ducks! You saw one duck.", "contradictory-feedback"],
+  ["Two ducks! You saw one duck, then another. Actually, three ducks.", "contradictory-feedback"],
+])("checks bounded feedback declarations and counting steps: %s", (text, expected) => {
+  expect(feedbackProblem(text, { quantity: 2, object: "duck" })).toBe(expected);
+});
+it.each([false, true])(
+  "only current sources may invalidate delivered feedback (invalidateAnswer=%s)",
+  invalidateAnswer => {
+    const f = fixture("grok-only");
+    f.tutor();
+    f.audio();
+    f.a.responseDone("r", "completed");
+    f.drain();
+    const state = f.a.state;
+    expect(state.answerAccepted).toBe(true);
+    expect(state.feedbackDelivered).toBeTruthy();
+    const current = runtimeSource(state);
+    for (const source of [
+      { ...current, runtimeId: "previous-runtime" },
+      { ...current, childTurnId: current.childTurnId - 1 },
+      { ...current, visitId: current.visitId - 1 },
+    ]) {
+      const result = reduceLessonRuntime(
+        state,
+        {
+          type: "tutor.feedback.invalidated",
+          source,
+          invalidateAnswer,
+          atMs: state.nowMs + 1,
+        },
+        COUNTING_LESSON,
+      );
+      expect(result.state).toBe(state);
+      expect(result.effects).toEqual([]);
+      // Stale invalidation cannot revoke success or reset its quiet interval.
+      const progressed = reduceLessonRuntime(
+        result.state,
+        {
+          type: "clock.tick",
+          source: current,
+          atMs: state.nowMs + 260,
+        },
+        COUNTING_LESSON,
+      );
+      expect(progressed.state.phase).toBe("rendering");
+    }
+    const valid = reduceLessonRuntime(
+      state,
+      {
+        type: "tutor.feedback.invalidated",
+        source: current,
+        invalidateAnswer,
+        atMs: state.nowMs + 1,
+      },
+      COUNTING_LESSON,
+    ).state;
+    expect(valid.feedbackDelivered).toBeNull();
+    expect(valid.answerAccepted).toBe(!invalidateAnswer);
+    expect(valid.acceptedAnswerRevision).toBe(invalidateAnswer ? null : state.acceptedAnswerRevision);
+    expect(
+      reduceLessonRuntime(
+        valid,
+        {
+          type: "clock.tick",
+          source: current,
+          atMs: state.nowMs + 260,
+        },
+        COUNTING_LESSON,
+      ).state.phase,
+    ).toBe("active");
+  },
+);

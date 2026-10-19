@@ -1447,3 +1447,24 @@ it.each(["grok-only", "grok-jev"] as const)(
     voice.stop();
   },
 );
+
+it("holds explicitly negated expected feedback after its own PCM playback drains", async () => {
+  vi.useFakeTimers();
+  const { voice, socket, context } = await connected();
+  learnerAnswer(socket);
+  propose(socket);
+  tutor(socket, "tools", "No, there isn't one duck.");
+  socket.event({ type: "response.done", response: { id: "tools", status: "completed" } });
+  expect(updates.at(-1)?.output).toBe("playing");
+  context.sources.at(-1)!.onended?.();
+  vi.advanceTimersByTime(260);
+  expect(updates.at(-1)).toMatchObject({ output: "idle", nodeId: "count-1-duck", learnerAnswerAccepted: true });
+  expect(updates.some(snapshot => snapshot.render)).toBe(false);
+  expect(updates.at(-1)?.decisionTimeline).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ type: "audio.drained" }),
+      expect.objectContaining({ type: "tutor.feedback.blocked", reason: "contradictory-feedback" }),
+    ]),
+  );
+  voice.stop();
+});
