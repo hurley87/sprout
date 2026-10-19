@@ -1,3 +1,4 @@
+import { ACK_MODEL, type AcknowledgmentMode } from "./acknowledgment";
 import { COUNTING_LESSON } from "@/lib/lesson-runtime/counting-lesson";
 
 import type { RenderIdentity } from "@/lib/lesson-runtime/lesson-runtime-reducer";
@@ -54,6 +55,8 @@ export const CONTINUATION_COMPLETE_TIMEOUT_MS = 60_000;
 export const GROK_MODEL = "grok-voice-3.0";
 export type Transcript = { id: string; speaker: "Learner" | "Tutor"; text: string; final: boolean };
 export type VoiceSnapshot = {
+  acknowledgmentMode?: AcknowledgmentMode;
+  classifierModel?: string | null;
   status: "connecting" | "listening" | "stopped" | "error" | "complete";
   error?: string;
   echoedModel?: string;
@@ -80,7 +83,7 @@ export function encodePcm(samples: Float32Array) {
 
 // One instance per Start. All continuations and callbacks are fenced by stopped.
 export class GrokVoice {
-  private proposals = new CountingProposals();
+  private proposals: CountingProposals;
   private stopped = false;
   private acceptedAtFailure = false;
   private started = false;
@@ -117,10 +120,22 @@ export class GrokVoice {
   private responseId?: string;
   private state: VoiceSnapshot = { status: "connecting", output: "idle", transcripts: [] };
 
-  constructor(private changed: (snapshot: VoiceSnapshot) => void) {}
+  constructor(
+    private changed: (snapshot: VoiceSnapshot) => void,
+    readonly acknowledgmentMode: AcknowledgmentMode = "grok-only",
+  ) {
+    this.proposals = new CountingProposals(crypto.randomUUID(), acknowledgmentMode, undefined, () => {
+      if (!this.stopped) {
+        this.advanceTools();
+        this.emit();
+      }
+    });
+  }
   private emit() {
     this.changed({
       ...this.state,
+      acknowledgmentMode: this.acknowledgmentMode,
+      classifierModel: this.acknowledgmentMode === "grok-jev" ? ACK_MODEL : null,
       nodeId: this.proposals.state.nodeId,
       render: this.proposals.state.pendingRender?.identity,
       complete: this.proposals.state.lessonComplete,
@@ -654,7 +669,9 @@ export class GrokVoice {
     );
     if (reason === "user-stop" || reason === "learner-request") this.proposals.recordDecision("lesson.stopped", reason);
     this.stopped = true;
-    this.proposals.stop();
+    this.proposals.stop(
+      reason === "failure" ? "connection-failure" : reason === "lesson-complete" ? "scene-transition" : reason,
+    );
     clearTimeout(this.timer);
     clearTimeout(this.proposalTimer);
     clearTimeout(this.drainTimer);

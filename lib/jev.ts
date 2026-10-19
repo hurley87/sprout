@@ -8,7 +8,10 @@ const ENDPOINT = "https://api.typesafe.ai/v1/systemone";
  */
 export const JEV_MODEL = "jev-1.14.0";
 
-type JevFailure = { ok: false; reason: "unconfigured" | "rejected" | "unreadable" | "unreachable" | "cancelled" };
+type JevFailure = {
+  ok: false;
+  reason: "unconfigured" | "rejected" | "unreadable" | "unreachable" | "cancelled" | "model_mismatch";
+};
 
 export type NoulQuestion = {
   readonly type: "noul";
@@ -24,11 +27,26 @@ function readNoul(body: unknown, questionId: string): number | null {
   return typeof noul === "number" && Number.isFinite(noul) && noul >= 0 && noul <= 1 ? noul : null;
 }
 
+type LegacyNoulOutcome<Key extends string> =
+  | { ok: true; probabilities: Record<Key, number>; model: string }
+  | { ok: false; reason: Exclude<JevFailure["reason"], "model_mismatch"> };
+export function evaluateNoulQuestions<Key extends string>(
+  state: unknown,
+  questions: Record<Key, NoulQuestion>,
+  signal: AbortSignal,
+): Promise<LegacyNoulOutcome<Key>>;
+export function evaluateNoulQuestions<Key extends string>(
+  state: unknown,
+  questions: Record<Key, NoulQuestion>,
+  signal: AbortSignal,
+  requireModelIdentity: true,
+): Promise<NoulOutcome<Key>>;
 /** One paid call, pinned model, closed probability projection; no raw bodies escape. */
 export async function evaluateNoulQuestions<Key extends string>(
   state: unknown,
   questions: Record<Key, NoulQuestion>,
   signal: AbortSignal,
+  requireModelIdentity = false,
 ): Promise<NoulOutcome<Key>> {
   if (signal.aborted) return { ok: false, reason: "cancelled" };
   const key = process.env.TYPESAFE_API_KEY;
@@ -53,6 +71,8 @@ export async function evaluateNoulQuestions<Key extends string>(
   if (!response.ok) return { ok: false, reason: "rejected" };
   const body: unknown = await response.json().catch(() => null);
   if (signal.aborted) return { ok: false, reason: "cancelled" };
+  if (requireModelIdentity && (!body || typeof body !== "object" || !("model" in body) || body.model !== JEV_MODEL))
+    return { ok: false, reason: "model_mismatch" };
   const probabilities = {} as Record<Key, number>;
   for (const id of Object.keys(questions) as Key[]) {
     const probability = readNoul(body, id);

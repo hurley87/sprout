@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { GrokVoice, GROK_MODEL, type VoiceSnapshot } from "@/lib/experiments/grok-counting/transport";
 import {
   COUNTING_LESSON_GRAPH,
@@ -8,7 +9,15 @@ import {
   type CountingNodeId,
 } from "@/lib/lesson-runtime/counting-lesson";
 
-export default function GrokCounting() {
+export default function GrokCountingPage() {
+  return (
+    <Suspense fallback={<p>Loading experiment…</p>}>
+      <GrokCounting />
+    </Suspense>
+  );
+}
+function GrokCounting() {
+  const mode = useSearchParams().get("mode") === "grok-jev" ? "grok-jev" : "grok-only";
   const scene = useRef<HTMLDivElement | null>(null);
   const voice = useRef<GrokVoice | null>(null);
   const [snapshot, setSnapshot] = useState<VoiceSnapshot | null>(null);
@@ -45,7 +54,7 @@ export default function GrokCounting() {
     voice.current?.stop();
     const current = new GrokVoice(value => {
       if (voice.current === current) setSnapshot(value);
-    });
+    }, mode);
     voice.current = current;
     void current.start();
   }
@@ -56,6 +65,8 @@ export default function GrokCounting() {
       version: 1,
       experiment: "grok-counting",
       exportedAt: new Date().toISOString(),
+      acknowledgmentMode: snapshot.acknowledgmentMode,
+      classifierModel: snapshot.classifierModel,
       requestedModel: GROK_MODEL,
       echoedModel: snapshot.echoedModel ?? null,
       status: snapshot.status,
@@ -85,6 +96,7 @@ export default function GrokCounting() {
   return (
     <main className="mx-auto max-w-5xl space-y-6 p-6">
       <h1 className="text-2xl font-semibold">Grok counting experiment</h1>
+      <p>Active acknowledgment mode: {mode}</p>
       <p>
         Adult or synthetic voice testing only. Count one duck, two ducks, then three butterflies. “Move on” ends this
         small experiment without answer credit. Use headphones to avoid echo.

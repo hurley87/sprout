@@ -391,3 +391,102 @@ All seven changed code/test files were byte-compared with the validated copy;
 formatting and diff checks passed. Counting validation and acknowledgment grammar
 were compared with the preceding commit and remain unchanged. No live provider
 evaluation was run.
+
+## Opt-in Jev tutor acknowledgment (Commit 1)
+
+Open `/experiments/grok-counting?mode=grok-jev` for semantic acknowledgment.
+`?mode=grok-only` (also the default for absent/unrecognized values) preserves the
+existing regex recognition. The page displays the selected mode; diagnostics
+exports include `acknowledgmentMode` and `classifierModel` (`jev-1.14.0` for Jev,
+`null` for Grok-only). Grok Voice 3 still interprets the learner and proposes
+`report_counting_answer`; its tool schema and counting validation are unchanged.
+The GPT-Live observer, curriculum, shared reducer and Catching Unicorns are unchanged.
+
+`POST /api/experiments/grok-counting/acknowledgment` uses the existing loopback,
+same-origin and JSON guards. It accepts exactly five fields: authored `nodeId`,
+`expectedAnswer` (the authored quantity and object, checked server-side), validated
+`learner` utterance, finalized `tutor` utterance, and an application-generated
+`requestId`. The body is limited to 12,000 bytes, each string to 2,000 characters,
+and the correlation ID to 80 alphanumeric/hyphen characters. No full lesson,
+conversation history, tool token, or provider response is sent to the browser.
+This prototype endpoint trusts the local application to have validated the
+learner; the reducer independently retains that requirement for progression.
+
+The server reuses `evaluateNoulQuestions` in `lib/jev.ts`, with an opt-in strict
+model-identity check. Existing callers retain their prior behavior and return type.
+The provider must echo exactly `jev-1.14.0`; missing/substituted identity abstains.
+One Noul question, `acknowledgesValidatedAnswer`, asks:
+
+> Does this tutor utterance explicitly and correctly acknowledge the learner's
+> validated answer to the current counting question?
+
+The provider schema is `{ model: "jev-1.14.0", answers: {
+acknowledgesValidatedAnswer: { noul: probability } } }`. Probability must be a
+finite number in [0, 1]. Supplied utterances are evidence, never instructions.
+The true criterion requires explicit confirmation of the correct number and
+object, including natural paraphrases and confirmation before/after the answer.
+False includes generic praise, questions, hints, uncertainty, contradictions,
+answer-giving before the learner, unrelated text and incomplete acknowledgment.
+Only a probability **at least 0.95** yields `acknowledging`. This is a conservative
+engineering threshold intended to limit false progression, **not an empirically
+calibrated threshold**. Values at most 0.05 abstain as `not-confirmed`; intermediate
+values abstain as `low-confidence`. No negative outcome changes learner credit.
+The browser receives only `{ requestId, outcome: "acknowledging" | "abstain",
+reason, modelValidated }`, with closed reasons, never raw provider bodies or keys.
+
+The adapter starts classification at its first event-processing tick after both
+a validated correct learner proposal and a current, bound, finalized tutor item
+exist. It need not wait for `response.done` or local playback drain. A continuation
+can use the retained validated learner observation without another tool call.
+Each request captures the response object, application scope (runtime, visit,
+node, learner turn), learner revision, transcript revision, tutor item/text and a
+fresh request ID. Duplicate finals reuse the same decision; corrected tutor text
+aborts/replaces it. Learner speech, learner corrections, rejected source evidence,
+response cancellation/supersession, scene change, Stop and failure invalidate it.
+An `AbortController`, explicit local deadline race and identity checks prevent
+late results from authorizing another scene, including a response that ignores
+abort. All metadata stays bounded; the transcript is exported only once.
+
+Both the server provider call and browser classification have a **five-second**
+deadline (the browser includes HTTP latency). While pending, missing-acknowledgment
+recovery is suppressed. Abstention, malformed output, model mismatch, unconfigured
+provider, HTTP/network failure or timeout release the existing recovery policy;
+there is no regex fallback. Recovery still waits for actual playback drain,
+then its existing three-second delay, confirms the already validated answer
+without asking the learner to repeat, and consumes the same one-continuation
+budget. A failed continuation exhausts that budget instead of looping.
+
+A current positive result sets recognition evidence only. The adapter still waits
+for completed, current response generation and actual response/item-correlated
+PCM, then projects `tutorState: acknowledging` through the existing reducer.
+The reducer still requires validated learner evidence, local audio quiet/drain,
+its quiet-period safeguard and exact React render confirmation. Jev alone cannot
+supply missing audio, create tutor speech, advance a scene or award mastery.
+When Jev finishes after drain, the existing projection conservatively establishes
+a fresh quiet period.
+
+The existing 256-entry decision timeline adds `classification.requested`,
+`classification.completed`, `classification.cancelled`, `classification.stale`
+and `classification.applied`. Closed reasons describe pending/confirmed/abstained,
+provider failures, cancellation and stale/accepted reducer application. Completed
+and cancelled entries carry bounded latency (0–5,000 ms) and a model-validation
+boolean; response/item ordinals correlate them to actual audio events. A positive
+result awaiting audio has a completed decision but no applied event. Captions,
+wire IDs, request IDs, credentials and raw bodies are excluded from this trace.
+
+Provider-free tests mock semantic outcomes, so they establish contract/lifecycle
+correctness, not Jev's actual language accuracy. Commit 2 must evaluate the
+positive/negative utterance set with the real pinned model, calibrate the
+threshold, measure latency/deadline suitability, and examine false positives,
+false negatives and recovery rates. No paid live benchmark was run here.
+
+Commit 1 validation: 48 new provider-free unit tests, the full **1,733-test suite
+(73 files)**, and all **23 focused browser tests** (including eight new Jev
+scenarios) passed. Typecheck, lint and production build passed using a clean
+copy without the ignored `test-results` review-source trees or developer env
+files. Unit tests ran in the repository because frozen historical fixtures read
+Git objects. All ten changed files were compared byte for byte with the validation
+copy; code formatting and `git diff --check` passed. The first browser clock
+setup reset the runtime clock after session creation; installing the test clock
+before page load fixed the two test-harness failures. No production behavior was
+changed to accommodate that clock setup.
