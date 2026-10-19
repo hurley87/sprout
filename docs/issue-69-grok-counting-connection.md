@@ -524,3 +524,60 @@ passed. The isolated live walkthrough failed at the preserved first-scene
 ASR/tool-report blocker; it was not retried. Source-copy validation excluded
 ignored review artifacts and local credential files, and all changed files were
 byte-compared with the validated copy. Historical evidence was not overwritten.
+
+## Grounded incorrect reports versus verified success
+
+The retained Commit 2 walkthrough exposed a validation-policy error: `incorrect`
+required a match in `total`, the strict number/authored-object grammar used to
+verify `correct`. Consequently Grok's matching finalized transcript and report
+for `I see one dog.` were rejected as `unsupported incorrect answer`. That
+historical evidence remains unchanged; no new paid evaluation was run for this fix.
+
+Correct-answer verification is unchanged: only the strict current-scene quantity
+and object, exact finalized supporting text, current response/turn/token/revision,
+no unresolved help/navigation and no tutor answer leakage can establish success.
+An arbitrary Grok `correct` label still cannot validate `I see one dog.`.
+
+For `incorrect`, the application instead admits Grok's negative semantic judgment
+when the same current-scope and exact-finalized-transcript checks pass, the words
+do not establish the known correct current-scene answer, and there is substantive
+counting-attempt evidence. The conservative admission guard requires a numeric
+token (any total) or an existing zero-through-ten number word outside bracketed
+annotations. It excludes empty/non-substantive text, standalone backchannels,
+question-only totals, explicit background/TV/radio attribution, navigation and
+unresolved help. This is an evidence-admission guard, not another semantic
+classifier or a dictionary of possible wrong objects; Grok determines the
+attempt's meaning. Arbitrary unmarked speech cannot be perfectly attributed by
+these text guards. No expanded wrong-object vocabulary or new provider is used.
+Existing `none`, `unclear` and `needs_help` checks are unchanged.
+
+Thus `I see one dog.` and `Two ducks.` on the one-duck scene can be recorded as
+incorrect, while `One duck.` with an incorrect label remains contradictory and
+is rejected. Accepted negative reports retain `tutorState: unknown`, never set
+`learnerAnswerAccepted` or correct-answer acceptance, and cannot request Jev
+acknowledgment classification or render a new scene. Even correlated tutor
+confirmation text and drained audio cannot turn the negative observation into
+success. The existing accepted-tool-only continuation lets the tutor respond
+naturally once, then the next attempt receives its normal new context token.
+Duplicate finals/calls remain deduplicated; a correction after validation
+invalidates even an accepted negative report's old context rather than relabeling
+it as correct. The reducer, acknowledgment/audio lifecycle, prompts, fixtures,
+Jev question/threshold and Grok tool schema are unchanged.
+
+Provider-free transport regressions replay the retained provisional/final ASR
+sequence, matching `incorrect/none` call, duplicate events, completed tool-only
+response, ordinary non-success tutor continuation, local audio drain and next-turn
+reservation in both `grok-only` and `grok-jev` modes. They verify the negative
+report is accepted with no success, acknowledgment classifier request or scene
+transition. This corrects application handling of the transcript actually received;
+it does not repair the `duck` → `dog` transcription or claim a successful live
+three-scene walkthrough.
+
+Validation for the grounded-incorrect fix: 331 focused Grok/Jev tests, all 1,803
+unit tests (74 files), and all 23 relevant provider-free browser tests passed.
+Typecheck, lint and production build passed in the clean source copy that excludes
+ignored review-source artifacts and local credential files. All four changed
+files were byte-compared with that copy; formatting and diff checks passed.
+The tool schema, strict correct-answer checks, and `none`/`unclear` checks were
+also compared directly with the parent revision and remain byte-identical.
+No paid live benchmark or new provider evidence was generated.

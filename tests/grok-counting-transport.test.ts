@@ -110,8 +110,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
-async function connected() {
-  const voice = new GrokVoice(s => updates.push(s));
+async function connected(mode: "grok-only" | "grok-jev" = "grok-only") {
+  const voice = new GrokVoice(s => updates.push(s), mode);
   await voice.start();
   const socket = Socket.instances[0];
   socket.onopen?.();
@@ -1337,3 +1337,88 @@ it("labels a validated correct proposal awaiting generation separately from an i
   });
   voice.stop();
 });
+
+it.each(["grok-only", "grok-jev"] as const)(
+  "accepts the actual grounded wrong-object negative report and continues without success in %s",
+  async mode => {
+    vi.useFakeTimers();
+    const { voice, socket, context } = await connected(mode);
+    let elapsed = 0;
+    const at = (ms: number, event: object) => {
+      vi.advanceTimersByTime(ms - elapsed);
+      elapsed = ms;
+      socket.event(event);
+    };
+    const final = (text: string) => ({
+      type: "conversation.item.input_audio_transcription.completed",
+      item_id: "learner",
+      transcript: text,
+    });
+    at(7937, { type: "input_audio_buffer.speech_started", item_id: "learner" });
+    at(8533, final("I see one"));
+    at(9439, { type: "input_audio_buffer.speech_stopped", item_id: "learner" });
+    at(9457, final("I see one dog."));
+    at(9510, { type: "response.created", response: { id: "tools" } });
+    at(9799, final("I see one dog."));
+    at(12455, final("I see one dog."));
+    vi.advanceTimersByTime(3);
+    propose(socket, "grounded-wrong-object", {
+      answer_outcome: "incorrect",
+      support_state: "none",
+      supporting_text: "I see one dog.",
+    });
+    const outputs = () =>
+      socket.sent.filter(event => (event.item as { type?: string })?.type === "function_call_output");
+    expect(outputs()).toHaveLength(1);
+    expect(JSON.parse((outputs()[0].item as { output: string }).output).status).toBe("accepted");
+    expect(updates.at(-1)?.proposal).toBe("Validated: incorrect · none");
+    socket.event({ type: "response.done", response: { id: "tools", status: "completed" } });
+    expect(updates.at(-1)).toMatchObject({
+      proposal: "Accepted: incorrect · none",
+      learnerAnswerAccepted: false,
+      answerAccepted: false,
+      nodeId: "count-1-duck",
+    });
+    expect(updates.at(-1)?.render).toBeUndefined();
+    propose(socket, "grounded-wrong-object", { answer_outcome: "incorrect", supporting_text: "I see one dog." });
+    expect(outputs()).toHaveLength(1);
+    expect(updates.at(-1)?.decisionTimeline).toContainEqual(
+      expect.objectContaining({ type: "continuation.requested", reason: "accepted-tool-only" }),
+    );
+    expect(updates.at(-1)?.decisionTimeline?.some(entry => entry.type === "proposal.rejected")).toBe(false);
+    socket.event({ type: "response.created", response: { id: "try-again" } });
+    tutor(socket, "try-again", "Please try counting the ducks again.");
+    socket.event({ type: "response.done", response: { id: "try-again", status: "completed" } });
+    context.sources.at(-1)!.onended?.();
+    vi.advanceTimersByTime(5000);
+    expect(updates.at(-1)?.transcripts).toContainEqual(
+      expect.objectContaining({ speaker: "Learner", text: "I see one dog.", final: true }),
+    );
+    expect(updates.at(-1)?.transcripts).toContainEqual(
+      expect.objectContaining({ speaker: "Tutor", text: "Please try counting the ducks again." }),
+    );
+    expect(updates.at(-1)?.render).toBeUndefined();
+    expect(updates.at(-1)).toMatchObject({
+      learnerAnswerAccepted: false,
+      answerAccepted: false,
+      nodeId: "count-1-duck",
+      complete: false,
+    });
+    expect(
+      updates
+        .at(-1)
+        ?.decisionTimeline?.some(entry =>
+          ["learner.answer.accepted", "classification.requested", "render.requested", "recovery.requested"].includes(
+            entry.type,
+          ),
+        ),
+    ).toBe(false);
+    expect(fetch).toHaveBeenCalledTimes(1); // Ephemeral authorization only; no Jev classification for incorrect evidence.
+    const next = socket.sent.filter(event => event.type === "session.update");
+    expect(next).toHaveLength(2);
+    socket.event({ type: "session.updated", session: next[1].session });
+    socket.event({ type: "input_audio_buffer.speech_started", item_id: "next-attempt" });
+    expect(updates.at(-1)?.diagnostics?.at(-1)?.code).toBe("context.claimed");
+    voice.stop();
+  },
+);

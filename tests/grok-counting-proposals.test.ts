@@ -51,6 +51,7 @@ it.each([
   "Move on",
   "One duck, next please",
   "One dog",
+  "I see one dog.",
   "",
   "I think one",
   "Two ducks",
@@ -689,14 +690,16 @@ it.each(["new item", "wrong response", "cancelled", "partial total"])(
   },
 );
 
-it("keeps the observed wrong-object ASR result rejected after settling the original turn", () => {
+it("accepts the observed wrong-object ASR result as incorrect after settling the original turn", () => {
   const { adapter, transcript, event } = settlingTurn();
   transcript("I see");
   adapter.speechStopped("settling-item");
   transcript("I see one dog.");
   adapter.responseCreated("settling-response");
   adapter.call(event({ answer_outcome: "incorrect", supporting_text: "I see one dog." }));
-  expect(adapter.drainResults()[0].reason).toBe("unsupported incorrect answer");
+  expect(adapter.drainResults()[0].status).toBe("accepted");
+  adapter.responseDone("settling-response", "completed");
+  expect(adapter.lastResult).toBe("Accepted: incorrect · none");
   expect(adapter.correlationDiagnostics.at(-1)?.code).toBe("response.bound");
   expect(adapter.learnerAnswerAccepted).toBe(false);
 });
@@ -798,4 +801,113 @@ it("records transcript replacement/revocation without retaining learner text in 
     ]),
   );
   expect(JSON.stringify(adapter.decisionTimeline)).not.toMatch(/One duck|Two ducks/);
+});
+
+it.each(["I see one dog.", "Two ducks.", "One butterfly.", "I counted 27 elephants.", "Zero cats."])(
+  "accepts a grounded incorrect counting attempt without supplying success: %s",
+  text => {
+    const { adapter, call } = fixture(text);
+    expect(call({ answer_outcome: "incorrect" })?.status).toBe("accepted");
+    adapter.responseDone("r1", "completed");
+    adapter.transcript({ id: "a1", speaker: "Tutor", text: "Yes, one duck.", final: true }, "r1");
+    adapter.output(true, "a1");
+    adapter.output(false);
+    adapter.tick();
+    expect(adapter.lastResult).toBe("Accepted: incorrect · none");
+    expect(adapter.learnerAnswerAccepted).toBe(false);
+    expect(adapter.state).toMatchObject({
+      answerAccepted: false,
+      acknowledgmentObserved: false,
+      transitionReady: false,
+      nodeId: "count-1-duck",
+      phase: "active",
+      conceptEvidence: {},
+    });
+    expect(adapter.state.pendingRender).toBeNull();
+    expect(adapter.recoveryReason).toBeUndefined();
+    expect(
+      adapter.decisionTimeline.some(
+        entry => entry.type === "classification.requested" || entry.type === "render.requested",
+      ),
+    ).toBe(false);
+  },
+);
+it.each(["One duck.", "one", "1", "I see one duck."])(
+  "rejects incorrect contradicting a known correct answer: %s",
+  text => {
+    expect(fixture(text).call({ answer_outcome: "incorrect" })?.reason).toBe("unsupported incorrect answer");
+  },
+);
+it.each([
+  "",
+  " ",
+  "...",
+  "[silence]",
+  "[background speech: two cats]",
+  "[background speech] two ducks",
+  "TV: two dogs",
+  "[TV] two dogs",
+  "Background speech: one duck",
+  "Hello.",
+  "I like ducks.",
+  "Where are my shoes?",
+  "Yes.",
+  "Okay.",
+  "Thanks.",
+  "I see.",
+  "I",
+  "Two?",
+  "One dog, move on please.",
+])("does not invent a settled incorrect answer from non-answer evidence: %s", text => {
+  const { adapter, call } = fixture(text);
+  expect(call({ answer_outcome: "incorrect" })?.status).toBe("rejected");
+  expect(adapter.state.answerAccepted).toBe(false);
+  expect(adapter.learnerAnswerAccepted).toBe(false);
+});
+it.each(["I don't know.", "I see one dog, help please."])(
+  "retains unresolved help protections for incorrect reports: %s",
+  text => {
+    expect(fixture(text).call({ answer_outcome: "incorrect", support_state: "none" })?.reason).toBe("unresolved help");
+    expect(fixture(text).call({ answer_outcome: "incorrect", support_state: "needs_help" })?.reason).toBe(
+      "unsupported incorrect answer",
+    );
+  },
+);
+it.each(["none", "unclear"])("preserves %s and needs_help for explicit not-knowing", outcome => {
+  expect(fixture("I don't know.").call({ answer_outcome: outcome, support_state: "needs_help" })?.status).toBe(
+    "accepted",
+  );
+});
+it.each([{ supporting_text: "One duck." }, { context_token: "stale" }])(
+  "rejects ungrounded incorrect report: %j",
+  changes => {
+    const { call } = fixture("I see one dog.");
+    expect(call({ answer_outcome: "incorrect", ...changes })?.status).toBe("rejected");
+  },
+);
+it.each(["old response", "new learner turn", "cancelled"])("rejects stale incorrect report on %s", fault => {
+  const { adapter, call } = fixture("I see one dog.");
+  if (fault === "new learner turn") {
+    adapter.speechStarted("u2");
+    adapter.speechStopped("u2");
+  }
+  if (fault === "cancelled") adapter.responseDone("r1", "cancelled");
+  expect(call({ answer_outcome: "incorrect" }, fault === "old response" ? { response_id: "other" } : {})?.status).toBe(
+    "rejected",
+  );
+});
+it("deduplicates negative evidence and invalidates corrected accepted incorrect reports", () => {
+  const { adapter, call } = fixture("I see one dog.");
+  expect(call({ answer_outcome: "incorrect" })?.status).toBe("accepted");
+  const revision = adapter.state.transcriptRevision;
+  adapter.transcript({ id: "u1", speaker: "Learner", text: "I see one dog.", final: true });
+  expect(adapter.state.transcriptRevision).toBe(revision);
+  expect(call({ answer_outcome: "incorrect" })).toBeUndefined();
+  expect(adapter.correlationDiagnostics.at(-1)?.code).toBe("call.id.duplicate");
+  adapter.transcript({ id: "u1", speaker: "Learner", text: "One duck.", final: true });
+  expect(adapter.correlationDiagnostics.at(-1)?.code).toBe("transcript.final.corrected");
+  expect(call({ answer_outcome: "correct", supporting_text: "One duck." }, { call_id: "c2" })?.status).toBe("rejected");
+  adapter.responseDone("r1", "completed");
+  expect(adapter.learnerAnswerAccepted).toBe(false);
+  expect(adapter.state.answerAccepted).toBe(false);
 });

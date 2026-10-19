@@ -1,3 +1,4 @@
+import { substantiveLearnerText } from "@/lib/lesson-runtime/tutor-observation";
 import { formatExpectedCountingAnswer } from "./expected-answer";
 import {
   ACK_DEADLINE_MS,
@@ -60,6 +61,17 @@ const navigation = /\b(stop|quit|move on|next|done|finish|finished)\b/i;
 // Deliberately narrow current-scene grammar; unknown paraphrases abstain.
 const total =
   /^(?:(?:i see|there is|there are|it is|it's) )?(one|1|two|2|three|3|four|4|five|5|six|6|seven|7|eight|8|nine|9|ten|10)(?: (ducks?|butterfl(?:y|ies)))?$/;
+
+/** A counting-attempt provenance guard, not a judgment of the answer's meaning.
+ * Reuse the existing small number-word range, allow any numeric total, and never
+ * enumerate wrong objects. Grok determines whether this attempt is incorrect. */
+function hasIncorrectAnswerEvidence(text: string): boolean {
+  const spoken = text.replace(/\[[^\]]*(?:\]|$)/gu, " ").trim();
+  const background =
+    /^(?:\[[^\]]*\b(?:background|tv|television|radio)\b[^\]]*\]|(?:background(?: speech)?|tv|television|radio)\s*:)/iu;
+  const quantityCue = /\b(?:[0-9]+|zero|one|two|three|four|five|six|seven|eight|nine|ten)\b/iu;
+  return substantiveLearnerText(text) && !background.test(text) && !spoken.endsWith("?") && quantityCue.test(spoken);
+}
 
 // Recognize bounded answer-giving constructions for this scene, not articles or
 // isolated counting-method words ("one at a time", "only look at the duck").
@@ -766,7 +778,10 @@ export class CountingProposals {
         tutorAnswerCue(tutorBefore, Number(node.quantity), node.object))
     )
       return fail("unsupported settled answer");
-    if (args.answer_outcome === "incorrect" && (!count || correct || help.test(text)))
+    if (
+      args.answer_outcome === "incorrect" &&
+      (correct || help.test(text) || navigation.test(text) || !hasIncorrectAnswerEvidence(text))
+    )
       return fail("unsupported incorrect answer");
     if (args.answer_outcome === "none" && count) return fail("unsupported no-attempt judgment");
     if (args.answer_outcome === "unclear" && count) return fail("unsupported unclear judgment");
