@@ -1,8 +1,8 @@
+import { feedbackProblem } from "./feedback";
 import { substantiveLearnerText } from "@/lib/lesson-runtime/tutor-observation";
 import { formatExpectedCountingAnswer } from "./expected-answer";
 import {
   ACK_DEADLINE_MS,
-  grokOnlyAcknowledges,
   requestAcknowledgment,
   type AcknowledgmentMode,
   type AckClassifier,
@@ -37,7 +37,8 @@ export const OUTCOME_TOOL = {
     required: ["context_token", "answer_outcome", "support_state", "supporting_text"],
   },
 };
-export type RecoveryReason = "missing-report" | "missing-acknowledgment" | "missing-acknowledgment-audio";
+export type RecoveryReason =
+  "missing-report" | "missing-feedback" | "missing-feedback-audio" | "contradictory-feedback";
 export type ToolCall = { call_id?: unknown; name?: unknown; arguments?: unknown; response_id?: unknown };
 type Scope = Omit<ClassificationSource, "transcriptRevision">;
 type Context = { token: string; source: Scope };
@@ -166,6 +167,11 @@ type RejectionReason =
 export type ContinuationReason = RecoveryReason | "accepted-tool-only" | "rejected-tool-only";
 export type DecisionReason =
   | CorrelationCode
+  | "feedback-and-audio"
+  | "feedback-complete"
+  | "awaiting-feedback"
+  | "awaiting-feedback-audio"
+  | "stalled-response"
   | AckReason
   | "stale-classification"
   | "classification-pending"
@@ -212,6 +218,9 @@ export type DecisionEvent =
   | "classification.cancelled"
   | "classification.applied"
   | "classification.stale"
+  | "tutor.feedback.completed"
+  | "tutor.feedback.blocked"
+  | "response.timed-out"
   | "learner.turn.started"
   | "learner.turn.ended"
   | "learner.transcript"
@@ -261,6 +270,7 @@ export type DecisionEntry = {
     answerAccepted: boolean;
     acknowledgmentRecognized: boolean;
     acknowledgmentObserved: boolean;
+    feedbackDelivered: boolean;
     audioObserved: boolean;
     audioDrained: boolean;
     output: CountingProposals["state"]["outputActivity"];
@@ -280,7 +290,7 @@ export class CountingProposals {
     id: string;
     sequence: number;
     items: Map<string, number>;
-    acknowledgmentEvaluation?: string;
+    feedbackEvaluation?: string;
     turnToken?: string;
     bindingFailure?: CorrelationCode;
     source: Scope;
@@ -296,6 +306,7 @@ export class CountingProposals {
     transcript?: string;
     tutor?: Message;
     audioItems?: Set<string>;
+    drainedItems?: Set<string>;
     acknowledgmentRecognized?: boolean;
   };
   private nextContext?: Context;
@@ -363,6 +374,7 @@ export class CountingProposals {
         answerAccepted: this.state.answerAccepted,
         acknowledgmentRecognized: r?.acknowledgmentRecognized === true,
         acknowledgmentObserved: this.state.acknowledgmentObserved,
+        feedbackDelivered: !!this.state.feedbackDelivered,
         audioObserved: this.state.tutorOutputObserved,
         audioDrained: this.state.tutorOutputDrained,
         output: this.state.outputActivity,
@@ -404,7 +416,7 @@ export class CountingProposals {
   private usedToken?: string;
   private seenLearnerItems = new Set<string>();
   private stopped = false;
-  private projectedAcknowledgment?: string;
+  private projectedFeedback?: string;
   private missingRetries = 0;
   recoveryExhausted = false;
   endRequested = false;
@@ -416,7 +428,7 @@ export class CountingProposals {
     private readonly classify: AckClassifier = requestAcknowledgment,
     private readonly acknowledgmentChanged: () => void = () => {},
   ) {
-    this.state = createLessonRuntime(connectionId, { lesson: COUNTING_LESSON });
+    this.state = createLessonRuntime(connectionId, { lesson: COUNTING_LESSON, feedbackPolicy: "validated-answer" });
   }
   private dispatch(event: AdapterEvent) {
     const before = this.state;
@@ -426,12 +438,12 @@ export class CountingProposals {
       COUNTING_LESSON,
     );
     if (before.phase === "active" && result.state.phase === "rendering")
-      this.recordDecision("transition.eligible", "acknowledgment-and-audio");
+      this.recordDecision("transition.eligible", "feedback-and-audio");
     if (before.visitId !== result.state.visitId || (before.phase === "active" && result.state.phase === "rendering"))
       this.invalidateAcknowledgment("scene-transition");
     this.state = result.state;
     if (before.phase !== "rendering" && this.state.phase === "rendering")
-      this.recordDecision("render.requested", "acknowledgment-and-audio");
+      this.recordDecision("render.requested", "feedback-and-audio");
   }
 
   private scope(): Scope {
@@ -460,7 +472,7 @@ export class CountingProposals {
     this.rejectPending("superseded learner turn");
     this.context = undefined;
     this.observation = undefined;
-    this.projectedAcknowledgment = undefined;
+    this.projectedFeedback = undefined;
     this.response = undefined;
     this.continuationRequested = false;
     this.continuationUsed = false;
@@ -500,6 +512,11 @@ export class CountingProposals {
   transcript(message: Message, responseId?: string) {
     if (this.stopped) return;
     if (message.speaker === "Learner" && message.id !== this.learner?.itemId) return;
+    if (
+      message.speaker === "Tutor" &&
+      ((responseId && responseId !== this.response?.id) || (this.response && !responseId))
+    )
+      return;
     const old = this.messages.find(m => m.id === message.id);
     const wasFinal = old?.final === true;
     if (old && old.speaker !== message.speaker) return;
@@ -508,18 +525,18 @@ export class CountingProposals {
     if (
       message.speaker === "Tutor" &&
       this.response &&
-      (!responseId || responseId === this.response.id) &&
+      responseId === this.response.id &&
       this.matches(this.response.source)
     ) {
       this.invalidateAcknowledgment("revised");
-      if (this.acknowledgmentMode === "grok-jev") this.projectedAcknowledgment = undefined;
+      this.projectedFeedback = undefined;
       this.response.tutor = { ...message };
       this.response.acknowledgmentRecognized = undefined;
     }
     if (message.speaker === "Learner") {
       this.invalidateAcknowledgment("learner transcript corrected");
       this.observation = undefined;
-      this.projectedAcknowledgment = undefined;
+      this.projectedFeedback = undefined;
       if (message.final && /^(?:please )?(?:move on|stop|quit|finish)(?: please)?[.!]?$/i.test(message.text.trim()))
         this.endRequested = true;
       this.learnerRevision++;
@@ -558,23 +575,22 @@ export class CountingProposals {
     this.deliver();
   }
   responseCreated(id?: string) {
-    if (this.stopped) return false;
+    if (this.stopped || this.state.phase !== "active") return false;
     if (!id || this.seenResponses.has(id)) {
       this.diagnose(!id ? "response.id.missing" : "response.id.duplicate", "response.created");
       return false;
     }
     this.invalidateAcknowledgment("superseded-response");
+    const superseded = !!this.response && !this.response.done;
+    if (superseded) this.observation = undefined;
+    this.dispatch({
+      type: "tutor.feedback.invalidated",
+      source: runtimeSource(this.state),
+      invalidateAnswer: superseded,
+    });
     this.rejectPending("superseded response");
     this.seenResponses.add(id);
-    if (this.state.acknowledgmentObserved) {
-      this.projectedAcknowledgment = undefined;
-      this.dispatch({
-        type: "transcript.updated",
-        source: runtimeSource(this.state),
-        revision: this.state.transcriptRevision + 1,
-        speaker: "tutor",
-      });
-    }
+    this.projectedFeedback = undefined;
     const bindingFailure = !this.state.hasChildTurn
       ? "response.before_turn_start"
       : this.state.childSpeaking
@@ -668,6 +684,8 @@ export class CountingProposals {
     if (this.consumedCalls.size >= 256) {
       this.invalidateAcknowledgment("invalidated-evidence");
       this.context = undefined;
+      this.observation = undefined;
+      this.dispatch({ type: "tutor.feedback.invalidated", source: runtimeSource(this.state), invalidateAnswer: true });
       if (this.response) this.response.rejected = true;
       this.lastResult = "Proposal limit reached; restart the experiment";
       return;
@@ -678,6 +696,12 @@ export class CountingProposals {
     const reject = (reason: RejectionReason, diagnostic?: CorrelationCode) => {
       if (diagnostic) this.diagnose(diagnostic, "tool.call");
       if (inResponse) {
+        this.observation = undefined;
+        this.dispatch({
+          type: "tutor.feedback.invalidated",
+          source: runtimeSource(this.state),
+          invalidateAnswer: true,
+        });
         this.invalidateAcknowledgment("invalidated-evidence");
         r.rejected = true;
         this.rejectPending("additional rejected call");
@@ -807,40 +831,30 @@ export class CountingProposals {
       COUNTING_LESSON,
     );
     if (validation.state.consumedRevision !== source.transcriptRevision) return fail("reducer rejected proposal");
+    this.dispatch({ type: "proposal.received", source, proposal: r.proposal, transcriptSnapshot: r.transcript });
     this.missingRetries = 0;
     this.learner.validated = true;
     r.validatedLearnerRevision = this.learnerRevision;
     r.pending = undefined;
     this.lastResult = `Validated: ${args.answer_outcome} · ${args.support_state}`;
     this.recordDecision("proposal.validated", args.answer_outcome);
+    this.observation = { source: r.source, learnerRevision: this.learnerRevision, outcome: r.proposal.answerOutcome };
+    if (this.learnerAnswerAccepted) this.recordDecision("learner.answer.accepted", "correct");
     this.results.push({
       call_id: pending.callId,
       status: "accepted",
       reason:
-        "proposal grounded; application still requires current tutor acknowledgment, playback drain and render confirmation",
+        "proposal grounded; correctness is separate from completed tutor feedback, natural playback drain and render confirmation",
     });
     this.deliver();
   }
   private deliver() {
     const r = this.response;
-    if (!r?.done || !r.completed || r.rejected || r.calls !== 1 || !r.proposal || !r.proposalSource || this.observation)
-      return;
+    if (!r?.done || !r.completed || r.rejected || r.calls !== 1 || !r.proposal || !r.proposalSource) return;
     const source = classificationSource(this.state);
     if (!source || !this.matches(r.source) || r.validatedLearnerRevision !== this.learnerRevision) return;
-    // Tutor revisions may supersede conversation state before delivery. The
-    // grounded learner observation remains diagnostic, never transition authority.
-    if (source.transcriptRevision === r.proposalSource.transcriptRevision) {
-      this.dispatch({
-        type: "proposal.received",
-        source: r.proposalSource,
-        proposal: r.proposal,
-        transcriptSnapshot: r.transcript,
-      });
-      if (this.state.consumedRevision !== source.transcriptRevision) return;
-    }
     this.observation = { source: r.source, learnerRevision: this.learnerRevision, outcome: r.proposal.answerOutcome };
     this.lastResult = `Accepted: ${r.proposal.answerOutcome} · ${r.proposal.supportState}`;
-    if (this.learnerAnswerAccepted) this.recordDecision("learner.answer.accepted", "correct");
   }
   responseDone(id?: string, status?: string) {
     const r = this.response;
@@ -849,6 +863,7 @@ export class CountingProposals {
     r.completed = status === "completed";
     if (!r.completed) {
       this.invalidateAcknowledgment("cancelled");
+      this.dispatch({ type: "tutor.feedback.invalidated", source: runtimeSource(this.state), invalidateAnswer: true });
       this.observation = undefined;
       this.rejectPending("cancelled response");
       r.rejected = true;
@@ -879,61 +894,42 @@ export class CountingProposals {
     this.continuationRequested = true;
     return r.rejected || !r.proposal ? "recovery" : "accepted";
   }
-  /** Revalidate the exact ordered exchange, never infer acknowledgment from a tool. */
+  /** Completed feedback is delivery evidence, never semantic acknowledgment. */
   tick() {
     if (this.stopped || this.state.phase !== "active") return;
     const r = this.response;
     const tutor = r?.tutor;
     this.startAcknowledgment();
-    if (this.learnerAnswerAccepted && r && (!r.done || !tutor?.final)) this.recordAcknowledgment("awaiting-evidence");
-    if (this.learnerAnswerAccepted && r?.done && r.completed && !r.rejected && this.matches(r.source) && tutor?.final) {
-      const node = COUNTING_LESSON.nodes[this.state.nodeId].presentation;
-      const key = JSON.stringify([this.learnerRevision, tutor.id, tutor.text]);
-      if (this.acknowledgmentMode === "grok-only") r.acknowledgmentRecognized = grokOnlyAcknowledges(tutor.text, node);
-      if (!this.ack?.pending) this.recordAcknowledgment(r.acknowledgmentRecognized ? "recognized" : "abstained");
-      if (r.audioItems?.has(tutor.id) && r.acknowledgmentRecognized && key !== this.projectedAcknowledgment) {
-        this.projectedAcknowledgment = key;
-        if (!this.state.tutorOutputObserved) {
-          // Retain the response-correlated real playback onset when its learner
-          // final arrived late. Conservatively begin fresh quiet after projection.
-          const wasQuiet = this.state.outputActivity === "quiet";
-          // Replay the real post-interruption quiet -> onset boundary when the
-          // reducer saw it before finalized learner text made it eligible.
-          if (!wasQuiet) this.dispatch({ type: "output.activity", source: runtimeSource(this.state), state: "quiet" });
-          this.dispatch({ type: "output.activity", source: runtimeSource(this.state), state: "active" });
-          if (wasQuiet) this.dispatch({ type: "output.activity", source: runtimeSource(this.state), state: "quiet" });
+    const problem = this.feedbackBlocker;
+    if (this.learnerAnswerAccepted && r) {
+      if (problem) {
+        if (r.feedbackEvaluation !== problem) {
+          r.feedbackEvaluation = problem;
+          this.recordDecision("tutor.feedback.blocked", problem, tutor ? this.playbackIdentity(tutor.id) : undefined);
         }
-        // Provider finals can arrive out of order. Re-project the actual final
-        // tutor message after finalized learner evidence into the reducer's
-        // ordered snapshot; this is a new validation, not retagging an old call.
-        this.dispatch({
-          type: "transcript.updated",
-          source: runtimeSource(this.state),
-          revision: this.state.transcriptRevision + 1,
-          speaker: "tutor",
-        });
-        const source = classificationSource(this.state);
-        if (source) {
-          this.dispatch({
-            type: "proposal.received",
-            source,
-            proposal: {
-              nodeId: source.nodeId,
-              transcriptRevision: source.transcriptRevision,
-              childActivity: "unknown",
-              answerOutcome: "correct",
-              supportState: "none",
-              tutorState: "acknowledging",
-            },
-            transcriptSnapshot: this.messages
-              .map(m => `${m.speaker === "Learner" ? "Child" : "Tutor"}: ${m.text}`)
-              .join("\n"),
-          });
-          if (this.acknowledgmentMode === "grok-jev")
-            this.recordDecision(
-              "classification.applied",
-              this.state.acknowledgmentObserved ? "classification-accepted" : "stale-classification",
-            );
+      } else if (tutor) {
+        const key = JSON.stringify([
+          this.state.transcriptRevision,
+          this.learnerRevision,
+          r.sequence,
+          tutor.id,
+          tutor.text,
+        ]);
+        if (key !== this.projectedFeedback) {
+          this.projectedFeedback = key;
+          const source = classificationSource(this.state);
+          const audio = this.playbackIdentity(tutor.id);
+          if (source && this.state.acceptedAnswerRevision !== null) {
+            this.dispatch({
+              type: "tutor.feedback.completed",
+              source,
+              learnerRevision: this.state.acceptedAnswerRevision,
+              response: audio.response!,
+              item: audio.item,
+            });
+            if (this.state.feedbackDelivered)
+              this.recordDecision("tutor.feedback.completed", "feedback-complete", audio);
+          }
         }
       }
     }
@@ -952,19 +948,49 @@ export class CountingProposals {
                     ? "awaiting-response-completion"
                     : "learner-answer-not-correct"
                 : "awaiting-report"
-            : !r?.acknowledgmentRecognized
-              ? "awaiting-tutor"
-              : !this.state.acknowledgmentObserved
-                ? "awaiting-acknowledgment-audio"
-                : this.state.outputActivity !== "quiet"
-                  ? "playback-active"
-                  : "quiet-period";
+            : (problem ?? "quiet-period");
       const key = JSON.stringify([this.state.visitId, this.state.childTurnId, reason]);
       if (key !== this.blockedDecision) {
         this.blockedDecision = key;
         this.recordDecision("transition.blocked", reason);
       }
     }
+  }
+  get feedbackStatus(): DecisionReason {
+    return this.learnerAnswerAccepted ? (this.feedbackBlocker ?? "feedback-complete") : "awaiting-learner-evidence";
+  }
+  private get feedbackBlocker(): DecisionReason | undefined {
+    const r = this.response;
+    if (!r || r.rejected || !r.turnToken || !this.matches(r.source)) return "invalidated-evidence";
+    if (!r.done) return "awaiting-response-completion";
+    if (!r.completed) return "cancelled";
+    if (!r.tutor?.final) return "missing-feedback";
+    const problem = feedbackProblem(r.tutor.text, COUNTING_LESSON.nodes[this.state.nodeId].presentation);
+    if (problem) return problem;
+    if (!r.audioItems?.has(r.tutor.id)) return "missing-feedback-audio";
+    if (!r.drainedItems?.has(r.tutor.id) || this.state.outputActivity !== "quiet") return "playback-active";
+  }
+  get feedbackResponsePending(): boolean {
+    const r = this.response;
+    return (
+      !this.stopped &&
+      !!r &&
+      !r.done &&
+      !r.rejected &&
+      !!r.turnToken &&
+      this.matches(r.source) &&
+      (this.learnerAnswerAccepted ||
+        (r.validatedLearnerRevision === this.learnerRevision && r.proposal?.answerOutcome === "correct"))
+    );
+  }
+  /** Only the transport's natural final source.onended boundary supplies this event. */
+  playbackDrained(audio: PlaybackIdentity) {
+    const r = this.response;
+    if (this.stopped || !r || audio.response !== r.sequence || !this.matches(r.source)) return;
+    const item = [...r.items].find(([, ordinal]) => ordinal === audio.item)?.[0];
+    if (!item || !r.audioItems?.has(item)) return;
+    r.drainedItems ??= new Set();
+    r.drainedItems.add(item);
   }
   private invalidateAcknowledgment(reason: DecisionReason) {
     if (this.ack?.pending) {
@@ -1006,7 +1032,7 @@ export class CountingProposals {
     const node = COUNTING_LESSON.nodes[this.state.nodeId].presentation;
     const requestId = crypto.randomUUID();
     this.recordDecision("classification.requested", "classification-pending", this.playbackIdentity(tutor.id));
-    // Race explicitly: even a mock or unresponsive transport that ignores abort cannot hold recovery open.
+    // Race explicitly: even a diagnostic transport that ignores abort has a bounded lifetime.
     let timer: ReturnType<typeof setTimeout>;
     let timedOut = false;
     const deadline = new Promise<never>((_, reject) => {
@@ -1072,29 +1098,21 @@ export class CountingProposals {
           latencyMs: Math.min(ACK_DEADLINE_MS, Math.round(performance.now() - ack.started)),
           modelValidated: decision.modelValidated,
         });
-        this.tick();
         this.acknowledgmentChanged();
       });
-  }
-  private recordAcknowledgment(reason: "recognized" | "abstained" | "awaiting-evidence") {
-    const r = this.response;
-    if (r && r.acknowledgmentEvaluation !== reason) {
-      r.acknowledgmentEvaluation = reason;
-      this.recordDecision("acknowledgment.evaluated", reason, r.tutor ? this.playbackIdentity(r.tutor.id) : undefined);
-    }
   }
   confirmRender(identity: RenderIdentity): boolean {
     const before = this.state.phase;
     this.dispatch({ type: "render.confirmed", runtimeId: this.state.runtimeId, identity });
     if (before !== "rendering" || this.state.phase === "rendering") return false;
-    this.recordDecision("render.confirmed", "acknowledgment-and-audio");
+    this.recordDecision("render.confirmed", "feedback-and-audio");
     if (this.state.phase === "complete") this.recordDecision("lesson.completed", "completed");
     this.invalidateAcknowledgment("scene-transition");
     this.nextContext = undefined;
     this.context = undefined;
     this.response = undefined;
     this.observation = undefined;
-    this.projectedAcknowledgment = undefined;
+    this.projectedFeedback = undefined;
     this.continuationUsed = false;
     this.continuationRequested = false;
     this.missingRetries = 0;
@@ -1115,16 +1133,15 @@ export class CountingProposals {
       !r.completed ||
       !r.turnToken ||
       !this.matches(r.source) ||
-      r.pending ||
-      this.ack?.pending
+      r.pending
     )
       return;
     if (this.learnerAnswerAccepted) {
       // Tool-only output gets its usual continuation before timed recovery.
       if (!r.spoken && !this.continuationUsed) return;
-      if (!r.acknowledgmentRecognized) return "missing-acknowledgment";
-      if (!r.tutor || !r.audioItems?.has(r.tutor.id) || !this.state.tutorOutputObserved)
-        return "missing-acknowledgment-audio";
+      const reason = this.feedbackBlocker;
+      if (reason === "missing-feedback" || reason === "missing-feedback-audio" || reason === "contradictory-feedback")
+        return reason;
       return;
     }
     if (r.calls === 0 && !this.continuationUsed && (total.test(normalize(learner.text)) || help.test(learner.text)))
@@ -1136,7 +1153,7 @@ export class CountingProposals {
     if (this.continuationUsed || (reason === "missing-report" && this.missingRetries >= 1)) {
       this.recoveryExhausted = true;
       this.recordDecision("recovery.exhausted", reason);
-      // Preserve lastResult and the validated observation for acknowledgment failures.
+      // Preserve lastResult and the validated observation for feedback failures.
       if (reason === "missing-report") this.lastResult = "No usable counting report after one retry.";
       return;
     }
@@ -1159,6 +1176,8 @@ export class CountingProposals {
     ) {
       this.response.audioItems ??= new Set();
       this.response.audioItems.add(itemId);
+      this.response.drainedItems?.delete(itemId);
+      this.projectedFeedback = undefined;
     }
     this.dispatch({ type: "output.activity", source: runtimeSource(this.state), state: active ? "active" : "quiet" });
   }

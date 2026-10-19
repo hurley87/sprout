@@ -66,6 +66,10 @@ function GrokCounting() {
       experiment: "grok-counting",
       exportedAt: new Date().toISOString(),
       acknowledgmentMode: snapshot.acknowledgmentMode,
+      progressionPolicy: "validated-answer-feedback",
+      jevRole: "diagnostic-only",
+      feedbackStatus: snapshot.feedbackStatus ?? null,
+      feedbackDelivered: snapshot.feedbackDelivered ?? false,
       classifierModel: snapshot.classifierModel,
       requestedModel: GROK_MODEL,
       echoedModel: snapshot.echoedModel ?? null,
@@ -96,7 +100,13 @@ function GrokCounting() {
   return (
     <main className="mx-auto max-w-5xl space-y-6 p-6">
       <h1 className="text-2xl font-semibold">Grok counting experiment</h1>
-      <p>Active acknowledgment mode: {mode}</p>
+      <p>Active mode: {mode}</p>
+      <p>
+        {mode === "grok-jev"
+          ? "Grok progression with Jev acknowledgment diagnostics."
+          : "Grok progression with spoken feedback completion."}{" "}
+        Validated learner answers determine correctness; Jev never gates scene changes.
+      </p>
       <p>
         Adult or synthetic voice testing only. Count one duck, two ducks, then three butterflies. “Move on” ends this
         small experiment without answer credit. Use headphones to avoid echo.
@@ -165,7 +175,7 @@ function GrokCounting() {
       </p>
       <p aria-label="Tool proposal">
         {snapshot?.proposal ?? "No proposal"} · Learner answer recorded:{" "}
-        {snapshot?.learnerAnswerAccepted ? "yes" : "no"} · Revision-bound answer:{" "}
+        {snapshot?.learnerAnswerAccepted ? "yes" : "no"} · Validated answer:{" "}
         {snapshot?.answerAccepted ? "yes" : "no"}
       </p>
       <details>

@@ -441,7 +441,7 @@ it("delivers a wire tool proposal and acknowledges once, continuing only after c
   const { voice, socket } = await connected();
   learnerAnswer(socket);
   propose(socket);
-  expect(updates.at(-1)?.answerAccepted).toBe(false);
+  expect(updates.at(-1)?.answerAccepted).toBe(true);
   expect(updates.at(-1)?.proposal).toContain("Validated: correct");
   const outputs = () => socket.sent.filter(e => (e.item as { type?: string })?.type === "function_call_output");
   expect(outputs()).toHaveLength(1);
@@ -480,7 +480,7 @@ it("does not double-speak when a tool arrives alongside tutor audio", async () =
   voice.stop();
 });
 
-it("retains the learner observation through real continuation events without restoring revision-bound acceptance", async () => {
+it("retains validated learner correctness independently of continuation feedback revisions", async () => {
   const { voice, socket } = await connected();
   learnerAnswer(socket);
   propose(socket);
@@ -498,7 +498,7 @@ it("retains the learner observation through real continuation events without res
     item_id: "a2",
     transcript: "Yes, one duck.",
   });
-  expect(updates.at(-1)).toMatchObject({ learnerAnswerAccepted: true, answerAccepted: false });
+  expect(updates.at(-1)).toMatchObject({ learnerAnswerAccepted: true, answerAccepted: true });
   socket.event({ type: "input_audio_buffer.speech_started", item_id: "new" });
   expect(updates.at(-1)?.learnerAnswerAccepted).toBe(false);
   voice.stop();
@@ -602,78 +602,97 @@ function tutor(socket: Socket, response: string, text: string, audio = true) {
       delta: btoa("\0\0".repeat(2400)),
     });
 }
-it("completes all authored edges only after playback drain and exact render confirmation, then config acknowledgment", async () => {
-  vi.useFakeTimers();
-  const { voice, socket, context } = await connected();
-  for (const [i, text, ack, next] of [
-    [1, "One duck.", "Yes, one duck.", "count-2-ducks"],
-    [2, "Two ducks.", "That's right, two ducks.", "count-3-butterflies"],
-    [3, "Three butterflies.", "Three butterflies!", null],
-  ] as const) {
-    const user = `u-${i}`,
-      response = `r-${i}`;
-    const config = socket.sent.filter(e => e.type === "session.update").at(-1)!;
-    const token = JSON.parse(
-      (config.session as { instructions: string }).instructions.match(/(\{"context_token".*?\})/)![1],
-    ).context_token;
-    socket.event({ type: "input_audio_buffer.speech_started", item_id: user });
-    socket.event({ type: "input_audio_buffer.speech_stopped", item_id: user });
-    socket.event({ type: "conversation.item.input_audio_transcription.completed", item_id: user, transcript: text });
-    socket.event({ type: "response.created", response: { id: response } });
-    if (i > 1) socket.event({ type: "response.created", response: { id: `r-${i - 1}` } });
-    // Alternate acknowledgment/tool event order, independently of audible drain.
-    if (i !== 2) tutor(socket, response, ack);
-    const call = {
-      type: "response.function_call_arguments.done",
-      name: "report_counting_answer",
-      call_id: `c-${i}`,
-      response_id: response,
-      arguments: JSON.stringify({
-        context_token: token,
-        supporting_text: text,
-        answer_outcome: "correct",
-        support_state: "none",
-      }),
-    };
-    socket.event(call);
-    socket.event(call); // Duplicate never delivers another result or transition.
-    if (i === 2) tutor(socket, response, ack);
-    socket.event({ type: "response.done", response: { id: response, status: "completed" } });
-    vi.advanceTimersByTime(1000);
-    expect(updates.at(-1)?.render).toBeUndefined();
-    expect(socket.sent.filter(e => e.type === "session.update")).toHaveLength(i);
-    context.sources.at(-1)!.onended?.();
-    vi.advanceTimersByTime(260);
-    const identity = updates.at(-1)!.render!;
-    expect(identity.nodeId).toBe(next);
-    expect(socket.sent.filter(e => e.type === "session.update")).toHaveLength(i);
-    voice.confirmRender({ ...identity, token: "stale" });
-    voice.confirmRender({ ...identity, sceneId: "wrong-scene" });
-    expect(socket.sent.filter(e => e.type === "session.update")).toHaveLength(i);
-    const questions = socket.sent.filter(e => e.type === "response.create").length;
-    voice.confirmRender(identity);
-    voice.confirmRender(identity);
-    if (next) {
-      const updated = socket.sent.filter(e => e.type === "session.update").at(-1)!;
-      expect(JSON.stringify(updated)).toContain(next === "count-2-ducks" ? "duck-friends" : "butterfly-garden");
-      expect(socket.sent.filter(e => e.type === "response.create")).toHaveLength(questions);
-      socket.event({ type: "session.updated", session: config.session });
-      expect(socket.sent.filter(e => e.type === "response.create")).toHaveLength(questions);
-      socket.event({ type: "session.updated", session: updated.session });
-      socket.event({ type: "session.updated", session: updated.session });
-      expect(socket.sent.filter(e => e.type === "response.create")).toHaveLength(questions + 1);
-    } else {
-      expect(updates.at(-1)).toMatchObject({ status: "complete", complete: true, output: "idle" });
-      expect(updates.at(-1)?.decisionTimeline?.filter(e => e.type === "lesson.completed")).toHaveLength(1);
-      expect(socket.close).toHaveBeenCalledOnce();
-      expect(socket.sent.filter(e => e.type === "response.create")).toHaveLength(questions);
+it.each(["grok-only", "grok-jev"] as const)(
+  "completes all authored edges after feedback drain and exact render confirmation in %s",
+  async mode => {
+    if (mode === "grok-jev")
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string, init?: RequestInit) =>
+          url.endsWith("/acknowledgment")
+            ? Response.json({
+                requestId: JSON.parse(String(init?.body)).requestId,
+                outcome: "abstain",
+                reason: "low-confidence",
+                modelValidated: true,
+              })
+            : Response.json({ value: "ephemeral", expires_at: Date.now() / 1000 + 60 }),
+        ),
+      );
+
+    vi.useFakeTimers();
+    const { voice, socket, context } = await connected(mode);
+    for (const [i, text, ack, next] of [
+      [1, "One", "One duck. You got it!", "count-2-ducks"],
+      [2, "Two", "Two ducks.", "count-3-butterflies"],
+      [3, "Three butterflies.", "Three butterflies!", null],
+    ] as const) {
+      const user = `u-${i}`,
+        response = `r-${i}`;
+      const config = socket.sent.filter(e => e.type === "session.update").at(-1)!;
+      const token = JSON.parse(
+        (config.session as { instructions: string }).instructions.match(/(\{"context_token".*?\})/)![1],
+      ).context_token;
+      socket.event({ type: "input_audio_buffer.speech_started", item_id: user });
+      socket.event({ type: "input_audio_buffer.speech_stopped", item_id: user });
+      socket.event({ type: "conversation.item.input_audio_transcription.completed", item_id: user, transcript: text });
+      socket.event({ type: "response.created", response: { id: response } });
+      if (i > 1) socket.event({ type: "response.created", response: { id: `r-${i - 1}` } });
+      // Alternate acknowledgment/tool event order, independently of audible drain.
+      if (i !== 2) tutor(socket, response, ack);
+      const call = {
+        type: "response.function_call_arguments.done",
+        name: "report_counting_answer",
+        call_id: `c-${i}`,
+        response_id: response,
+        arguments: JSON.stringify({
+          context_token: token,
+          supporting_text: text,
+          answer_outcome: "correct",
+          support_state: "none",
+        }),
+      };
+      socket.event(call);
+      socket.event(call); // Duplicate never delivers another result or transition.
+      if (i === 2) tutor(socket, response, ack);
+      socket.event({ type: "response.done", response: { id: response, status: "completed" } });
+      await flush();
+      vi.advanceTimersByTime(1000);
+      expect(updates.at(-1)?.render).toBeUndefined();
+      expect(socket.sent.filter(e => e.type === "session.update")).toHaveLength(i);
+      context.sources.at(-1)!.onended?.();
+      vi.advanceTimersByTime(260);
+      const identity = updates.at(-1)!.render!;
+      expect(identity.nodeId).toBe(next);
+      expect(socket.sent.filter(e => e.type === "session.update")).toHaveLength(i);
+      voice.confirmRender({ ...identity, token: "stale" });
+      voice.confirmRender({ ...identity, sceneId: "wrong-scene" });
+      expect(socket.sent.filter(e => e.type === "session.update")).toHaveLength(i);
+      const questions = socket.sent.filter(e => e.type === "response.create").length;
+      voice.confirmRender(identity);
+      voice.confirmRender(identity);
+      if (next) {
+        const updated = socket.sent.filter(e => e.type === "session.update").at(-1)!;
+        expect(JSON.stringify(updated)).toContain(next === "count-2-ducks" ? "duck-friends" : "butterfly-garden");
+        expect(socket.sent.filter(e => e.type === "response.create")).toHaveLength(questions);
+        socket.event({ type: "session.updated", session: config.session });
+        expect(socket.sent.filter(e => e.type === "response.create")).toHaveLength(questions);
+        socket.event({ type: "session.updated", session: updated.session });
+        socket.event({ type: "session.updated", session: updated.session });
+        expect(socket.sent.filter(e => e.type === "response.create")).toHaveLength(questions + 1);
+      } else {
+        expect(updates.at(-1)).toMatchObject({ status: "complete", complete: true, output: "idle" });
+        expect(updates.at(-1)?.decisionTimeline?.filter(e => e.type === "lesson.completed")).toHaveLength(1);
+        expect(socket.close).toHaveBeenCalledOnce();
+        expect(socket.sent.filter(e => e.type === "response.create")).toHaveLength(questions);
+      }
+      // Old scene calls/transcripts cannot affect a new scene or repeat closing speech.
+      socket.event(call);
+      tutor(socket, response, "One duck.");
     }
-    // Old scene calls/transcripts cannot affect a new scene or repeat closing speech.
-    socket.event(call);
-    tutor(socket, response, "One duck.");
-  }
-  expect(fetch).toHaveBeenCalledTimes(1); // Authorization only, no classifier.
-});
+    expect(fetch).toHaveBeenCalledTimes(mode === "grok-jev" ? 4 : 1);
+  },
+);
 it.each(["correction", "interrupt", "cancel", "stop"])(
   "revokes pending success on %s during acknowledgment playback",
   async fault => {
@@ -773,7 +792,7 @@ it.each(["Move on", "Stop"])("ends %s without following an edge or granting succ
   voice.stop();
 });
 
-it.each(["no audio", "generic praise", "question", "old response"])(
+it.each(["no audio", "question", "old response"])(
   "cannot advance with %s instead of grounded audible acknowledgment",
   async fault => {
     vi.useFakeTimers();
@@ -1049,7 +1068,7 @@ it("settles the exact live partial-completed sequence and progresses only after 
   voice.stop();
 });
 
-it.each(["recover", "abstain again", "no audio", "wrong item audio", "tool-only budget"])(
+it.each(["recover", "contradict again", "no audio", "wrong item audio", "tool-only budget"])(
   "separates the live accepted-answer acknowledgment failure: %s",
   async outcome => {
     vi.useFakeTimers();
@@ -1061,9 +1080,9 @@ it.each(["recover", "abstain again", "no audio", "wrong item audio", "tool-only 
       socket.event({ type: "response.created", response: { id: "ack" } });
     }
     const response = outcome === "tool-only budget" ? "ack" : "tools";
-    tutor(socket, response, "One duck. That's right!");
+    tutor(socket, response, "No, that is wrong.");
     socket.event({ type: "response.done", response: { id: response, status: "completed" } });
-    expect(updates.at(-1)).toMatchObject({ learnerAnswerAccepted: true, answerAccepted: false });
+    expect(updates.at(-1)).toMatchObject({ learnerAnswerAccepted: true, answerAccepted: true });
     vi.advanceTimersByTime(5000); // Generation completion cannot stand in for local drain.
     expect(socket.sent.filter(e => e.type === "response.create")).toHaveLength(outcome === "tool-only budget" ? 2 : 1);
     context.sources.at(-1)?.onended?.();
@@ -1080,7 +1099,7 @@ it.each(["recover", "abstain again", "no audio", "wrong item audio", "tool-only 
       tutor(
         socket,
         "retry-ack",
-        outcome === "abstain again" ? "One duck. That's right!" : "Yes, one duck.",
+        outcome === "contradict again" ? "No, that is wrong." : "Yes, one duck.",
         outcome !== "no audio" && outcome !== "wrong item audio",
       );
       if (outcome === "wrong item audio")
@@ -1100,9 +1119,7 @@ it.each(["recover", "abstain again", "no audio", "wrong item audio", "tool-only 
     if (outcome !== "recover") {
       expect(updates.at(-1)).toMatchObject({ status: "error", learnerAnswerAccepted: true, nodeId: "count-1-duck" });
       expect(updates.at(-1)?.error).toContain(
-        outcome.includes("audio")
-          ? "Tutor confirmation audio could not be verified"
-          : "Tutor confirmation could not be verified",
+        outcome.includes("audio") ? "Tutor feedback audio could not be verified" : "Tutor feedback contradicted",
       );
       expect(updates.some(s => s.render || s.error?.includes("No usable counting report"))).toBe(false);
     }
@@ -1119,7 +1136,7 @@ it.each(["Stop", "new learner speech", "cancel", "interrupt during recovery"])(
     const { voice, socket, context } = await connected();
     learnerAnswer(socket);
     propose(socket);
-    tutor(socket, "tools", "One duck. That's right!");
+    tutor(socket, "tools", "No, that is wrong.");
     if (action === "cancel") {
       socket.event({ type: "response.done", response: { id: "tools", status: "cancelled" } });
     } else {
@@ -1284,46 +1301,35 @@ it("does not start a continuation watchdog for opening or VAD-generated response
   voice.stop();
 });
 
-it("retains the October 18 decision history through accurate acknowledgment failure", async () => {
+it("records the former October 18 phrase as delivered feedback without acknowledgment recovery", async () => {
   vi.useFakeTimers();
-  const { socket, context } = await connected();
+  const { voice, socket, context } = await connected();
   learnerAnswer(socket);
   propose(socket);
   tutor(socket, "tools", "One duck. That's right!");
   socket.event({ type: "response.done", response: { id: "tools", status: "completed" } });
   context.sources.at(-1)?.onended?.();
-  vi.advanceTimersByTime(3000);
-  socket.event({ type: "response.created", response: { id: "recovery" } });
-  tutor(socket, "recovery", "One duck. That's right!");
-  socket.event({ type: "response.done", response: { id: "recovery", status: "completed" } });
-  context.sources.at(-1)?.onended?.();
-  vi.advanceTimersByTime(3000);
-  const snapshot = updates.at(-1)!;
-  expect(snapshot.error).toContain("Tutor confirmation could not be verified");
-  const entries = snapshot.decisionTimeline!;
-  const events = entries.map(e => `${e.type}:${e.reason}`);
+  vi.advanceTimersByTime(260);
+  expect(updates.at(-1)?.error).toBeUndefined();
+  expect(updates.at(-1)?.render?.nodeId).toBe("count-2-ducks");
+  voice.confirmRender(updates.at(-1)!.render!);
+  const entries = updates.at(-1)!.decisionTimeline!;
+  const events = entries.map(e => e.type);
   for (const event of [
-    "learner.transcript:settled",
-    "proposal.received:awaiting-evidence",
-    "proposal.validated:correct",
-    "learner.answer.accepted:correct",
-    "acknowledgment.evaluated:abstained",
-    "audio.drained:local-playback",
-    "recovery.requested:missing-acknowledgment",
-    "continuation.completed:missing-acknowledgment",
-    "recovery.exhausted:missing-acknowledgment",
-    "lesson.failed:missing-acknowledgment",
+    "proposal.validated",
+    "learner.answer.accepted",
+    "audio.drained",
+    "tutor.feedback.completed",
+    "transition.eligible",
+    "render.confirmed",
   ])
     expect(events).toContain(event);
-  expect(entries.find(e => e.type === "proposal.validated")?.state).toMatchObject({
-    proposalOutcome: "correct",
-    proposalSupport: "none",
-  });
-  expect(events.some(e => e.startsWith("render.requested"))).toBe(false);
+  expect(events.some(e => e.startsWith("recovery."))).toBe(false);
   expect(entries.every((e, i) => !i || (e.atMs >= entries[i - 1].atMs && e.sequence > entries[i - 1].sequence))).toBe(
     true,
   );
-  expect(JSON.stringify(entries)).not.toMatch(/One duck|That's right|context_token|tools"|recovery"|ephemeral/);
+  expect(JSON.stringify(entries)).not.toMatch(/One duck|That's right|context_token|supporting_text|ephemeral/);
+  voice.stop();
 });
 
 it("labels a validated correct proposal awaiting generation separately from an incorrect answer", async () => {
@@ -1333,7 +1339,7 @@ it("labels a validated correct proposal awaiting generation separately from an i
   expect(updates.at(-1)?.decisionTimeline?.at(-1)).toMatchObject({
     type: "transition.blocked",
     reason: "awaiting-response-completion",
-    state: { learnerAccepted: false, proposalOutcome: "correct", proposalSupport: "none" },
+    state: { learnerAccepted: true, proposalOutcome: "correct", proposalSupport: "none" },
   });
   voice.stop();
 });
@@ -1419,6 +1425,25 @@ it.each(["grok-only", "grok-jev"] as const)(
     socket.event({ type: "session.updated", session: next[1].session });
     socket.event({ type: "input_audio_buffer.speech_started", item_id: "next-attempt" });
     expect(updates.at(-1)?.diagnostics?.at(-1)?.code).toBe("context.claimed");
+    voice.stop();
+  },
+);
+
+it.each(["grok-only", "grok-jev"] as const)(
+  "bounds a stalled validated feedback response without losing learner correctness in %s",
+  async mode => {
+    vi.useFakeTimers();
+    const { voice, socket } = await connected(mode);
+    learnerAnswer(socket);
+    propose(socket);
+    vi.advanceTimersByTime(CONTINUATION_COMPLETE_TIMEOUT_MS);
+    expect(updates.at(-1)).toMatchObject({ status: "error", learnerAnswerAccepted: true, nodeId: "count-1-duck" });
+    expect(updates.at(-1)?.error).toContain("response stalled");
+    expect(updates.at(-1)?.decisionTimeline).toContainEqual(
+      expect.objectContaining({ type: "response.timed-out", reason: "stalled-response" }),
+    );
+    expect(updates.at(-1)?.render).toBeUndefined();
+    expect(socket.sent.filter(e => e.type === "response.create")).toHaveLength(1);
     voice.stop();
   },
 );

@@ -192,7 +192,7 @@ it("bounds calls per connection and cannot award an answer without a call", () =
 it("does not deliver a validated answer from a subsequently cancelled response", () => {
   const { adapter, call } = fixture();
   expect(call()?.status).toBe("accepted");
-  expect(adapter.state.answerAccepted).toBe(false);
+  expect(adapter.state.answerAccepted).toBe(true);
   adapter.responseDone("r1", "cancelled");
   expect(adapter.state.answerAccepted).toBe(false);
 });
@@ -203,17 +203,17 @@ it.each(["before", "after"])(
     const { adapter, call } = fixture();
     call();
     if (timing === "after") adapter.responseDone("r1", "completed");
-    adapter.transcript({ id: "a1", speaker: "Tutor", text: "Yes, one duck.", final: true });
+    adapter.transcript({ id: "a1", speaker: "Tutor", text: "Yes, one duck.", final: true }, "r1");
     if (timing === "before") adapter.responseDone("r1", "completed");
     expect(adapter.learnerAnswerAccepted).toBe(true);
     expect(adapter.state).toMatchObject({
-      answerAccepted: false,
+      answerAccepted: true,
       acknowledgmentObserved: false,
       transitionReady: false,
     });
     adapter.responseCreated("continuation");
-    adapter.transcript({ id: "a2", speaker: "Tutor", text: "Great work!", final: false });
-    adapter.transcript({ id: "a2", speaker: "Tutor", text: "Great work!", final: true });
+    adapter.transcript({ id: "a2", speaker: "Tutor", text: "Great work!", final: false }, "continuation");
+    adapter.transcript({ id: "a2", speaker: "Tutor", text: "Great work!", final: true }, "continuation");
     expect(adapter.learnerAnswerAccepted).toBe(true);
     adapter.speechStarted("u2");
     expect(adapter.learnerAnswerAccepted).toBe(false);
@@ -705,8 +705,8 @@ it("accepts the observed wrong-object ASR result as incorrect after settling the
 });
 
 it.each([
-  ["One duck. That's right!", true, "missing-acknowledgment"],
-  ["Yes, one duck.", false, "missing-acknowledgment-audio"],
+  ["One duck. That's right!", true, undefined],
+  ["Yes, one duck.", false, "missing-feedback-audio"],
   ["Yes, one duck.", true, undefined],
 ] as const)("distinguishes acknowledgment from correlated audio: %s / %s", (text, audio, reason) => {
   const { adapter, call } = fixture();
@@ -716,6 +716,7 @@ it.each([
   if (audio) adapter.output(true, "ack");
   adapter.responseDone("r1", "completed");
   adapter.output(false);
+  if (audio) adapter.playbackDrained(adapter.playbackIdentity("ack"));
   adapter.tick();
   expect(adapter.learnerAnswerAccepted).toBe(true);
   expect(adapter.recoveryReason).toBe(reason);
@@ -738,19 +739,19 @@ it("uses missing-report recovery only without a validated observation", () => {
   expect(adapter.learnerAnswerAccepted).toBe(false);
 });
 
-it("retains the accepted observation when an already used continuation exhausts acknowledgment recovery", () => {
+it("retains the accepted observation when an already used continuation exhausts contradictory feedback recovery", () => {
   const { adapter, call } = fixture();
   call();
   adapter.responseDone("r1", "completed");
   expect(adapter.takeContinuation()).toBe("accepted");
   adapter.responseCreated("ack");
-  adapter.transcript({ id: "ack-item", speaker: "Tutor", text: "One duck. That's right!", final: true }, "ack");
+  adapter.transcript({ id: "ack-item", speaker: "Tutor", text: "No, that is wrong.", final: true }, "ack");
   adapter.output(true, "ack-item");
   adapter.spoken("ack");
   adapter.responseDone("ack", "completed");
   adapter.output(false);
   adapter.tick();
-  expect(adapter.recoveryReason).toBe("missing-acknowledgment");
+  expect(adapter.recoveryReason).toBe("contradictory-feedback");
   expect(adapter.takeRecovery()).toBeUndefined();
   expect(adapter.recoveryExhausted).toBe(true);
   expect(adapter.recoveryReason).toBeUndefined();

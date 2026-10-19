@@ -57,6 +57,8 @@ export type Transcript = { id: string; speaker: "Learner" | "Tutor"; text: strin
 export type VoiceSnapshot = {
   acknowledgmentMode?: AcknowledgmentMode;
   classifierModel?: string | null;
+  feedbackStatus?: DecisionReason;
+  feedbackDelivered?: boolean;
   status: "connecting" | "listening" | "stopped" | "error" | "complete";
   error?: string;
   echoedModel?: string;
@@ -105,6 +107,7 @@ export class GrokVoice {
     timer: ReturnType<typeof setTimeout>;
   };
   private playbackItems = new Map<AudioBufferSourceNode, PlaybackIdentity>();
+  private feedbackResponseTimer?: ReturnType<typeof setTimeout>;
   private recoveryTimer?: ReturnType<typeof setTimeout>;
   private questionPending = false;
   private proposalTimer?: ReturnType<typeof setTimeout>;
@@ -125,16 +128,15 @@ export class GrokVoice {
     readonly acknowledgmentMode: AcknowledgmentMode = "grok-only",
   ) {
     this.proposals = new CountingProposals(crypto.randomUUID(), acknowledgmentMode, undefined, () => {
-      if (!this.stopped) {
-        this.advanceTools();
-        this.emit();
-      }
+      if (!this.stopped) this.emit();
     });
   }
   private emit() {
     this.changed({
       ...this.state,
       acknowledgmentMode: this.acknowledgmentMode,
+      feedbackStatus: this.proposals.feedbackStatus,
+      feedbackDelivered: !!this.proposals.state.feedbackDelivered,
       classifierModel: this.acknowledgmentMode === "grok-jev" ? ACK_MODEL : null,
       nodeId: this.proposals.state.nodeId,
       render: this.proposals.state.pendingRender?.identity,
@@ -344,6 +346,8 @@ export class GrokVoice {
       this.proposals.state.phase === "active" &&
       this.proposals.responseCreated(event.response?.id)
     ) {
+      clearTimeout(this.feedbackResponseTimer);
+      this.feedbackResponseTimer = undefined;
       this.responseId = event.response?.id;
       this.interrupted = false;
       const continuation = this.continuation;
@@ -361,6 +365,8 @@ export class GrokVoice {
       }
     }
     if (type === "input_audio_buffer.speech_started") {
+      clearTimeout(this.feedbackResponseTimer);
+      this.feedbackResponseTimer = undefined;
       this.cancelContinuation("interrupted");
       if (this.proposals.state.phase === "rendering") {
         this.fail("Speech interrupted the scene change. Press Start to begin again.");
@@ -521,6 +527,22 @@ export class GrokVoice {
         },
       });
     this.proposals.tick();
+    if (!this.proposals.feedbackResponsePending) {
+      clearTimeout(this.feedbackResponseTimer);
+      this.feedbackResponseTimer = undefined;
+    } else if (!this.feedbackResponseTimer) {
+      const responseId = this.responseId;
+      this.feedbackResponseTimer = setTimeout(() => {
+        this.feedbackResponseTimer = undefined;
+        if (!this.stopped && this.responseId === responseId && this.proposals.feedbackResponsePending) {
+          this.proposals.recordDecision("response.timed-out", "stalled-response");
+          this.fail(
+            "Tutor feedback response stalled. The learner answer was recorded, but the scene cannot advance. Press Start to restart.",
+            "stalled-response",
+          );
+        }
+      }, CONTINUATION_COMPLETE_TIMEOUT_MS);
+    }
     clearTimeout(this.drainTimer);
     this.drainTimer = undefined;
     if (this.proposals.state.phase === "rendering") {
@@ -530,11 +552,7 @@ export class GrokVoice {
       this.responseId = undefined;
       return;
     }
-    if (
-      this.proposals.state.quietSinceMs !== null &&
-      this.proposals.state.acknowledgmentObserved &&
-      !this.sources.size
-    ) {
+    if (this.proposals.state.quietSinceMs !== null && this.proposals.state.feedbackDelivered && !this.sources.size) {
       this.drainTimer = setTimeout(() => {
         this.advanceTools();
         this.emit();
@@ -564,7 +582,7 @@ export class GrokVoice {
             const instruction =
               recovery === "missing-report"
                 ? "No usable report arrived. Ask once for the learner to repeat or clarify, without giving a count or claiming success."
-                : "The learner's correct answer was already validated. Confirm that answer once with its number and object, then pause. Do not ask the learner to repeat or answer again.";
+                : "The learner's correct answer was already validated. Deliver brief accurate feedback once, then pause. Do not ask the learner to repeat or answer again.";
             this.requestContinuation(
               recovery,
               `${this.configurationInstructions}\n${instruction} Do not call any tools. Do not announce a new scene.`,
@@ -573,9 +591,11 @@ export class GrokVoice {
             const message =
               reason === "missing-report"
                 ? "No usable counting report after one retry. Press Start to restart, or leave the experiment."
-                : reason === "missing-acknowledgment-audio"
-                  ? "Tutor confirmation audio could not be verified. The learner answer was recorded, but the scene cannot advance. Press Start to restart."
-                  : "Tutor confirmation could not be verified. The learner answer was recorded, but the scene cannot advance. Press Start to restart.";
+                : reason === "contradictory-feedback"
+                  ? "Tutor feedback contradicted the validated answer. The learner answer was recorded, but the scene cannot advance. Press Start to restart."
+                  : reason === "missing-feedback-audio"
+                    ? "Tutor feedback audio could not be verified. The learner answer was recorded, but the scene cannot advance. Press Start to restart."
+                    : "Tutor feedback could not be verified. The learner answer was recorded, but the scene cannot advance. Press Start to restart.";
             this.fail(message, reason);
           }
           this.emit();
@@ -604,6 +624,7 @@ export class GrokVoice {
   private play(encoded: string, itemId: string, contentIndex: number) {
     const context = this.context!;
     const binary = atob(encoded);
+    if (!binary.length) return;
     if (binary.length % 2) throw new Error("Invalid PCM");
     const buffer = context.createBuffer(1, binary.length / 2, 24000);
     const samples = buffer.getChannelData(0);
@@ -638,7 +659,10 @@ export class GrokVoice {
         this.proposals.output(false);
         this.state.output = "idle";
       }
-      if (itemDrained) this.proposals.recordDecision("audio.drained", "local-playback", audio);
+      if (itemDrained) {
+        this.proposals.playbackDrained(audio);
+        this.proposals.recordDecision("audio.drained", "local-playback", audio);
+      }
       if (!this.sources.size) this.advanceTools();
       if (itemDrained || !this.sources.size) this.emit();
     };
@@ -676,6 +700,7 @@ export class GrokVoice {
     clearTimeout(this.proposalTimer);
     clearTimeout(this.drainTimer);
     clearTimeout(this.recoveryTimer);
+    clearTimeout(this.feedbackResponseTimer);
     this.abort.abort();
     if (this.socket) {
       this.socket.onopen = this.socket.onmessage = this.socket.onerror = this.socket.onclose = null;

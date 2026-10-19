@@ -214,7 +214,7 @@ test("wire tool proposal reaches the reducer adapter without secondary requests 
   ])
     emit!(event);
   await expect.poll(() => Boolean(token)).toBe(true);
-  await expect(page.getByLabel("Tool proposal")).toContainText("Revision-bound answer: no");
+  await expect(page.getByLabel("Tool proposal")).toContainText("Validated answer: no");
   const call = {
     type: "response.function_call_arguments.done",
     response_id: "r1",
@@ -229,11 +229,11 @@ test("wire tool proposal reaches the reducer adapter without secondary requests 
   };
   emit!(call);
   await expect(page.getByLabel("Tool proposal")).toContainText("Validated: correct");
-  await expect(page.getByLabel("Tool proposal")).toContainText("Revision-bound answer: no");
+  await expect(page.getByLabel("Tool proposal")).toContainText("Validated answer: yes");
   emit!(call);
   emit!({ type: "response.done", response: { id: "r1", status: "completed" } });
   await expect.poll(() => sent.filter(e => e.type === "response.create").length).toBe(2);
-  await expect(page.getByLabel("Tool proposal")).toContainText("Revision-bound answer: yes");
+  await expect(page.getByLabel("Tool proposal")).toContainText("Validated answer: yes");
   expect(sent.filter(e => e.item?.type === "function_call_output")).toHaveLength(1);
   emit!({ type: "response.created", response: { id: "continuation" } });
   emit!({ type: "response.output_audio_transcript.delta", response_id: "continuation", item_id: "a2", delta: "Yes, " });
@@ -244,7 +244,7 @@ test("wire tool proposal reaches the reducer adapter without secondary requests 
     transcript: "Yes, one duck.",
   });
   await expect(page.getByLabel("Tool proposal")).toContainText("Learner answer recorded: yes");
-  await expect(page.getByLabel("Tool proposal")).toContainText("Revision-bound answer: no");
+  await expect(page.getByLabel("Tool proposal")).toContainText("Validated answer: yes");
   emit!({ type: "input_audio_buffer.speech_started", item_id: "u2" });
   await expect(page.getByLabel("Tool proposal")).toContainText("Learner answer recorded: no");
   expect(requests).toEqual(["/api/experiments/grok-counting"]);

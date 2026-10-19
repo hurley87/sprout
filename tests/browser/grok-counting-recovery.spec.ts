@@ -62,7 +62,7 @@ for (const outcome of ["recognized", "abstain", "missing audio", "budget consume
       response = "ack";
       emit({ type: "response.created", response: { id: response } });
     }
-    speak(response, "One duck. That's right!");
+    speak(response, "No, that is wrong.");
     await expect(page.getByLabel("Tool proposal")).toContainText("Learner answer recorded: yes");
     await expect(page.getByRole("status")).toContainText("Audio: idle");
     await expect(page.locator('[data-node-id="count-1-duck"]')).toBeVisible();
@@ -72,19 +72,13 @@ for (const outcome of ["recognized", "abstain", "missing audio", "budget consume
         "Do not ask the learner to repeat",
       );
       emit({ type: "response.created", response: { id: "recovery" } });
-      speak(
-        "recovery",
-        outcome === "abstain" ? "One duck. That's right!" : "Yes, one duck.",
-        outcome !== "missing audio",
-      );
+      speak("recovery", outcome === "abstain" ? "No, that is wrong." : "Yes, one duck.", outcome !== "missing audio");
     }
     if (outcome === "recognized") {
       await expect(page.locator('[data-node-id="count-2-ducks"]')).toBeVisible();
     } else {
       await expect(page.getByRole("main").getByRole("alert")).toContainText(
-        outcome === "missing audio"
-          ? "Tutor confirmation audio could not be verified"
-          : "Tutor confirmation could not be verified",
+        outcome === "missing audio" ? "Tutor feedback audio could not be verified" : "Tutor feedback contradicted",
       );
       await expect(page.getByLabel("Tool proposal")).toContainText("Learner answer recorded: yes");
       await expect(page.locator('[data-node-id="count-1-duck"]')).toBeVisible();
@@ -106,7 +100,7 @@ for (const outcome of ["recognized", "abstain", "missing audio", "budget consume
           type: "learner.answer.accepted",
           state: expect.objectContaining({ learnerAccepted: true }),
         }),
-        expect.objectContaining({ type: "acknowledgment.evaluated", reason: "abstained" }),
+        expect.objectContaining({ type: "tutor.feedback.blocked", reason: "contradictory-feedback" }),
         expect.objectContaining({ type: "audio.drained" }),
         expect.objectContaining({ type: "continuation.requested" }),
       ]),
@@ -119,7 +113,7 @@ for (const outcome of ["recognized", "abstain", "missing audio", "budget consume
       expect(timeline).toContainEqual(
         expect.objectContaining({
           type: "lesson.failed",
-          reason: outcome === "missing audio" ? "missing-acknowledgment-audio" : "missing-acknowledgment",
+          reason: outcome === "missing audio" ? "missing-feedback-audio" : "contradictory-feedback",
         }),
       );
       expect(report.learnerAnswerAccepted).toBe(true);

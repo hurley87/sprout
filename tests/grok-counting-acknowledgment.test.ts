@@ -161,11 +161,11 @@ function fixture(nodeId = "count-1-duck", learner = "One duck.") {
   };
   return { adapter, call, tutor, requests, classifier, finish };
 }
-it.each(["before", "after"])("requires audio drain when Jev completes %s it", async order => {
+it.each(["before", "after"])("requires natural drain without waiting for Jev that finishes %s it", async order => {
   const f = fixture();
   f.call();
   f.tutor();
-  expect(f.requests).toHaveLength(1); // starts before response.done, while playback can run
+  expect(f.requests).toHaveLength(1);
   f.adapter.output(true, "tutor");
   f.adapter.responseDone("r1", "completed");
   if (order === "before") {
@@ -173,16 +173,16 @@ it.each(["before", "after"])("requires audio drain when Jev completes %s it", as
     expect(f.adapter.state.phase).toBe("active");
   }
   f.adapter.output(false);
+  f.adapter.playbackDrained(f.adapter.playbackIdentity("tutor"));
   f.adapter.tick();
-  if (order === "after") {
-    await vi.advanceTimersByTimeAsync(1000);
-    f.adapter.tick();
-    expect(f.adapter.state.phase).toBe("active");
-    await f.finish();
-  }
   await vi.advanceTimersByTimeAsync(300);
   f.adapter.tick();
   expect(f.adapter.state.phase).toBe("rendering");
+  const rendered = f.adapter.state;
+  if (order === "after") {
+    await f.finish();
+    expect(f.adapter.state).toBe(rendered);
+  }
   expect(f.adapter.confirmRender({ ...f.adapter.state.pendingRender!.identity, token: "wrong" })).toBe(false);
   expect(f.adapter.confirmRender(f.adapter.state.pendingRender!.identity)).toBe(true);
   expect(f.adapter.state.nodeId).toBe("count-2-ducks");
@@ -196,7 +196,7 @@ it("positive classification cannot supply missing acknowledgment audio", async (
   await vi.advanceTimersByTimeAsync(1000);
   f.adapter.tick();
   expect(f.adapter.state.phase).toBe("active");
-  expect(f.adapter.recoveryReason).toBe("missing-acknowledgment-audio");
+  expect(f.adapter.recoveryReason).toBe("missing-feedback-audio");
   expect(f.adapter.state.acknowledgmentObserved).toBe(false);
 });
 it("does not classify a tutor answer before a validated learner tool report", () => {
@@ -238,30 +238,27 @@ it.each(["interrupt", "correction", "cancel", "supersede", "scene", "stop"])(
     expect(f.adapter.decisionTimeline.some(e => e.type === "classification.stale")).toBe(true);
   },
 );
-it.each(["abstention", "timeout"])(
-  "holds recovery while pending, then preserves one continuation on %s",
-  async reason => {
-    const f = fixture();
-    f.call();
-    f.tutor("Great job!");
-    f.adapter.responseDone("r1", "completed");
-    expect(f.adapter.recoveryReason).toBeUndefined();
-    if (reason === "timeout") await vi.advanceTimersByTimeAsync(ACK_DEADLINE_MS);
-    else await f.finish(0, false);
-    expect(f.adapter.recoveryReason).toBe("missing-acknowledgment");
-    expect(f.adapter.learnerAnswerAccepted).toBe(true);
-    expect(f.adapter.takeRecovery()).toBe("missing-acknowledgment");
-    f.adapter.responseCreated("recovery");
-    f.adapter.spoken("recovery");
-    f.adapter.transcript({ id: "t2", speaker: "Tutor", text: "Great job!", final: true }, "recovery");
-    f.adapter.responseDone("recovery", "completed");
-    f.adapter.tick();
-    await f.finish(1, false);
-    expect(f.adapter.takeRecovery()).toBeUndefined();
-    expect(f.adapter.recoveryExhausted).toBe(true);
-    expect(JSON.stringify(f.adapter.decisionTimeline)).not.toMatch(/Great job|One duck|context_token/);
-  },
-);
+it.each(["abstention", "timeout"])("diagnostic %s never holds missing feedback-audio recovery", async reason => {
+  const f = fixture();
+  f.call();
+  f.tutor("Great job!");
+  f.adapter.responseDone("r1", "completed");
+  expect(f.adapter.recoveryReason).toBe("missing-feedback-audio");
+  if (reason === "timeout") await vi.advanceTimersByTimeAsync(ACK_DEADLINE_MS);
+  else await f.finish(0, false);
+  expect(f.adapter.recoveryReason).toBe("missing-feedback-audio");
+  expect(f.adapter.learnerAnswerAccepted).toBe(true);
+  expect(f.adapter.takeRecovery()).toBe("missing-feedback-audio");
+  f.adapter.responseCreated("recovery");
+  f.adapter.spoken("recovery");
+  f.adapter.transcript({ id: "t2", speaker: "Tutor", text: "Great job!", final: true }, "recovery");
+  f.adapter.responseDone("recovery", "completed");
+  f.adapter.tick();
+  await f.finish(1, false);
+  expect(f.adapter.takeRecovery()).toBeUndefined();
+  expect(f.adapter.recoveryExhausted).toBe(true);
+  expect(JSON.stringify(f.adapter.decisionTimeline)).not.toMatch(/Great job|One duck|context_token/);
+});
 it.each([
   ["count-2-ducks", "Two ducks.", "Yes, two ducks."],
   ["count-3-butterflies", "Three butterflies.", "Exactly! Three butterflies."],

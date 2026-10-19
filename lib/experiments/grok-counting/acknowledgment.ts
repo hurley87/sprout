@@ -1,7 +1,7 @@
 /** Browser-safe experiment contract. No provider transport or credentials. */
 export type AcknowledgmentMode = "grok-only" | "grok-jev";
 export const ACK_MODEL = "jev-1.14.0";
-// Conservative engineering guard, not empirically calibrated (Commit 2).
+// Diagnostic recognition threshold, not empirically calibrated and never a progression gate.
 export const ACK_THRESHOLD = 0.95;
 export const ACK_DEADLINE_MS = 5000;
 export type AckInput = {
@@ -57,7 +57,7 @@ export const requestAcknowledgment: AckClassifier = async (input, signal) => {
   };
 };
 
-/** Exact existing Grok-only grammar, shared with its offline benchmark comparison. */
+/** Historical Grok-only grammar retained for the frozen offline benchmark comparison only. */
 export function grokOnlyAcknowledges(
   text: string,
   node: { readonly quantity?: unknown; readonly object?: unknown },

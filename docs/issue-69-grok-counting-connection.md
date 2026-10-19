@@ -12,6 +12,99 @@ See the [bounded paired evaluation](issue-69-grok-counting-evaluation.md) for th
 fixed checklist, historical live evidence, transcript-correction blocker and
 **insufficient evidence** recommendation. Earlier live results below are historical.
 
+## Current progression: accepted learner answer, then delivered feedback
+
+This section supersedes the acknowledgment-gated progression descriptions in the
+historical sections below. Both `grok-only` and `grok-jev` now use the same
+`validated-answer-feedback` policy. A validated Grok report determines learner
+correctness; completed feedback playback determines when progression is safe.
+Neither positive acknowledgment wording nor Jev recognition awards correctness.
+
+The existing tool schema, authored three-scene curriculum, exact supporting-text
+correlation, finalized learner evidence, correct-answer grammar, help checks and
+source/token validation are unchanged. A valid correct report immediately records
+`learner.answer.accepted` and its learner revision. Learner correction, interruption,
+cancellation, unfinished-response supersession or a rejected additional report
+revokes pending success. Tutor-only transcript updates preserve the accepted
+learner fact without fabricating a new learner transcript or proposal.
+
+The counting adapter opts into the shared reducer's `validated-answer` feedback
+policy. It emits `tutor.feedback.completed` only after the current correlated
+response completes successfully, its tutor item has a finalized nonempty message,
+real nonempty PCM for that same response/item has played, and that item's local
+playback drains naturally with all output quiet. Audio start, an empty PCM chunk,
+transcript alone, forced output clearing, tool-only output or an old item's drain
+cannot satisfy the contract. The event carries current scope/transcript source,
+accepted learner revision, and application response/item ordinals. No semantic
+`acknowledging` proposal or artificial playback event is generated.
+
+The reducer verifies current accepted evidence, source/revision, observed output
+and quiet state, then owns the existing 250 ms quiet-period decision and pending
+render. Exact React render confirmation remains mandatory before configuring the
+next scene, including final lesson completion. This is an explicit opt-in for the
+authored counting lesson; default GPT-Live/Jev and Catching Unicorns policies and
+default state shape remain unchanged.
+
+### Feedback policy and bounded recovery
+
+After a correct learner answer, “One duck. You got it!”, “Two ducks.”, richer
+acknowledgment, or generic encouragement such as “Great job!” can satisfy spoken
+feedback. There is no positive acknowledgment grammar. Empty or annotation-only
+text and a question-only utterance are missing feedback. A small deterministic
+veto holds explicit negatives such as “wrong”, “incorrect”, “not correct”, “try
+again”, and clear mismatched numbered duck/butterfly or direct total statements.
+Thus “No, that's wrong.” and “Actually, there are three ducks.” with an accepted
+answer of two cannot automatically advance.
+
+This guard is deliberately limited: it can miss paraphrases, other languages and
+implicit contradictions, and can reject benign references to another count or
+negated negative wording. It is not a semantic classifier or evidence of live
+model reliability. Generic encouragement is permitted only after independently
+validated correct learner evidence and actual completed feedback playback.
+
+Recovery distinguishes missing/invalid learner reports, `missing-feedback`,
+`missing-feedback-audio`, and `contradictory-feedback`. Existing interruption and
+supersession fences remain separate from missing evidence. A validated answer
+whose provider response never completes uses the existing 60 s completion deadline
+and records `response.timed-out` / `stalled-response`; this deadline withholds
+progression and never schedules a transition. Existing continuation start/completion
+watchdogs (15 s / 60 s) and the single continuation budget remain. Tool-only output
+requests real spoken continuation; feedback recovery retains the correct learner
+fact and asks for accurate feedback without asking the learner to repeat it.
+Playback that never naturally drains cannot advance. Jev abstention is never a
+recovery cause or terminal learner failure.
+
+### Diagnostic-only Jev and exports
+
+`grok-jev` means **Grok progression with Jev acknowledgment diagnostics**. Jev
+still reports recognition/abstention and latency asynchronously, with the existing
+5 s diagnostic deadline, cancellation and stale-result checks. Confirmation, low
+confidence, timeout and provider error cannot dispatch reducer changes, delay
+playback/render, change the accepted learner outcome or trigger recovery. Results
+arriving after transition are stale diagnostic events only.
+
+Exports include `progressionPolicy`, `jevRole: diagnostic-only`, `feedbackStatus`
+and `feedbackDelivered`. The bounded timeline separates `learner.answer.accepted`,
+`tutor.feedback.completed`, `tutor.feedback.blocked`, `audio.drained`,
+`transition.eligible` and `render.confirmed` from `classification.*` diagnostics.
+Legacy acknowledgment fields remain inspectable; `acknowledgmentObserved` is not
+synthesized to satisfy the new policy. Blocking reasons distinguish learner,
+feedback and audio evidence. The existing privacy limits apply: no new learner
+personal fields, raw provider responses, audio or credentials are stored.
+
+Provider-free regressions reproduce both reported scenes, all three authored
+transitions in both modes with real browser Web Audio and React, diagnostic
+failure/late completion, invalid learner evidence, stale/duplicate lifecycle,
+contradiction recovery and missing/draining audio. Shared runtime regressions
+include the frozen baseline replay and Catching Unicorns. Historical benchmark
+evidence below is preserved; no new paid or live evaluation was performed.
+
+Validation: 327 focused unit tests, all 1,843 unit tests across 75 files, and all
+20 focused browser tests pass. Typecheck, lint and production build pass in a clean
+local checkout, excluding ignored historical test-result source copies.
+
+## Historical implementation notes (superseded progression policy)
+
 ## Same-item settlement correction (after `3711cc3`)
 
 The Grok adapter now tracks the current learner item's VAD-stop and proposal-validation

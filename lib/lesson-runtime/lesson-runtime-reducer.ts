@@ -62,10 +62,19 @@ export type LessonRuntimeState = {
   readonly transcriptRevision: number;
   readonly transcriptSource: "child" | "tutor" | "unknown";
   readonly consumedRevision: number | null;
-  /** Earlier correct observation is only a candidate until the exact latest revision revalidates it. */
+  /** Default: candidate until latest snapshot revalidation. Opt-in feedback policy:
+   * the validated learner revision persists through tutor-only transcript updates. */
   readonly acceptedAnswerRevision: number | null;
   readonly answerAccepted: boolean;
   readonly acknowledgmentObserved: boolean;
+  /** Opt-in adapter policy. Default lessons still require semantic acknowledgment. */
+  readonly feedbackPolicy?: "validated-answer";
+  readonly feedbackDelivered?: {
+    readonly source: ClassificationSource;
+    readonly learnerRevision: number;
+    readonly response: number;
+    readonly item: number;
+  } | null;
   readonly outputActivity: OutputActivityEvent["state"];
   /** Candidate audio for this ended child turn; semantic authority is still required to use it. */
   readonly tutorOutputObserved: boolean;
@@ -102,7 +111,11 @@ export type LessonRuntimeEvent = { readonly atMs: number } & (
   | { readonly type: "child.candidate.started"; readonly source: RuntimeSource }
   | { readonly type: "child.candidate.discarded"; readonly source: RuntimeSource }
   | { readonly type: "child.turn.confirmed"; readonly source: RuntimeSource }
-  | { readonly type: "conversation.recheck.requested"; readonly source: ClassificationSource; readonly transcriptSnapshot?: string }
+  | {
+      readonly type: "conversation.recheck.requested";
+      readonly source: ClassificationSource;
+      readonly transcriptSnapshot?: string;
+    }
   | { readonly type: "child.turn.ended"; readonly source: RuntimeSource }
   | {
       readonly type: "transcript.updated";
@@ -117,6 +130,16 @@ export type LessonRuntimeEvent = { readonly atMs: number } & (
       readonly proposal: unknown;
       readonly transcriptSnapshot?: string;
     }
+  // Application attests a finalized current tutor response/item with real PCM and
+  // natural drain; the reducer independently checks learner/source/quiet/render gates.
+  | {
+      readonly type: "tutor.feedback.completed";
+      readonly source: ClassificationSource;
+      readonly learnerRevision: number;
+      readonly response: number;
+      readonly item: number;
+    }
+  | { readonly type: "tutor.feedback.invalidated"; readonly source: RuntimeSource; readonly invalidateAnswer?: boolean }
   | { readonly type: "output.activity"; readonly source: RuntimeSource; readonly state: OutputActivityEvent["state"] }
   | {
       readonly type: "conversation.advance.requested";
@@ -162,9 +185,15 @@ const clearedEvidence = {
 /** The initial authored scene must already be rendered. Use a fresh runtimeId for every start/reconnect. */
 export function createLessonRuntime(
   runtimeId: string,
-  { quietDrainMs = 250, atMs = 0, lesson }: { quietDrainMs?: number; atMs?: number; lesson: LessonDefinition },
+  {
+    quietDrainMs = 250,
+    atMs = 0,
+    lesson,
+    feedbackPolicy,
+  }: { quietDrainMs?: number; atMs?: number; lesson: LessonDefinition; feedbackPolicy?: "validated-answer" },
 ): LessonRuntimeState {
   if (
+    (feedbackPolicy === "validated-answer" && lesson.id !== "counting") ||
     !runtimeId ||
     !Number.isFinite(quietDrainMs) ||
     quietDrainMs <= 0 ||
@@ -176,6 +205,7 @@ export function createLessonRuntime(
   return {
     runtimeId,
     lessonId: lesson.id,
+    ...(feedbackPolicy ? { feedbackPolicy } : {}),
     nodeId: lesson.initialNodeId,
     visitId: 1,
     childTurnId: 0,
@@ -188,6 +218,7 @@ export function createLessonRuntime(
     transcriptSource: "unknown",
     consumedRevision: null,
     ...clearedEvidence,
+    ...(feedbackPolicy ? { feedbackDelivered: null } : {}),
     outputActivity: "unavailable",
     quietDrainMs,
     nowMs: atMs,
@@ -245,11 +276,15 @@ export function hasCurrentCompletionEvidence(state: LessonRuntimeState, lesson: 
   if (lesson.conversationFirst) return hasConversationCompletionEvidence(state);
   return (
     state.hasChildTranscript &&
-    state.transcriptSource === "tutor" &&
+    (state.feedbackPolicy === "validated-answer" || state.transcriptSource === "tutor") &&
     state.consumedRevision === state.transcriptRevision &&
     state.acceptedAnswerRevision !== null &&
     state.answerAccepted &&
-    state.acknowledgmentObserved &&
+    (state.feedbackPolicy === "validated-answer"
+      ? !!state.feedbackDelivered &&
+        sameClassificationSource(state, state.feedbackDelivered.source) &&
+        state.feedbackDelivered.learnerRevision === state.acceptedAnswerRevision
+      : state.acknowledgmentObserved) &&
     meetsAuthoredCompletionPolicy(state, lesson)
   );
 }
@@ -263,6 +298,7 @@ function stopped(state: LessonRuntimeState): LessonRuntimeState {
   return {
     ...state,
     ...clearedEvidence,
+    ...(state.feedbackPolicy === "validated-answer" ? { feedbackDelivered: null } : {}),
     nodeId: state.pendingRender?.origin.nodeId ?? state.nodeId,
     phase: "stopped",
     lessonComplete: state.pendingRender ? false : state.lessonComplete,
@@ -326,6 +362,7 @@ function requestAuthoredTransition(
     state: {
       ...next,
       ...clearedEvidence,
+      ...(next.feedbackPolicy === "validated-answer" ? { feedbackDelivered: null } : {}),
       // Keep delivery evidence until the terminal screen has actually committed;
       // resumed output can suspend that confirmation without closing the voice.
       ...(edge.kind === "complete" && node.completeAfterTutorOutput
@@ -450,6 +487,7 @@ export function reduceLessonRuntime(
     const skipped: LessonRuntimeState = {
       ...state,
       ...clearedEvidence,
+      ...(state.feedbackPolicy === "validated-answer" ? { feedbackDelivered: null } : {}),
       nowMs: event.atMs,
       hasChildTurn: false,
       hasChildTranscript: false,
@@ -530,6 +568,7 @@ export function reduceLessonRuntime(
       next = {
         ...next,
         ...clearedEvidence,
+        ...(state.feedbackPolicy === "validated-answer" ? { feedbackDelivered: null } : {}),
         tutorClosure: lesson.conversationFirst ? state.tutorClosure : null,
         // Terminal transcript/audio evidence belongs to this recap visit, not a
         // microphone turn. Activity blocks completion but is not new learner text.
@@ -570,6 +609,7 @@ export function reduceLessonRuntime(
       next = {
         ...next,
         ...clearedEvidence,
+        ...(state.feedbackPolicy === "validated-answer" ? { feedbackDelivered: null } : {}),
         hasChildTranscript: state.childCandidate.hasChildTranscript,
         tutorOutputObserved: state.childCandidate.tutorOutputObserved,
         // Recap output quiet is independent of microphone activity. Other nodes
@@ -612,6 +652,11 @@ export function reduceLessonRuntime(
       next = {
         ...next,
         ...(event.speaker === "tutor" ? {} : clearedEvidence),
+        // PCM is a turn-local fact, even when this turn's finalized ASR arrives late.
+        // Learner correctness is still cleared and must validate at the new revision.
+        ...(state.feedbackPolicy === "validated-answer" && !state.childSpeaking
+          ? { tutorOutputObserved: state.tutorOutputObserved, quietSinceMs: state.quietSinceMs }
+          : {}),
         tutorClosure: closure,
         // A brief acknowledgment belongs to the preceding exchange. Keep its
         // observed audio even when classification of the close is still in flight.
@@ -630,8 +675,10 @@ export function reduceLessonRuntime(
           event.speaker === "tutor" && state.conversationAdvanceRequested === "learner" ? "learner"
             : closure && exchange?.complete ? "tutor" : false,
         // Answer acceptance remains revision-bound, independently of conversational closure.
-        answerAccepted: false,
+        answerAccepted:
+          event.speaker === "tutor" && state.feedbackPolicy === "validated-answer" ? state.answerAccepted : false,
         acknowledgmentObserved: false,
+        ...(state.feedbackPolicy === "validated-answer" ? { feedbackDelivered: null } : {}),
         ...(lesson.nodes[state.nodeId].completeAfterTutorOutput ? { terminalTranscriptComplete: false } : {}),
         ...(lesson.nodes[state.nodeId].completeAfterTutorOutput && event.speaker === "child"
           ? { terminalLearnerPending: false }
@@ -744,7 +791,11 @@ export function reduceLessonRuntime(
         proposal.supportState !== "none" ||
         proposal.childActivity === "answering"
       ) {
-        next = { ...next, ...clearedEvidence };
+        next = {
+          ...next,
+          ...clearedEvidence,
+          ...(state.feedbackPolicy === "validated-answer" ? { feedbackDelivered: null } : {}),
+        };
         break;
       }
       next = {
@@ -757,6 +808,46 @@ export function reduceLessonRuntime(
       };
       break;
     }
+    case "tutor.feedback.invalidated":
+      if (state.feedbackPolicy !== "validated-answer") return ignored;
+      next = {
+        ...next,
+        feedbackDelivered: null,
+        transitionReady: false,
+        ...(event.invalidateAnswer ? { acceptedAnswerRevision: null, answerAccepted: false } : {}),
+      };
+      break;
+    case "tutor.feedback.completed":
+      if (
+        state.feedbackPolicy !== "validated-answer" ||
+        !sameClassificationSource(state, event.source) ||
+        !state.hasChildTranscript ||
+        state.childSpeaking ||
+        !state.answerAccepted ||
+        state.acceptedAnswerRevision === null ||
+        event.learnerRevision !== state.acceptedAnswerRevision ||
+        !state.tutorOutputObserved ||
+        state.outputActivity !== "quiet" ||
+        !Number.isSafeInteger(event.response) ||
+        event.response < 1 ||
+        !Number.isSafeInteger(event.item) ||
+        event.item < 1 ||
+        state.feedbackDelivered
+      )
+        return ignored;
+      next = {
+        ...next,
+        consumedRevision: state.transcriptRevision,
+        feedbackDelivered: {
+          source: event.source,
+          learnerRevision: event.learnerRevision,
+          response: event.response,
+          item: event.item,
+        },
+        // Require fresh quiet after the complete transcript/response/drain contract.
+        quietSinceMs: event.atMs,
+      };
+      break;
     case "output.activity":
       next = { ...next, outputActivity: event.state };
       if (state.interruptedExchange) {
@@ -791,12 +882,14 @@ export function reduceLessonRuntime(
       } else if (event.state === "active") {
         next = {
           ...next,
+          ...(state.feedbackPolicy === "validated-answer" ? { feedbackDelivered: null } : {}),
           // Anchor a fresh onset to the ended child turn, independent of classifier latency.
           // Already-active pre-turn/during-child PCM cannot become relevant by remaining active.
           tutorOutputObserved:
             state.tutorOutputObserved ||
             (state.outputActivity !== "active" &&
               (state.hasChildTranscript ||
+                (state.feedbackPolicy === "validated-answer" && state.hasChildTurn) ||
                 state.interruptedExchange?.ready === true ||
                 lesson.nodes[state.nodeId].completeAfterTutorOutput === true) &&
               (!state.childSpeaking || lesson.nodes[state.nodeId].completeAfterTutorOutput === true)),
