@@ -121,6 +121,125 @@ export type CorrelationDiagnostic = {
   revision: number;
 };
 
+// Additive to the original 64-entry correlation trace. No caption or wire IDs.
+export const DECISION_TIMELINE_LIMIT = 256;
+type RejectionReason =
+  | "superseded learner turn"
+  | "learner transcript corrected"
+  | "superseded response"
+  | "final learner transcript unavailable"
+  | "additional rejected call"
+  | "stale response"
+  | "unknown tool"
+  | "malformed arguments"
+  | "stale context"
+  | "unmatched learner evidence"
+  | "unresolved help"
+  | "unsupported help judgment"
+  | "unsupported settled answer"
+  | "unsupported incorrect answer"
+  | "unsupported no-attempt judgment"
+  | "unsupported unclear judgment"
+  | "reducer rejected proposal"
+  | "cancelled response";
+export type ContinuationReason = RecoveryReason | "accepted-tool-only" | "rejected-tool-only";
+export type DecisionReason =
+  | CorrelationCode
+  | RejectionReason
+  | ContinuationReason
+  | "current-turn"
+  | "settled"
+  | "revised"
+  | "provisional"
+  | "correct"
+  | "incorrect"
+  | "none"
+  | "unclear"
+  | "recognized"
+  | "abstained"
+  | "awaiting-evidence"
+  | "awaiting-learner"
+  | "awaiting-report"
+  | "awaiting-learner-evidence"
+  | "learner-answer-not-correct"
+  | "awaiting-response-completion"
+  | "invalidated-evidence"
+  | "awaiting-tutor"
+  | "awaiting-acknowledgment-audio"
+  | "playback-active"
+  | "quiet-period"
+  | "acknowledgment-and-audio"
+  | "local-playback"
+  | "playback-cleared"
+  | "completed"
+  | "cancelled"
+  | "interrupted"
+  | "superseded-response"
+  | "scene-transition"
+  | "user-stop"
+  | "learner-request"
+  | "connection-failure"
+  | "continuation-never-started"
+  | "continuation-incomplete";
+export type DecisionEvent =
+  | "learner.turn.started"
+  | "learner.turn.ended"
+  | "learner.transcript"
+  | "proposal.received"
+  | "proposal.validated"
+  | "proposal.rejected"
+  | "learner.answer.accepted"
+  | "response.started"
+  | "response.completed"
+  | "response.cancelled"
+  | "correlation.checked"
+  | "acknowledgment.evaluated"
+  | "audio.started"
+  | "audio.drained"
+  | "audio.cleared"
+  | "recovery.requested"
+  | "recovery.exhausted"
+  | "continuation.requested"
+  | "continuation.started"
+  | "continuation.completed"
+  | "continuation.cancelled"
+  | "continuation.timed-out"
+  | "transition.eligible"
+  | "transition.blocked"
+  | "render.requested"
+  | "render.confirmed"
+  | "lesson.completed"
+  | "lesson.stopped"
+  | "lesson.failed";
+export type PlaybackIdentity = { response: number | null; item: number };
+export type DecisionEntry = {
+  sequence: number;
+  atMs: number;
+  type: DecisionEvent;
+  reason: DecisionReason;
+  node: string;
+  visit: number;
+  turn: number;
+  revision: number;
+  response: number | null;
+  item: number | null;
+  correlation: "bound" | "unbound" | "none";
+  state: {
+    phase: CountingProposals["state"]["phase"];
+    learnerAccepted: boolean;
+    answerAccepted: boolean;
+    acknowledgmentRecognized: boolean;
+    acknowledgmentObserved: boolean;
+    audioObserved: boolean;
+    audioDrained: boolean;
+    output: CountingProposals["state"]["outputActivity"];
+    continuationUsed: boolean;
+    continuationRequested: boolean;
+    proposalOutcome: ConversationStateProposal["answerOutcome"] | null;
+    proposalSupport: ConversationStateProposal["supportState"] | null;
+  };
+};
+
 /** Isolated evidence adapter. All progression authority stays in the shared reducer. */
 export class CountingProposals {
   state;
@@ -128,6 +247,9 @@ export class CountingProposals {
   private learner?: { itemId?: string; vadStopped: boolean; validated: boolean };
   private response?: {
     id: string;
+    sequence: number;
+    items: Map<string, number>;
+    acknowledgmentEvaluation?: string;
     turnToken?: string;
     bindingFailure?: CorrelationCode;
     source: Scope;
@@ -165,6 +287,60 @@ export class CountingProposals {
       revision: this.state.transcriptRevision,
     });
     if (this.diagnostics.length > 64) this.diagnostics.shift();
+    this.recordDecision("correlation.checked", code);
+  }
+  private timeline: DecisionEntry[] = [];
+  private timelineSequence = 0;
+  private timelineOrigin = performance.now();
+  private responseSequence = 0;
+  private blockedDecision?: string;
+  get decisionTimeline(): DecisionEntry[] {
+    return this.timeline.map(entry => ({ ...entry, state: { ...entry.state } }));
+  }
+  /** Closed metadata only; transport uses the same experiment-local diagnostics. */
+  recordDecision(type: DecisionEvent, reason: DecisionReason, audio?: PlaybackIdentity) {
+    const r = this.response;
+    this.timeline.push({
+      sequence: ++this.timelineSequence,
+      atMs: Math.max(this.timeline.at(-1)?.atMs ?? 0, Math.round(performance.now() - this.timelineOrigin)),
+      type,
+      reason,
+      node: this.state.nodeId,
+      visit: this.state.visitId,
+      turn: this.state.childTurnId,
+      revision: this.state.transcriptRevision,
+      response: audio ? audio.response : (r?.sequence ?? null),
+      item: audio?.item ?? null,
+      correlation: !r
+        ? "none"
+        : (!audio || audio.response === r.sequence) && r.turnToken && this.matches(r.source)
+          ? "bound"
+          : "unbound",
+      state: {
+        phase: this.state.phase,
+        learnerAccepted: this.learnerAnswerAccepted,
+        answerAccepted: this.state.answerAccepted,
+        acknowledgmentRecognized: r?.acknowledgmentRecognized === true,
+        acknowledgmentObserved: this.state.acknowledgmentObserved,
+        audioObserved: this.state.tutorOutputObserved,
+        audioDrained: this.state.tutorOutputDrained,
+        output: this.state.outputActivity,
+        continuationUsed: this.continuationUsed,
+        continuationRequested: this.continuationRequested,
+        proposalOutcome: r?.proposal?.answerOutcome ?? null,
+        proposalSupport: r?.proposal?.supportState ?? null,
+      },
+    });
+    if (this.timeline.length > DECISION_TIMELINE_LIMIT) this.timeline.shift();
+  }
+  playbackIdentity(itemId: string): PlaybackIdentity {
+    const r = this.response;
+    if (!r) return { response: null, item: 0 };
+    if (!r.items.has(itemId)) r.items.set(itemId, r.items.size + 1);
+    return { response: r.sequence, item: r.items.get(itemId)! };
+  }
+  get responseBound(): boolean {
+    return !!this.response?.turnToken && this.matches(this.response.source);
   }
   private scopeFailure(source: Scope): CorrelationCode {
     return source.childTurnId !== this.state.childTurnId ? "turn.identity.mismatch" : "scope.identity.mismatch";
@@ -196,12 +372,19 @@ export class CountingProposals {
     this.state = createLessonRuntime(connectionId, { lesson: COUNTING_LESSON });
   }
   private dispatch(event: AdapterEvent) {
-    this.state = reduceLessonRuntime(
-      this.state,
+    const before = this.state;
+    const result = reduceLessonRuntime(
+      before,
       { ...event, atMs: performance.now() } as LessonRuntimeEvent,
       COUNTING_LESSON,
-    ).state;
+    );
+    if (before.phase === "active" && result.state.phase === "rendering")
+      this.recordDecision("transition.eligible", "acknowledgment-and-audio");
+    this.state = result.state;
+    if (before.phase !== "rendering" && this.state.phase === "rendering")
+      this.recordDecision("render.requested", "acknowledgment-and-audio");
   }
+
   private scope(): Scope {
     return { ...runtimeSource(this.state), nodeId: this.state.nodeId };
   }
@@ -238,6 +421,7 @@ export class CountingProposals {
     if (itemId && !this.messages.some(message => message.id === itemId))
       this.messages.push({ id: itemId, speaker: "Learner", text: "", final: false });
     this.dispatch({ type: "child.turn.started", source: runtimeSource(this.state) });
+    this.recordDecision("learner.turn.started", "current-turn");
     if (!itemId) this.contextFailure = "turn.item_id.missing";
     else if (!this.nextContext) this.contextFailure = "turn.reservation.missing";
     else if (!this.contextAcknowledged) this.contextFailure = "turn.configuration.unacknowledged";
@@ -259,12 +443,15 @@ export class CountingProposals {
     if (!this.learner || this.learner.vadStopped) return;
     this.learner.vadStopped = true;
     this.dispatch({ type: "child.turn.ended", source: runtimeSource(this.state) });
+    this.recordDecision("learner.turn.ended", "current-turn");
+    if (this.messages.find(m => m.id === itemId)?.final) this.recordDecision("learner.transcript", "settled");
     this.settlePending();
   }
   transcript(message: Message, responseId?: string) {
     if (this.stopped) return;
     if (message.speaker === "Learner" && message.id !== this.learner?.itemId) return;
     const old = this.messages.find(m => m.id === message.id);
+    const wasFinal = old?.final === true;
     if (old && old.speaker !== message.speaker) return;
     if (old?.final && !message.final) return;
     if (old?.text === message.text && old.final === message.final) return;
@@ -309,6 +496,11 @@ export class CountingProposals {
       revision: this.state.transcriptRevision + 1,
       speaker: message.speaker === "Learner" ? "child" : "tutor",
     });
+    if (message.speaker === "Learner" && message.final)
+      this.recordDecision(
+        "learner.transcript",
+        !this.learner?.vadStopped ? "provisional" : wasFinal ? "revised" : "settled",
+      );
     this.settlePending();
     this.deliver();
   }
@@ -338,9 +530,10 @@ export class CountingProposals {
           : !this.matches(this.context.source)
             ? this.scopeFailure(this.context.source)
             : undefined;
-    this.diagnose(bindingFailure ?? "response.bound", "response.created");
     this.response = {
       id,
+      sequence: ++this.responseSequence,
+      items: new Map(),
       bindingFailure,
       turnToken:
         !this.state.childSpeaking && this.context && this.matches(this.context.source) ? this.context.token : undefined,
@@ -352,6 +545,8 @@ export class CountingProposals {
       rejected: false,
     };
     this.continuationRequested = false;
+    this.diagnose(bindingFailure ?? "response.bound", "response.created");
+    this.recordDecision("response.started", bindingFailure ?? "current-turn");
     return true;
   }
   spoken(id?: string) {
@@ -396,16 +591,18 @@ export class CountingProposals {
   expirePending() {
     this.rejectPending("final learner transcript unavailable");
   }
-  private rejectPending(reason: string) {
+  private rejectPending(reason: RejectionReason) {
     const r = this.response;
     if (!r?.pending) return;
     this.results.push({ call_id: r.pending.callId, status: "rejected", reason });
     r.pending = undefined;
     r.rejected = true;
     this.lastResult = `Rejected: ${reason}`;
+    this.recordDecision("proposal.rejected", reason);
   }
   call(event: ToolCall): void {
     if (this.stopped) return;
+    this.recordDecision("proposal.received", "awaiting-evidence");
     if (typeof event.call_id !== "string" || !event.call_id || event.call_id.length > 256) {
       this.diagnose("call.id.missing", "tool.call");
       return;
@@ -423,13 +620,14 @@ export class CountingProposals {
     this.consumedCalls.add(event.call_id);
     const r = this.response;
     const inResponse = !!r && event.response_id === r.id && !r.done && this.matches(r.source);
-    const reject = (reason: string, diagnostic?: CorrelationCode) => {
+    const reject = (reason: RejectionReason, diagnostic?: CorrelationCode) => {
       if (diagnostic) this.diagnose(diagnostic, "tool.call");
       if (inResponse) {
         r.rejected = true;
         this.rejectPending("additional rejected call");
       }
       this.lastResult = `Rejected: ${reason}`;
+      this.recordDecision("proposal.rejected", diagnostic ?? reason);
       this.results.push({ call_id: event.call_id as string, status: "rejected", reason });
     };
     if (inResponse) r.calls++;
@@ -492,7 +690,7 @@ export class CountingProposals {
     const r = this.response;
     const pending = r?.pending;
     if (!r || !pending) return;
-    const fail = (reason: string) => this.rejectPending(reason);
+    const fail = (reason: RejectionReason) => this.rejectPending(reason);
     if (r.rejected || !this.context || !this.matches(this.context.source) || !this.matches(r.source))
       return fail("stale context");
     const source = classificationSource(this.state);
@@ -555,6 +753,7 @@ export class CountingProposals {
     r.validatedLearnerRevision = this.learnerRevision;
     r.pending = undefined;
     this.lastResult = `Validated: ${args.answer_outcome} · ${args.support_state}`;
+    this.recordDecision("proposal.validated", args.answer_outcome);
     this.results.push({
       call_id: pending.callId,
       status: "accepted",
@@ -582,6 +781,7 @@ export class CountingProposals {
     }
     this.observation = { source: r.source, learnerRevision: this.learnerRevision, outcome: r.proposal.answerOutcome };
     this.lastResult = `Accepted: ${r.proposal.answerOutcome} · ${r.proposal.supportState}`;
+    if (this.learnerAnswerAccepted) this.recordDecision("learner.answer.accepted", "correct");
   }
   responseDone(id?: string, status?: string) {
     const r = this.response;
@@ -594,6 +794,11 @@ export class CountingProposals {
       r.rejected = true;
     }
     this.deliver();
+    this.recordDecision(
+      r.completed ? "response.completed" : "response.cancelled",
+      r.completed ? "completed" : "cancelled",
+    );
+    return true;
   }
   /** One continuation total per learner turn, including any rejected-tool recovery. */
   takeContinuation(): "accepted" | "recovery" | undefined {
@@ -619,6 +824,7 @@ export class CountingProposals {
     if (this.stopped || this.state.phase !== "active") return;
     const r = this.response;
     const tutor = r?.tutor;
+    if (this.learnerAnswerAccepted && r && (!r.done || !tutor?.final)) this.recordAcknowledgment("awaiting-evidence");
     if (this.learnerAnswerAccepted && r?.done && r.completed && !r.rejected && this.matches(r.source) && tutor?.final) {
       const node = COUNTING_LESSON.nodes[this.state.nodeId].presentation;
       const number = ["zero", "one", "two", "three"][Number(node.quantity)];
@@ -631,6 +837,7 @@ export class CountingProposals {
       );
       const key = JSON.stringify([this.learnerRevision, tutor.id, tutor.text]);
       r.acknowledgmentRecognized = acknowledgment.test(tutor.text.trim());
+      this.recordAcknowledgment(r.acknowledgmentRecognized ? "recognized" : "abstained");
       if (r.audioItems?.has(tutor.id) && r.acknowledgmentRecognized && key !== this.projectedAcknowledgment) {
         this.projectedAcknowledgment = key;
         if (!this.state.tutorOutputObserved) {
@@ -672,11 +879,47 @@ export class CountingProposals {
       }
     }
     this.dispatch({ type: "clock.tick", source: runtimeSource(this.state) });
+    if (this.state.phase === "active") {
+      const reason: DecisionReason =
+        this.state.childSpeaking || !this.state.hasChildTurn
+          ? "awaiting-learner"
+          : !this.learnerAnswerAccepted
+            ? r?.pending || !this.messages.find(m => m.id === this.learner?.itemId)?.final
+              ? "awaiting-learner-evidence"
+              : r?.proposal
+                ? r.rejected
+                  ? "invalidated-evidence"
+                  : r.proposal.answerOutcome === "correct"
+                    ? "awaiting-response-completion"
+                    : "learner-answer-not-correct"
+                : "awaiting-report"
+            : !r?.acknowledgmentRecognized
+              ? "awaiting-tutor"
+              : !this.state.acknowledgmentObserved
+                ? "awaiting-acknowledgment-audio"
+                : this.state.outputActivity !== "quiet"
+                  ? "playback-active"
+                  : "quiet-period";
+      const key = JSON.stringify([this.state.visitId, this.state.childTurnId, reason]);
+      if (key !== this.blockedDecision) {
+        this.blockedDecision = key;
+        this.recordDecision("transition.blocked", reason);
+      }
+    }
+  }
+  private recordAcknowledgment(reason: "recognized" | "abstained" | "awaiting-evidence") {
+    const r = this.response;
+    if (r && r.acknowledgmentEvaluation !== reason) {
+      r.acknowledgmentEvaluation = reason;
+      this.recordDecision("acknowledgment.evaluated", reason, r.tutor ? this.playbackIdentity(r.tutor.id) : undefined);
+    }
   }
   confirmRender(identity: RenderIdentity): boolean {
     const before = this.state.phase;
     this.dispatch({ type: "render.confirmed", runtimeId: this.state.runtimeId, identity });
     if (before !== "rendering" || this.state.phase === "rendering") return false;
+    this.recordDecision("render.confirmed", "acknowledgment-and-audio");
+    if (this.state.phase === "complete") this.recordDecision("lesson.completed", "completed");
     this.nextContext = undefined;
     this.context = undefined;
     this.response = undefined;
@@ -721,6 +964,7 @@ export class CountingProposals {
     if (!reason) return;
     if (this.continuationUsed || (reason === "missing-report" && this.missingRetries >= 1)) {
       this.recoveryExhausted = true;
+      this.recordDecision("recovery.exhausted", reason);
       // Preserve lastResult and the validated observation for acknowledgment failures.
       if (reason === "missing-report") this.lastResult = "No usable counting report after one retry.";
       return;
@@ -731,6 +975,7 @@ export class CountingProposals {
     }
     this.continuationUsed = true;
     this.continuationRequested = true;
+    this.recordDecision("recovery.requested", reason);
     return reason;
   }
   output(active: boolean, itemId?: string) {

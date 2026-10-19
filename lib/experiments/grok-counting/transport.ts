@@ -2,7 +2,15 @@ import { COUNTING_LESSON } from "@/lib/lesson-runtime/counting-lesson";
 
 import type { RenderIdentity } from "@/lib/lesson-runtime/lesson-runtime-reducer";
 
-import { CountingProposals, OUTCOME_TOOL, type CorrelationDiagnostic } from "./proposals";
+import {
+  CountingProposals,
+  OUTCOME_TOOL,
+  type CorrelationDiagnostic,
+  type DecisionEntry,
+  type DecisionReason,
+  type ContinuationReason,
+  type PlaybackIdentity,
+} from "./proposals";
 
 // Providers may reorder object keys or add defaults when echoing configuration.
 function echoesConfiguration(actual: unknown, expected: unknown): boolean {
@@ -40,6 +48,9 @@ function echoesTools(tools: unknown[]): boolean {
   return echoesConfiguration(tool.function, definition);
 }
 
+// Conservative realtime generation limits. Neither is a playback deadline.
+export const CONTINUATION_START_TIMEOUT_MS = 15_000;
+export const CONTINUATION_COMPLETE_TIMEOUT_MS = 60_000;
 export const GROK_MODEL = "grok-voice-3.0";
 export type Transcript = { id: string; speaker: "Learner" | "Tutor"; text: string; final: boolean };
 export type VoiceSnapshot = {
@@ -52,6 +63,7 @@ export type VoiceSnapshot = {
   render?: RenderIdentity;
   complete?: boolean;
   diagnostics?: CorrelationDiagnostic[];
+  decisionTimeline?: DecisionEntry[];
   proposal?: string;
   answerAccepted?: boolean;
   learnerAnswerAccepted?: boolean;
@@ -70,7 +82,7 @@ export function encodePcm(samples: Float32Array) {
 export class GrokVoice {
   private proposals = new CountingProposals();
   private stopped = false;
-  private acceptedAtRecoveryFailure = false;
+  private acceptedAtFailure = false;
   private started = false;
   private abort = new AbortController();
   private socket?: WebSocket;
@@ -84,6 +96,12 @@ export class GrokVoice {
   private pendingInstructions?: string;
   private openingSent = false;
   private drainTimer?: ReturnType<typeof setTimeout>;
+  private continuation?: {
+    reason: ContinuationReason;
+    responseId?: string;
+    timer: ReturnType<typeof setTimeout>;
+  };
+  private playbackItems = new Map<AudioBufferSourceNode, PlaybackIdentity>();
   private recoveryTimer?: ReturnType<typeof setTimeout>;
   private questionPending = false;
   private proposalTimer?: ReturnType<typeof setTimeout>;
@@ -107,21 +125,53 @@ export class GrokVoice {
       render: this.proposals.state.pendingRender?.identity,
       complete: this.proposals.state.lessonComplete,
       diagnostics: this.proposals.correlationDiagnostics,
+      decisionTimeline: this.proposals.decisionTimeline,
       proposal: this.proposals.lastResult,
       answerAccepted: this.proposals.state.answerAccepted,
-      learnerAnswerAccepted: this.acceptedAtRecoveryFailure || this.proposals.learnerAnswerAccepted,
+      learnerAnswerAccepted: this.acceptedAtFailure || this.proposals.learnerAnswerAccepted,
       transcripts: this.state.transcripts.map(t => ({ ...t })),
     });
   }
   private send(event: object) {
     if (!this.stopped && this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(event));
   }
-  private fail(message: string) {
+  private fail(message: string, reason: DecisionReason = "connection-failure") {
     if (this.stopped) return;
-    this.stop();
+    const accepted = this.proposals.learnerAnswerAccepted;
+    this.proposals.recordDecision("lesson.failed", reason);
+    this.stop("failure");
+    // Terminal diagnostic only. The stopped reducer retains no progression authority.
+    this.acceptedAtFailure = accepted;
     this.state.status = "error";
     this.state.error = message;
     this.emit();
+  }
+  private cancelContinuation(reason: DecisionReason) {
+    const continuation = this.continuation;
+    if (!continuation) return;
+    clearTimeout(continuation.timer);
+    this.continuation = undefined;
+    this.proposals.recordDecision("continuation.cancelled", reason);
+  }
+  private requestContinuation(reason: ContinuationReason, instructions: string) {
+    if (this.stopped || this.continuation) return;
+    this.proposals.recordDecision("continuation.requested", reason);
+    this.continuation = {
+      reason,
+      timer: setTimeout(() => this.continuationTimeout("continuation-never-started"), CONTINUATION_START_TIMEOUT_MS),
+    };
+    this.send({ type: "response.create", response: { instructions } });
+  }
+  private continuationTimeout(reason: "continuation-never-started" | "continuation-incomplete") {
+    if (this.stopped || !this.continuation) return;
+    this.continuation = undefined;
+    this.proposals.recordDecision("continuation.timed-out", reason);
+    this.fail(
+      reason === "continuation-never-started"
+        ? "Tutor continuation did not start in time. The scene cannot advance. Press Start to restart."
+        : "Tutor continuation did not complete in time. The scene cannot advance. Press Start to restart.",
+      reason,
+    );
   }
   async start() {
     if (this.started || this.stopped) return;
@@ -281,8 +331,22 @@ export class GrokVoice {
     ) {
       this.responseId = event.response?.id;
       this.interrupted = false;
+      const continuation = this.continuation;
+      if (continuation) {
+        if (continuation.responseId || !this.proposals.responseBound) this.cancelContinuation("superseded-response");
+        else {
+          clearTimeout(continuation.timer);
+          continuation.responseId = this.responseId;
+          continuation.timer = setTimeout(
+            () => this.continuationTimeout("continuation-incomplete"),
+            CONTINUATION_COMPLETE_TIMEOUT_MS,
+          );
+          this.proposals.recordDecision("continuation.started", continuation.reason);
+        }
+      }
     }
     if (type === "input_audio_buffer.speech_started") {
+      this.cancelContinuation("interrupted");
       if (this.proposals.state.phase === "rendering") {
         this.fail("Speech interrupted the scene change. Press Start to begin again.");
         return;
@@ -308,7 +372,18 @@ export class GrokVoice {
     }
     if (type === "input_audio_buffer.speech_stopped") this.proposals.speechStopped(event.item_id);
     if (type === "response.function_call_arguments.done") this.proposals.call(event);
-    if (type === "response.done") this.proposals.responseDone(event.response?.id, event.response?.status);
+    if (type === "response.done") {
+      const delivered = this.proposals.responseDone(event.response?.id, event.response?.status);
+      const continuation = this.continuation;
+      if (delivered && continuation?.responseId && event.response?.id === continuation.responseId) {
+        clearTimeout(continuation.timer);
+        this.continuation = undefined;
+        this.proposals.recordDecision(
+          event.response.status === "completed" ? "continuation.completed" : "continuation.cancelled",
+          event.response.status === "completed" ? continuation.reason : "cancelled",
+        );
+      }
+    }
     if (
       type === "conversation.item.input_audio_transcription.updated" ||
       type === "conversation.item.input_audio_transcription.completed"
@@ -371,7 +446,7 @@ export class GrokVoice {
   confirmRender(identity: RenderIdentity) {
     if (this.stopped || !this.proposals.confirmRender(identity)) return;
     if (this.proposals.state.phase === "complete") {
-      this.stop();
+      this.stop("lesson-complete");
       this.state.status = "complete";
       this.emit();
       return;
@@ -416,7 +491,7 @@ export class GrokVoice {
   private advanceTools() {
     if (this.stopped) return;
     if (this.proposals.endRequested) {
-      this.stop();
+      this.stop("learner-request");
       this.state.error = "Experiment ended at the learner's request; no correct-answer credit.";
       this.emit();
       return;
@@ -434,6 +509,7 @@ export class GrokVoice {
     clearTimeout(this.drainTimer);
     this.drainTimer = undefined;
     if (this.proposals.state.phase === "rendering") {
+      this.cancelContinuation("scene-transition");
       this.ready = false;
       if (this.responseId) this.blockedResponses.add(this.responseId);
       this.responseId = undefined;
@@ -474,24 +550,18 @@ export class GrokVoice {
               recovery === "missing-report"
                 ? "No usable report arrived. Ask once for the learner to repeat or clarify, without giving a count or claiming success."
                 : "The learner's correct answer was already validated. Confirm that answer once with its number and object, then pause. Do not ask the learner to repeat or answer again.";
-            this.send({
-              type: "response.create",
-              response: {
-                instructions: `${this.configurationInstructions}\n${instruction} Do not call any tools. Do not announce a new scene.`,
-              },
-            });
+            this.requestContinuation(
+              recovery,
+              `${this.configurationInstructions}\n${instruction} Do not call any tools. Do not announce a new scene.`,
+            );
           } else if (this.proposals.recoveryExhausted) {
-            const accepted = this.proposals.learnerAnswerAccepted;
             const message =
               reason === "missing-report"
                 ? "No usable counting report after one retry. Press Start to restart, or leave the experiment."
                 : reason === "missing-acknowledgment-audio"
                   ? "Tutor confirmation audio could not be verified. The learner answer was recorded, but the scene cannot advance. Press Start to restart."
                   : "Tutor confirmation could not be verified. The learner answer was recorded, but the scene cannot advance. Press Start to restart.";
-            this.fail(message);
-            // Diagnostic learner evidence survives this terminal recovery error only;
-            // Stop/cancellation still revoke all progression authority in the adapter.
-            this.acceptedAtRecoveryFailure = accepted;
+            this.fail(message, reason);
           }
           this.emit();
         }, 3000);
@@ -510,12 +580,10 @@ export class GrokVoice {
         continuation === "recovery"
           ? "The tool report was rejected. It establishes no success. Gently ask the learner to try again or clarify without supplying a count."
           : "The learner answer proposal was recorded. Respond naturally once.";
-      this.send({
-        type: "response.create",
-        response: {
-          instructions: `${this.configurationInstructions}\n${instruction} Do not call any tools in this continuation. Do not announce a new scene.`,
-        },
-      });
+      this.requestContinuation(
+        continuation === "accepted" ? "accepted-tool-only" : "rejected-tool-only",
+        `${this.configurationInstructions}\n${instruction} Do not call any tools in this continuation. Do not announce a new scene.`,
+      );
     } else this.configureNextTurn();
   }
   private play(encoded: string, itemId: string, contentIndex: number) {
@@ -534,21 +602,33 @@ export class GrokVoice {
     const source = context.createBufferSource();
     source.buffer = buffer;
     source.connect(context.destination);
+    const audio = this.proposals.playbackIdentity(itemId);
+    const alreadyPlaying = [...this.playbackItems.values()].some(
+      item => item.response === audio.response && item.item === audio.item,
+    );
     this.sources.add(source);
+    this.playbackItems.set(source, audio);
     this.proposals.spoken(this.responseId);
     this.proposals.output(true, itemId);
     this.state.output = "playing";
     source.onended = () => {
+      if (!this.sources.delete(source)) return;
       source.disconnect();
-      this.sources.delete(source);
-      if (!this.stopped && !this.sources.size) {
+      this.playbackItems.delete(source);
+      if (this.stopped) return;
+      const itemDrained = ![...this.playbackItems.values()].some(
+        item => item.response === audio.response && item.item === audio.item,
+      );
+      if (!this.sources.size) {
         this.proposals.output(false);
         this.state.output = "idle";
-        this.advanceTools();
-        this.emit();
       }
+      if (itemDrained) this.proposals.recordDecision("audio.drained", "local-playback", audio);
+      if (!this.sources.size) this.advanceTools();
+      if (itemDrained || !this.sources.size) this.emit();
     };
     source.start(start);
+    if (!alreadyPlaying) this.proposals.recordDecision("audio.started", "local-playback", audio);
   }
   private clearPlayback() {
     for (const source of this.sources) {
@@ -556,14 +636,23 @@ export class GrokVoice {
       source.stop();
       source.disconnect();
     }
+    for (const audio of new Map(
+      [...this.playbackItems.values()].map(item => [`${item.response}:${item.item}`, item]),
+    ).values())
+      this.proposals.recordDecision("audio.cleared", "playback-cleared", audio);
+    this.playbackItems.clear();
     this.sources.clear();
     this.item = undefined;
     this.nextTime = 0;
     this.state.output = "idle";
     this.proposals.output(false);
   }
-  stop() {
+  stop(reason: "user-stop" | "failure" | "lesson-complete" | "learner-request" = "user-stop") {
     if (this.stopped) return;
+    this.cancelContinuation(
+      reason === "failure" ? "connection-failure" : reason === "lesson-complete" ? "scene-transition" : reason,
+    );
+    if (reason === "user-stop" || reason === "learner-request") this.proposals.recordDecision("lesson.stopped", reason);
     this.stopped = true;
     this.proposals.stop();
     clearTimeout(this.timer);

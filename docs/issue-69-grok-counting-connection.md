@@ -1,5 +1,13 @@
 # Grok counting experiment
 
+**Download diagnostics** saves a local JSON snapshot of the current attempt,
+including model details, status/error, current scene/proposal state, captions and
+the latest 64 sanitized correlation events and up to 256 lesson decision events. It is enabled after Start and remains
+available after Stop, completion or an error; Start replaces the previous attempt.
+Exports omit audio, credentials, provider IDs and turn/render tokens. Caption text
+is included, so review it before sharing. Downloading does not stop the session
+or send diagnostics to a server.
+
 See the [bounded paired evaluation](issue-69-grok-counting-evaluation.md) for the
 fixed checklist, historical live evidence, transcript-correction blocker and
 **insufficient evidence** recommendation. Earlier live results below are historical.
@@ -298,3 +306,88 @@ active development server and ignored review-source artifacts under `test-result
 that prevent the corresponding in-place checks. Formatting and diff checks passed.
 These regressions exercise fixtures and real local Web Audio drain; no new live
 Grok/classifier quality result is claimed.
+
+## Lesson decision timeline and continuation watchdog
+
+The version-1 JSON download preserves all existing fields and the original
+64-entry `diagnostics` correlation trace. It adds `decisionTimeline` (latest 256
+entries) and `decisionTimelineDropped` (number of evicted entries). Start creates
+a fresh session; Stop, completion and failure preserve the buffer. A sequence
+starting above 1 and the dropped count explicitly identify incomplete history.
+No timeline is persisted or sent to a server.
+
+Each timeline entry has this schema:
+
+| Field | Meaning |
+| --- | --- |
+| `sequence`, `atMs` | Increasing event sequence and nondecreasing milliseconds from the session's local monotonic clock |
+| `type`, `reason` | Closed application event and reason vocabularies; no provider error text or captions |
+| `node`, `visit`, `turn`, `revision` | Authored node and application evidence scope at the event |
+| `response`, `item` | Local numeric response/item ordinals, or null when unavailable; never provider IDs |
+| `correlation` | Current response bound to the current learner turn, unbound, or absent; correlation-check reason codes explain individual envelope failures |
+| `state` | Phase, retained learner acceptance, revision-bound answer acceptance, acknowledgment recognition/observation, reducer audio observation/drain, output activity, continuation used/requested, validated proposal outcome/support |
+
+The `state` keys are `phase`, `learnerAccepted`, `answerAccepted`,
+`acknowledgmentRecognized`, `acknowledgmentObserved`, `audioObserved`,
+`audioDrained`, `output`, `continuationUsed`, `continuationRequested`,
+`proposalOutcome`, and `proposalSupport`. The eligibility event records the
+origin snapshot before the reducer commits its render request; its reason records
+the actual successful reducer outcome, including the just-completed quiet period.
+
+Events capture learner turn boundaries and provisional/settled/revised finals;
+proposal receipt, validation, rejection and accepted correct observations;
+response generation start/completion/cancellation; acknowledgment recognition,
+abstention or awaiting evidence; real item playback start/drain/clear; recovery
+request/exhaustion; continuation lifecycle; transition blocking/eligibility;
+render request/confirmation; and lesson completion, Stop or failure. Repeated
+unchanged acknowledgment and transition-wait decisions are suppressed. Snapshots
+are copied so consumers cannot mutate retained history.
+
+Acknowledgment events and audio events share local response/item ordinals.
+`audio.started` records successful scheduling of actual PCM in Web Audio;
+`audio.drained` requires every currently queued source for that item to end
+naturally. An item can resume if more PCM arrives; a queue drain alone says
+nothing about generation completion. `audio.cleared` records cancelled playback
+and is never a natural drain. Reducer audio-drain state additionally requires its
+quiet period and is separate from these local queue events. No provider
+`response.done` or text-only acknowledgment creates playback evidence.
+
+The existing exported transcript remains the sole caption copy. Timeline entries
+contain no utterances, raw PCM, credentials, application tokens, provider IDs or
+render identities. Earlier acceptance and failure-time learner evidence remain
+visible even when terminal cleanup revokes progression authority. Long sessions
+can evict earlier decisions; exported JSON explicitly reports that limitation.
+
+Every application-requested continuation (accepted/rejected tool-only speech or
+missing-report/acknowledgment recovery) gets a **15-second start deadline**. The
+next newly admitted, current-turn-bound response starts a **60-second generation
+completion deadline**. These conservative deadlines allow provider latency and a
+short realtime tutor turn without leaving a session stuck indefinitely. Lifecycle
+binding uses the existing serialized request and turn fences; it is not a claim
+that xAI echoes an application request ID. New learner speech cancels the pending
+binding before a VAD-generated response can be admitted. Opening questions and
+ordinary VAD-generated responses do not start watchdogs.
+
+Matching generation completion or cancellation clears the watchdog; duplicate or
+unrelated lifecycle events cannot complete or reset it. Stop, interruption/new
+speech, superseding responses, scene transition and connection failure also cancel
+it. Neither deadline applies to local playback after generation completes.
+Timeout closes the session once with `continuation-never-started` or
+`continuation-incomplete`, retains prior accepted-answer diagnostics, requests no
+further response or tools, and awards no success. Late events cannot reopen the
+stopped session. Existing recovery/continuation limits and acknowledgment/counting
+validation are unchanged.
+
+Timeline/watchdog validation: 213 focused Grok unit tests and the full 1,685-test
+suite (72 files) passed. All 15 focused provider-free browser tests passed,
+including downloaded JSON for the October 18 abstention sequence, recognized
+recovery/scene transition, missing audio, consumed continuation budget, and both
+watchdog deadlines. Unit coverage also verifies late callbacks, duplicate
+lifecycle events, interruption/Stop/connection cancellation, multi-chunk local
+drain, missing reports, completed lesson events, bounded storage and defensive
+snapshot/privacy behavior. Typecheck, lint and production build passed in a clean
+copy to avoid the existing dev-server lock and ignored review-source artifacts.
+All seven changed code/test files were byte-compared with the validated copy;
+formatting and diff checks passed. Counting validation and acknowledgment grammar
+were compared with the preceding commit and remain unchanged. No live provider
+evaluation was run.

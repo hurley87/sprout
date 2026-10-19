@@ -49,6 +49,39 @@ export default function GrokCounting() {
     voice.current = current;
     void current.start();
   }
+  function downloadDiagnostics() {
+    if (!snapshot) return;
+    // Explicit export projection: never serialize the transport or opaque IDs.
+    const report = {
+      version: 1,
+      experiment: "grok-counting",
+      exportedAt: new Date().toISOString(),
+      requestedModel: GROK_MODEL,
+      echoedModel: snapshot.echoedModel ?? null,
+      status: snapshot.status,
+      error: snapshot.error ?? null,
+      output: snapshot.output,
+      nodeId: snapshot.nodeId ?? INITIAL_COUNTING_NODE_ID,
+      complete: snapshot.complete ?? false,
+      proposal: snapshot.proposal ?? "No proposal",
+      learnerAnswerAccepted: snapshot.learnerAnswerAccepted ?? false,
+      answerAccepted: snapshot.answerAccepted ?? false,
+      pendingRender: snapshot.render ? { nodeId: snapshot.render.nodeId, sceneId: snapshot.render.sceneId } : null,
+      transcripts: snapshot.transcripts.map(({ speaker, text, final }) => ({ speaker, text, final })),
+      diagnostics: snapshot.diagnostics ?? [],
+      decisionTimeline: snapshot.decisionTimeline ?? [],
+      decisionTimelineDropped: Math.max(0, (snapshot.decisionTimeline?.[0]?.sequence ?? 1) - 1),
+    };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `sprout-grok-counting-${report.exportedAt.replace(/[:.]/g, "-")}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    // Let the browser begin the download before releasing its object URL.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
   return (
     <main className="mx-auto max-w-5xl space-y-6 p-6">
       <h1 className="text-2xl font-semibold">Grok counting experiment</h1>
@@ -71,10 +104,21 @@ export default function GrokCounting() {
         >
           Stop
         </button>
+        <button
+          className="rounded border px-4 py-2 disabled:opacity-40"
+          disabled={!snapshot}
+          onClick={downloadDiagnostics}
+        >
+          Download diagnostics
+        </button>
         <span role="status">
           {snapshot?.status ?? "Ready"} · Audio: {snapshot?.output ?? "idle"}
         </span>
       </div>
+      <p className="text-sm">
+        Diagnostics downloads include captions, the latest 64 correlation events, and up to 256 lesson decision events,
+        without audio.
+      </p>
       {snapshot?.error && <p role="alert">{snapshot.error}</p>}
       {snapshot?.complete ? (
         <div

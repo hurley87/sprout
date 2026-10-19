@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 
 test("provider-free voice scene, captions, interruption, Stop/restart and page exit", async ({ page }) => {
   let connections = 0;
@@ -51,6 +52,7 @@ test("provider-free voice scene, captions, interruption, Stop/restart and page e
   });
   await page.goto("/experiments/grok-counting");
   await expect(page.getByRole("img", { name: "1 duck to count" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Download diagnostics", exact: true })).toBeDisabled();
   await page.getByRole("button", { name: "Start", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("listening");
   await expect(page.getByText("Learner:")).toBeVisible();
@@ -69,6 +71,33 @@ test("provider-free voice scene, captions, interruption, Stop/restart and page e
     ),
   ).toBe(true);
   const count = sent.length;
+  const downloadEvent = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download diagnostics", exact: true }).click();
+  const download = await downloadEvent;
+  expect(download.suggestedFilename()).toMatch(/^sprout-grok-counting-.*\.json$/);
+  const json = await readFile((await download.path())!, "utf8");
+  const report = JSON.parse(json);
+  expect(report).toMatchObject({
+    version: 1,
+    experiment: "grok-counting",
+    requestedModel: "grok-voice-3.0",
+    echoedModel: "offline-fixture",
+    status: "stopped",
+    output: "idle",
+    nodeId: "count-1-duck",
+    complete: false,
+    learnerAnswerAccepted: false,
+    answerAccepted: false,
+    pendingRender: null,
+  });
+  expect(report.transcripts).toContainEqual({ speaker: "Learner", text: "One duck.", final: true });
+  expect(report.decisionTimeline).toContainEqual(
+    expect.objectContaining({ type: "lesson.stopped", reason: "user-stop" }),
+  );
+  expect(report.decisionTimeline.length).toBeLessThanOrEqual(256);
+  expect(report.diagnostics.length).toBeGreaterThan(0);
+  expect(report.diagnostics.length).toBeLessThanOrEqual(64);
+  expect(json).not.toMatch(/offline-test|context_token|"id"|"token"|"audio"/);
   await page.waitForTimeout(150);
   expect(sent).toHaveLength(count);
   await page.getByRole("button", { name: "Start", exact: true }).click();

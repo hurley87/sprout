@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { encodePcm, GrokVoice, type VoiceSnapshot } from "../lib/experiments/grok-counting/transport";
+import {
+  CONTINUATION_START_TIMEOUT_MS,
+  CONTINUATION_COMPLETE_TIMEOUT_MS,
+  encodePcm,
+  GrokVoice,
+  type VoiceSnapshot,
+} from "../lib/experiments/grok-counting/transport";
 class Socket {
   static OPEN = 1;
   static instances: Socket[] = [];
@@ -658,6 +664,7 @@ it("completes all authored edges only after playback drain and exact render conf
       expect(socket.sent.filter(e => e.type === "response.create")).toHaveLength(questions + 1);
     } else {
       expect(updates.at(-1)).toMatchObject({ status: "complete", complete: true, output: "idle" });
+      expect(updates.at(-1)?.decisionTimeline?.filter(e => e.type === "lesson.completed")).toHaveLength(1);
       expect(socket.close).toHaveBeenCalledOnce();
       expect(socket.sent.filter(e => e.type === "response.create")).toHaveLength(questions);
     }
@@ -741,6 +748,12 @@ it("bounds missing-call clarification to one retry and gives thinking pauses roo
   vi.advanceTimersByTime(3000);
   expect(updates.at(-1)).toMatchObject({ status: "error", learnerAnswerAccepted: false });
   expect(updates.at(-1)?.error).toContain("one retry");
+  expect(updates.at(-1)?.decisionTimeline).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ type: "recovery.requested", reason: "missing-report" }),
+      expect.objectContaining({ type: "lesson.failed", reason: "missing-report" }),
+    ]),
+  );
   vi.advanceTimersByTime(60000);
   expect(socket.sent.filter(e => e.type === "response.create")).toHaveLength(2);
   voice.stop();
@@ -1135,3 +1148,192 @@ it.each(["Stop", "new learner speech", "cancel", "interrupt during recovery"])(
     voice.stop();
   },
 );
+
+it.each(["never starts", "never completes"])("bounds application continuation generation when it %s", async fault => {
+  vi.useFakeTimers();
+  const { socket, context } = await connected();
+  learnerAnswer(socket);
+  propose(socket);
+  socket.event({ type: "response.done", response: { id: "tools", status: "completed" } });
+  const requested = socket.sent.length;
+  expect(updates.at(-1)?.decisionTimeline).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        type: "continuation.requested",
+        reason: "accepted-tool-only",
+        state: expect.objectContaining({ learnerAccepted: true }),
+      }),
+    ]),
+  );
+  let deadline = CONTINUATION_START_TIMEOUT_MS;
+  if (fault === "never completes") {
+    vi.advanceTimersByTime(CONTINUATION_START_TIMEOUT_MS - 1);
+    socket.event({ type: "response.created", response: { id: "continuation-private" } });
+    socket.event({ type: "response.created", response: { id: "continuation-private" } });
+    tutor(socket, "continuation-private", "Yes, one duck.");
+    context.sources.at(-1)?.onended?.();
+    deadline = CONTINUATION_COMPLETE_TIMEOUT_MS;
+  }
+  vi.advanceTimersByTime(deadline - 1);
+  expect(updates.at(-1)?.status).toBe("listening");
+  vi.advanceTimersByTime(1);
+  const terminal = updates.at(-1)!;
+  expect(terminal).toMatchObject({
+    status: "error",
+    learnerAnswerAccepted: true,
+    answerAccepted: false,
+    nodeId: "count-1-duck",
+  });
+  expect(terminal.error).toContain(fault === "never starts" ? "did not start" : "did not complete");
+  const timeline = terminal.decisionTimeline!;
+  expect(timeline.filter(e => e.type === "continuation.timed-out")).toHaveLength(1);
+  expect(timeline.filter(e => e.type === "continuation.started")).toHaveLength(fault === "never starts" ? 0 : 1);
+  expect(timeline.at(-1)).toMatchObject({
+    type: "lesson.failed",
+    reason: fault === "never starts" ? "continuation-never-started" : "continuation-incomplete",
+    state: expect.objectContaining({ learnerAccepted: true }),
+  });
+  expect(timeline.some(e => e.type === "render.requested")).toBe(false);
+  socket.event({ type: "response.created", response: { id: "late" } });
+  tutor(socket, "late", "Yes, one duck.");
+  socket.event({ type: "response.done", response: { id: "late", status: "completed" } });
+  vi.advanceTimersByTime(120000);
+  expect(updates.at(-1)).toEqual(terminal);
+  expect(socket.sent).toHaveLength(requested);
+  expect(JSON.stringify(timeline)).not.toMatch(
+    /continuation-private|ephemeral|context_token|supporting_text|One duck|Yes, one/,
+  );
+});
+
+it.each(
+  ["before start", "during generation"].flatMap(boundary =>
+    ["stop", "speech", "connection failure"].map(action => [boundary, action]),
+  ),
+)("cancels the watchdog %s on %s", async (boundary, action) => {
+  vi.useFakeTimers();
+  const { voice, socket } = await connected();
+  learnerAnswer(socket);
+  propose(socket);
+  socket.event({ type: "response.done", response: { id: "tools", status: "completed" } });
+  if (boundary === "during generation") socket.event({ type: "response.created", response: { id: "continuation" } });
+  if (action === "stop") voice.stop();
+  if (action === "speech") socket.event({ type: "input_audio_buffer.speech_started", item_id: "new-private-turn" });
+  if (action === "connection failure") socket.onerror?.();
+  vi.advanceTimersByTime(120000);
+  const timeline = updates.at(-1)!.decisionTimeline!;
+  expect(timeline.filter(e => e.type === "continuation.cancelled")).toHaveLength(1);
+  expect(timeline.some(e => e.type === "continuation.timed-out")).toBe(false);
+  expect(updates.every(s => !s.render)).toBe(true);
+  voice.stop();
+  vi.useRealTimers();
+});
+
+it("completes the continuation watchdog once at generation end while real audio still plays", async () => {
+  vi.useFakeTimers();
+  const { voice, socket, context } = await connected();
+  learnerAnswer(socket);
+  propose(socket);
+  socket.event({ type: "response.done", response: { id: "tools", status: "completed" } });
+  socket.event({ type: "response.created", response: { id: "continuation" } });
+  tutor(socket, "continuation", "Yes, one duck.");
+  // Multiple chunks for the same item cannot claim full drain after just one ends.
+  socket.event({
+    type: "response.output_audio.delta",
+    response_id: "continuation",
+    item_id: "a-continuation",
+    delta: btoa("\0\0".repeat(2400)),
+  });
+  socket.event({ type: "response.done", response: { id: "continuation", status: "completed" } });
+  socket.event({ type: "response.done", response: { id: "continuation", status: "completed" } });
+  vi.advanceTimersByTime(120000);
+  let timeline = updates.at(-1)!.decisionTimeline!;
+  expect(updates.at(-1)?.status).toBe("listening");
+  expect(updates.at(-1)?.render).toBeUndefined();
+  expect(timeline.filter(e => e.type === "continuation.completed")).toHaveLength(1);
+  expect(timeline.filter(e => e.type === "audio.started")).toHaveLength(1);
+  expect(timeline.some(e => e.type === "audio.drained")).toBe(false);
+  const firstEnd = context.sources[0].onended!;
+  firstEnd();
+  firstEnd();
+  expect(updates.at(-1)!.decisionTimeline!.some(e => e.type === "audio.drained")).toBe(false);
+  context.sources[1].onended?.();
+  vi.advanceTimersByTime(260);
+  timeline = updates.at(-1)!.decisionTimeline!;
+  expect(timeline.filter(e => e.type === "audio.drained")).toHaveLength(1);
+  expect(timeline).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ type: "transition.eligible" }),
+      expect.objectContaining({ type: "render.requested" }),
+    ]),
+  );
+  expect(updates.at(-1)?.render?.nodeId).toBe("count-2-ducks");
+  voice.confirmRender(updates.at(-1)!.render!);
+  expect(updates.at(-1)!.decisionTimeline!.some(e => e.type === "render.confirmed")).toBe(true);
+  voice.stop();
+});
+
+it("does not start a continuation watchdog for opening or VAD-generated responses", async () => {
+  vi.useFakeTimers();
+  const { voice, socket } = await connected();
+  socket.event({ type: "response.created", response: { id: "opening" } });
+  vi.advanceTimersByTime(120000);
+  learnerAnswer(socket);
+  vi.advanceTimersByTime(120000);
+  expect(updates.at(-1)?.status).toBe("listening");
+  expect(updates.at(-1)?.decisionTimeline?.some(e => e.type.startsWith("continuation."))).toBe(false);
+  voice.stop();
+});
+
+it("retains the October 18 decision history through accurate acknowledgment failure", async () => {
+  vi.useFakeTimers();
+  const { socket, context } = await connected();
+  learnerAnswer(socket);
+  propose(socket);
+  tutor(socket, "tools", "One duck. That's right!");
+  socket.event({ type: "response.done", response: { id: "tools", status: "completed" } });
+  context.sources.at(-1)?.onended?.();
+  vi.advanceTimersByTime(3000);
+  socket.event({ type: "response.created", response: { id: "recovery" } });
+  tutor(socket, "recovery", "One duck. That's right!");
+  socket.event({ type: "response.done", response: { id: "recovery", status: "completed" } });
+  context.sources.at(-1)?.onended?.();
+  vi.advanceTimersByTime(3000);
+  const snapshot = updates.at(-1)!;
+  expect(snapshot.error).toContain("Tutor confirmation could not be verified");
+  const entries = snapshot.decisionTimeline!;
+  const events = entries.map(e => `${e.type}:${e.reason}`);
+  for (const event of [
+    "learner.transcript:settled",
+    "proposal.received:awaiting-evidence",
+    "proposal.validated:correct",
+    "learner.answer.accepted:correct",
+    "acknowledgment.evaluated:abstained",
+    "audio.drained:local-playback",
+    "recovery.requested:missing-acknowledgment",
+    "continuation.completed:missing-acknowledgment",
+    "recovery.exhausted:missing-acknowledgment",
+    "lesson.failed:missing-acknowledgment",
+  ])
+    expect(events).toContain(event);
+  expect(entries.find(e => e.type === "proposal.validated")?.state).toMatchObject({
+    proposalOutcome: "correct",
+    proposalSupport: "none",
+  });
+  expect(events.some(e => e.startsWith("render.requested"))).toBe(false);
+  expect(entries.every((e, i) => !i || (e.atMs >= entries[i - 1].atMs && e.sequence > entries[i - 1].sequence))).toBe(
+    true,
+  );
+  expect(JSON.stringify(entries)).not.toMatch(/One duck|That's right|context_token|tools"|recovery"|ephemeral/);
+});
+
+it("labels a validated correct proposal awaiting generation separately from an incorrect answer", async () => {
+  const { voice, socket } = await connected();
+  learnerAnswer(socket);
+  propose(socket);
+  expect(updates.at(-1)?.decisionTimeline?.at(-1)).toMatchObject({
+    type: "transition.blocked",
+    reason: "awaiting-response-completion",
+    state: { learnerAccepted: false, proposalOutcome: "correct", proposalSupport: "none" },
+  });
+  voice.stop();
+});

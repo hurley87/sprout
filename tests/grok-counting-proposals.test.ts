@@ -755,3 +755,47 @@ it("retains the accepted observation when an already used continuation exhausts 
   expect(adapter.state).toMatchObject({ acknowledgmentObserved: false, phase: "active", conceptEvidence: {} });
   expect(adapter.lastResult).toBe("Accepted: correct · none");
 });
+
+it("bounds the additive decision timeline, preserves monotonic order, and returns defensive snapshots", () => {
+  const { adapter, call } = fixture();
+  call();
+  adapter.responseDone("r1", "completed");
+  for (let i = 0; i < 400; i++) call({}, { call_id: "private-duplicate" });
+  const entries = adapter.decisionTimeline;
+  expect(entries).toHaveLength(256);
+  expect(entries[0].sequence).toBeGreaterThan(1);
+  expect(entries.every((e, i) => !i || (e.sequence > entries[i - 1].sequence && e.atMs >= entries[i - 1].atMs))).toBe(
+    true,
+  );
+  expect(adapter.correlationDiagnostics).toHaveLength(64);
+  expect(JSON.stringify(entries)).not.toMatch(
+    /private-duplicate|context_token|supporting_text|One duck|How many|r1|c1/,
+  );
+  const saved = entries[0].state.learnerAccepted;
+  entries[0].state.learnerAccepted = !saved;
+  entries[0].reason = "user-stop";
+  expect(adapter.decisionTimeline[0].state.learnerAccepted).toBe(saved);
+  expect(adapter.decisionTimeline[0].reason).not.toBe("user-stop");
+});
+
+it("records transcript replacement/revocation without retaining learner text in the timeline", () => {
+  const { adapter, call } = fixture();
+  call();
+  adapter.responseDone("r1", "completed");
+  adapter.transcript({ id: "u1", speaker: "Learner", text: "Two ducks.", final: true });
+  expect(adapter.decisionTimeline).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        type: "learner.answer.accepted",
+        state: expect.objectContaining({ learnerAccepted: true }),
+      }),
+      expect.objectContaining({
+        type: "learner.transcript",
+        reason: "revised",
+        state: expect.objectContaining({ learnerAccepted: false }),
+      }),
+      expect.objectContaining({ type: "correlation.checked", reason: "transcript.final.corrected" }),
+    ]),
+  );
+  expect(JSON.stringify(adapter.decisionTimeline)).not.toMatch(/One duck|Two ducks/);
+});
