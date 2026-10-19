@@ -11,7 +11,11 @@ export const acknowledgmentQuestion = {
       "Generic praise without confirming the answer, a question, hint, uncertainty, contradiction, a tutor-supplied answer before the learner responds, changed subject, or ambiguous/incomplete acknowledgment. Great job alone, How many ducks do you see, Maybe one duck, and No there are two ducks when one is expected do not qualify.",
   },
 };
-export async function classifyAcknowledgment(input: AckInput, signal: AbortSignal): Promise<AckDecision> {
+/** Probability projection is server/harness-only; the browser route returns decision alone. */
+export async function evaluateAcknowledgment(
+  input: AckInput,
+  signal: AbortSignal,
+): Promise<{ decision: AckDecision; probability: number | null }> {
   const result = await evaluateNoulQuestions(
     {
       nodeId: input.nodeId,
@@ -24,12 +28,22 @@ export async function classifyAcknowledgment(input: AckInput, signal: AbortSigna
     true,
   );
   if (!result.ok)
-    return { requestId: input.requestId, outcome: "abstain", reason: result.reason, modelValidated: false };
+    return {
+      decision: { requestId: input.requestId, outcome: "abstain", reason: result.reason, modelValidated: false },
+      probability: null,
+    };
   const p = result.probabilities.acknowledgesValidatedAnswer;
   return {
-    requestId: input.requestId,
-    outcome: p >= ACK_THRESHOLD ? "acknowledging" : "abstain",
-    reason: p >= ACK_THRESHOLD ? "confirmed" : p <= 1 - ACK_THRESHOLD ? "not-confirmed" : "low-confidence",
-    modelValidated: true,
+    probability: p,
+    decision: {
+      requestId: input.requestId,
+      outcome: p >= ACK_THRESHOLD ? "acknowledging" : "abstain",
+      reason: p >= ACK_THRESHOLD ? "confirmed" : p <= 1 - ACK_THRESHOLD ? "not-confirmed" : "low-confidence",
+      modelValidated: true,
+    },
   };
+}
+
+export async function classifyAcknowledgment(input: AckInput, signal: AbortSignal): Promise<AckDecision> {
+  return (await evaluateAcknowledgment(input, signal)).decision;
 }

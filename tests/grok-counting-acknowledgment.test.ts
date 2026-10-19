@@ -11,7 +11,7 @@ import { CountingProposals, OUTCOME_TOOL } from "../lib/experiments/grok-countin
 const input: AckInput = {
   requestId: "application-1",
   nodeId: "count-1-duck",
-  expectedAnswer: "1 duck",
+  expectedAnswer: "one duck",
   learner: "One duck.",
   tutor: "Yes, one duck.",
 };

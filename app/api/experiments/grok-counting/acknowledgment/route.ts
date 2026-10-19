@@ -1,3 +1,4 @@
+import { formatExpectedCountingAnswer } from "@/lib/experiments/grok-counting/expected-answer";
 import { isLocalRequest, readJsonBody } from "@/lib/local-request";
 import { COUNTING_LESSON } from "@/lib/lesson-runtime/counting-lesson";
 import { ACK_DEADLINE_MS, type AckInput } from "@/lib/experiments/grok-counting/acknowledgment";
@@ -22,7 +23,7 @@ export async function POST(request: Request) {
   )
     return json({ error: "invalid_request" }, 400);
   const node = COUNTING_LESSON.nodes[input.nodeId]?.presentation;
-  if (!node || input.expectedAnswer !== `${node.quantity} ${node.object}`)
+  if (!node || input.expectedAnswer !== formatExpectedCountingAnswer(node))
     return json({ error: "invalid_request" }, 400);
   const timeout = AbortSignal.timeout(ACK_DEADLINE_MS);
   const signal = AbortSignal.any([request.signal, timeout]);

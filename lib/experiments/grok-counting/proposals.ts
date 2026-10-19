@@ -1,5 +1,7 @@
+import { formatExpectedCountingAnswer } from "./expected-answer";
 import {
   ACK_DEADLINE_MS,
+  grokOnlyAcknowledges,
   requestAcknowledgment,
   type AcknowledgmentMode,
   type AckClassifier,
@@ -871,16 +873,8 @@ export class CountingProposals {
     if (this.learnerAnswerAccepted && r && (!r.done || !tutor?.final)) this.recordAcknowledgment("awaiting-evidence");
     if (this.learnerAnswerAccepted && r?.done && r.completed && !r.rejected && this.matches(r.source) && tutor?.final) {
       const node = COUNTING_LESSON.nodes[this.state.nodeId].presentation;
-      const number = ["zero", "one", "two", "three"][Number(node.quantity)];
-      const object = node.object === "duck" ? "ducks?" : "butterfl(?:y|ies)";
-      // Full utterance recognition is intentionally conservative. Generic praise,
-      // questions, hints and a count supplied before the learner do not qualify.
-      const acknowledgment = new RegExp(
-        `^(?:(?:yes|correct|that's right|that is right|well done|great)[,! .]+)?(?:there (?:is|are) |you (?:saw|counted) )?(?:${number}|${node.quantity}) ${object}[.!]*$`,
-        "i",
-      );
       const key = JSON.stringify([this.learnerRevision, tutor.id, tutor.text]);
-      if (this.acknowledgmentMode === "grok-only") r.acknowledgmentRecognized = acknowledgment.test(tutor.text.trim());
+      if (this.acknowledgmentMode === "grok-only") r.acknowledgmentRecognized = grokOnlyAcknowledges(tutor.text, node);
       if (!this.ack?.pending) this.recordAcknowledgment(r.acknowledgmentRecognized ? "recognized" : "abstained");
       if (r.audioItems?.has(tutor.id) && r.acknowledgmentRecognized && key !== this.projectedAcknowledgment) {
         this.projectedAcknowledgment = key;
@@ -1019,7 +1013,7 @@ export class CountingProposals {
       {
         requestId,
         nodeId: this.state.nodeId,
-        expectedAnswer: `${node.quantity} ${node.object}`,
+        expectedAnswer: formatExpectedCountingAnswer(node),
         learner: this.messages.find(m => m.id === this.learner?.itemId)!.text,
         tutor: tutor.text,
       },

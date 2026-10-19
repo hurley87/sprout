@@ -56,3 +56,19 @@ export const requestAcknowledgment: AckClassifier = async (input, signal) => {
     modelValidated: value.modelValidated,
   };
 };
+
+/** Exact existing Grok-only grammar, shared with its offline benchmark comparison. */
+export function grokOnlyAcknowledges(
+  text: string,
+  node: { readonly quantity?: unknown; readonly object?: unknown },
+): boolean {
+  const number = ["zero", "one", "two", "three"][Number(node.quantity)];
+  const object = node.object === "duck" ? "ducks?" : "butterfl(?:y|ies)";
+  // Full utterance recognition is intentionally conservative. Generic praise,
+  // questions, hints and a count supplied before the learner do not qualify.
+  const acknowledgment = new RegExp(
+    `^(?:(?:yes|correct|that's right|that is right|well done|great)[,! .]+)?(?:there (?:is|are) |you (?:saw|counted) )?(?:${number}|${node.quantity}) ${object}[.!]*$`,
+    "i",
+  );
+  return acknowledgment.test(text.trim());
+}

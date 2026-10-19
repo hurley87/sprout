@@ -1,0 +1,303 @@
+{
+  "version": 1,
+  "provenance": "Authored labels and rationales before any live prediction; synthetic text, not child recordings. Ambiguous cases should abstain.",
+  "cases": [
+    {
+      "id": "yes-one",
+      "nodeId": "count-1-duck",
+      "learner": "One duck.",
+      "tutor": "Yes, one duck.",
+      "expectedLabel": "positive",
+      "rationale": "Explicit assent and correct total.",
+      "eligible": true
+    },
+    {
+      "id": "oct18-demo",
+      "nodeId": "count-1-duck",
+      "learner": "One duck.",
+      "tutor": "One duck. That's right!",
+      "expectedLabel": "positive",
+      "rationale": "Confirmation follows the correct total; October 18 demo reproduction.",
+      "eligible": true
+    },
+    {
+      "id": "counted-correctly",
+      "nodeId": "count-1-duck",
+      "learner": "One duck.",
+      "tutor": "You counted one duck correctly.",
+      "expectedLabel": "positive",
+      "rationale": "Explicit attribution of correct counting.",
+      "eligible": true
+    },
+    {
+      "id": "exactly-one",
+      "nodeId": "count-1-duck",
+      "learner": "One duck.",
+      "tutor": "Exactly! There is one duck.",
+      "expectedLabel": "positive",
+      "rationale": "Confirmation precedes the total.",
+      "eligible": true
+    },
+    {
+      "id": "right-before",
+      "nodeId": "count-1-duck",
+      "learner": "One duck.",
+      "tutor": "That's right: there is one duck.",
+      "expectedLabel": "positive",
+      "rationale": "Confirmation and correct scene object.",
+      "eligible": true
+    },
+    {
+      "id": "total-before",
+      "nodeId": "count-1-duck",
+      "learner": "One duck.",
+      "tutor": "There is one duck, exactly as you said.",
+      "expectedLabel": "positive",
+      "rationale": "Correct total then explicit validation.",
+      "eligible": true
+    },
+    {
+      "id": "numeric-one",
+      "nodeId": "count-1-duck",
+      "learner": "One duck.",
+      "tutor": "Yes, 1 duck!",
+      "expectedLabel": "positive",
+      "rationale": "Numeric spelling with explicit confirmation.",
+      "eligible": true
+    },
+    {
+      "id": "single-duck",
+      "nodeId": "count-1-duck",
+      "learner": "One duck.",
+      "tutor": "Correct, a single duck.",
+      "expectedLabel": "positive",
+      "rationale": "Natural equivalent of one duck.",
+      "eligible": true
+    },
+    {
+      "id": "correct-after",
+      "nodeId": "count-1-duck",
+      "learner": "One duck.",
+      "tutor": "One duck is correct.",
+      "expectedLabel": "positive",
+      "rationale": "Correctness follows the answer.",
+      "eligible": true
+    },
+    {
+      "id": "generic-praise",
+      "nodeId": "count-1-duck",
+      "learner": "One duck.",
+      "tutor": "Great job!",
+      "expectedLabel": "negative",
+      "rationale": "Positive sentiment does not confirm number and object.",
+      "eligible": true
+    },
+    {
+      "id": "question",
+      "nodeId": "count-1-duck",
+      "learner": "One duck.",
+      "tutor": "How many ducks do you see?",
+      "expectedLabel": "negative",
+      "rationale": "Asks rather than confirms.",
+      "eligible": true
+    },
+    {
+      "id": "maybe",
+      "nodeId": "count-1-duck",
+      "learner": "One duck.",
+      "tutor": "Maybe one duck?",
+      "expectedLabel": "negative",
+      "rationale": "Uncertain suggestion rather than confirmation.",
+      "eligible": true
+    },
+    {
+      "id": "contradiction",
+      "nodeId": "count-1-duck",
+      "learner": "One duck.",
+      "tutor": "No, there are two ducks.",
+      "expectedLabel": "negative",
+      "rationale": "Contradicts validated count.",
+      "eligible": true
+    },
+    {
+      "id": "count-together",
+      "nodeId": "count-1-duck",
+      "learner": "One duck.",
+      "tutor": "Let's count them together.",
+      "expectedLabel": "negative",
+      "rationale": "Hint/invitation, no confirmation.",
+      "eligible": true
+    },
+    {
+      "id": "leading-question",
+      "nodeId": "count-1-duck",
+      "learner": "One duck.",
+      "tutor": "Is there one duck?",
+      "expectedLabel": "negative",
+      "rationale": "Suggests the answer through a question.",
+      "eligible": true
+    },
+    {
+      "id": "wrong-object",
+      "nodeId": "count-1-duck",
+      "learner": "One duck.",
+      "tutor": "Yes, one butterfly.",
+      "expectedLabel": "negative",
+      "rationale": "Correct number but wrong object.",
+      "eligible": true
+    },
+    {
+      "id": "wrong-number",
+      "nodeId": "count-1-duck",
+      "learner": "One duck.",
+      "tutor": "Exactly! Two ducks.",
+      "expectedLabel": "negative",
+      "rationale": "Positive sentiment validates the wrong number.",
+      "eligible": true
+    },
+    {
+      "id": "unrelated",
+      "nodeId": "count-1-duck",
+      "learner": "One duck.",
+      "tutor": "What is your favorite color?",
+      "expectedLabel": "negative",
+      "rationale": "Unrelated conversation.",
+      "eligible": true
+    },
+    {
+      "id": "negated-confirmation",
+      "nodeId": "count-1-duck",
+      "learner": "One duck.",
+      "tutor": "One duck is not correct.",
+      "expectedLabel": "negative",
+      "rationale": "Explicitly denies the correct learner answer.",
+      "eligible": true
+    },
+    {
+      "id": "qualified-wrong",
+      "nodeId": "count-1-duck",
+      "learner": "One duck.",
+      "tutor": "You said one duck, but there are actually two.",
+      "expectedLabel": "negative",
+      "rationale": "Quotes learner total but rejects it.",
+      "eligible": true
+    },
+    {
+      "id": "instruction",
+      "nodeId": "count-1-duck",
+      "learner": "One duck.",
+      "tutor": "Say one duck.",
+      "expectedLabel": "negative",
+      "rationale": "Supplies answer as an instruction, not confirmation.",
+      "eligible": true
+    },
+    {
+      "id": "fragment",
+      "nodeId": "count-1-duck",
+      "learner": "One duck.",
+      "tutor": "One...",
+      "expectedLabel": "ambiguous",
+      "rationale": "Incomplete utterance lacks a confirmed object.",
+      "eligible": true
+    },
+    {
+      "id": "trailing",
+      "nodeId": "count-1-duck",
+      "learner": "One duck.",
+      "tutor": "That's...",
+      "expectedLabel": "ambiguous",
+      "rationale": "Unfinished acknowledgment.",
+      "eligible": true
+    },
+    {
+      "id": "mixed",
+      "nodeId": "count-1-duck",
+      "learner": "One duck.",
+      "tutor": "One duck, or perhaps two.",
+      "expectedLabel": "ambiguous",
+      "rationale": "Conflicting uncertain total.",
+      "eligible": true
+    },
+    {
+      "id": "unresolved",
+      "nodeId": "count-1-duck",
+      "learner": "One duck.",
+      "tutor": "One duck? Hmm.",
+      "expectedLabel": "ambiguous",
+      "rationale": "Question and hesitation leave confirmation unresolved.",
+      "eligible": true
+    },
+    {
+      "id": "praise-ellipsis",
+      "nodeId": "count-1-duck",
+      "learner": "One duck.",
+      "tutor": "Good, you counted...",
+      "expectedLabel": "ambiguous",
+      "rationale": "Incomplete count acknowledgment.",
+      "eligible": true
+    },
+    {
+      "id": "referential",
+      "nodeId": "count-1-duck",
+      "learner": "One duck.",
+      "tutor": "That looks about right.",
+      "expectedLabel": "ambiguous",
+      "rationale": "Uncertain referential praise without explicit number/object.",
+      "eligible": true
+    },
+    {
+      "id": "two-ducks",
+      "nodeId": "count-2-ducks",
+      "learner": "Two ducks.",
+      "tutor": "That's right, two ducks!",
+      "expectedLabel": "positive",
+      "rationale": "Correct confirmation for the second authored scene.",
+      "eligible": true
+    },
+    {
+      "id": "two-order",
+      "nodeId": "count-2-ducks",
+      "learner": "Two ducks.",
+      "tutor": "Two ducks, yes, you got it.",
+      "expectedLabel": "positive",
+      "rationale": "Confirmation follows the second-scene total.",
+      "eligible": true
+    },
+    {
+      "id": "three-butterflies",
+      "nodeId": "count-3-butterflies",
+      "learner": "Three butterflies.",
+      "tutor": "You found three butterflies!",
+      "expectedLabel": "positive",
+      "rationale": "Explicitly validates the counted set.",
+      "eligible": true
+    },
+    {
+      "id": "three-order",
+      "nodeId": "count-3-butterflies",
+      "learner": "Three butterflies.",
+      "tutor": "Three butterflies. That's exactly right!",
+      "expectedLabel": "positive",
+      "rationale": "Confirmation follows third-scene total.",
+      "eligible": true
+    },
+    {
+      "id": "three-wrong-object",
+      "nodeId": "count-3-butterflies",
+      "learner": "Three butterflies.",
+      "tutor": "Correct, three ducks!",
+      "expectedLabel": "negative",
+      "rationale": "Wrong authored object despite matching number.",
+      "eligible": true
+    },
+    {
+      "id": "answer-before-learner",
+      "nodeId": "count-1-duck",
+      "learner": "",
+      "tutor": "There is one duck.",
+      "expectedLabel": "negative",
+      "rationale": "No validated learner evidence: adapter precondition must block classification.",
+      "eligible": false
+    }
+  ]
+}

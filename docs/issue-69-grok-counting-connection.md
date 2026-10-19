@@ -490,3 +490,37 @@ copy; code formatting and `git diff --check` passed. The first browser clock
 setup reset the runtime clock after session creation; installing the test clock
 before page load fixed the two test-harness failures. No production behavior was
 changed to accommodate that clock setup.
+
+## Commit 2: measured acknowledgment benchmark
+
+The shared experiment-local expected-answer formatter now supplies `one duck`,
+`two ducks`, and `three butterflies` in both browser requests and server
+validation. The 0.95 threshold, question, curriculum, learner validator, tool
+schema and reducer remain unchanged. A server/harness-only probability projection
+supports evaluation without exposing probabilities or provider bodies in the
+browser endpoint. The exact existing Grok-only regex is shared with its offline
+comparison; its matching behavior is unchanged.
+
+See the [Commit 2 report](issue-69-grok-jev-acknowledgment-benchmark.md) for the
+fixed labeled dataset, opt-in commands, metric definitions, alternatives computed
+from the same probabilities, actual evidence and architecture comparison.
+Real Jev accepted the October 18 phrase at p=0.99 (110 ms). Across 32 eligible
+text examples it accepted 13/13 positives and no negative/ambiguous case; median
+latency was 136 ms and p95 273 ms. The 0.95 three-way semantic abstention rate
+was 6/32; the production gate also withholds confident negatives.
+
+The one real synthetic `grok-jev` walkthrough stopped on scene 1: Grok heard
+`I see one dog.` from the existing `I see one duck.` fixture and emitted an
+unsupported `incorrect` report. No validated learner answer, Jev request,
+acknowledgment audio or scene transition followed. The later scenes and a fresh
+Grok-only comparison were not executed. No paid retry, prompt/validation change,
+threshold tuning or architecture winner is claimed. Further opt-in development
+is warranted, with separate fixture/ASR/tool-grounding investigation before a
+successful three-scene run.
+
+Commit 2 validation: 290 focused Grok/Jev tests, all 1,762 unit tests (74 files),
+23 provider-free browser tests, typecheck, lint, formatting and production build
+passed. The isolated live walkthrough failed at the preserved first-scene
+ASR/tool-report blocker; it was not retried. Source-copy validation excluded
+ignored review artifacts and local credential files, and all changed files were
+byte-compared with the validated copy. Historical evidence was not overwritten.
