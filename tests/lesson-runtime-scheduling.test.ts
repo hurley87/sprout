@@ -2,12 +2,14 @@ import { useRuntimeFakeTimers } from "./helpers/runtime-harness";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ClientCommand, ProviderEvent } from "../lib/events";
 import { LessonRuntime } from "../lib/lesson-runtime/lesson-runtime";
-import { COUNTING_LESSON } from "../lib/lesson-runtime/counting-lesson";
+// Preservation replay of the original confirmation-gated policy.
+import { LEGACY_COUNTING_LESSON as COUNTING_LESSON } from "./helpers/counting-runtime";
 import { LESSON_START_INSTRUCTION } from "./helpers/counting-live-context";
 import { ANSWER_RECOVERY_INSTRUCTION } from "../lib/lesson-runtime/answer-recovery";
 import fillerTrace from "./fixtures/butterfly-filler-confirmation.json";
 import { TEST_CONCEPT_LESSON } from "./fixtures/concept-lesson";
 import type { EvidenceTracking, FeedbackTracking } from "../lib/lesson-runtime/evidence-tracking";
+import type { LessonDefinition } from "../lib/lesson-runtime/lesson-definition";
 
 const transport = vi.hoisted(() => ({
   receive: undefined as ((event: ProviderEvent) => void) | undefined,
@@ -35,7 +37,7 @@ afterEach(() => {
 function emit(event: ProviderEvent) {
   transport.receive?.(event);
 }
-function start(childAnswer = "One.", definition = COUNTING_LESSON) {
+function start(childAnswer = "One.", definition: LessonDefinition = COUNTING_LESSON) {
   lesson = new LessonRuntime({} as HTMLAudioElement, () => {}, definition);
   lesson.confirmRendered(lesson.snapshot().display);
   const command = transport.send.mock.calls[0][0];
@@ -1082,9 +1084,9 @@ function choiceDiagnostic() {
     labelCompletionEligible: false,
     outputs: {
       objectiveState: {
-        choice: "completed",
+        choice: "incorrect",
         confidence: 1,
-        probabilities: { completed: 1, incorrect: 0, unclear_or_incomplete: 0, unresolved_help: 0, no_attempt: 0 },
+        probabilities: { completed: 0, incorrect: 1, unclear_or_incomplete: 0, unresolved_help: 0, no_attempt: 0 },
       },
       tutorState: {
         choice: "other",

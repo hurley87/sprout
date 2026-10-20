@@ -1,5 +1,13 @@
 # Issue 77: provider-free preservation replay
 
+This report records the original tracking-only change. The later counting
+[learner-answer policy](lesson-runtime-reducer.md#counting-learner-answer-policy)
+intentionally changes counting decisions. Preservation replays now explicitly use
+the confirmation-era counting fixture. For new-policy inputs the differential
+guard compares both reducers with that policy disabled on the same input state;
+it does not claim historical equivalence of the new counting policy. Direct
+mapping and runtime cases in `tests/counting-answer-policy.test.ts` cover that policy.
+
 Baseline: `16120943cd821749dbca025d4456f53bf4c01968`, before tracking.
 Implementation parent: `599a5b430b5538fdeaf0beb64d8ae72ff136de8d`.
 No production code, behavior flags, policy, prompts or evaluator settings changed.
@@ -15,8 +23,10 @@ runtime-driven reductions and clock ticks, not just tracking-helper expectations
 Each stream starts at the same initial state or test fixture checkpoint. New
 `proposalConsumption` metadata is observational and excluded from the comparison.
 
-Only one historical source file is retained. Its reversible import relocation,
-original SHA-256 and six unchanged transitive dependency hashes are checked by
+The original replay retained one historical source file. The later commitment
+contract also pins the actual historical proposal parser, so its new live field
+cannot alter baseline parsing. Counting's legacy projection omits that new field.
+Reversible import relocation, original SHA-256 and six dependency hashes are checked by
 `tracking-baseline-provenance.test.ts`; extraction details are in
 `tests/fixtures/issue-77-baseline/README.md`. Tests need neither Git nor network.
 

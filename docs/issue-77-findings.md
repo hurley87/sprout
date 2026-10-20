@@ -1,5 +1,12 @@
 # Issue #77 findings and policy recommendation
 
+This report records the original tracking-only analysis. The later
+[counting learner-answer policy](lesson-runtime-reducer.md#counting-learner-answer-policy)
+separately introduces correctness and commitment judgments following manual
+conversation testing. Its new behavior and tests are not part of the historical
+measurements or hash-bound source set below; the recommendation here describes
+the evidence available at that earlier stage.
+
 **Recommendation: defer behavioral policy changes; keep the delivered separate
 tracking.** The saved evidence demonstrates rechecks, conservative holds and
 context-sensitive judgments. It does not demonstrate a valid accepted answer

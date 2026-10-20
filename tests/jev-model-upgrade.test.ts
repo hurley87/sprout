@@ -37,6 +37,8 @@ function response(input: (typeof snapshots)[number], model: string = JEV_MODEL) 
         const choice =
           name === "objectiveState"
             ? "completed"
+            : name === "answerCommitment"
+              ? "committed"
             : name === "tutorState"
               ? "confirmed_completion"
               : (name.startsWith("source_") || name.startsWith("sourceEnd_"))

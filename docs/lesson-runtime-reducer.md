@@ -127,10 +127,47 @@ tutor-acknowledgment, relevant-output-drain, render-confirmation, and steering
 gates. Explicit skip uses quiet drain and acknowledged steering as its local
 eligibility gates without turning media quiet into answer evidence. An authored edge may list `carryForwardCriteria`; only demonstrated
 evidence for those IDs is copied into the target node. No carry-forward is
-implicit. Counting nodes do not opt into concept evidence and retain their
-existing completion path.
+implicit. Counting nodes do not opt into concept evidence; their learner-answer
+policy below removes tutor confirmation from semantic eligibility.
 
-## Completion gate
+## Counting learner-answer policy
+
+The registered counting lesson authors `answerAcceptance: "learner_evidence"`.
+Jev must confidently judge both correctness (`objectiveState`) and learner
+endorsement (`answerCommitment`) before an answer can be accepted. Commitment is a
+separate Choice question in the same provider request: `committed`, `unresolved`,
+`withdrawn`, or `no_answer`. A committed answer may be correct or incorrect. One
+identifiable answer must remain endorsed after any revisions; alternatives cannot
+be resolved merely by choosing the expected number or the last-mentioned candidate.
+Hesitation alone does not prevent commitment, and tutor agreement or silence cannot
+establish it. The rule has no phrase matching or number-specific exceptions.
+Confidence thresholds and model selection are unchanged. Correctness and commitment
+are not claims of independent mastery or acoustic finality.
+
+Accepted current evidence survives tutor-only transcript revisions; a later hint
+or explanation is not itself a learner retraction. Microphone candidates, confirmed
+learner speech, and child/unknown transcript changes still clear current acceptance.
+Advancement waits for a fresh exact-source evaluation. Jev may reaccept the earlier
+answer when the new words only request an explanation, or hold on a revised guess.
+Historical journal entries never supply this authority. Stale or aborted results
+cannot restore acceptance. This also works when “Why?” arrives before the first
+answer evaluation: the current snapshot includes the earlier learner answer.
+
+Relevant fresh output, sustained quiet, no learner speech, authored edges, exact
+render confirmation and steering protections remain required. Tutor confirmation
+is still observable but no longer required for this counting policy. The policy is
+enabled by default for counting; other lessons retain their existing rules.
+`lesson.prepared.detail.answerAcceptance` identifies the policy in new exports;
+`answerCommitment: "explicit"` on that preparation event identifies the additional
+judgment. Mapping/feedback diagnostics retain its label and full probabilities,
+and the reducer requires `proposal.answerCommitment === "committed"` for counting.
+Missing or uncertain commitment fails closed and can use the existing bounded
+clarification recovery. Noncommitted judgments hold even with high correctness.
+
+## Confirmation-based completion gate
+
+The following gate describes lessons without counting's learner-answer policy,
+including the preserved confirmation-era counting fixtures used by legacy tests.
 
 A correct proposal with no unresolved need for help accepts an answer.
 Acknowledgment requires a current tutor-authored transcript revision containing

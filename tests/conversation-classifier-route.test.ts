@@ -4,7 +4,6 @@ import * as canonical from "../lib/lesson-runtime/jev-conversation-state-classif
 import { JEV_MODEL } from "../lib/jev";
 import { COUNTING_LESSON } from "../lib/lesson-runtime/counting-lesson";
 import {
-  CONTEXT_PROJECTION_QUESTIONS,
   fullTranscriptObserverState,
 } from "../lib/experiments/issue-57/context-projection";
 import {
@@ -23,6 +22,7 @@ const request = (fields: Record<string, unknown> = wireInput) =>
   });
 // Synthetic supplied Choice scores: a transport/mapping control, never an expected Jev result.
 const outputs: SimplifiedOutputs = {
+  answerCommitment: { choice: "committed", confidence: 0.97, probabilities: { committed: 0.97, unresolved: 0.01, withdrawn: 0.01, no_answer: 0.01 } },
   objectiveState: {
     choice: "completed",
     confidence: 0.96,
@@ -69,7 +69,7 @@ it("invokes the canonical full-context Choice classifier exactly once (mock prov
   expect(wire).toEqual({
     model: JEV_MODEL,
     state: fullTranscriptObserverState(input),
-    questions: CONTEXT_PROJECTION_QUESTIONS,
+    questions: canonical.conversationStateQuestions(COUNTING_LESSON),
   });
   expect(wire.state.transcript).toBe(fixture.input.transcript);
   expect(Object.keys(wire.state)).toEqual(["nodeId", "scene", "learningObjective", "transcript", "transcriptRevision"]);
@@ -82,7 +82,7 @@ it("invokes the canonical full-context Choice classifier exactly once (mock prov
     outputs,
     outcome: "allow_semantic_completion_evidence",
   });
-  expect(parseLiveClassificationDiagnostic(body.diagnostic)).toEqual(body.diagnostic);
+  expect(parseLiveClassificationDiagnostic(body.diagnostic, COUNTING_LESSON)).toEqual(body.diagnostic);
   expect(JSON.stringify(body)).not.toMatch(
     /private provider marker|rawBody|"transcriptRevision":999|count-3-butterflies/,
   );
@@ -102,7 +102,7 @@ it("fails closed without retry on provider failure", async () => {
       outcome: "unresolved",
     },
   });
-  expect(parseLiveClassificationDiagnostic(body.diagnostic)).toEqual(body.diagnostic);
+  expect(parseLiveClassificationDiagnostic(body.diagnostic, COUNTING_LESSON)).toEqual(body.diagnostic);
 });
 it("rejects retired mode selection before a provider call", async () => {
   const fetch = vi.fn();
@@ -128,7 +128,7 @@ it.each([
   expect((await POST(request(fields))).status).toBe(400);
   expect(fetch).not.toHaveBeenCalled();
 });
-it("returns held-scene diagnostics for valid negative semantic states", async () => {
+it("accepts correct learner evidence when the latest tutor response is not confirmation", async () => {
   const raw = providerBody();
   raw.answers.tutorState = {
     type: "choice",
@@ -141,9 +141,9 @@ it("returns held-scene diagnostics for valid negative semantic states", async ()
     vi.fn(async () => Response.json(raw)),
   );
   const body = await (await POST(request())).json();
-  expect(body.proposal).toBeNull();
-  expect(body.diagnostic.outcome).toBe("hold_scene");
-  expect(parseLiveClassificationDiagnostic(body.diagnostic)).toEqual(body.diagnostic);
+  expect(body.proposal).toMatchObject({ answerOutcome: "correct", tutorState: "unknown" });
+  expect(body.diagnostic.outcome).toBe("allow_semantic_completion_evidence");
+  expect(parseLiveClassificationDiagnostic(body.diagnostic, COUNTING_LESSON)).toEqual(body.diagnostic);
 });
 
 it("reports missing configuration without a provider request", async () => {

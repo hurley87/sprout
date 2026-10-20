@@ -1,4 +1,5 @@
 import type { LessonDefinition } from "./lesson-definition";
+import { ANSWER_COMMITMENTS, type AnswerCommitment } from "./counting-answer-policy";
 
 export const CHILD_ACTIVITIES = ["unknown", "waiting", "thinking", "answering"] as const;
 export type ChildActivity = (typeof CHILD_ACTIVITIES)[number];
@@ -42,8 +43,10 @@ export type ConversationStateProposal = {
   readonly transcriptRevision: number;
   /** Requires runtime turn/audio signals; a transcript-only classifier emits "unknown". */
   readonly childActivity: ChildActivity;
-  /** Outcome of the latest answer for this node; "none" when no answer has been given. */
+  /** Correctness of the latest answer candidate; counting commitment is separate. */
   readonly answerOutcome: AnswerOutcome;
+  /** Counting's separate learner-endorsement judgment; absent in other lesson contracts. */
+  readonly answerCommitment?: AnswerCommitment;
   /** Current inferred need for help; "none" when no need is inferred. */
   readonly supportState: SupportState;
   /** Transcript classification describes the latest tutor message, not live speech activity. */
@@ -78,6 +81,7 @@ const PROPOSAL_KEYS = [
   "supportState",
   "tutorState",
   "conceptObservations",
+  "answerCommitment",
 ] as const;
 
 /** Closed runtime payload: reject commands, future-node context, and evidence/review metadata. */
@@ -86,9 +90,9 @@ export function parseConversationStateProposal(value: unknown): ConversationStat
   const proposal = value as Record<string, unknown>;
   const keys = Object.keys(proposal);
   if (
-    (keys.length !== PROPOSAL_KEYS.length && keys.length !== PROPOSAL_KEYS.length - 1) ||
+    keys.length !== 6 + Number("conceptObservations" in proposal) + Number("answerCommitment" in proposal) ||
     keys.some(key => !PROPOSAL_KEYS.includes(key as (typeof PROPOSAL_KEYS)[number])) ||
-    (keys.length === PROPOSAL_KEYS.length) !== ("conceptObservations" in proposal)
+    ("answerCommitment" in proposal && !ANSWER_COMMITMENTS.includes(proposal.answerCommitment as AnswerCommitment))
   )
     return null;
 
@@ -136,6 +140,7 @@ export function parseConversationStateProposal(value: unknown): ConversationStat
     transcriptRevision: proposal.transcriptRevision,
     childActivity: proposal.childActivity as ChildActivity,
     answerOutcome: proposal.answerOutcome as AnswerOutcome,
+    ...("answerCommitment" in proposal ? { answerCommitment: proposal.answerCommitment as AnswerCommitment } : {}),
     supportState: proposal.supportState as SupportState,
     tutorState: proposal.tutorState as TutorState,
     ...(conceptObservations === undefined ? {} : { conceptObservations }),

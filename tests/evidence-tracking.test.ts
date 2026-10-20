@@ -3,6 +3,7 @@ import fillerTrace from "./fixtures/butterfly-filler-confirmation.json";
 import { parseLiveClassificationDiagnostic } from "../lib/lesson-runtime/live-classification-diagnostic";
 import { DiagnosticJournal } from "../lib/lesson-runtime/diagnostic-journal";
 import { COUNTING_LESSON } from "../lib/lesson-runtime/counting-lesson";
+import { LEGACY_COUNTING_LESSON } from "./helpers/counting-runtime";
 import { TEST_CONCEPT_LESSON, CONCEPT_TRANSCRIPT_FIXTURES } from "./fixtures/concept-lesson";
 import type { LessonDefinition } from "../lib/lesson-runtime/lesson-definition";
 import type { ConversationStateProposal } from "../lib/lesson-runtime/conversation-state-classifier";
@@ -25,7 +26,7 @@ import {
 } from "../lib/lesson-runtime/evidence-tracking";
 
 type WithoutTime<T> = T extends unknown ? Omit<T, "atMs"> : never;
-function harness(lesson: LessonDefinition = COUNTING_LESSON) {
+function harness(lesson: LessonDefinition = LEGACY_COUNTING_LESSON) {
   let state = createLessonRuntime("tracking-test", { lesson, quietDrainMs: 100 });
   const journal = new DiagnosticJournal(state.runtimeId, () => state.nowMs, state.nodeId);
   const history = () => journal.observe(undefined, () => state).events;
@@ -108,7 +109,7 @@ it("retains original acceptance and exact support through tutor suspension, reva
     prior: { offset: 0 },
   });
   expect(h.evidence()[0]).toEqual(accepted);
-  expect(currentEvidenceEligibility(h.state, COUNTING_LESSON)).toMatchObject({
+  expect(currentEvidenceEligibility(h.state, LEGACY_COUNTING_LESSON)).toMatchObject({
     semanticCompletionEvidence: false,
     transitionReady: false,
   });
@@ -313,7 +314,7 @@ it("retains Jev labels, probabilities and mapping abstention without inventing a
   const fixture = fillerTrace.steps.find(step => "mapping" in step)!.mapping!;
   const mapping = parseLiveClassificationDiagnostic(
     { ...fixture, nodeId: source.nodeId, transcriptRevision: source.transcriptRevision },
-    COUNTING_LESSON,
+    LEGACY_COUNTING_LESSON,
     source.nodeId,
   );
   expect(mapping).not.toBeNull();

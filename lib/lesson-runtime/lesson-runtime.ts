@@ -259,7 +259,11 @@ export class LessonRuntime {
       this.log(event.type, event.detail);
       // Measurements are exported, but do not rerender the page every VAD frame/window.
     });
-    this.log("lesson.prepared", { timing: LESSON_TIMING });
+    this.log("lesson.prepared", {
+      timing: LESSON_TIMING,
+      answerAcceptance: this.lessonDefinition.answerAcceptance ?? "tutor_confirmation",
+      ...(this.lessonDefinition.answerAcceptance === "learner_evidence" ? { answerCommitment: "explicit" } : {}),
+    });
   }
 
   private now() {
@@ -883,6 +887,8 @@ export class LessonRuntime {
           (diagnostic.decision === "abstained" &&
             [
               "objectiveState_no_winner",
+              "answerCommitment_no_winner",
+              "answerCommitment_competing_options",
               "tutorState_no_winner",
               "objectiveState_competing_options",
               "tutorState_competing_options",

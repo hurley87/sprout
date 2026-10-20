@@ -1,4 +1,5 @@
 import type { OutputActivityEvent } from "../events";
+import { acceptsLearnerAnswerIndependently } from "./counting-answer-policy";
 import { parseConversationStateProposal } from "./conversation-state-classifier";
 import { currentNodeContext, isLessonNodeId, type LessonDefinition } from "./lesson-definition";
 import { transcriptMessages } from "./tutor-observation";
@@ -262,13 +263,14 @@ export function hasCurrentCompletionEvidence(state: LessonRuntimeState, lesson: 
   if (lesson.nodes[state.nodeId].completeAfterTutorOutput)
     return state.tutorOutputObserved && state.terminalTranscriptComplete === true && !state.terminalLearnerPending;
   if (lesson.conversationFirst) return hasConversationCompletionEvidence(state);
+  const learnerAnswerOnly = acceptsLearnerAnswerIndependently(lesson);
   return (
     state.hasChildTranscript &&
-    state.transcriptSource === "tutor" &&
-    state.consumedRevision === state.transcriptRevision &&
+    (learnerAnswerOnly ||
+      (state.transcriptSource === "tutor" &&
+        state.consumedRevision === state.transcriptRevision && state.acknowledgmentObserved)) &&
     state.acceptedAnswerRevision !== null &&
     state.answerAccepted &&
-    state.acknowledgmentObserved &&
     meetsAuthoredCompletionPolicy(state, lesson)
   );
 }
@@ -662,8 +664,9 @@ export function reduceLessonRuntime(
             : closure && exchange?.complete
               ? "tutor"
               : false,
-        // Answer acceptance remains revision-bound, independently of conversational closure.
-        answerAccepted: false,
+        // Tutor wording does not retract counting evidence. New learner speech
+        // always clears acceptance until its exact current source is evaluated.
+        answerAccepted: acceptsLearnerAnswerIndependently(lesson) && event.speaker === "tutor" && state.answerAccepted,
         acknowledgmentObserved: false,
         ...(lesson.nodes[state.nodeId].completeAfterTutorOutput ? { terminalTranscriptComplete: false } : {}),
         ...(lesson.nodes[state.nodeId].completeAfterTutorOutput && event.speaker === "child"
@@ -780,11 +783,13 @@ export function reduceLessonRuntime(
       }
       if (
         proposal.answerOutcome !== "correct" ||
+        (acceptsLearnerAnswerIndependently(lesson) && proposal.answerCommitment !== "committed") ||
         proposal.supportState !== "none" ||
         proposal.childActivity === "answering"
       ) {
         next = { ...next, ...clearedEvidence };
-        proposalReason = "nonqualifying_answer_judgment";
+        proposalReason = acceptsLearnerAnswerIndependently(lesson) && proposal.answerCommitment !== "committed"
+          ? "uncommitted_answer_judgment" : "nonqualifying_answer_judgment";
         break;
       }
       next = {

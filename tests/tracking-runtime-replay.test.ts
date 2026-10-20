@@ -3,7 +3,8 @@ import type { ClientCommand, ProviderEvent } from "../lib/events";
 import type { PlaybackDiagnostic } from "../lib/browser-transport";
 import { DiagnosticJournal } from "../lib/lesson-runtime/diagnostic-journal";
 import { LessonRuntime } from "../lib/lesson-runtime/lesson-runtime";
-import { COUNTING_LESSON } from "../lib/lesson-runtime/counting-lesson";
+// Preservation replay of the original confirmation-gated policy.
+import { LEGACY_COUNTING_LESSON as COUNTING_LESSON } from "./helpers/counting-runtime";
 import { useRuntimeFakeTimers as installRuntimeFakeTimers } from "./helpers/runtime-harness";
 import {
   mapConversationObservation,

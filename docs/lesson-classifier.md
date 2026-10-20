@@ -87,11 +87,20 @@ current-node model assessment can describe an earlier concept as missing even
 when the runtime has retained its accepted evidence. This is a context boundary,
 not evidence that the learner must repeat an already accepted explanation.
 
-Two Choice questions classify:
+Two baseline Choice questions classify:
 
 - `objectiveState`: completed, incorrect, unclear_or_incomplete,
   unresolved_help, no_attempt.
 - `tutorState`: confirmed_completion, clarifying, helping, asking, other.
+
+Live counting adds `answerCommitment`: committed, unresolved, withdrawn, no_answer.
+It asks whether the learner endorses one identifiable answer after their revisions,
+independently of correctness. It never chooses a candidate because it is expected,
+last-mentioned, or confirmed by the tutor. Fillers alone do not imply uncertainty;
+ambiguous replacements and open alternatives remain unresolved. The separate
+objective question judges the latest identifiable learner-owned candidate's
+correctness. Both questions use the unchanged confidence gates. They are evaluated
+in one Jev request, with no extra provider round trip or keyword classifier.
 
 When the active node authors concept criteria, the same request adds one current
 node Choice question per criterion. Its outputs distinguish not yet, partial,
@@ -117,7 +126,8 @@ tutor confirmation, or missing current criterion does not qualify. No threshold
 changes are made. The reducer remains responsible for requiring all authored
 criteria, including carried criteria, and for matching the current revision,
 learner turn, tutor response, and drained audio before advancing. Scenes without
-concepts retain their existing global objective/tutor gates.
+concepts retain their existing global objective/tutor gates, except counting's
+explicit learner-evidence policy, which requires correctness and commitment instead.
 
 Response validation checks the pinned model, closed option sets, finite scores,
 normalized distributions, and a selected maximum. The deterministic mapper
@@ -125,22 +135,29 @@ retains the live path's existing confidence bands: HIGH 0.9,
 COMPETITOR_CEILING 0.2, MIN_MARGIN 0.7. Choice confidence and normalized
 probabilities are exported; thresholds are unchanged by promotion.
 
-For scenes without concept criteria, only `completed` plus
+For confirmation-based scenes without concept criteria, only `completed` plus
 `confirmed_completion`, after validation and confidence gates, emits the existing
 correct/none/acknowledging proposal. Concept scenes additionally use the
 criterion-based completion rule above and can emit individual criterion
 observations while holding the scene. Invalid results abstain.
+Counting instead requires confident `completed` and confident `committed`; tutor
+feedback is retained independently. Confident noncommitment yields a hold proposal,
+while missing, malformed or uncertain commitment fails closed. Counting proposals
+carry `answerCommitment`, which the reducer checks even if diagnostics are absent.
+Other lessons do not request or require this question. Legacy reports without it
+remain historical two-question records; their missing commitment is not backfilled.
 The observer cannot select destinations or grant progression by itself.
 
 ## Runtime authority and diagnostics
 
 The reducer still checks exact runtime/visit/child-turn/revision identity,
-current acknowledgment, relevant tutor audio and drain. Render confirmation
+current acknowledgment for confirmation-based lessons (or explicit commitment
+for counting), relevant tutor audio and drain. Render confirmation
 still precedes authored-edge steering. Promotion changes neither VAD,
 cancellation, stabilization timing, GPT-Live prompts, nor reducer semantics.
 
 Exports include `classifierVersion` at the top level, on classifier events, and
-in normalized mapping diagnostics. Diagnostics retain both choices and their
+in normalized mapping diagnostics. Diagnostics retain the choices and their
 probabilities, mapped outcome, abstention reason, elapsed time, node ID, and
 transcript revision. Raw provider bodies and secrets are excluded. HTTP errors
 retain safe category/status/allowlisted-code diagnostics.

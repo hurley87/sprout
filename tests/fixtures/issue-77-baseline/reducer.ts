@@ -1,6 +1,6 @@
 // Pinned pre-instrumentation reducer; see README.md. Only relative import paths changed.
 import type { OutputActivityEvent } from "../../../lib/events";
-import { parseConversationStateProposal } from "../../../lib/lesson-runtime/conversation-state-classifier";
+import { parseConversationStateProposal } from "./proposal-parser";
 import { currentNodeContext, isLessonNodeId, type LessonDefinition } from "../../../lib/lesson-runtime/lesson-definition";
 import { transcriptMessages } from "../../../lib/lesson-runtime/tutor-observation";
 import {
