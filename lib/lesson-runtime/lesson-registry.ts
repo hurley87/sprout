@@ -1,11 +1,13 @@
 import { COUNTING_LESSON } from "./counting-lesson";
 import { CATCHING_UNICORNS_LESSON } from "./catching-unicorns-lesson";
+import { MAE386_LESSON } from "./mae386-lesson";
 import type { LessonDefinition } from "./lesson-definition";
 
 /** Application-owned allowlist. Keep additions explicit and small. */
 const APPLICATION_LESSONS: Readonly<Record<string, LessonDefinition>> = {
   [COUNTING_LESSON.id]: COUNTING_LESSON,
   [CATCHING_UNICORNS_LESSON.id]: CATCHING_UNICORNS_LESSON,
+  [MAE386_LESSON.id]: MAE386_LESSON,
 };
 
 export function resolveLessonDefinition(value: unknown): LessonDefinition | null {
