@@ -6,6 +6,8 @@ import { COUNTING_LESSON } from "../lib/lesson-runtime/counting-lesson";
 import { LESSON_START_INSTRUCTION } from "./helpers/counting-live-context";
 import { ANSWER_RECOVERY_INSTRUCTION } from "../lib/lesson-runtime/answer-recovery";
 import fillerTrace from "./fixtures/butterfly-filler-confirmation.json";
+import { TEST_CONCEPT_LESSON } from "./fixtures/concept-lesson";
+import type { EvidenceTracking, FeedbackTracking } from "../lib/lesson-runtime/evidence-tracking";
 
 const transport = vi.hoisted(() => ({
   receive: undefined as ((event: ProviderEvent) => void) | undefined,
@@ -33,8 +35,8 @@ afterEach(() => {
 function emit(event: ProviderEvent) {
   transport.receive?.(event);
 }
-function start(childAnswer = "One.") {
-  lesson = new LessonRuntime({} as HTMLAudioElement, () => {}, COUNTING_LESSON);
+function start(childAnswer = "One.", definition = COUNTING_LESSON) {
+  lesson = new LessonRuntime({} as HTMLAudioElement, () => {}, definition);
   lesson.confirmRendered(lesson.snapshot().display);
   const command = transport.send.mock.calls[0][0];
   emit({
@@ -47,6 +49,49 @@ function start(childAnswer = "One.") {
   emit({ type: "transcript", speaker: "child", delta: childAnswer, startMs: 100, endMs: 200 });
   emit({ type: "microphone.speech_stopped", quietMs: 900 });
 }
+
+it("isolates snapshot diagnostic mutations from authored criteria, live evidence and stored history", async () => {
+  const definition = structuredClone({ ...TEST_CONCEPT_LESSON, initialNodeId: "concept-b" });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (_url: string, init: RequestInit) => {
+      const input = JSON.parse(init.body as string);
+      return Response.json({
+        proposal: {
+          nodeId: input.nodeId,
+          transcriptRevision: input.transcriptRevision,
+          childActivity: "unknown",
+          answerOutcome: "correct",
+          supportState: "none",
+          tutorState: "unknown",
+          conceptObservations: [
+            { criterionId: "repetition", observation: "demonstrated_independent", childMessageIndex: 0 },
+            { criterionId: "change", observation: "not_yet" },
+          ],
+        },
+      });
+    }),
+  );
+  start("The same shape comes back again and again.", definition);
+  await vi.advanceTimersByTimeAsync(300);
+  const before = lesson.report();
+  const observedBefore = lesson.observe();
+  expect(before.evidenceEligibility?.authoredCompletionPolicyMet).toBe(false);
+  const diagnostics = lesson.snapshot().diagnostics;
+  const evidenceEvent = diagnostics.find(event => event.type === "tracking.evidence")!;
+  const evidence = evidenceEvent.detail as EvidenceTracking;
+  const feedback = diagnostics.find(event => event.type === "tracking.feedback")!.detail as FeedbackTracking;
+  expect(evidence.accepted?.conceptEvidence["concept-b:repetition"].status).toBe("demonstrated");
+  Reflect.set(evidence.accepted!.conceptEvidence["concept-b:repetition"], "status", "not_yet");
+  Reflect.set(feedback.support.authored!.concepts!, "length", 0);
+  Reflect.set(evidence.origin.source, "nodeId", "forged");
+  evidenceEvent.type = "forged";
+  expect(definition.nodes["concept-b"].concepts).toHaveLength(2);
+  expect(lesson.report()).toEqual(before);
+  expect(lesson.observe()).toEqual(observedBefore);
+  expect(lesson.snapshot().diagnostics).toEqual(observedBefore.snapshot.diagnostics);
+  expect(lesson.snapshot().evidenceEligibility?.authoredCompletionPolicyMet).toBe(false);
+});
 function tutor(delta: string, startMs = 300) {
   emit({ type: "transcript", speaker: "sprout", delta, startMs, endMs: startMs + 100 });
 }

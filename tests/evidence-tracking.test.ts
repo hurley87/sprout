@@ -292,6 +292,20 @@ it("uses complete cloned history beyond recent diagnostics and tolerates old eve
   ).toEqual([]);
 });
 
+it("captures tracking payloads independently of later live state and lesson mutations", () => {
+  const lesson = structuredClone(TEST_CONCEPT_LESSON);
+  const h = harness(lesson);
+  h.child(CONCEPT_TRANSCRIPT_FIXTURES.paraphrase);
+  h.proposal(CONCEPT_TRANSCRIPT_FIXTURES.paraphrase, {
+    conceptObservations: [{ criterionId: "repetition", observation: "demonstrated_independent" }],
+  });
+  const before = h.evidence();
+  expect(before[0].accepted?.conceptEvidence["concept-a:repetition"].status).toBe("demonstrated");
+  Reflect.set(h.state.conceptEvidence["concept-a:repetition"], "status", "not_yet");
+  Reflect.set(lesson.nodes["concept-a"].concepts![0], "description", "changed after capture");
+  expect(h.evidence()).toEqual(before);
+});
+
 it("retains Jev labels, probabilities and mapping abstention without inventing a tutor verdict", () => {
   const h = harness();
   h.child();

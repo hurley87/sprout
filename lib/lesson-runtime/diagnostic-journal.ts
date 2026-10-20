@@ -78,8 +78,9 @@ export class DiagnosticJournal {
   }
 
   private appendTracking(details: TrackingDetail[], state: LessonRuntimeState | null) {
+    // Capture each observation without retaining live evidence or authored criteria.
     for (const detail of details)
-      this.append(`tracking.${detail.kind}`, detail, {
+      this.append(`tracking.${detail.kind}`, structuredClone(detail), {
         state,
         revision: detail.origin.source.transcriptRevision,
         source: detail.origin.source,
@@ -87,7 +88,8 @@ export class DiagnosticJournal {
   }
 
   recent() {
-    return this.events.slice(-100);
+    // Snapshot consumers must not mutate journal history or its referenced runtime data.
+    return structuredClone(this.events.slice(-100));
   }
 
   /** Read the complete journal independently of React publication; never return runtime references. */
