@@ -2,6 +2,9 @@
 
 This document retains the reducer's deterministic contract. Integration and
 recovery design continue in [#56](https://github.com/hurley87/sprout/issues/56).
+The [issue #77 tracking contract](issue-77-tracking-contract.md) separates current
+evidence authority from proposed acceptance history, tutor semantics and delivery
+observations without changing this reducer contract.
 
 The pure `lib/lesson-runtime/lesson-runtime-reducer.ts` is the
 authority layer. It consumes descriptive proposals and local runtime evidence,
