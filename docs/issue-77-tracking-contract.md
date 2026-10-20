@@ -2,7 +2,8 @@
 
 Design for [issue #77](https://github.com/hurley87/sprout/issues/77), checked against
 parent `96af7a04daaf27e1c07e4f291b0c220d4924f567`. Implementations for commits 2
-and 3 are described below; replay analysis remains follow-up work.
+and 3 are described below; commit 4 replay verification is documented in
+[issue-77-tracking-replay.md](issue-77-tracking-replay.md).
 **Current** below describes baseline behavior; **proposed** means additive,
 attempt-local observation. Optional policy work is separate. No tracking field may authorize progression, schedule Jev, or alter
 an authored edge.
