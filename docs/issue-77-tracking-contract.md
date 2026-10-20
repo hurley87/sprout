@@ -1,8 +1,8 @@
 # Evidence, feedback, and delivery tracking (#77)
 
 Design for [issue #77](https://github.com/hurley87/sprout/issues/77), checked against
-parent `96af7a04daaf27e1c07e4f291b0c220d4924f567`. The commit 2 implementation
-is described below; delivery and replay proposals remain follow-up work.
+parent `96af7a04daaf27e1c07e4f291b0c220d4924f567`. Implementations for commits 2
+and 3 are described below; replay analysis remains follow-up work.
 **Current** below describes baseline behavior; **proposed** means additive,
 attempt-local observation. Optional policy work is separate. No tracking field may authorize progression, schedule Jev, or alter
 an authored edge.
@@ -197,6 +197,48 @@ tracking history is consulted by progression. Consumers must tolerate absent
 tracking records and eligibility fields in older exports. Playback instrumentation,
 delivery claims and broad replay analysis are outside this commit.
 
+## Commit 3 implementation
+
+A dedicated optional `BrowserTransport.setPlaybackDiagnosticSink` exports
+`play_requested`, promise resolution/rejection, audio-element `playing`,
+`waiting`, `paused`, `ended`, and explicit attachment `teardown` facts.
+Instrumentation is independent of microphone diagnostics and does not add
+`ProviderEvent` variants. The runtime tolerates older transport doubles without
+the sink or attachment getter. No remote attachment means no playback facts.
+
+Each remote-track attachment has a monotonically increasing local
+`attachmentGeneration`, unrelated to provider response identity. Playback
+callbacks and promises capture the transport source, remote stream and generation.
+Replacement and stop unregister listeners; saved callbacks and late promise
+settlements are fenced. Element listeners also check the currently attached
+stream and reject events whose creation timestamp predates attachment. Element
+facts describe the shared element at observation time; the browser provides no
+per-response identity or proof that an element event belongs to particular words.
+
+`LessonRuntime` captures playback's runtime origin at `play_requested` and retains
+it through later facts and teardown, even across learner turns. This conservative
+attachment origin must not be read as the source of all speech on the stream.
+PCM delivery records instead capture the original pre-dispatch runtime exchange,
+actual provider-boundary source ID (null if missing), nullable attachment
+generation and the existing pre-event `outputActivity`, `tutorOutputObserved`
+and `tutorOutputDrained` gate values separately. The existing `output.activity`
+and reducer diagnostics still record the normal event and resulting gate changes.
+
+Typed `tracking.delivery` records share the complete journal and observe/report
+exports. A `feedback` journal reference is `inferred_temporal` only, using a
+previously observed feedback record with a tutor message in the same
+runtime/node/visit/turn, known
+transport source and no newer transcript revision. Missing correlation stays null;
+classification that arrives later does not retroactively rewrite media history.
+Playback facts use their captured attachment origin rather than being relabelled
+as feedback in a newer exchange. Reports and cursor reads clone delivery details.
+
+Every delivery record keeps `responseId: null`, `responseComplete: "unknown"`
+and `speechHeard: "unknown"`. Quiet, a resolved play promise, an element/stream
+end or teardown never upgrades those fields. Uninstrumented history remains
+unknown. Tracking does not dispatch reducer events, request classifications,
+schedule Jev, or change playback, thresholds, media gates or transition policy.
+
 ## Observation limits and invalidation
 
 Jev currently exposes tutor Choice labels `confirmed_completion`, `clarifying`,
@@ -211,15 +253,12 @@ supports them. Do not add model questions, thresholds or a second classifier.
 
 `OutputActivityObserver` samples decoded remote PCM every 50 ms with a fixed
 energy floor through a zero-gain sink, independently of the playback element.
-Quiet can be a pause inside a response. The transport currently calls `audio.play`
-and fails on rejection; it does not journal successful playback start/drain,
-per-response cancellation, or speech heard. Track replacement emits unavailable,
-but no replacement identity is exported. Source retirement/stop proves teardown,
-not that any particular response was cancelled before/after delivery. Proposed
-playback callbacks must capture the local transport source and a local attachment
-generation if needed to fence callbacks from replaced streams; such a generation
-would identify an attachment only, not a provider response. Its exact shape is an
-open implementation decision. Do not infer provider response-finished support.
+Quiet can be a pause inside a response. The transport calls `audio.play`
+and fails on rejection; commit 3 journals the available promise/element facts,
+but per-response start, drain, cancellation and speech heard remain unavailable.
+Track replacement emits unavailable and increments the local attachment generation.
+Source retirement/stop proves teardown, not that any particular response was
+cancelled before/after delivery. Do not infer provider response-finished support.
 
 Keep three levels explicit: observed PCM/element event; inferred temporal
 association with a source/visit/turn/tutor snapshot; unknown response completion
@@ -285,8 +324,7 @@ pure model compute; do not subtract unrelated clocks or assign all residual time
 to generation/playback. Mark absent stages unknown. No new real-audio benefit may
 be claimed without a human-reviewed authorized walkthrough.
 
-Unresolved: response-level delivery/completion is unavailable; attachment callback
-fencing and exact rejection-detail shape need implementation choices; counting
+Unresolved: response-level delivery/completion is unavailable; counting
 fine-grained answer/independence attribution is unavailable; existing concept
 retention does not model every possible later contradiction. Old exports cannot
 fill these gaps. After tracking/replay, recommend **adopt / refine / defer / no

@@ -15,6 +15,7 @@ import {
   type ClassificationSource,
 } from "../lib/lesson-runtime/lesson-runtime-reducer";
 import {
+  trackDelivery,
   trackingOrigin,
   currentEvidenceEligibility,
   trackClassification,
@@ -337,4 +338,43 @@ it("retains independent concept provenance when a later prompted turn is consume
   });
   expect(result.accepted?.conceptEvidence["concept-a:repetition"].promptingHistory.at(-1)?.prompted).toBe(true);
   expect(h.evidence()[0]).toEqual(original);
+});
+
+it("correlates delivery only temporally within a known transport and original exchange", () => {
+  const h = harness();
+  h.child();
+  const source = classificationSource(h.state)!;
+  const origin = trackingOrigin(source, COUNTING_LESSON, 7);
+  h.journal.trackClassification(
+    {
+      origin,
+      transcript: "Child: One.\nTutor: Yes.",
+      proposal: null,
+      mapping: null,
+      lesson: COUNTING_LESSON,
+    },
+    h.state,
+  );
+  const input = { origin, attachmentGeneration: 2, pcm: "quiet" as const, playbackFact: null, outputGate: null };
+  expect(trackDelivery(input, h.history())).toMatchObject({
+    feedback: { runtimeId: source.runtimeId, offset: 1 },
+    correlation: "inferred_temporal",
+    responseId: null,
+    responseComplete: "unknown",
+    speechHeard: "unknown",
+  });
+  for (const changed of [
+    { ...origin, transportSourceId: null },
+    { ...origin, transportSourceId: 8 },
+    { ...origin, source: { ...source, childTurnId: source.childTurnId + 1 } },
+    { ...origin, source: { ...source, visitId: source.visitId + 1 } },
+    { ...origin, source: { ...source, transcriptRevision: source.transcriptRevision - 1 } },
+  ]) {
+    expect(trackDelivery({ ...input, origin: changed }, h.history())).toMatchObject({
+      feedback: null,
+      correlation: null,
+      responseComplete: "unknown",
+    });
+  }
+  expect(trackDelivery(input, [])).toMatchObject({ feedback: null, correlation: null });
 });

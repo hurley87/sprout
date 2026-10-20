@@ -84,6 +84,7 @@ export class LessonRuntime {
   private readonly runtimeId = crypto.randomUUID();
   private readonly createdAt = performance.now();
   private readonly transport: BrowserTransport;
+  private playbackOrigin?: { generation: number; origin: TrackingOrigin };
   private state: LessonRuntimeState | null = null;
   private status: LessonSnapshot["status"] = "prepared";
   private display: RenderIdentity;
@@ -215,6 +216,44 @@ export class LessonRuntime {
       },
     );
     this.transport = new BrowserTransport(audio, true);
+    this.transport.setPlaybackDiagnosticSink?.(event => {
+      if (!this.state) return;
+      if (event.playbackFact === "play_requested") {
+        if (this.status === "ended" || event.sourceId !== this.transport.activeSourceId) return;
+        this.playbackOrigin = {
+          generation: event.attachmentGeneration,
+          origin: trackingOrigin(
+            {
+              ...runtimeSource(this.state),
+              nodeId: this.state.nodeId,
+              transcriptRevision: this.state.transcriptRevision,
+            },
+            this.lessonDefinition,
+            event.sourceId,
+          ),
+        };
+      }
+      const captured = this.playbackOrigin;
+      if (
+        !captured ||
+        captured.generation !== event.attachmentGeneration ||
+        captured.origin.transportSourceId !== event.sourceId
+      )
+        return;
+      if (this.status === "ended" && event.playbackFact !== "teardown") return;
+      if (event.playbackFact !== "teardown" && event.sourceId !== this.transport.activeSourceId) return;
+      this.journal.trackDelivery(
+        {
+          origin: captured.origin,
+          attachmentGeneration: event.attachmentGeneration,
+          playbackFact: event.playbackFact,
+          pcm: null,
+          outputGate: null,
+        },
+        this.state,
+      );
+      if (event.playbackFact === "teardown") this.playbackOrigin = undefined;
+    });
     this.transport.setMicrophoneDiagnosticSink(event => {
       if (this.status === "ended") return;
       this.log(event.type, event.detail);
@@ -475,6 +514,28 @@ export class LessonRuntime {
         }
         return;
       case "output.activity":
+        this.journal.trackDelivery(
+          {
+            origin: trackingOrigin(
+              {
+                ...source,
+                nodeId: this.state.nodeId,
+                transcriptRevision: this.state.transcriptRevision,
+              },
+              this.lessonDefinition,
+              event.sourceId,
+            ),
+            attachmentGeneration: this.transport.playbackAttachmentGeneration ?? null,
+            pcm: event.state,
+            playbackFact: null,
+            outputGate: {
+              outputActivity: this.state.outputActivity,
+              tutorOutputObserved: this.state.tutorOutputObserved,
+              tutorOutputDrained: this.state.tutorOutputDrained,
+            },
+          },
+          this.state,
+        );
         this.log("output.activity", { state: event.state }, source);
         this.dispatch({ type: "output.activity", source, state: event.state, atMs: this.now() });
         return;
@@ -1087,6 +1148,7 @@ export class LessonRuntime {
       }),
       evidenceEligibility: currentEvidenceEligibility(this.state, this.lessonDefinition),
     };
-    return report as Omit<typeof report, "evidenceEligibility"> & Partial<Pick<typeof report, "evidenceEligibility">>;
+    return structuredClone(report) as Omit<typeof report, "evidenceEligibility"> &
+      Partial<Pick<typeof report, "evidenceEligibility">>;
   }
 }

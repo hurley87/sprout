@@ -1,4 +1,4 @@
-import { trackReduction, trackClassification, type TrackingDetail } from "./evidence-tracking";
+import { trackReduction, trackClassification, trackDelivery, type TrackingDetail } from "./evidence-tracking";
 import { CLASSIFIER_VERSION } from "./conversation-observer-contract";
 import type { ConversationAssessment, ConversationVisit } from "./conversation-assessment";
 import type { ClassificationSource, LessonRuntimeState, RuntimeSource } from "./lesson-runtime-reducer";
@@ -71,6 +71,10 @@ export class DiagnosticJournal {
       trackClassification({ ...input, history: this.events, journalRuntimeId: this.runtimeId }),
       state,
     );
+  }
+
+  trackDelivery(input: Parameters<typeof trackDelivery>[0], state: LessonRuntimeState | null) {
+    this.appendTracking([trackDelivery(input, this.events)], state);
   }
 
   private appendTracking(details: TrackingDetail[], state: LessonRuntimeState | null) {

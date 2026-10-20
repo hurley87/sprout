@@ -1,3 +1,4 @@
+import type { PlaybackFact } from "../browser-transport";
 import type { LessonDiagnostic, LessonEventCursor } from "./diagnostic-journal";
 import { parseConversationStateProposal, type ConversationStateProposal } from "./conversation-state-classifier";
 import type { LessonDefinition, LessonNodeDefinition } from "./lesson-definition";
@@ -50,7 +51,50 @@ export type FeedbackTracking = {
   contradiction: "unknown";
   prompting: "unknown";
 };
-export type TrackingDetail = EvidenceTracking | FeedbackTracking;
+export type DeliveryTracking = {
+  kind: "delivery";
+  origin: TrackingOrigin;
+  attachmentGeneration: number | null;
+  feedback: LessonEventCursor | null;
+  correlation: "inferred_temporal" | null;
+  pcm: "active" | "quiet" | "unavailable" | null;
+  playbackFact: PlaybackFact | null;
+  responseId: null;
+  responseComplete: "unknown";
+  speechHeard: "unknown";
+  // Exact existing gate values at receipt, not a second eligibility evaluator.
+  outputGate: Pick<LessonRuntimeState, "outputActivity" | "tutorOutputObserved" | "tutorOutputDrained"> | null;
+};
+export type TrackingDetail = EvidenceTracking | FeedbackTracking | DeliveryTracking;
+
+export function trackDelivery(
+  detail: Omit<
+    DeliveryTracking,
+    "kind" | "feedback" | "correlation" | "responseId" | "responseComplete" | "speechHeard"
+  >,
+  history: readonly LessonDiagnostic[],
+): DeliveryTracking {
+  const offset = history.findLastIndex(event => {
+    if (event.type !== "tracking.feedback") return false;
+    const feedback = event.detail as FeedbackTracking;
+    return (
+      feedback.tutorMessageIndex !== null &&
+      sameExchange(feedback.origin.source, detail.origin.source) &&
+      feedback.origin.transportSourceId === detail.origin.transportSourceId &&
+      detail.origin.transportSourceId !== null &&
+      feedback.origin.source.transcriptRevision <= detail.origin.source.transcriptRevision
+    );
+  });
+  return {
+    ...detail,
+    kind: "delivery",
+    feedback: offset < 0 ? null : { runtimeId: detail.origin.source.runtimeId, offset },
+    correlation: offset < 0 ? null : "inferred_temporal",
+    responseId: null,
+    responseComplete: "unknown",
+    speechHeard: "unknown",
+  };
+}
 
 export function trackingOrigin(
   source: ClassificationSource,
