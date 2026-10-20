@@ -23,7 +23,9 @@ import {
   runtimeSource,
   type LessonRuntimeEvent,
 } from "./helpers/counting-runtime";
-import { COUNTING_LESSON, COUNTING_NODE_IDS } from "../lib/lesson-runtime/counting-lesson";
+import { COUNTING_NODE_IDS } from "../lib/lesson-runtime/counting-lesson";
+// This offline builder exercises the original confirmation-era report assertions.
+import { LEGACY_COUNTING_LESSON as COUNTING_LESSON } from "./helpers/counting-runtime";
 import type { LessonDiagnostic } from "../lib/lesson-runtime/lesson-runtime";
 import { LIVE_CORRECT_ANSWERS } from "./browser/live/answers";
 import manifest from "./fixtures/speech/manifest.json";

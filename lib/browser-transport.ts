@@ -46,6 +46,14 @@ export function microphoneTrackSettings(track: MediaStreamTrack): Record<string,
   return result;
 }
 
+export type PlaybackFact =
+  "play_requested" | "play_resolved" | "play_rejected" | "playing" | "waiting" | "paused" | "ended" | "teardown";
+export type PlaybackDiagnostic = {
+  sourceId: LiveSourceId;
+  attachmentGeneration: number;
+  playbackFact: PlaybackFact;
+};
+
 type LiveSource = {
   id: LiveSourceId;
   abort: AbortController;
@@ -58,11 +66,23 @@ type LiveSource = {
   ready: boolean;
   sessionStarted: boolean;
   retired: boolean;
+  attachmentGeneration?: number;
+  detachPlayback?: () => void;
   activity: Extract<ProviderEvent, { type: "output.activity" }>;
 };
 
 export class BrowserTransport {
   private current?: LiveSource;
+  private nextAttachmentGeneration = 0;
+  private playbackSink?: (event: PlaybackDiagnostic) => void;
+
+  setPlaybackDiagnosticSink(sink: (event: PlaybackDiagnostic) => void) {
+    if (!this.cancelled) this.playbackSink = sink;
+  }
+
+  get playbackAttachmentGeneration(): number | undefined {
+    return this.current?.attachmentGeneration;
+  }
   private onEvent?: (event: ProviderEvent) => void;
   private onFailure?: (message: string) => void;
   private mic?: MediaStream;
@@ -217,6 +237,7 @@ export class BrowserTransport {
     if (!source || source.retired) return;
     source.retired = true;
     this.current = undefined;
+    source.detachPlayback?.();
     this.audio.muted = true;
     this.audio.pause();
     this.audio.srcObject = null;
@@ -233,13 +254,41 @@ export class BrowserTransport {
     if (!remote || !this.authoritative(source)) return;
     this.audio.muted = false;
     this.audio.srcObject = remote;
-    void this.audio.play().catch(() => {
-      if (source.remote === remote)
-        this.fail(
-          source,
-          "The browser blocked Sprout's voice playback. Allow sound for this site, then start a new lesson.",
-        );
+    const generation = source.attachmentGeneration!;
+    const attachedAt = performance.now();
+    const current = () =>
+      this.authoritative(source) && source.remote === remote && source.attachmentGeneration === generation;
+    const report = (playbackFact: PlaybackFact) =>
+      this.playbackSink?.({ sourceId: source.id, attachmentGeneration: generation, playbackFact });
+    const listeners = (["playing", "waiting", "pause", "ended"] as const).map(type => {
+      const listener = (event: Event) => {
+        // A queued event created before replacement must not acquire the new attachment's identity.
+        if (current() && this.audio.srcObject === remote && event.timeStamp >= attachedAt)
+          report(type === "pause" ? "paused" : type);
+      };
+      this.audio.addEventListener?.(type, listener);
+      return { type, listener };
     });
+    source.detachPlayback = () => {
+      source.detachPlayback = undefined;
+      for (const { type, listener } of listeners) this.audio.removeEventListener?.(type, listener);
+      report("teardown");
+    };
+    report("play_requested");
+    void this.audio.play().then(
+      () => {
+        if (current()) report("play_resolved");
+      },
+      () => {
+        if (current()) {
+          report("play_rejected");
+          this.fail(
+            source,
+            "The browser blocked Sprout's voice playback. Allow sound for this site, then start a new lesson.",
+          );
+        }
+      },
+    );
   }
 
   private async connectSource(source: LiveSource) {
@@ -249,6 +298,8 @@ export class BrowserTransport {
         track.stop();
         return;
       }
+      source.detachPlayback?.();
+      source.attachmentGeneration = ++this.nextAttachmentGeneration;
       source.observer?.close();
       source.remote?.getTracks().forEach(oldTrack => oldTrack.stop());
       source.activity = { type: "output.activity", state: "unavailable" };
@@ -367,6 +418,7 @@ export class BrowserTransport {
     this.abort.abort();
     this.diagnosticSink = undefined;
     this.retireSource();
+    this.playbackSink = undefined;
     this.audio.muted = true;
     if (this.audio.srcObject) this.audio.pause();
     this.audio.srcObject = null;

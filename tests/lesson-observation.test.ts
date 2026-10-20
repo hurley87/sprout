@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import type { Page } from "@playwright/test";
-import type { MicrophoneDiagnostic } from "../lib/browser-transport";
+import type { MicrophoneDiagnostic, PlaybackDiagnostic } from "../lib/browser-transport";
 import type { ProviderEvent } from "../lib/events";
 import { LessonRuntime } from "../lib/lesson-runtime/lesson-runtime";
 import { COUNTING_LESSON } from "../lib/lesson-runtime/counting-lesson";
@@ -8,12 +8,16 @@ import { attachLessonObservation, type LessonObservationWindow } from "../lib/le
 import { LessonObserver } from "./helpers/lesson-observer";
 
 const transport = vi.hoisted(() => ({
+  playback: undefined as ((event: PlaybackDiagnostic) => void) | undefined,
   diagnostic: undefined as ((event: MicrophoneDiagnostic) => void) | undefined,
   receive: undefined as ((event: ProviderEvent) => void) | undefined,
 }));
 vi.mock("../lib/browser-transport", () => ({
   BrowserTransport: class {
     activeSourceId = 1;
+    setPlaybackDiagnosticSink(sink: (event: PlaybackDiagnostic) => void) {
+      transport.playback = sink;
+    }
     setMicrophoneDiagnosticSink(sink: (event: MicrophoneDiagnostic) => void) {
       transport.diagnostic = sink;
     }
@@ -232,4 +236,74 @@ it("samples the attempt performance clock without changing the production report
   expect(lesson.observe().nowMs).toBe(35);
   expect(lesson.report()).toEqual(report);
   expect(report.events.find(event => event.type === "render.confirmed")?.atMs).toBe(25);
+});
+
+it("journals playback independently, preserves its attachment origin, and clones delivery exports", async () => {
+  const lesson = runtime();
+  lesson.confirmRendered(lesson.snapshot().display);
+  await Promise.resolve();
+  const before = lesson.observe();
+  const requests = vi.fn();
+  vi.stubGlobal("fetch", requests);
+  const playback = (playbackFact: PlaybackDiagnostic["playbackFact"], sourceId = 1, attachmentGeneration = 9) =>
+    transport.playback?.({ sourceId, attachmentGeneration, playbackFact });
+  playback("play_requested");
+  const original = lesson.observe().snapshot.runtime!;
+  transport.receive?.({ type: "output.activity", sourceId: 1, state: "active" });
+  transport.receive?.({ type: "output.activity", sourceId: 1, state: "quiet" });
+  transport.receive?.({ type: "output.activity", sourceId: 1, state: "unavailable" });
+  transport.receive?.({ type: "microphone.speech_started" });
+  expect(lesson.snapshot().runtime!.childTurnId).not.toBe(original.childTurnId);
+  const afterPcm = lesson.observe().cursor;
+  transport.receive?.({ type: "output.activity", sourceId: 999, state: "quiet" });
+  playback("play_resolved");
+  playback("playing");
+  playback("waiting");
+  playback("paused");
+  playback("ended");
+  playback("playing", 999);
+  playback("playing", 1, 8);
+  const observations = lesson.observe(afterPcm).events;
+  expect(observations).toHaveLength(5);
+  expect(observations.every(event => event.type === "tracking.delivery")).toBe(true);
+  expect(observations[0].detail).toMatchObject({
+    origin: { source: { childTurnId: original.childTurnId, transcriptRevision: original.transcriptRevision } },
+    responseId: null,
+    responseComplete: "unknown",
+    speechHeard: "unknown",
+    feedback: null,
+    correlation: null,
+    pcm: null,
+  });
+  expect(requests).not.toHaveBeenCalled();
+  const pcm = lesson
+    .observe(before.cursor)
+    .events.filter(event => event.type === "tracking.delivery" && (event.detail as { pcm: unknown }).pcm !== null);
+  expect(pcm.map(event => (event.detail as { pcm: unknown }).pcm)).toEqual(["active", "quiet", "unavailable"]);
+  expect(pcm[1].detail).toMatchObject({
+    playbackFact: null,
+    attachmentGeneration: null,
+    outputGate: { outputActivity: "active" },
+    responseComplete: "unknown",
+  });
+  const exported = lesson.report();
+  const delivery = exported.events.find(event => event.type === "tracking.delivery")!;
+  Reflect.set(delivery.detail as object, "speechHeard", "forged");
+  Reflect.set(observations[0].detail as object, "responseId", "forged");
+  expect(lesson.report().events.find(event => event.type === "tracking.delivery")!.detail).toMatchObject({
+    speechHeard: "unknown",
+    responseId: null,
+  });
+  lesson.stop();
+  const ended = lesson.observe().cursor;
+  playback("teardown");
+  expect(lesson.observe(ended).events).toHaveLength(1);
+  expect(lesson.observe(ended).events[0]).toMatchObject({
+    type: "tracking.delivery",
+    detail: { playbackFact: "teardown", origin: { source: { childTurnId: original.childTurnId } } },
+  });
+  const tornDown = lesson.observe().cursor;
+  playback("playing");
+  expect(lesson.observe(tornDown).events).toEqual([]);
+  vi.unstubAllGlobals();
 });

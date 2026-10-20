@@ -1,3 +1,4 @@
+import { HISTORICAL_COUNTING_LESSON } from "../lib/experiments/issue-57/counting-classifier-contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
 import report from "../docs/issue-57-simplified-observer-comparison.json";
@@ -16,7 +17,7 @@ import {
   CONVERSATION_QUESTIONS,
   classifyConversationStateWithDiagnostics,
 } from "../lib/experiments/issue-57/legacy/jev-conversation-state-classifier";
-import { COUNTING_LESSON, isCountingNodeId } from "../lib/lesson-runtime/counting-lesson";
+import { isCountingNodeId } from "../lib/lesson-runtime/counting-lesson";
 import {
   classificationSource,
   createLessonRuntime,
@@ -27,7 +28,7 @@ import {
 import { conversationProviderBody } from "./fixtures/conversation-classification";
 
 const input = {
-  lesson: COUNTING_LESSON,
+  lesson: HISTORICAL_COUNTING_LESSON,
   nodeId: "count-1-duck" as const,
   transcriptRevision: 2,
   transcript: "Child: One\nTutor: Yes, one duck.",

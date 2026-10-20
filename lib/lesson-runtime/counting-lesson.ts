@@ -11,6 +11,7 @@ export const COUNTING_ANSWER_RECOVERY_INSTRUCTION =
 
 const countingLesson = {
   id: "counting",
+  answerAcceptance: "learner_evidence",
   initialNodeId: INITIAL_COUNTING_NODE_ID,
   recovery: {
     supportClarificationInstruction: COUNTING_SUPPORT_CLARIFICATION_INSTRUCTION,
@@ -43,13 +44,13 @@ const countingLesson = {
     nodeInstruction: "Teach only this current scene and learning objective. It replaces all previous scene context; do not refer to the previous scene. Follow the session counting and help guidance. Ask or continue naturally now; let the child supply the count and total. Confirm a settled successful answer with its number and object, then pause. Wait or clarify unfinished/uncertain attempts; never supply the count or total as a hint. You do not control lesson transitions; only the application changes the scene. Never invent a next scene or ask to change it.",
   },
   classifier: {
-    objectiveInstructions: "Which mutually exclusive state best describes the objective now? Unresolved current help takes precedence over a previously correct or incorrect answer.",
+    objectiveInstructions: "Judge the correctness of the learner's latest identifiable task-answer candidate independently of tutor feedback and separately from answerCommitment. Commitment describes whether the learner endorses the candidate; this question describes whether that candidate matches the authored quantity. Follow learner revisions in order. When unresolved alternatives leave no single candidate identifiable, do not select the correct alternative just because it matches the expected quantity. Tutor words cannot establish a learner-owned answer.",
     objectiveCriteria: {
-      completed: "The child has settled on an intelligible correct answer for the authored quantity, including a finished count, self-correction, or reaffirmation. Earlier errors or help are resolved by later settled success. A later status question such as is that all does not automatically retract a settled answer unless it expresses renewed task uncertainty or help. Fillers or opening hesitation alone do not undo settlement. This is task completion, not proof of independent mastery.",
-      incorrect: "The child has settled on an intelligible incorrect answer; no continuing help request or difficulty remains current.",
-      unclear_or_incomplete: "The child attempted the task but has not settled on an intelligible answer: a partial count, unfinished speech, unresolved alternatives, or genuinely tentative final task answer. Tutor agreement cannot settle it. Use unresolved_help instead if continuing difficulty or a help request remains current.",
-      unresolved_help: "The child still needs help or expresses continuing difficulty at snapshot end, including renewed help or renewed task uncertainty after a correct answer. Historical help resolved by a later settled correct child answer is no longer current. A wrong or partial answer alone does not establish a help need. Tutor help alone does not establish current child difficulty. A tutor-supplied answer without settled child evidence cannot resolve a help request.",
-      no_attempt: "No Child-labelled task attempt exists for this objective; only tutor-supplied answers, greetings or unrelated speech. Not-knowing and help requests belong to unresolved_help. Missing text does not imply silence or thinking.",
+      completed: "The latest identifiable learner-owned answer candidate is correct for the authored quantity. A finished count or a self-correction may supply that candidate. Evaluate correctness separately from commitment: hesitation alone is not an incorrect answer. An explanation request does not by itself change the candidate. Tutor-supplied answer content or a simple echo alone cannot establish learner success. This is task correctness, not proof of independent mastery.",
+      incorrect: "The latest identifiable learner-owned answer candidate is incorrect for the authored quantity. The separate commitment judgment determines whether the learner has settled on it.",
+      unclear_or_incomplete: "The text does not establish one intelligible answer candidate, leaves competing candidates unidentified, or contains only an unfinished count or explanation. Do not choose a candidate using the expected quantity or tutor agreement.",
+      unresolved_help: "The learner requests or still needs help establishing a task-answer candidate, rather than merely requesting an explanation of an identifiable answer. Tutor help alone does not establish learner difficulty; tutor-supplied content cannot substitute for learner evidence.",
+      no_attempt: "No learner-owned task-answer candidate exists for this objective; there is only tutor-supplied content, greetings or unrelated speech. Missing text does not imply silence or thinking.",
     },
     tutorInstructions: "Describe only the latest relevant tutor response in the ordered transcript, using earlier child and tutor messages as context. Earlier messages are context only, never the latest tutor action. Select the latest response's primary conversational function, not earlier tutor behaviour or physical audio activity.",
     tutorCriteria: {

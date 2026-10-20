@@ -5,12 +5,13 @@ import {
   CLASSIFIER_VERSION,
   normalizeConversationOutputs,
   mapConversationObservation,
+  conversationStateQuestions,
   type ObjectiveState,
   type ObservedTutorState,
 } from "../lib/lesson-runtime/jev-conversation-state-classifier";
-import { CONVERSATION_STATE_QUESTIONS } from "../lib/experiments/issue-57/counting-classifier-contract";
 import { COUNTING_LESSON } from "../lib/lesson-runtime/counting-lesson";
 import { JEV_MODEL } from "../lib/jev";
+const CONVERSATION_STATE_QUESTIONS = conversationStateQuestions(COUNTING_LESSON);
 const distribution = (options: Record<string, string>, choice: string, p = 0.96) => ({
   type: "choice",
   choice,
@@ -24,6 +25,7 @@ function body(objective: ObjectiveState = "completed", tutor: ObservedTutorState
     model: JEV_MODEL,
     answers: {
       objectiveState: distribution(CONVERSATION_STATE_QUESTIONS.objectiveState.criteria, objective, p),
+      answerCommitment: distribution(CONVERSATION_STATE_QUESTIONS.answerCommitment.criteria, "committed"),
       tutorState: distribution(CONVERSATION_STATE_QUESTIONS.tutorState.criteria, tutor, p),
     },
   };
@@ -75,7 +77,7 @@ it.each([
   ["incomplete", "Child: I think...\nTutor: Take your time", "unclear_or_incomplete", "other", false],
   ["help", "Child: Help me\nTutor: Point to each duck", "unresolved_help", "helping", false],
   ["tutor supplies answer", "Tutor: Two ducks", "no_attempt", "other", false],
-  ["generic praise", "Child: Two\nTutor: Nice effort", "completed", "other", false],
+  ["generic praise", "Child: Two\nTutor: Nice effort", "completed", "other", true],
 ] as const)(
   "maps supplied %s judgments using full context only",
   async (_name, transcript, objective, tutor, complete) => {
@@ -99,13 +101,14 @@ it.each([
       "transcriptRevision",
     ]);
     expect(result.status).toBe("accepted");
-    expect(result.proposal !== null).toBe(complete);
+    expect(result.proposal).not.toBeNull();
+    expect(result.outcome).toBe(complete ? "allow_semantic_completion_evidence" : "hold_scene");
     if (complete)
       expect(result.proposal).toMatchObject({
         nodeId: input.nodeId,
         transcriptRevision: 4,
         answerOutcome: "correct",
-        tutorState: "acknowledging",
+        tutorState: tutor === "confirmed_completion" ? "acknowledging" : "unknown",
       });
     expect(CLASSIFIER_VERSION).toBe("conversation-state-v2");
   },

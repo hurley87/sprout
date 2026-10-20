@@ -176,3 +176,79 @@ it.each([{ id: "obsolete", target: "client" }, { id: "obsolete", target: "server
     expect(parseProviderEvent({ type: "session.delegation.created", event_id: "obsolete", delegation })).toBeNull();
   },
 );
+
+it.each(["resolve", "reject"] as const)(
+  "fences late play %s and saved element callbacks across replacement and stop",
+  async settlement => {
+    const { peer, remoteTrack } = liveConnection();
+    const audio = audioElement();
+    const listeners = new Map<string, EventListener>();
+    const remove = vi.fn((type: string, listener: EventListener) => {
+      if (listeners.get(type) === listener) listeners.delete(type);
+    });
+    Object.assign(audio, {
+      addEventListener: (type: string, listener: EventListener) => listeners.set(type, listener),
+      removeEventListener: remove,
+    });
+    const pending: { resolve: () => void; reject: (error: Error) => void }[] = [];
+    audio.play.mockImplementation(() => new Promise<void>((resolve, reject) => pending.push({ resolve, reject })));
+    const sink = vi.fn();
+    const failures = vi.fn();
+    const transport = new BrowserTransport(audio as unknown as HTMLAudioElement);
+    transport.setPlaybackDiagnosticSink(sink);
+    await transport.start(vi.fn(), failures);
+    peer.ontrack?.({ track: remoteTrack });
+    const firstGeneration = transport.playbackAttachmentGeneration;
+    const oldPlaying = listeners.get("playing")!;
+    const queued = new Event("playing");
+    // Ensure an event created before replacement has an older monotonic timestamp.
+    await new Promise(resolve => setTimeout(resolve, 2));
+    peer.ontrack?.({ track: { stop: vi.fn() } as unknown as MediaStreamTrack });
+    const secondGeneration = transport.playbackAttachmentGeneration;
+    expect(secondGeneration).not.toBe(firstGeneration);
+    const count = sink.mock.calls.length;
+    oldPlaying(new Event("playing"));
+    listeners.get("playing")!(queued);
+    pending[0][settlement](new Error("old"));
+    await Promise.resolve();
+    expect(sink).toHaveBeenCalledTimes(count);
+    listeners.get("playing")!(new Event("playing"));
+    expect(sink).toHaveBeenLastCalledWith({
+      sourceId: 1,
+      attachmentGeneration: secondGeneration,
+      playbackFact: "playing",
+    });
+    const saved = listeners.get("ended")!;
+    transport.close();
+    const stoppedCount = sink.mock.calls.length;
+    saved(new Event("ended"));
+    pending[1][settlement](new Error("stopped"));
+    await Promise.resolve();
+    expect(sink).toHaveBeenCalledTimes(stoppedCount);
+    expect(sink).toHaveBeenLastCalledWith({
+      sourceId: 1,
+      attachmentGeneration: secondGeneration,
+      playbackFact: "teardown",
+    });
+    expect(listeners.size).toBe(0);
+    expect(remove).toHaveBeenCalledTimes(8);
+    expect(failures).not.toHaveBeenCalled();
+  },
+);
+
+it("observes blocked playback independently of microphone diagnostics and preserves failure behavior", async () => {
+  const { peer, remoteTrack } = liveConnection();
+  const audio = audioElement();
+  audio.play.mockRejectedValue(new Error("blocked"));
+  const sink = vi.fn();
+  const failures = vi.fn();
+  const transport = new BrowserTransport(audio as unknown as HTMLAudioElement, false);
+  transport.setPlaybackDiagnosticSink(sink);
+  await transport.start(vi.fn(), failures);
+  expect(sink).not.toHaveBeenCalled(); // Missing remote media is unknown.
+  peer.ontrack?.({ track: remoteTrack });
+  await Promise.resolve();
+  expect(sink.mock.calls.map(([event]) => event.playbackFact)).toEqual(["play_requested", "play_rejected"]);
+  expect(failures).toHaveBeenCalledWith(expect.stringContaining("blocked"));
+  transport.close();
+});

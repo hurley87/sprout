@@ -1,0 +1,787 @@
+{
+  "scope": "Selected sanitized segments/checkpoints; not full-session request totals, ground truth, or fresh model performance.",
+  "sources": [
+    {
+      "path": "docs/issue-57-final-node-review-set.json",
+      "sha256": "32defefab8e60dbdd8430c2b7af359f735dc9247910a0d26689280531178b6b9",
+      "provenance": {
+        "file": "/Users/davidhurley/Downloads/sprout-lesson-8adca88d-2e69-4869-a512-dc31682fc071.json",
+        "sha256": "b17152bfe5df6da779e51cb3379a2e343a6276e05f8f036107a05b611110fe40",
+        "runtimeId": "8adca88d-2e69-4869-a512-dc31682fc071",
+        "clock": "browser.performance.now-relative-to-attempt",
+        "audioIndependentlyReviewed": false,
+        "recordedExportCount": 1
+      },
+      "note": null,
+      "provenanceAnnotation": null
+    },
+    {
+      "path": "docs/issue-57-clarification-review-set.json",
+      "sha256": "7416b90b244909573da09f0d63659c0109354e4fb33fc8377f30dfbe82deed86",
+      "provenance": {
+        "file": "/Users/davidhurley/Downloads/sprout-lesson-39abf02a-8c9a-4144-ada0-9430673ab5d4.json",
+        "sha256": "f9c608b2fda6f7bd396a1707816d85201193a3701c567ef558167540357192c4",
+        "runtimeId": "39abf02a-8c9a-4144-ada0-9430673ab5d4",
+        "clock": "browser.performance.now-relative-to-attempt",
+        "audioIndependentlyReviewed": false
+      },
+      "note": null,
+      "provenanceAnnotation": null
+    },
+    {
+      "path": "tests/fixtures/butterfly-filler-confirmation.json",
+      "sha256": "5cfa658dbc46699a2b015d4bdaa386c05c7966d0a7ec02b6a3737f290d2a770e",
+      "provenance": {
+        "reportSha256": "991b7f1b03edb7a8de4f69981e9ffa12522e7ff71fbff4a08011877655fa3c52",
+        "runtimeId": "969d045e-9dcb-454e-8b69-2382b607796b",
+        "note": "Reduced saved production evidence; clock ticks reconstructed from logged changed states. Provider fragments reconstructed from consecutive speaker text; no live calls."
+      },
+      "note": null,
+      "provenanceAnnotation": null
+    },
+    {
+      "path": "tests/fixtures/issue-57-fragmented-confirmation.json",
+      "sha256": "1de75aa4b2b69378876c0242ce30f712e57bd9bb89c3410966187b7c357fba3c",
+      "provenance": "sprout-lesson-8c9e6f4e-5aa5-4b41-91a9-74ef4541e59b.json",
+      "note": null,
+      "provenanceAnnotation": null
+    },
+    {
+      "path": "tests/fixtures/catching-unicorns-source-boundaries-oct16.json",
+      "sha256": "1c87be9936d9d5963af3f4462c74010d58c3e5ea8a7af4af9fb94b27114dc110",
+      "provenance": "sprout-catching-unicorns-469a81f7-d59f-4d53-a1a3-a336279bf334.json",
+      "note": "Exact classifier.started transcripts and classifier.mapping outputs in recorded order; no regenerated scores.",
+      "provenanceAnnotation": null
+    },
+    {
+      "path": "tests/fixtures/catching-unicorns-closure-oct16.json",
+      "sha256": "dca2f4d6edcf2c127a4ad32fdbf90e08ba2b7dda788b35fb4f5c21830b90b21f",
+      "provenance": "sprout-catching-unicorns-469a81f7-d59f-4d53-a1a3-a336279bf334.json",
+      "note": "Exact local-clock microphone/output events and transcript text deltas after the final learner explanation. Replay serves the recorded final closure proposal at its recorded 349.4ms latency for earlier identical conversational acts; earlier canceled calls have no captured result. This is a controlled scheduler comparison, not a provider prediction.",
+      "provenanceAnnotation": null
+    },
+    {
+      "path": "tests/fixtures/catching-unicorns-exogram-confirmation-replay.json",
+      "sha256": "aa4e787d63ca2dcbc4615b14f2570f674a16114f8d93ad79482b29b09b36f9c4",
+      "provenance": "7 October question-2 stall: original transcript and normalized scores from a bounded live replay after decoupling tutor confirmation from mastery.",
+      "note": null,
+      "provenanceAnnotation": "Source selections are controlled, manually reviewed regression inputs added for utterance attribution; they were not returned by the recorded provider. Original concept/objective/tutor scores are unchanged."
+    },
+    {
+      "path": "tests/fixtures/catching-unicorns-attribution-oct17.json",
+      "sha256": "91fb76d83510568ef928caa4ca9ebcbaf3caa2e4952211dd6bab8c92d8c5fecc",
+      "provenance": "Synthetic reconstruction of the explanation described in the Commit 4 request, not a diagnostic replay. Original af06ed93-d150-4dc5-935e-f2db02934db6 export unavailable. Exact wording, provider envelopes, timestamps, neutral backchannel and all classifier scores are synthetic. The report describes mathematics, numbers/plus, abstraction, numerical relationships, and tutor-introduced shared meaning; it does not establish exact source indexes or rejection scores.",
+      "note": null,
+      "provenanceAnnotation": null
+    }
+  ],
+  "counting": [
+    {
+      "runtimeId": "8adca88d-2e69-4869-a512-dc31682fc071",
+      "savedRequestCount": 9,
+      "requestToMappingRangeMs": {
+        "min": 168.8,
+        "max": 266.9
+      },
+      "excludedSyntheticCount": 16,
+      "savedMappingCounts": {
+        "abstained": 7,
+        "accepted": 2
+      },
+      "requests": [
+        {
+          "id": "wrong-one-duck-before-retry",
+          "requestEventIndex": 150,
+          "mappingEventIndex": 152,
+          "identity": {
+            "runtimeId": "8adca88d-2e69-4869-a512-dc31682fc071",
+            "nodeId": "count-1-duck",
+            "visitId": 1,
+            "childTurnId": 2,
+            "transcriptRevision": 12
+          },
+          "requestAtMs": 11659,
+          "mappingAtMs": 11925.9,
+          "requestToMappingMs": 266.9,
+          "mapping": {
+            "decision": "abstained",
+            "probabilities": {
+              "answerCorrect": 0.05,
+              "answerIncorrect": 0.94,
+              "answerUnclear": 0.11,
+              "answerNone": 0.04,
+              "needsHelp": 0.56,
+              "tutorAcknowledging": 0.02,
+              "tutorAsking": 0.61,
+              "tutorClarifying": 0.64,
+              "tutorHelping": 0.28
+            },
+            "thresholds": {
+              "HIGH": 0.9,
+              "LOW": 0.1,
+              "COMPETITOR_CEILING": 0.2,
+              "MIN_MARGIN": 0.7
+            },
+            "reason": "tutor_no_winner",
+            "detail": {
+              "category": "tutor",
+              "candidate": "tutorClarifying",
+              "candidateProbability": 0.64
+            }
+          }
+        },
+        {
+          "id": "wrong-one-duck-after-hint",
+          "requestEventIndex": 384,
+          "mappingEventIndex": 386,
+          "identity": {
+            "runtimeId": "8adca88d-2e69-4869-a512-dc31682fc071",
+            "nodeId": "count-1-duck",
+            "visitId": 1,
+            "childTurnId": 2,
+            "transcriptRevision": 26
+          },
+          "requestAtMs": 18120.8,
+          "mappingAtMs": 18355.1,
+          "requestToMappingMs": 234.3,
+          "mapping": {
+            "decision": "abstained",
+            "probabilities": {
+              "answerCorrect": 0.05,
+              "answerIncorrect": 0.82,
+              "answerUnclear": 0.37,
+              "answerNone": 0.05,
+              "needsHelp": 0.79,
+              "tutorAcknowledging": 0.02,
+              "tutorAsking": 0.18,
+              "tutorClarifying": 0.1,
+              "tutorHelping": 0.95
+            },
+            "thresholds": {
+              "HIGH": 0.9,
+              "LOW": 0.1,
+              "COMPETITOR_CEILING": 0.2,
+              "MIN_MARGIN": 0.7
+            },
+            "reason": "answer_no_winner",
+            "detail": {
+              "category": "answer",
+              "candidate": "answerIncorrect",
+              "candidateProbability": 0.82
+            }
+          }
+        },
+        {
+          "id": "settled-one-duck-correction",
+          "requestEventIndex": 483,
+          "mappingEventIndex": 485,
+          "identity": {
+            "runtimeId": "8adca88d-2e69-4869-a512-dc31682fc071",
+            "nodeId": "count-1-duck",
+            "visitId": 1,
+            "childTurnId": 3,
+            "transcriptRevision": 32
+          },
+          "requestAtMs": 24121,
+          "mappingAtMs": 24380.2,
+          "requestToMappingMs": 259.2,
+          "mapping": {
+            "decision": "accepted",
+            "probabilities": {
+              "answerCorrect": 0.94,
+              "answerIncorrect": 0.07,
+              "answerUnclear": 0.06,
+              "answerNone": 0.02,
+              "needsHelp": 0.1,
+              "tutorAcknowledging": 0.96,
+              "tutorAsking": 0.03,
+              "tutorClarifying": 0.04,
+              "tutorHelping": 0.07
+            },
+            "thresholds": {
+              "HIGH": 0.9,
+              "LOW": 0.1,
+              "COMPETITOR_CEILING": 0.2,
+              "MIN_MARGIN": 0.7
+            }
+          }
+        },
+        {
+          "id": "settled-two-ducks",
+          "requestEventIndex": 695,
+          "mappingEventIndex": 697,
+          "identity": {
+            "runtimeId": "8adca88d-2e69-4869-a512-dc31682fc071",
+            "nodeId": "count-2-ducks",
+            "visitId": 2,
+            "childTurnId": 4,
+            "transcriptRevision": 46
+          },
+          "requestAtMs": 35321.1,
+          "mappingAtMs": 35579.8,
+          "requestToMappingMs": 258.7,
+          "mapping": {
+            "decision": "accepted",
+            "probabilities": {
+              "answerCorrect": 0.97,
+              "answerIncorrect": 0.03,
+              "answerUnclear": 0.05,
+              "answerNone": 0.02,
+              "needsHelp": 0.06,
+              "tutorAcknowledging": 0.97,
+              "tutorAsking": 0.03,
+              "tutorClarifying": 0.04,
+              "tutorHelping": 0.07
+            },
+            "thresholds": {
+              "HIGH": 0.9,
+              "LOW": 0.1,
+              "COMPETITOR_CEILING": 0.2,
+              "MIN_MARGIN": 0.7
+            }
+          }
+        },
+        {
+          "id": "wrong-butterflies-after-hint",
+          "requestEventIndex": 1004,
+          "mappingEventIndex": 1006,
+          "identity": {
+            "runtimeId": "8adca88d-2e69-4869-a512-dc31682fc071",
+            "nodeId": "count-3-butterflies",
+            "visitId": 3,
+            "childTurnId": 5,
+            "transcriptRevision": 68
+          },
+          "requestAtMs": 49420.4,
+          "mappingAtMs": 49634.6,
+          "requestToMappingMs": 214.2,
+          "mapping": {
+            "decision": "abstained",
+            "probabilities": {
+              "answerCorrect": 0.05,
+              "answerIncorrect": 0.91,
+              "answerUnclear": 0.19,
+              "answerNone": 0.04,
+              "needsHelp": 0.73,
+              "tutorAcknowledging": 0.02,
+              "tutorAsking": 0.04,
+              "tutorClarifying": 0.05,
+              "tutorHelping": 0.97
+            },
+            "thresholds": {
+              "HIGH": 0.9,
+              "LOW": 0.1,
+              "COMPETITOR_CEILING": 0.2,
+              "MIN_MARGIN": 0.7
+            },
+            "reason": "support_ambiguous",
+            "detail": {
+              "category": "support",
+              "candidate": "needsHelp",
+              "candidateProbability": 0.73
+            }
+          }
+        },
+        {
+          "id": "finished-butterfly-count",
+          "requestEventIndex": 1135,
+          "mappingEventIndex": 1137,
+          "identity": {
+            "runtimeId": "8adca88d-2e69-4869-a512-dc31682fc071",
+            "nodeId": "count-3-butterflies",
+            "visitId": 3,
+            "childTurnId": 6,
+            "transcriptRevision": 76
+          },
+          "requestAtMs": 57020.5,
+          "mappingAtMs": 57226.3,
+          "requestToMappingMs": 205.8,
+          "mapping": {
+            "decision": "abstained",
+            "probabilities": {
+              "answerCorrect": 0.8,
+              "answerIncorrect": 0.15,
+              "answerUnclear": 0.3,
+              "answerNone": 0.02,
+              "needsHelp": 0.17,
+              "tutorAcknowledging": 0.87,
+              "tutorAsking": 0.03,
+              "tutorClarifying": 0.06,
+              "tutorHelping": 0.08
+            },
+            "thresholds": {
+              "HIGH": 0.9,
+              "LOW": 0.1,
+              "COMPETITOR_CEILING": 0.2,
+              "MIN_MARGIN": 0.7
+            },
+            "reason": "answer_no_winner",
+            "detail": {
+              "category": "answer",
+              "candidate": "answerCorrect",
+              "candidateProbability": 0.8
+            }
+          }
+        },
+        {
+          "id": "same-count-after-discard",
+          "requestEventIndex": 1155,
+          "mappingEventIndex": 1157,
+          "identity": {
+            "runtimeId": "8adca88d-2e69-4869-a512-dc31682fc071",
+            "nodeId": "count-3-butterflies",
+            "visitId": 3,
+            "childTurnId": 7,
+            "transcriptRevision": 76
+          },
+          "requestAtMs": 58761.9,
+          "mappingAtMs": 58935,
+          "requestToMappingMs": 173.1,
+          "mapping": {
+            "decision": "abstained",
+            "probabilities": {
+              "answerCorrect": 0.79,
+              "answerIncorrect": 0.14,
+              "answerUnclear": 0.35,
+              "answerNone": 0.03,
+              "needsHelp": 0.19,
+              "tutorAcknowledging": 0.88,
+              "tutorAsking": 0.03,
+              "tutorClarifying": 0.06,
+              "tutorHelping": 0.09
+            },
+            "thresholds": {
+              "HIGH": 0.9,
+              "LOW": 0.1,
+              "COMPETITOR_CEILING": 0.2,
+              "MIN_MARGIN": 0.7
+            },
+            "reason": "answer_no_winner",
+            "detail": {
+              "category": "answer",
+              "candidate": "answerCorrect",
+              "candidateProbability": 0.79
+            }
+          }
+        },
+        {
+          "id": "follow-up-before-tutor-response",
+          "requestEventIndex": 1209,
+          "mappingEventIndex": 1211,
+          "identity": {
+            "runtimeId": "8adca88d-2e69-4869-a512-dc31682fc071",
+            "nodeId": "count-3-butterflies",
+            "visitId": 3,
+            "childTurnId": 8,
+            "transcriptRevision": 79
+          },
+          "requestAtMs": 67021.5,
+          "mappingAtMs": 67251.9,
+          "requestToMappingMs": 230.4,
+          "mapping": {
+            "decision": "abstained",
+            "probabilities": {
+              "answerCorrect": 0.64,
+              "answerIncorrect": 0.17,
+              "answerUnclear": 0.52,
+              "answerNone": 0.03,
+              "needsHelp": 0.4,
+              "tutorAcknowledging": 0.87,
+              "tutorAsking": 0.04,
+              "tutorClarifying": 0.08,
+              "tutorHelping": 0.11
+            },
+            "thresholds": {
+              "HIGH": 0.9,
+              "LOW": 0.1,
+              "COMPETITOR_CEILING": 0.2,
+              "MIN_MARGIN": 0.7
+            },
+            "reason": "answer_no_winner",
+            "detail": {
+              "category": "answer",
+              "candidate": "answerCorrect",
+              "candidateProbability": 0.64
+            }
+          }
+        },
+        {
+          "id": "follow-up-after-tutor-response",
+          "requestEventIndex": 1286,
+          "mappingEventIndex": 1288,
+          "identity": {
+            "runtimeId": "8adca88d-2e69-4869-a512-dc31682fc071",
+            "nodeId": "count-3-butterflies",
+            "visitId": 3,
+            "childTurnId": 8,
+            "transcriptRevision": 84
+          },
+          "requestAtMs": 70820.6,
+          "mappingAtMs": 70989.4,
+          "requestToMappingMs": 168.8,
+          "mapping": {
+            "decision": "abstained",
+            "probabilities": {
+              "answerCorrect": 0.68,
+              "answerIncorrect": 0.16,
+              "answerUnclear": 0.64,
+              "answerNone": 0.04,
+              "needsHelp": 0.38,
+              "tutorAcknowledging": 0.82,
+              "tutorAsking": 0.03,
+              "tutorClarifying": 0.06,
+              "tutorHelping": 0.06
+            },
+            "thresholds": {
+              "HIGH": 0.9,
+              "LOW": 0.1,
+              "COMPETITOR_CEILING": 0.2,
+              "MIN_MARGIN": 0.7
+            },
+            "reason": "answer_no_winner",
+            "detail": {
+              "category": "answer",
+              "candidate": "answerCorrect",
+              "candidateProbability": 0.68
+            }
+          }
+        }
+      ]
+    },
+    {
+      "runtimeId": "39abf02a-8c9a-4144-ada0-9430673ab5d4",
+      "savedRequestCount": 4,
+      "requestToMappingRangeMs": {
+        "min": 165.1,
+        "max": 258.7
+      },
+      "excludedSyntheticCount": 10,
+      "savedMappingCounts": {
+        "abstained": 3,
+        "accepted": 1
+      },
+      "requests": [
+        {
+          "id": "before-clarification",
+          "requestEventIndex": 606,
+          "mappingEventIndex": 607,
+          "identity": {
+            "runtimeId": "39abf02a-8c9a-4144-ada0-9430673ab5d4",
+            "nodeId": "count-1-duck",
+            "visitId": 1,
+            "childTurnId": 5,
+            "transcriptRevision": 37
+          },
+          "requestAtMs": 46931.1,
+          "mappingAtMs": 47105.8,
+          "requestToMappingMs": 174.7,
+          "mapping": {
+            "decision": "abstained",
+            "probabilities": {
+              "answerCorrect": 0.95,
+              "answerIncorrect": 0.06,
+              "answerUnclear": 0.15,
+              "answerNone": 0.02,
+              "needsHelp": 0.4,
+              "tutorAcknowledging": 0.97,
+              "tutorAsking": 0.02,
+              "tutorClarifying": 0.05,
+              "tutorHelping": 0.07
+            },
+            "thresholds": {
+              "HIGH": 0.9,
+              "LOW": 0.1,
+              "COMPETITOR_CEILING": 0.2,
+              "MIN_MARGIN": 0.7
+            },
+            "reason": "support_ambiguous",
+            "detail": {
+              "category": "support",
+              "candidate": "needsHelp",
+              "candidateProbability": 0.4
+            }
+          }
+        },
+        {
+          "id": "after-question",
+          "requestEventIndex": 751,
+          "mappingEventIndex": 753,
+          "identity": {
+            "runtimeId": "39abf02a-8c9a-4144-ada0-9430673ab5d4",
+            "nodeId": "count-1-duck",
+            "visitId": 1,
+            "childTurnId": 5,
+            "transcriptRevision": 47
+          },
+          "requestAtMs": 57080.5,
+          "mappingAtMs": 57317.5,
+          "requestToMappingMs": 237,
+          "mapping": {
+            "decision": "abstained",
+            "probabilities": {
+              "answerCorrect": 0.95,
+              "answerIncorrect": 0.06,
+              "answerUnclear": 0.13,
+              "answerNone": 0.02,
+              "needsHelp": 0.36,
+              "tutorAcknowledging": 0.94,
+              "tutorAsking": 0.06,
+              "tutorClarifying": 0.06,
+              "tutorHelping": 0.08
+            },
+            "thresholds": {
+              "HIGH": 0.9,
+              "LOW": 0.1,
+              "COMPETITOR_CEILING": 0.2,
+              "MIN_MARGIN": 0.7
+            },
+            "reason": "support_ambiguous",
+            "detail": {
+              "category": "support",
+              "candidate": "needsHelp",
+              "candidateProbability": 0.36
+            }
+          }
+        },
+        {
+          "id": "child-reaffirmation",
+          "requestEventIndex": 796,
+          "mappingEventIndex": 798,
+          "identity": {
+            "runtimeId": "39abf02a-8c9a-4144-ada0-9430673ab5d4",
+            "nodeId": "count-1-duck",
+            "visitId": 1,
+            "childTurnId": 6,
+            "transcriptRevision": 51
+          },
+          "requestAtMs": 61957.5,
+          "mappingAtMs": 62216.2,
+          "requestToMappingMs": 258.7,
+          "mapping": {
+            "decision": "accepted",
+            "probabilities": {
+              "answerCorrect": 0.97,
+              "answerIncorrect": 0.06,
+              "answerUnclear": 0.09,
+              "answerNone": 0.02,
+              "needsHelp": 0.1,
+              "tutorAcknowledging": 0.95,
+              "tutorAsking": 0.05,
+              "tutorClarifying": 0.07,
+              "tutorHelping": 0.07
+            },
+            "thresholds": {
+              "HIGH": 0.9,
+              "LOW": 0.1,
+              "COMPETITOR_CEILING": 0.2,
+              "MIN_MARGIN": 0.7
+            }
+          }
+        },
+        {
+          "id": "generic-thanks",
+          "requestEventIndex": 855,
+          "mappingEventIndex": 857,
+          "identity": {
+            "runtimeId": "39abf02a-8c9a-4144-ada0-9430673ab5d4",
+            "nodeId": "count-1-duck",
+            "visitId": 1,
+            "childTurnId": 6,
+            "transcriptRevision": 55
+          },
+          "requestAtMs": 64381.2,
+          "mappingAtMs": 64546.3,
+          "requestToMappingMs": 165.1,
+          "mapping": {
+            "decision": "abstained",
+            "probabilities": {
+              "answerCorrect": 0.97,
+              "answerIncorrect": 0.05,
+              "answerUnclear": 0.07,
+              "answerNone": 0.02,
+              "needsHelp": 0.09,
+              "tutorAcknowledging": 0.43,
+              "tutorAsking": 0.02,
+              "tutorClarifying": 0.03,
+              "tutorHelping": 0.03
+            },
+            "thresholds": {
+              "HIGH": 0.9,
+              "LOW": 0.1,
+              "COMPETITOR_CEILING": 0.2,
+              "MIN_MARGIN": 0.7
+            },
+            "reason": "tutor_no_winner",
+            "detail": {
+              "category": "tutor",
+              "candidate": "tutorAcknowledging",
+              "candidateProbability": 0.43
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "selectedPairs": [
+    {
+      "before": "wrong-one-duck-before-retry",
+      "after": "wrong-one-duck-after-hint",
+      "sameChildTurn": true,
+      "identicalTranscript": false,
+      "appendedText": "\nTutor: Hmm. Let's try carefully. Point to the duck and count it. What do you get?",
+      "requestToMappingMs": [
+        266.9,
+        234.3
+      ]
+    },
+    {
+      "before": "finished-butterfly-count",
+      "after": "same-count-after-discard",
+      "sameChildTurn": false,
+      "identicalTranscript": true,
+      "appendedText": "",
+      "requestToMappingMs": [
+        205.8,
+        173.1
+      ]
+    },
+    {
+      "before": "follow-up-before-tutor-response",
+      "after": "follow-up-after-tutor-response",
+      "sameChildTurn": true,
+      "identicalTranscript": false,
+      "appendedText": "\nTutor: Yes, you counted all the butterflies.",
+      "requestToMappingMs": [
+        230.4,
+        168.8
+      ]
+    },
+    {
+      "before": "before-clarification",
+      "after": "after-question",
+      "sameChildTurn": true,
+      "identicalTranscript": false,
+      "appendedText": " Hey, are you finished with your answer, or would you like some help?",
+      "requestToMappingMs": [
+        174.7,
+        237
+      ]
+    },
+    {
+      "before": "child-reaffirmation",
+      "after": "generic-thanks",
+      "sameChildTurn": true,
+      "identicalTranscript": false,
+      "appendedText": "\nTutor: Thanks for telling me.",
+      "requestToMappingMs": [
+        258.7,
+        165.1
+      ]
+    }
+  ],
+  "catchingUnicorns": {
+    "savedCheckpointCount": 20,
+    "exactDuplicateInputs": [
+      [
+        3,
+        4
+      ],
+      [
+        8,
+        9
+      ],
+      [
+        17,
+        18
+      ]
+    ],
+    "exogramTutorExtension": {
+      "indexes": [
+        2,
+        3
+      ],
+      "revisions": [
+        34,
+        50
+      ],
+      "unchangedChildText": "Child: It's a\nChild: Information stored outside of our brain or mind",
+      "appendedText": "\nTutor: Yeah, that's on the right track. Could a note or a diagram\nTutor: keep information outside of you?",
+      "objectiveCompleted": [
+        0.68,
+        0.31
+      ],
+      "independent": [
+        0.98,
+        0.97
+      ]
+    },
+    "closureTiming": {
+      "sampleCount": 1,
+      "lastRecordedChildSpeechStop": {
+        "index": 52,
+        "atMs": 214119.5
+      },
+      "lastQuietAtMs": 216851.4,
+      "proposalAtMs": 217785.8,
+      "recordedRenderRequestedAtMs": 217786,
+      "recordedRenderConfirmedAtMs": 217819.5,
+      "quietToRenderRequestMs": 934.6,
+      "proposalToRenderRequestMs": 0.2,
+      "requestToConfirmationMs": 33.5,
+      "savedClassifierLatencyMs": 349.4,
+      "classifierLatencyStage": "Fixture metadata; browser versus endpoint attribution not established here."
+    }
+  },
+  "butterfly": {
+    "runtimeId": "969d045e-9dcb-454e-8b69-2382b607796b",
+    "savedMappingCount": 1,
+    "initialAnswerAccepted": false,
+    "finalAnswerAccepted": false,
+    "mappingReason": "objectiveState_no_winner",
+    "savedEndpointMappingElapsedMs": 207.1,
+    "childSpeechStop": {
+      "index": 9,
+      "atMs": 33892.8
+    },
+    "lastAnswerTextReceipt": {
+      "index": 10,
+      "atMs": 34066.1
+    },
+    "firstPcmActive": {
+      "index": 12,
+      "atMs": 34157.3
+    },
+    "answerReceiptToPcmActiveMs": 91.2,
+    "answerProviderInterval": {
+      "type": "transcript",
+      "speaker": "child",
+      "delta": " butterflies.",
+      "startMs": 32800,
+      "endMs": 33000
+    }
+  },
+  "fragmentedConfirmation": {
+    "source": "sprout-lesson-8c9e6f4e-5aa5-4b41-91a9-74ef4541e59b.json",
+    "mappingEventIndex": 414,
+    "legacy": {
+      "reason": "tutor_no_winner",
+      "answerCorrect": 0.97,
+      "tutorAcknowledging": 0.64
+    },
+    "interpretation": {
+      "objectiveState": "completed",
+      "tutorState": "Requires full-context observer evaluation; no measured Choice output is available.",
+      "limitations": "Speaker attribution/acoustics are unverified; tests assert evidence delivery, not Jev semantic performance."
+    }
+  },
+  "unknown": [
+    "full-session/per-turn request totals",
+    "unnecessary recheck rate",
+    "valid-answer loss rate",
+    "correctness/false advancement/false mastery rates",
+    "counting fine-grained independence",
+    "response ID/completion/heard",
+    "answer-end to audible feedback/confirmed scene distribution",
+    "causal context contamination"
+  ]
+}

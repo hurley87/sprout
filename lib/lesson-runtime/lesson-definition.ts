@@ -28,6 +28,8 @@ export type LessonDefinition = {
   readonly requirePresentationConfirmation?: boolean;
   /** Conversational closure advances independently of assessment/mastery. */
   readonly conversationFirst?: boolean;
+  /** Counting may accept learner answers independently of tutor confirmation. */
+  readonly answerAcceptance?: "learner_evidence";
   /** Concise topic labels for an accepted-evidence terminal close. No answer text. */
   readonly recapTopics?: Readonly<Record<string, string>>;
   readonly nodes: Readonly<Record<string, LessonNodeDefinition>>;

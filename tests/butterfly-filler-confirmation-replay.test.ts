@@ -7,7 +7,8 @@ import {
   type ConversationStateOutputs,
 } from "../lib/lesson-runtime/conversation-observer-contract";
 import { LessonRuntime } from "../lib/lesson-runtime/lesson-runtime";
-import { COUNTING_LESSON } from "../lib/lesson-runtime/counting-lesson";
+// Preservation replay of the original confirmation-gated policy.
+import { LEGACY_COUNTING_LESSON as COUNTING_LESSON } from "./helpers/counting-runtime";
 import {
   classificationSource,
   reduceLessonRuntime,

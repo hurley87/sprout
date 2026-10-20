@@ -2,10 +2,14 @@ import { useRuntimeFakeTimers } from "./helpers/runtime-harness";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ClientCommand, ProviderEvent } from "../lib/events";
 import { LessonRuntime } from "../lib/lesson-runtime/lesson-runtime";
-import { COUNTING_LESSON } from "../lib/lesson-runtime/counting-lesson";
+// Preservation replay of the original confirmation-gated policy.
+import { LEGACY_COUNTING_LESSON as COUNTING_LESSON } from "./helpers/counting-runtime";
 import { LESSON_START_INSTRUCTION } from "./helpers/counting-live-context";
 import { ANSWER_RECOVERY_INSTRUCTION } from "../lib/lesson-runtime/answer-recovery";
 import fillerTrace from "./fixtures/butterfly-filler-confirmation.json";
+import { TEST_CONCEPT_LESSON } from "./fixtures/concept-lesson";
+import type { EvidenceTracking, FeedbackTracking } from "../lib/lesson-runtime/evidence-tracking";
+import type { LessonDefinition } from "../lib/lesson-runtime/lesson-definition";
 
 const transport = vi.hoisted(() => ({
   receive: undefined as ((event: ProviderEvent) => void) | undefined,
@@ -33,8 +37,8 @@ afterEach(() => {
 function emit(event: ProviderEvent) {
   transport.receive?.(event);
 }
-function start(childAnswer = "One.") {
-  lesson = new LessonRuntime({} as HTMLAudioElement, () => {}, COUNTING_LESSON);
+function start(childAnswer = "One.", definition: LessonDefinition = COUNTING_LESSON) {
+  lesson = new LessonRuntime({} as HTMLAudioElement, () => {}, definition);
   lesson.confirmRendered(lesson.snapshot().display);
   const command = transport.send.mock.calls[0][0];
   emit({
@@ -47,6 +51,49 @@ function start(childAnswer = "One.") {
   emit({ type: "transcript", speaker: "child", delta: childAnswer, startMs: 100, endMs: 200 });
   emit({ type: "microphone.speech_stopped", quietMs: 900 });
 }
+
+it("isolates snapshot diagnostic mutations from authored criteria, live evidence and stored history", async () => {
+  const definition = structuredClone({ ...TEST_CONCEPT_LESSON, initialNodeId: "concept-b" });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (_url: string, init: RequestInit) => {
+      const input = JSON.parse(init.body as string);
+      return Response.json({
+        proposal: {
+          nodeId: input.nodeId,
+          transcriptRevision: input.transcriptRevision,
+          childActivity: "unknown",
+          answerOutcome: "correct",
+          supportState: "none",
+          tutorState: "unknown",
+          conceptObservations: [
+            { criterionId: "repetition", observation: "demonstrated_independent", childMessageIndex: 0 },
+            { criterionId: "change", observation: "not_yet" },
+          ],
+        },
+      });
+    }),
+  );
+  start("The same shape comes back again and again.", definition);
+  await vi.advanceTimersByTimeAsync(300);
+  const before = lesson.report();
+  const observedBefore = lesson.observe();
+  expect(before.evidenceEligibility?.authoredCompletionPolicyMet).toBe(false);
+  const diagnostics = lesson.snapshot().diagnostics;
+  const evidenceEvent = diagnostics.find(event => event.type === "tracking.evidence")!;
+  const evidence = evidenceEvent.detail as EvidenceTracking;
+  const feedback = diagnostics.find(event => event.type === "tracking.feedback")!.detail as FeedbackTracking;
+  expect(evidence.accepted?.conceptEvidence["concept-b:repetition"].status).toBe("demonstrated");
+  Reflect.set(evidence.accepted!.conceptEvidence["concept-b:repetition"], "status", "not_yet");
+  Reflect.set(feedback.support.authored!.concepts!, "length", 0);
+  Reflect.set(evidence.origin.source, "nodeId", "forged");
+  evidenceEvent.type = "forged";
+  expect(definition.nodes["concept-b"].concepts).toHaveLength(2);
+  expect(lesson.report()).toEqual(before);
+  expect(lesson.observe()).toEqual(observedBefore);
+  expect(lesson.snapshot().diagnostics).toEqual(observedBefore.snapshot.diagnostics);
+  expect(lesson.snapshot().evidenceEligibility?.authoredCompletionPolicyMet).toBe(false);
+});
 function tutor(delta: string, startMs = 300) {
   emit({ type: "transcript", speaker: "sprout", delta, startMs, endMs: startMs + 100 });
 }
@@ -1037,9 +1084,9 @@ function choiceDiagnostic() {
     labelCompletionEligible: false,
     outputs: {
       objectiveState: {
-        choice: "completed",
+        choice: "incorrect",
         confidence: 1,
-        probabilities: { completed: 1, incorrect: 0, unclear_or_incomplete: 0, unresolved_help: 0, no_attempt: 0 },
+        probabilities: { completed: 0, incorrect: 1, unclear_or_incomplete: 0, unresolved_help: 0, no_attempt: 0 },
       },
       tutorState: {
         choice: "other",
@@ -1107,4 +1154,46 @@ it("correlates real parser-to-runtime snapshots, rejection and pending-steering 
   deliver(null, 500, 550);
   expect(evidence().parserDiscardedLearnerEvents).toBe(1);
   expect(evidence().learnerSnapshots).toHaveLength(1);
+});
+
+it("exports accepted learner history and separate tutor feedback through complete observe/report after transition", async () => {
+  const fetch = vi.fn((_url: string, init: RequestInit) => Promise.resolve(correctResponse(init)));
+  vi.stubGlobal("fetch", fetch);
+  start();
+  await vi.advanceTimersByTimeAsync(300);
+  const first = lesson.report().events.find(event => event.type === "tracking.evidence")!;
+  expect(first.detail).toMatchObject({
+    consumption: "consumed",
+    accepted: { answerAccepted: true },
+    origin: { transportSourceId: 1, sceneId: "hello-duck" },
+    support: { transcript: "Child: One." },
+  });
+  tutor("Yes, one duck!");
+  emit({ type: "output.activity", state: "active" });
+  emit({ type: "output.activity", state: "quiet" });
+  await vi.advanceTimersByTimeAsync(600);
+  expect(fetch).toHaveBeenCalledTimes(2);
+  const observation = lesson.observe();
+  expect(observation.events).toEqual(lesson.report().events);
+  expect(observation.snapshot.runtime).toMatchObject({ phase: "rendering", answerAccepted: false });
+  expect(observation.snapshot.evidenceEligibility).toEqual(lesson.report().evidenceEligibility);
+  const evidence = observation.events.filter(event => event.type === "tracking.evidence");
+  expect(evidence[0]).toEqual(first);
+  expect(evidence.map(event => event.detail)).toContainEqual(
+    expect.objectContaining({ change: "authority_suspended", reason: "tutor_revision_revalidation" }),
+  );
+  const feedback = observation.events.filter(event => event.type === "tracking.feedback").at(-1)!;
+  expect(feedback.detail).toMatchObject({
+    semantic: "acknowledging",
+    mapping: null,
+    tutorMessageIndex: 1,
+    contradiction: "unknown",
+    prompting: "unknown",
+    origin: { source: { nodeId: "count-1-duck", visitId: 1, childTurnId: 1 } },
+  });
+  const ref = (feedback.detail as { evidence: { offset: number } }).evidence;
+  expect(observation.events[ref.offset].detail).toMatchObject({
+    consumption: "consumed",
+    accepted: { answerAccepted: true, acknowledgmentObserved: true },
+  });
 });
