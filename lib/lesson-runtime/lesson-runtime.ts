@@ -1,3 +1,4 @@
+import { currentEvidenceEligibility, trackingOrigin, type TrackingOrigin } from "./evidence-tracking";
 import { terminalRecapComplete } from "./terminal-recap";
 import { evidenceRecap } from "./evidence-recap";
 import { normalizeAssessment, type ConversationAssessment, type ConversationVisit } from "./conversation-assessment";
@@ -66,6 +67,8 @@ export type LessonSnapshot = {
   awaitingSteering: boolean;
   diagnostics: readonly LessonDiagnostic[];
   assessment?: ConversationAssessment;
+  /** Existing current gates, separate from historical tracking records. */
+  evidenceEligibility?: ReturnType<typeof currentEvidenceEligibility>;
 };
 
 function eventDiagnosticSource(event: LessonRuntimeEvent, before: LessonRuntimeState): ClassificationSource {
@@ -176,12 +179,18 @@ export class LessonRuntime {
       this.lessonDefinition.conversationFirst
         ? source => {
             this.dispatch({
-              type: "conversation.recheck.requested", source, transcriptSnapshot: this.transcript, atMs: this.now(),
+              type: "conversation.recheck.requested",
+              source,
+              transcriptSnapshot: this.transcript,
+              atMs: this.now(),
             });
             // Dispatch may restore an accepted close and even commit its scene.
             // Neither outcome may fall through to the recovery prompt callback.
-            if (this.state && (this.state.visitId !== source.visitId ||
-              hasCurrentCompletionEvidence(this.state, this.lessonDefinition))) return true;
+            if (
+              this.state &&
+              (this.state.visitId !== source.visitId || hasCurrentCompletionEvidence(this.state, this.lessonDefinition))
+            )
+              return true;
             if (!this.state?.interruptedExchange?.ready) return false;
             this.log("conversation.recheck.started", null, source);
             this.scheduleClassification("missing_transcript_recheck");
@@ -236,6 +245,7 @@ export class LessonRuntime {
       awaitingSteering: Boolean(this.steering),
       diagnostics: this.journal.recent(),
       assessment: this.assessment,
+      evidenceEligibility: currentEvidenceEligibility(this.state, this.lessonDefinition),
     };
   }
 
@@ -282,11 +292,20 @@ export class LessonRuntime {
     this.dispatch({ type: "render.confirmed", runtimeId: this.runtimeId, identity, atMs: this.now() });
   }
 
-  private dispatch(event: LessonRuntimeEvent) {
+  private dispatch(event: LessonRuntimeEvent, capturedOrigin?: TrackingOrigin) {
     if (!this.state || this.status === "ended") return;
     const before = this.state;
     const result = reduceLessonRuntime(before, event, this.lessonDefinition);
     this.state = result.state;
+    this.journal.trackReduction({
+      before,
+      event,
+      result,
+      lesson: this.lessonDefinition,
+      origin:
+        capturedOrigin ??
+        trackingOrigin(eventDiagnosticSource(event, before), this.lessonDefinition, this.transport.activeSourceId),
+    });
     if (event.type !== "clock.tick")
       this.log(
         `runtime.event.${event.type}`,
@@ -348,7 +367,8 @@ export class LessonRuntime {
   private scheduleClock() {
     clearTimeout(this.clockTimer);
     const terminalRendering =
-      this.state?.phase === "rendering" && this.state.lessonComplete &&
+      this.state?.phase === "rendering" &&
+      this.state.lessonComplete &&
       this.lessonDefinition.nodes[this.state.nodeId].completeAfterTutorOutput;
     if (
       !this.state ||
@@ -689,7 +709,8 @@ export class LessonRuntime {
       return;
     }
     if (this.state) {
-      const closed = this.lessonDefinition.conversationFirst && hasCurrentCompletionEvidence(this.state, this.lessonDefinition);
+      const closed =
+        this.lessonDefinition.conversationFirst && hasCurrentCompletionEvidence(this.state, this.lessonDefinition);
       if (closed) this.answerRecovery.cancel("conversation_closed");
       else this.answerRecovery.observe(this.state, this.status === "live" && !this.steering);
     }
@@ -704,6 +725,7 @@ export class LessonRuntime {
     const transcript = this.transcript;
     const speaker = this.state.transcriptSource;
     if (!source || !transcript) return;
+    const origin = trackingOrigin(source, this.lessonDefinition, this.transport.activeSourceId);
     const key = JSON.stringify(source);
     if (this.lastClassifiedKey === key) return;
     this.lastClassifiedKey = key;
@@ -770,14 +792,21 @@ export class LessonRuntime {
       );
       if (proposal) {
         this.supportClarification.cancel("proposal_received");
-        this.dispatch({
-          type: "proposal.received",
-          source,
-          proposal,
-          transcriptSnapshot: transcript,
-          atMs: this.now(),
-        });
+        this.dispatch(
+          {
+            type: "proposal.received",
+            source,
+            proposal,
+            transcriptSnapshot: transcript,
+            atMs: this.now(),
+          },
+          origin,
+        );
       }
+      this.journal.trackClassification(
+        { origin, transcript, proposal, mapping: diagnostic, lesson: this.lessonDefinition },
+        this.state,
+      );
       // Usable evidence does not rule out a hold: a concept proposal may be
       // partial, or learner speech may have interrupted tutor confirmation.
       if (
@@ -1007,15 +1036,25 @@ export class LessonRuntime {
     if (this.steering) clearTimeout(this.steering.timer);
     this.steering = undefined;
     if (this.state && this.state.phase !== "complete") {
-      this.state = reduceLessonRuntime(
-        this.state,
-        {
-          type: disconnected ? "disconnect" : "stop",
-          runtimeId: this.runtimeId,
-          atMs: this.now(),
-        },
-        this.lessonDefinition,
-      ).state;
+      const before = this.state;
+      const event: LessonRuntimeEvent = {
+        type: disconnected ? "disconnect" : "stop",
+        runtimeId: this.runtimeId,
+        atMs: this.now(),
+      };
+      const result = reduceLessonRuntime(before, event, this.lessonDefinition);
+      this.state = result.state;
+      this.journal.trackReduction({
+        before,
+        event,
+        result,
+        lesson: this.lessonDefinition,
+        origin: trackingOrigin(
+          eventDiagnosticSource(event, before),
+          this.lessonDefinition,
+          this.transport.activeSourceId,
+        ),
+      });
       this.display = {
         token: `${this.runtimeId}:stopped`,
         nodeId: this.state.nodeId,
@@ -1036,14 +1075,18 @@ export class LessonRuntime {
   }
 
   report() {
-    return this.journal.report({
-      timing: LESSON_TIMING,
-      runtime: this.state,
-      status: this.status,
-      error: this.error,
-      transcript: this.transcript,
-      conversation: [...this.conversationVisits.values()],
-      assessment: this.assessment,
-    });
+    const report = {
+      ...this.journal.report({
+        timing: LESSON_TIMING,
+        runtime: this.state,
+        status: this.status,
+        error: this.error,
+        transcript: this.transcript,
+        conversation: [...this.conversationVisits.values()],
+        assessment: this.assessment,
+      }),
+      evidenceEligibility: currentEvidenceEligibility(this.state, this.lessonDefinition),
+    };
+    return report as Omit<typeof report, "evidenceEligibility"> & Partial<Pick<typeof report, "evidenceEligibility">>;
   }
 }

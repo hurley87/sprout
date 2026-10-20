@@ -1,10 +1,10 @@
 # Evidence, feedback, and delivery tracking (#77)
 
 Design for [issue #77](https://github.com/hurley87/sprout/issues/77), checked against
-parent `96af7a04daaf27e1c07e4f291b0c220d4924f567`. This commit documents the
-contract only. **Current** below describes executable behavior; **proposed** means
-additive, attempt-local observation for subsequent commits. Optional policy work
-is separate. No tracking field may authorize progression, schedule Jev, or alter
+parent `96af7a04daaf27e1c07e4f291b0c220d4924f567`. The commit 2 implementation
+is described below; delivery and replay proposals remain follow-up work.
+**Current** below describes baseline behavior; **proposed** means additive,
+attempt-local observation. Optional policy work is separate. No tracking field may authorize progression, schedule Jev, or alter
 an authored edge.
 
 ## Current lifecycle and identities
@@ -156,6 +156,46 @@ Examples (schematic observations, not fabricated session findings):
   at the new turn/text, and record the next evaluation separately. Label a
   semantic correction only when supported by existing observations/review; the
   receipt of new words itself is only a mechanical source change.
+
+## Commit 2 implementation
+
+`evidence-tracking.ts` now projects typed `tracking.evidence` and `tracking.feedback`
+records into the complete `DiagnosticJournal`, available through existing
+`LessonRuntime.observe/report` and the observation bridge. The journal remains the
+only history. `prior` and feedback `evidence` use its zero-based offsets; feedback
+links the exact dispatched proposal observation, including an ignored duplicate,
+rather than searching backward for an accepted answer. Links correlate observations;
+they do not assert that tutor text addressed a particular learner utterance.
+
+Each evaluation retains its captured classification/transport origin, exact request
+transcript, authored objective, concepts and completion policy. Composite snapshots
+have null provider packet/interval fields. The resulting concept ledger retains its
+existing quote/span, prompting history and independent/prompted attribution; counting
+attribution and independence remain `unknown`. Feedback preserves the validated
+mapping (including Jev labels/probabilities), proposed tutor state and snapshot-local
+tutor index; correction, contradiction and general prompting remain `unknown`.
+
+Additive `proposalConsumption` reducer result metadata distinguishes consumption
+from ignoring and captures answer/acknowledgment/concept results **before** `finish`
+can clear flags during a transition. Reasons identify the actual existing boundary:
+`runtime_event_ineligible`, `inactive_or_source_mismatch`,
+`classification_source_mismatch`, `proposal_guard_rejected`, or
+`revision_already_consumed`. Grouped reasons intentionally do not claim which
+individual semantic guard failed. A consumed nonqualifying answer has
+`nonqualifying_answer_judgment` at the existing clearing branch. States, effects,
+guard evaluation order and policy outcomes are unchanged.
+Tutor revisions suspend current answer authority with `tutor_revision_revalidation`;
+other mechanical invalidations use the triggering event type or `node_visit_changed`.
+A transition immediately following acceptance records both acceptance and
+supersession. Historical sources remain unchanged, including after a new child turn.
+
+Optional `evidenceEligibility` in snapshots/reports projects the existing
+`hasCurrentCompletionEvidence` and `meetsAuthoredCompletionPolicy` predicates,
+phase, `transitionReady` and pending render. These are current gates, not a new
+advancement evaluator; audio and speech gates remain in the runtime state. No
+tracking history is consulted by progression. Consumers must tolerate absent
+tracking records and eligibility fields in older exports. Playback instrumentation,
+delivery claims and broad replay analysis are outside this commit.
 
 ## Observation limits and invalidation
 

@@ -102,7 +102,11 @@ export type LessonRuntimeEvent = { readonly atMs: number } & (
   | { readonly type: "child.candidate.started"; readonly source: RuntimeSource }
   | { readonly type: "child.candidate.discarded"; readonly source: RuntimeSource }
   | { readonly type: "child.turn.confirmed"; readonly source: RuntimeSource }
-  | { readonly type: "conversation.recheck.requested"; readonly source: ClassificationSource; readonly transcriptSnapshot?: string }
+  | {
+      readonly type: "conversation.recheck.requested";
+      readonly source: ClassificationSource;
+      readonly transcriptSnapshot?: string;
+    }
   | { readonly type: "child.turn.ended"; readonly source: RuntimeSource }
   | {
       readonly type: "transcript.updated";
@@ -142,9 +146,19 @@ export type LessonRuntimeEffect =
     }
   | { readonly type: "lesson.completed"; readonly renderToken: string }
   | ConceptRevealEffect;
+/** Observation only: captured before finish can clear accepted flags on transition. */
+export type ProposalConsumption = {
+  readonly consumption: "consumed" | "ignored";
+  readonly reason: string | null;
+  readonly accepted: Pick<
+    LessonRuntimeState,
+    "answerAccepted" | "acceptedAnswerRevision" | "acknowledgmentObserved" | "conceptEvidence"
+  > | null;
+};
 export type LessonRuntimeResult = {
   readonly state: LessonRuntimeState;
   readonly effects: readonly LessonRuntimeEffect[];
+  readonly proposalConsumption?: ProposalConsumption;
 };
 
 const clearedEvidence = {
@@ -204,7 +218,12 @@ export function runtimeSource(state: LessonRuntimeState): RuntimeSource {
 
 /** Capture alongside the exact transcript snapshot before awaiting a classification. */
 export function classificationSource(state: LessonRuntimeState): ClassificationSource | null {
-  if (state.phase !== "active" || state.childSpeaking || (!state.hasChildTranscript && !state.interruptedExchange?.ready)) return null;
+  if (
+    state.phase !== "active" ||
+    state.childSpeaking ||
+    (!state.hasChildTranscript && !state.interruptedExchange?.ready)
+  )
+    return null;
   return { ...runtimeSource(state), nodeId: state.nodeId, transcriptRevision: state.transcriptRevision };
 }
 
@@ -355,7 +374,16 @@ export function reduceLessonRuntime(
   event: LessonRuntimeEvent,
   lesson: LessonDefinition,
 ): LessonRuntimeResult {
-  const ignored = { state, effects: [] };
+  const ignore = (reason: string): LessonRuntimeResult => ({
+    state,
+    effects: [],
+    ...(event.type === "proposal.received"
+      ? ({
+          proposalConsumption: { consumption: "ignored", reason, accepted: null },
+        } as const)
+      : {}),
+  });
+  const ignored = ignore("runtime_event_ineligible");
   if (state.lessonId && state.lessonId !== lesson.id) return ignored;
   if (state.phase === "stopped" || state.phase === "complete" || !validTime(event.atMs) || event.atMs < state.nowMs)
     return ignored;
@@ -404,8 +432,7 @@ export function reduceLessonRuntime(
       state.phase !== "rendering" ||
       !state.pendingRender ||
       !sameRender(state.pendingRender.identity, event.identity) ||
-      (terminalRendering &&
-        (!state.tutorOutputDrained || !outputHasDrained({ ...state, nowMs: event.atMs }, lesson)))
+      (terminalRendering && (!state.tutorOutputDrained || !outputHasDrained({ ...state, nowMs: event.atMs }, lesson)))
     )
       return ignored;
     const next: LessonRuntimeState = {
@@ -501,10 +528,11 @@ export function reduceLessonRuntime(
       return ignored;
     return { state: stopped({ ...state, nowMs: event.atMs }), effects: [] };
   }
-  if (state.phase !== "active" || !sameSource(state, event.source)) return ignored;
+  if (state.phase !== "active" || !sameSource(state, event.source)) return ignore("inactive_or_source_mismatch");
 
   let next: LessonRuntimeState = { ...state, nowMs: event.atMs };
   let additionalEffects: LessonRuntimeEffect[] = [];
+  let proposalReason: string | null = null;
   switch (event.type) {
     case "child.candidate.started":
     case "child.turn.started":
@@ -606,8 +634,8 @@ export function reduceLessonRuntime(
         const confirmed = reduceLessonRuntime(state, { ...event, type: "child.turn.started" }, lesson).state;
         return reduceLessonRuntime(confirmed, { ...event, source: runtimeSource(confirmed) }, lesson);
       }
-      const exchange = lesson.conversationFirst && event.speaker === "child"
-        ? closingTutorExchange(event.transcriptSnapshot) : null;
+      const exchange =
+        lesson.conversationFirst && event.speaker === "child" ? closingTutorExchange(event.transcriptSnapshot) : null;
       const closure = matchesTutorClosure(exchange, state.tutorClosure) ? state.tutorClosure : null;
       next = {
         ...next,
@@ -615,10 +643,12 @@ export function reduceLessonRuntime(
         tutorClosure: closure,
         // A brief acknowledgment belongs to the preceding exchange. Keep its
         // observed audio even when classification of the close is still in flight.
-        ...(exchange ? {
-          tutorOutputObserved: state.tutorOutputObserved || !!state.interruptedExchange?.tutorOutputObserved,
-          quietSinceMs: state.outputActivity === "quiet" ? (state.quietSinceMs ?? event.atMs) : null,
-        } : {}),
+        ...(exchange
+          ? {
+              tutorOutputObserved: state.tutorOutputObserved || !!state.interruptedExchange?.tutorOutputObserved,
+              quietSinceMs: state.outputActivity === "quiet" ? (state.quietSinceMs ?? event.atMs) : null,
+            }
+          : {}),
         childCandidate: event.speaker === "tutor" ? state.childCandidate : null,
         interruptedExchange: event.speaker === "tutor" ? state.interruptedExchange : null,
         transcriptRevision: event.revision,
@@ -627,8 +657,11 @@ export function reduceLessonRuntime(
           event.speaker === "child" ? state.hasChildTurn : event.speaker === "tutor" && state.hasChildTranscript,
         consumedRevision: null,
         conversationAdvanceRequested:
-          event.speaker === "tutor" && state.conversationAdvanceRequested === "learner" ? "learner"
-            : closure && exchange?.complete ? "tutor" : false,
+          event.speaker === "tutor" && state.conversationAdvanceRequested === "learner"
+            ? "learner"
+            : closure && exchange?.complete
+              ? "tutor"
+              : false,
         // Answer acceptance remains revision-bound, independently of conversational closure.
         answerAccepted: false,
         acknowledgmentObserved: false,
@@ -662,7 +695,8 @@ export function reduceLessonRuntime(
         // tutor output already invalidate tutorClosure in transcript.updated.
         conversationAdvanceRequested:
           exchange?.complete && matchesTutorClosure(exchange, state.tutorClosure)
-            ? "tutor" : state.conversationAdvanceRequested,
+            ? "tutor"
+            : state.conversationAdvanceRequested,
         // Without a retained close, require a fresh exact-source proposal.
         consumedRevision: null,
       };
@@ -695,9 +729,12 @@ export function reduceLessonRuntime(
         (state.childSpeaking && !state.childCandidate?.deferredTurn) ||
         (!state.hasChildTranscript && !(lesson.conversationFirst && state.interruptedExchange?.ready)) ||
         !proposal ||
-        !isLessonNodeId(lesson, proposal.nodeId) ||
-        event.source.nodeId !== state.nodeId ||
-        event.source.transcriptRevision !== state.transcriptRevision ||
+        !isLessonNodeId(lesson, proposal.nodeId)
+      )
+        return ignore("proposal_guard_rejected");
+      if (event.source.nodeId !== state.nodeId || event.source.transcriptRevision !== state.transcriptRevision)
+        return ignore("classification_source_mismatch");
+      if (
         proposal.nodeId !== state.nodeId ||
         (currentNode.concepts?.length &&
           (!proposal.conceptObservations ||
@@ -708,16 +745,20 @@ export function reduceLessonRuntime(
             !transcriptMessages(event.transcriptSnapshot)?.some(
               message => message.speaker === "Child" && message.text.trim(),
             ))) ||
-        proposal.transcriptRevision !== state.transcriptRevision ||
-        state.consumedRevision === state.transcriptRevision
+        proposal.transcriptRevision !== state.transcriptRevision
       )
-        return ignored;
+        return ignore("proposal_guard_rejected");
+      if (state.consumedRevision === state.transcriptRevision) return ignore("revision_already_consumed");
       next = { ...next, consumedRevision: state.transcriptRevision };
       // A missing-turn recheck can establish conversational closure only. Do not
       // attribute historical child words or new mastery to the microphone-only turn.
       const conceptResult = state.hasChildTranscript
         ? applyConceptObservations(
-            next.conceptEvidence, currentNode, event.source, proposal.conceptObservations, event.transcriptSnapshot,
+            next.conceptEvidence,
+            currentNode,
+            event.source,
+            proposal.conceptObservations,
+            event.transcriptSnapshot,
           )
         : { conceptEvidence: next.conceptEvidence, effects: [] };
       if (conceptResult.conceptEvidence !== next.conceptEvidence)
@@ -728,14 +769,12 @@ export function reduceLessonRuntime(
         const tutorClosed = tutorAcknowledgedClosure(proposal.tutorState, state.transcriptSource, exchange);
         next = {
           ...next,
-          tutorClosure: tutorClosed && exchange
-            ? { messageIndex: exchange.messageIndex, text: exchange.text, source: event.source } : null,
+          tutorClosure:
+            tutorClosed && exchange
+              ? { messageIndex: exchange.messageIndex, text: exchange.text, source: event.source }
+              : null,
           conversationAdvanceRequested:
-            next.conversationAdvanceRequested === "learner"
-              ? "learner"
-              : tutorClosed
-                ? "tutor"
-                : false,
+            next.conversationAdvanceRequested === "learner" ? "learner" : tutorClosed ? "tutor" : false,
         };
         break;
       }
@@ -745,6 +784,7 @@ export function reduceLessonRuntime(
         proposal.childActivity === "answering"
       ) {
         next = { ...next, ...clearedEvidence };
+        proposalReason = "nonqualifying_answer_judgment";
         break;
       }
       next = {
@@ -832,5 +872,22 @@ export function reduceLessonRuntime(
       break;
   }
   const result = finish(next, lesson);
-  return { ...result, effects: [...additionalEffects, ...result.effects] };
+  return {
+    ...result,
+    effects: [...additionalEffects, ...result.effects],
+    ...(event.type === "proposal.received"
+      ? ({
+          proposalConsumption: {
+            consumption: "consumed",
+            reason: proposalReason,
+            accepted: {
+              answerAccepted: next.answerAccepted,
+              acceptedAnswerRevision: next.acceptedAnswerRevision,
+              acknowledgmentObserved: next.acknowledgmentObserved,
+              conceptEvidence: next.conceptEvidence,
+            },
+          },
+        } as const)
+      : {}),
+  };
 }

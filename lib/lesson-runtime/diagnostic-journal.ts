@@ -1,3 +1,4 @@
+import { trackReduction, trackClassification, type TrackingDetail } from "./evidence-tracking";
 import { CLASSIFIER_VERSION } from "./conversation-observer-contract";
 import type { ConversationAssessment, ConversationVisit } from "./conversation-assessment";
 import type { ClassificationSource, LessonRuntimeState, RuntimeSource } from "./lesson-runtime-reducer";
@@ -56,6 +57,29 @@ export class DiagnosticJournal {
       transcriptSpeaker: speaker ?? state?.transcriptSource ?? "unknown",
       detail,
     });
+  }
+
+  trackReduction(input: Omit<Parameters<typeof trackReduction>[0], "history">) {
+    this.appendTracking(trackReduction({ ...input, history: this.events }), input.result.state);
+  }
+
+  trackClassification(
+    input: Omit<Parameters<typeof trackClassification>[0], "history" | "journalRuntimeId">,
+    state: LessonRuntimeState | null,
+  ) {
+    this.appendTracking(
+      trackClassification({ ...input, history: this.events, journalRuntimeId: this.runtimeId }),
+      state,
+    );
+  }
+
+  private appendTracking(details: TrackingDetail[], state: LessonRuntimeState | null) {
+    for (const detail of details)
+      this.append(`tracking.${detail.kind}`, detail, {
+        state,
+        revision: detail.origin.source.transcriptRevision,
+        source: detail.origin.source,
+      });
   }
 
   recent() {

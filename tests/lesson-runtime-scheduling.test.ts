@@ -1108,3 +1108,45 @@ it("correlates real parser-to-runtime snapshots, rejection and pending-steering 
   expect(evidence().parserDiscardedLearnerEvents).toBe(1);
   expect(evidence().learnerSnapshots).toHaveLength(1);
 });
+
+it("exports accepted learner history and separate tutor feedback through complete observe/report after transition", async () => {
+  const fetch = vi.fn((_url: string, init: RequestInit) => Promise.resolve(correctResponse(init)));
+  vi.stubGlobal("fetch", fetch);
+  start();
+  await vi.advanceTimersByTimeAsync(300);
+  const first = lesson.report().events.find(event => event.type === "tracking.evidence")!;
+  expect(first.detail).toMatchObject({
+    consumption: "consumed",
+    accepted: { answerAccepted: true },
+    origin: { transportSourceId: 1, sceneId: "hello-duck" },
+    support: { transcript: "Child: One." },
+  });
+  tutor("Yes, one duck!");
+  emit({ type: "output.activity", state: "active" });
+  emit({ type: "output.activity", state: "quiet" });
+  await vi.advanceTimersByTimeAsync(600);
+  expect(fetch).toHaveBeenCalledTimes(2);
+  const observation = lesson.observe();
+  expect(observation.events).toEqual(lesson.report().events);
+  expect(observation.snapshot.runtime).toMatchObject({ phase: "rendering", answerAccepted: false });
+  expect(observation.snapshot.evidenceEligibility).toEqual(lesson.report().evidenceEligibility);
+  const evidence = observation.events.filter(event => event.type === "tracking.evidence");
+  expect(evidence[0]).toEqual(first);
+  expect(evidence.map(event => event.detail)).toContainEqual(
+    expect.objectContaining({ change: "authority_suspended", reason: "tutor_revision_revalidation" }),
+  );
+  const feedback = observation.events.filter(event => event.type === "tracking.feedback").at(-1)!;
+  expect(feedback.detail).toMatchObject({
+    semantic: "acknowledging",
+    mapping: null,
+    tutorMessageIndex: 1,
+    contradiction: "unknown",
+    prompting: "unknown",
+    origin: { source: { nodeId: "count-1-duck", visitId: 1, childTurnId: 1 } },
+  });
+  const ref = (feedback.detail as { evidence: { offset: number } }).evidence;
+  expect(observation.events[ref.offset].detail).toMatchObject({
+    consumption: "consumed",
+    accepted: { answerAccepted: true, acknowledgmentObserved: true },
+  });
+});
