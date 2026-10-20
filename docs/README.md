@@ -10,6 +10,8 @@ The production prototype is the realtime counting lesson at `/`, backed by
 | [Classifier contract](lesson-classifier.md) | Jev input projection, probabilities and deterministic mapping |
 | [Reducer contract](lesson-runtime-reducer.md) | Identity, completion gate, render and steering handoff |
 | [Evidence, feedback and delivery tracking](issue-77-tracking-contract.md) | Current lifecycle and proposed behavior-preserving observation contract for issue #77 |
+| [Issue #77 preservation replay](issue-77-tracking-replay.md) | Baseline behavior and scheduling verification, provenance and synthetic replay limits |
+| [Issue #77 findings](issue-77-findings.md) | Recorded tracking observations, reproducible analysis and deferred policy recommendation |
 | [Browser evaluation guide](lesson-browser-guide.md) | Reproduction steps, timing, diagnostic interpretation and limitations |
 | [Browser test suites](browser-tests.md) | Provider-free versus live selection, configuration and costs |
 | [Catching Unicorns demo validation](catching-unicorns-demo-validation.md) | Demo coverage, source limits, live acceptance status and removal rehearsal |
