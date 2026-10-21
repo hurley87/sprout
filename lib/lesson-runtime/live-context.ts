@@ -1,3 +1,4 @@
+import { mae386TeachingInstruction } from "./mae386/live-instructions";
 import { currentNodeContext, type LessonDefinition } from "./lesson-definition";
 import type { CurrentNodeSteeringContext, LessonRuntimeState } from "./lesson-runtime-reducer";
 
@@ -65,6 +66,7 @@ export function teachingInstruction(
 ) {
   if (lesson.nodes[context.nodeId].completeAfterTutorOutput)
     return `Application screen confirmation: ${context.nodeId} is now rendered. This is the terminal recap, not a question. Read the following application-authored close verbatim once, then stop speaking; the application ends the session after audio drains. No additions, questions, exercises or further responses. This text is the sole authority for claims about the learner, never infer from conversation memory. Close: ${JSON.stringify(recapText ?? "Thanks for the discussion.")}`;
+  if (lesson.id === "mae386") return mae386TeachingInstruction(context);
   if (Object.values(lesson.nodes).some(node => node.concepts?.length)) {
     const targets =
       context.completionCriteria?.map(concept => `${concept.id}: ${targetText(concept.description)}`).join("\n") ??
@@ -95,4 +97,13 @@ export function createLiveSessionConfig(lesson: LessonDefinition) {
       },
     ],
   } as const;
+}
+
+/** Same-node learner controls carry no answer evidence or scene-transition authority. */
+export function learnerSupportInstruction(context: CurrentNodeSteeringContext, request: "help" | "repeat") {
+  return `Application learner control for the current rendered node ${context.nodeId}: ${
+    request === "repeat"
+      ? `Repeat only the current prompt and exact original source, without an answer or hint. Prompt: ${JSON.stringify(context.scene.prompt)}. Source: ${JSON.stringify(context.scene.sourceText ?? "")}.`
+      : "The learner explicitly requested help. Give one short targeted hint under the current tutor brief, then invite their own explanation. Never read private criteria or reference answers as a checklist."
+  } Stay on this subpart and listen. This control is not an answer or evidence of understanding.`;
 }

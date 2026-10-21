@@ -367,8 +367,8 @@ these departure facts with accepted learner evidence and observation identity.
 An authenticated direct spoken “Stop” in grouped lessons calls the existing
 teardown immediately after speech-end, regardless of tutor playback or pending
 assessment. Quoted, reported, negated or unbound text cannot authorize it. UI Stop
-continues to release media immediately in every lesson. MAE386's route remains a
-later commit; its frozen recap contract is described below.
+continues to release media immediately in every lesson. The MAE386 route renders
+the frozen recap contract described below.
 Deterministic tests use reducer events and local transport doubles; they do not
 establish live GPT-Live/Jev semantic reliability.
 
@@ -442,8 +442,9 @@ live semantic behavior still require the planned microphone acceptance work.
 `LessonRuntimeState.questionOutcomes` is the MAE386-only immutable authority for
 all eight question claims. `LessonSnapshot.questionRecap` exposes readable labels,
 component detail and the application-authored spoken text from that same snapshot.
-No original exam marks, numeric scores or pass/fail are produced. The route/UI is
-not part of this contract implementation.
+No original exam marks, numeric scores or pass/fail are produced. The
+`/demos/mae386` route renders `LessonSnapshot.questionRecap` directly; secondary
+assessment is shown separately under `?debug=1` and cannot change these claims.
 
 Each question retains all authored parts, reached/skipped facts, required criterion
 provenance, assistance and objective-attempt history. Optional dimensions retain

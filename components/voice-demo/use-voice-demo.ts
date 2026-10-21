@@ -89,5 +89,13 @@ export function useVoiceDemo({
     runtime.current?.stop();
   }
 
-  return { audio, sceneRef, snapshot, live, start, stop, download };
+  function support(request: "help" | "repeat") {
+    runtime.current?.requestSupport(request);
+  }
+
+  function skip(scope: "subpart" | "question") {
+    runtime.current?.skipScene(scope);
+  }
+
+  return { audio, sceneRef, snapshot, live, start, stop, download, support, skip };
 }

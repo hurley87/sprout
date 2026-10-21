@@ -9,7 +9,12 @@ import type { ProviderEvent, TranscriptEvent } from "../events";
 import { MICROPHONE_ONSET_MS, MICROPHONE_ONSET_QUIET_MS, MICROPHONE_QUIET_MS } from "../microphone-turn";
 import { parseConversationStateProposal } from "./conversation-state-classifier";
 import { currentNodeContext, type LessonDefinition } from "./lesson-definition";
-import { answerRecoveryInstruction, initialTeachingContext, teachingInstruction } from "./live-context";
+import {
+  answerRecoveryInstruction,
+  initialTeachingContext,
+  teachingInstruction,
+  learnerSupportInstruction,
+} from "./live-context";
 import { SupportClarification } from "./support-clarification";
 import { AnswerRecovery } from "./answer-recovery";
 import { TutorStabilizationGate } from "./tutor-stabilization";
@@ -113,12 +118,14 @@ export class LessonRuntime {
   private clockTimer?: ReturnType<typeof setTimeout>;
   private terminalTimer?: ReturnType<typeof setTimeout>;
   private terminalText?: string;
+  private supportRequestedAt?: { visitId: number; revision: number };
   private startupTimer?: ReturnType<typeof setTimeout>;
   private steering?: {
     eventId: string;
     source: RuntimeSource;
     timer: ReturnType<typeof setTimeout>;
     queued: Fragment[];
+    support: boolean;
   };
 
   constructor(
@@ -479,8 +486,9 @@ export class LessonRuntime {
         return;
       case "transcript": {
         const fragment = { event, source, order: ++this.order };
-        if (this.steering && this.state.phase === "active") {
-          // Wait for the matching append's provider-timeline boundary, not packet arrival time.
+        if (this.steering && this.state.phase === "active" && !(this.steering.support && event.speaker === "child")) {
+          // New-scene transcripts wait for their timeline boundary. Same-node
+          // support never blocks authenticated learner speech (especially Stop).
           this.steering.queued.push(fragment);
           if (this.steering.queued.length > 256)
             this.fail("Too many transcript fragments pending steering confirmation.");
@@ -519,10 +527,14 @@ export class LessonRuntime {
           return;
         }
         clearTimeout(steering.timer);
-        this.providerFloorMs = Math.max(this.providerFloorMs, event.startMs);
+        // Support changes no visit or source identity. Advancing the visit floor
+        // here would discard valid learner speech begun before its acknowledgment.
+        if (!steering.support) this.providerFloorMs = Math.max(this.providerFloorMs, event.startMs);
         const queued = steering.queued;
         this.steering = undefined;
-        this.log("transcript.visit_boundary", { providerFloorMs: this.providerFloorMs });
+        this.log(steering.support ? "gpt_live.support_acknowledged" : "transcript.visit_boundary", {
+          providerFloorMs: this.providerFloorMs,
+        });
         for (const fragment of queued) this.observeTranscript(fragment);
         this.scheduleClassification("steering_acknowledged");
         this.publish();
@@ -694,13 +706,21 @@ export class LessonRuntime {
       this.state?.hasChildTranscript &&
       this.state.phase === "active" &&
       !this.state.childSpeaking &&
-      !this.steering &&
+      (!this.steering || this.steering.support) &&
       this.state.learnerUtterance?.source.childTurnId === this.state.childTurnId &&
       isLearnerStopText(this.state.learnerUtterance.text)
     ) {
       this.stop("learner_stop");
       return;
     }
+    // A UI support request supplies no learner transcript revision. Hold old
+    // closure observations until actual new conversation arrives instead.
+    if (
+      this.state &&
+      this.supportRequestedAt?.visitId === this.state.visitId &&
+      this.supportRequestedAt.revision === this.state.transcriptRevision
+    )
+      return;
     if (this.state && this.lessonDefinition.nodes[this.state.nodeId].completeAfterTutorOutput) return;
     if (this.lessonDefinition.conversationFirst && this.state && !this.steering) {
       const source =
@@ -768,7 +788,14 @@ export class LessonRuntime {
   }
 
   private async classify(trigger: string) {
-    if (!this.state || this.status !== "live" || this.steering) return;
+    if (
+      !this.state ||
+      this.status !== "live" ||
+      this.steering ||
+      (this.supportRequestedAt?.visitId === this.state.visitId &&
+        this.supportRequestedAt.revision === this.state.transcriptRevision)
+    )
+      return;
     // These two values are captured together, once, before any async work.
     const source = classificationSource(this.state);
     const transcript = this.transcript;
@@ -951,9 +978,16 @@ export class LessonRuntime {
     this.classification = undefined;
   }
 
-  private appendSteering(context: CurrentNodeSteeringContext, renderToken: string, startLesson = false) {
+  private appendSteering(
+    context: CurrentNodeSteeringContext,
+    renderToken: string,
+    startLesson = false,
+    request?: "help" | "repeat",
+  ) {
     if (!this.state || this.status !== "live") return false;
-    const eventId = `${this.runtimeId}:steer:${this.state.visitId}`;
+    const eventId = request
+      ? `${this.runtimeId}:support:${crypto.randomUUID()}`
+      : `${this.runtimeId}:steer:${this.state.visitId}`;
     const terminal = this.lessonDefinition.nodes[context.nodeId].completeAfterTutorOutput;
     if (terminal) {
       this.terminalText ??= this.state.questionOutcomes
@@ -967,9 +1001,12 @@ export class LessonRuntime {
         60_000,
       );
     }
-    const content = teachingInstruction(context, this.lessonDefinition, startLesson, this.terminalText);
+    const content = request
+      ? learnerSupportInstruction(context, request)
+      : teachingInstruction(context, this.lessonDefinition, startLesson, this.terminalText);
     const source = runtimeSource(this.state);
     this.steering = {
+      support: request !== undefined,
       eventId,
       source,
       queued: [],
@@ -993,6 +1030,36 @@ export class LessonRuntime {
     this.error = message;
     this.log("error", { message });
     this.stop("failure", true);
+  }
+
+  /** UI support is app context, never fabricated learner transcript or assessment evidence. */
+  requestSupport(request: "help" | "repeat") {
+    if (
+      !this.state ||
+      !this.lessonDefinition.questionGroups ||
+      this.state.conversationAdvanceRequested ||
+      this.status !== "live" ||
+      this.state.phase !== "active" ||
+      this.lessonDefinition.nodes[this.state.nodeId].completeAfterTutorOutput ||
+      this.state.childSpeaking ||
+      this.state.childCandidate ||
+      this.steering ||
+      this.state.outputActivity !== "quiet" ||
+      this.state.quietSinceMs === null ||
+      this.now() - this.state.quietSinceMs < this.state.quietDrainMs
+    )
+      return;
+    this.supportRequestedAt = { visitId: this.state.visitId, revision: this.state.transcriptRevision };
+    this.cancelClassification("learner_support_requested");
+    this.answerRecovery.cancel("learner_support_requested");
+    this.log("learner.support_requested", { request });
+    this.appendSteering(
+      currentNodeContext(this.lessonDefinition, this.state.nodeId),
+      this.display.token,
+      false,
+      request,
+    );
+    this.publish();
   }
 
   /** Advance along the authored edge without turning a skip into understanding evidence. */
