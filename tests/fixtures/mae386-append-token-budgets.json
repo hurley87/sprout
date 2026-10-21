@@ -2,17 +2,17 @@
   "tokenizers": ["o200k_base", "cl100k_base"],
   "messages": {
     "q1:teaching": {
-      "sha256": "626d1c50fe09bbff1626b3b3f553ed83a9d14e5499d02beb81bb459cae3ba087",
+      "sha256": "322c4757bb61669d280ab5cdd4098dbd6bd763cf82b35399da4969872deffabd",
       "tokens": {
-        "o200k_base": 221,
-        "cl100k_base": 222
+        "o200k_base": 271,
+        "cl100k_base": 273
       }
     },
     "q1:help": {
-      "sha256": "f2c40885bf77de3683eff8b2def471ce7dd569f474e979e4dcc35f253b7113c6",
+      "sha256": "25eca0d6f9e6ea48712eb1ed30df8574358396b49930462303c42b34936c5f04",
       "tokens": {
-        "o200k_base": 64,
-        "cl100k_base": 64
+        "o200k_base": 117,
+        "cl100k_base": 118
       }
     },
     "q1:repeat": {
@@ -23,17 +23,17 @@
       }
     },
     "q6:teaching": {
-      "sha256": "a1cacc1e6cbc308f8674aae154eb30f1c6263e8034a5ba7197fb1466e131de6d",
+      "sha256": "cb6cc7e776e6a87f225882ea27785ea22b0d6bb34e3ef530c907177ef64bc10d",
       "tokens": {
-        "o200k_base": 215,
-        "cl100k_base": 215
+        "o200k_base": 265,
+        "cl100k_base": 266
       }
     },
     "q6:help": {
-      "sha256": "d3a152bb3034c615d2f3bff806c7bc253d636ab3048f16aa2364b0110cfeb20b",
+      "sha256": "8c1153fea888dd5b3e8fe29ff6b4d5f79f2053f2cac62ee7ad339be0e84a15a2",
       "tokens": {
-        "o200k_base": 64,
-        "cl100k_base": 64
+        "o200k_base": 116,
+        "cl100k_base": 117
       }
     },
     "q6:repeat": {
@@ -44,17 +44,17 @@
       }
     },
     "q8:teaching": {
-      "sha256": "a424952638bf218121e0e7c27ecad4b2c94328c0ec5b70eb72620fcb705fbcf5",
+      "sha256": "3ae7308b617a1f65badfd946814889b7fa30d016e4d5d552ba9a8867ff637b60",
       "tokens": {
-        "o200k_base": 214,
-        "cl100k_base": 215
+        "o200k_base": 275,
+        "cl100k_base": 278
       }
     },
     "q8:help": {
-      "sha256": "77e7821babd62b51186a43a9688feb8f4ea60473def46d476475b3002cffbf66",
+      "sha256": "b72222c5f95816aa05a7d6698804eacb3b3a90f8ebae19913c530c328d2d8074",
       "tokens": {
-        "o200k_base": 64,
-        "cl100k_base": 64
+        "o200k_base": 116,
+        "cl100k_base": 117
       }
     },
     "q8:repeat": {
@@ -65,17 +65,17 @@
       }
     },
     "q10-1:teaching": {
-      "sha256": "1219cdf885e9d08cc9dc168a530f4f596170248fdac7a15643941f7405dddf5b",
+      "sha256": "37ce4b51a0fae6522b7c5d220f63c0581c684043ddc9c09a6b317887cedde1cc",
       "tokens": {
-        "o200k_base": 285,
-        "cl100k_base": 287
+        "o200k_base": 335,
+        "cl100k_base": 338
       }
     },
     "q10-1:help": {
-      "sha256": "ffdf47e866440c475b7a60e8ce338ea3435253271c6d3a245c24d3c33bf6ddea",
+      "sha256": "fa4992b05d0671173f6f6cd6398082c087bb38b5af6134b73ed2b7450185b73e",
       "tokens": {
-        "o200k_base": 66,
-        "cl100k_base": 66
+        "o200k_base": 142,
+        "cl100k_base": 143
       }
     },
     "q10-1:repeat": {
@@ -86,17 +86,17 @@
       }
     },
     "q10-2:teaching": {
-      "sha256": "bfaf172e55ebb05dfa6302eed4aa373f1ef001159b78ee742744a3cd9e1bded5",
+      "sha256": "ca32e9050a65ae0c4e6962497f03bf74eeb951c8af868ab10741a896c9093e90",
       "tokens": {
-        "o200k_base": 282,
-        "cl100k_base": 284
+        "o200k_base": 332,
+        "cl100k_base": 335
       }
     },
     "q10-2:help": {
-      "sha256": "4f14fed0d22f2c835ea9121d4a2fe6e484a96f46f50b78ab072ffe8ae2ea5795",
+      "sha256": "c42b2d8e2b70d8f168968ab4d768c8eb595cdea3a1f4771dc7ea8b4e84865696",
       "tokens": {
-        "o200k_base": 66,
-        "cl100k_base": 66
+        "o200k_base": 142,
+        "cl100k_base": 143
       }
     },
     "q10-2:repeat": {
@@ -107,17 +107,17 @@
       }
     },
     "q10-3:teaching": {
-      "sha256": "47126b96e62a35084461764ec65ec202778f852da3c1d0957ff8ee1933b026ab",
+      "sha256": "667a57886d7fe25f4ab873fc55554b014727103e89eca20d4614f6a52e77da33",
       "tokens": {
-        "o200k_base": 294,
-        "cl100k_base": 297
+        "o200k_base": 344,
+        "cl100k_base": 348
       }
     },
     "q10-3:help": {
-      "sha256": "0773fd9a5b572dac59c5eaa8ec3bf4a1e9c848f856e4ab761c7bd10d92a5e0d3",
+      "sha256": "70ef45d783e7594b3db8d3b98285bb17829709f2f90a62fd35de4e78e15cb710",
       "tokens": {
-        "o200k_base": 66,
-        "cl100k_base": 66
+        "o200k_base": 142,
+        "cl100k_base": 143
       }
     },
     "q10-3:repeat": {
@@ -128,17 +128,17 @@
       }
     },
     "q5-a:teaching": {
-      "sha256": "0a61d9a4e5a1cc6cc4c9e6d9e0731999204aec75cf4c6da4a0ba4603c654ca89",
+      "sha256": "071f7839e90d24a135be4078153cf82f25b8e7f2437d1da50f1f3ec39c039eea",
       "tokens": {
-        "o200k_base": 246,
-        "cl100k_base": 248
+        "o200k_base": 296,
+        "cl100k_base": 299
       }
     },
     "q5-a:help": {
-      "sha256": "0ea8faaff9a3fef095006eb914ae56866e88ca045dd1dcd33fd02cfa42f1e1e5",
+      "sha256": "1e172649be46c7944e0d2bb5472d24177e6b8251491200c2d8ea11676f673fd9",
       "tokens": {
-        "o200k_base": 65,
-        "cl100k_base": 65
+        "o200k_base": 120,
+        "cl100k_base": 121
       }
     },
     "q5-a:repeat": {
@@ -149,17 +149,17 @@
       }
     },
     "q5-c:teaching": {
-      "sha256": "b6b48648bdfa97c11315c287ab6620a8ac456ca8b8fb76124abd4cb33e7761a6",
+      "sha256": "73350c73323ee28e1cea33bfb4d5359636b2e6862624f086fe2b2a380589f160",
       "tokens": {
-        "o200k_base": 270,
-        "cl100k_base": 270
+        "o200k_base": 320,
+        "cl100k_base": 321
       }
     },
     "q5-c:help": {
-      "sha256": "c43334d1f9a30c6cbcdda6b881de08056a47708175c36e723768510fda1535a1",
+      "sha256": "92bbfe4967f298c05cb1665cbdef8c93f92105f620f2fe66af39d8baef446048",
       "tokens": {
-        "o200k_base": 65,
-        "cl100k_base": 65
+        "o200k_base": 112,
+        "cl100k_base": 113
       }
     },
     "q5-c:repeat": {
@@ -170,17 +170,17 @@
       }
     },
     "q5-f:teaching": {
-      "sha256": "5759fd77d58f2734153f3d52de915d8a67155833443f370eb4e9935d36524235",
+      "sha256": "c10ed7bee1a1735485c56a350ea9498b5337941e2c7253bb526503b562eabc91",
       "tokens": {
-        "o200k_base": 293,
-        "cl100k_base": 296
+        "o200k_base": 343,
+        "cl100k_base": 347
       }
     },
     "q5-f:help": {
-      "sha256": "e60436b57e0f7b66d0a9594b65e3362e81aff35cbfcb5e2eb5ec740583a68672",
+      "sha256": "3e3cfc60d6086d1652b29266a5668e4a9e63a3619a35b23965ca2bd2def8b9e8",
       "tokens": {
-        "o200k_base": 65,
-        "cl100k_base": 65
+        "o200k_base": 110,
+        "cl100k_base": 111
       }
     },
     "q5-f:repeat": {
@@ -191,17 +191,17 @@
       }
     },
     "q12:teaching": {
-      "sha256": "d3d83e2808e2c2c53f3018829d41373e2c26b2f5b0ab9c55b09fa564df68b04a",
+      "sha256": "b2db1ebfbefd35de23fd36c28110756b75546cfb827e336bdca51550235baef5",
       "tokens": {
-        "o200k_base": 231,
-        "cl100k_base": 235
+        "o200k_base": 281,
+        "cl100k_base": 286
       }
     },
     "q12:help": {
-      "sha256": "6b7cb27836c2746ea48a4f77caa4fc029aa838ce8dfa04a0535fc2a8a80d3441",
+      "sha256": "51877d79c0234e69d72ed51ea4ed60cc624767580004308baa25165d5ee81e8a",
       "tokens": {
-        "o200k_base": 64,
-        "cl100k_base": 64
+        "o200k_base": 118,
+        "cl100k_base": 120
       }
     },
     "q12:repeat": {
@@ -212,17 +212,17 @@
       }
     },
     "q14:teaching": {
-      "sha256": "5dc9292cf4b07a8939eb207d20b63e40979b049b432796b4341e9371026e1f62",
+      "sha256": "873cc399f0a925e665a86656b619febe3683a1ef0e98edaf7a280591c55f308b",
       "tokens": {
-        "o200k_base": 236,
-        "cl100k_base": 237
+        "o200k_base": 286,
+        "cl100k_base": 288
       }
     },
     "q14:help": {
-      "sha256": "6871d65933deee7dfac420c2e406829f95356214817b53b47147df70c9a68cfc",
+      "sha256": "c91fcee758d30a286db815e3986ebd71cadaefc19ce41a538278dab8ad9f87af",
       "tokens": {
-        "o200k_base": 64,
-        "cl100k_base": 64
+        "o200k_base": 113,
+        "cl100k_base": 114
       }
     },
     "q14:repeat": {
@@ -233,17 +233,17 @@
       }
     },
     "q15:teaching": {
-      "sha256": "abbf4d60fb12080d8d815251cbfa719a086a17f27981047625fa667e24ef04a1",
+      "sha256": "9fc309237bc0466c7e9d1d049149398082518c577684c4feb3f8b63ecf8ea9b1",
       "tokens": {
-        "o200k_base": 287,
-        "cl100k_base": 291
+        "o200k_base": 337,
+        "cl100k_base": 342
       }
     },
     "q15:help": {
-      "sha256": "c1d03249f95c4334f9c32fc89c931a37df8a7a0bcbd19c9759aa47dbd048620d",
+      "sha256": "381c709e481da30f8b1057f87ba3b27efc1a64dd336b9e22fe7290a7d828ec7c",
       "tokens": {
-        "o200k_base": 64,
-        "cl100k_base": 64
+        "o200k_base": 120,
+        "cl100k_base": 121
       }
     },
     "q15:repeat": {

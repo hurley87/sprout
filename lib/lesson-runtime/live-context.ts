@@ -1,4 +1,4 @@
-import { mae386TeachingInstruction } from "./mae386/live-instructions";
+import { mae386TeachingInstruction, mae386HelpInstruction } from "./mae386/live-instructions";
 import { currentNodeContext, type LessonDefinition } from "./lesson-definition";
 import type { CurrentNodeSteeringContext, LessonRuntimeState } from "./lesson-runtime-reducer";
 
@@ -109,7 +109,12 @@ export function createLiveSessionConfig(lesson: LessonDefinition) {
 }
 
 /** Same-node learner controls carry no answer evidence or scene-transition authority. */
-export function learnerSupportInstruction(context: CurrentNodeSteeringContext, request: "help" | "repeat") {
+export function learnerSupportInstruction(
+  context: CurrentNodeSteeringContext,
+  request: "help" | "repeat",
+  lesson?: LessonDefinition,
+) {
+  if (lesson?.id === "mae386" && request === "help") return mae386HelpInstruction(context);
   return `Application learner control for the current rendered node ${context.nodeId}: ${
     request === "repeat"
       ? `Repeat only the current prompt and exact original source, without an answer or hint. Prompt: ${JSON.stringify(context.scene.prompt)}. Source: ${JSON.stringify(context.scene.sourceText ?? "")}.`

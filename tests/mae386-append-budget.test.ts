@@ -24,7 +24,7 @@ for (const node of Object.values(lesson.nodes)) {
   messages[`${node.id}:teaching`] = teachingInstruction(context, lesson, node.id === lesson.initialNodeId);
   if (!node.completeAfterTutorOutput)
     for (const request of ["help", "repeat"] as const)
-      messages[`${node.id}:${request}`] = learnerSupportInstruction(context, request);
+      messages[`${node.id}:${request}`] = learnerSupportInstruction(context, request, lesson);
 }
 const initial = createLessonRuntime("budget", { lesson });
 const frozen = freezeQuestionOutcomes(lesson, initial);
@@ -62,7 +62,7 @@ it.each(Object.entries(messages))(
     for (const tokenizer of measured.tokenizers) expect(row.tokens[tokenizer]).toBeLessThanOrEqual(450);
     expect(Buffer.byteLength(content)).toBeLessThanOrEqual(2000);
     if (id.endsWith(":teaching") && !id.startsWith("recap:")) {
-      expect(content).toContain("Private focus (never read aloud):");
+      expect(content).toContain("Private focus (do not recite as a checklist):");
       expect(content).not.toContain("undefined");
     }
   },

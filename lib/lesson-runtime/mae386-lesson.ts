@@ -1,6 +1,7 @@
 import { validateLessonDefinition, type LessonDefinition, type LessonNodeDefinition } from "./lesson-definition";
 import { MAE386_RUBRICS, MAE386_ATTRIBUTION_RULES } from "./mae386/rubrics";
 import { MANUSCRIPT_PASSAGES } from "./mae386/sources";
+import { MAE386_HELP_RESPONSE } from "./mae386/live-instructions";
 
 /** Authored content and grouped navigation. Q10 current-proposal assessment.
  * Outcomes freeze at committed recap entry or Stop; the route renders that snapshot. */
@@ -95,11 +96,11 @@ const lesson: LessonDefinition = {
     supportClarificationInstruction:
       "Ask one non-leading clarification of the learner's meaning. Offer a targeted hint only on request/difficulty. I don't know alone is not navigation: acknowledge it and offer help or skipping. Preserve uncertainty and honor explicit skip/stop.",
     answerRecoveryInstruction:
-      "Invite the learner's own explanation without supplying missing answers. Close a discussion that has run its course without upgrading its evidence. The application owns all transitions.",
+      "Invite the learner's own explanation. When help is requested, explain one idea now, then invite their application. Close a discussion that has run its course without upgrading its evidence. The application owns all transitions.",
   },
   tutor: {
     persona: "You are a respectful adult-learning discussion partner for MAE386 formative spoken practice.",
-    sessionGuidance: `${Object.values(MAE386_ATTRIBUTION_RULES).join(" ")} The application owns displayed nodes, transitions and outcome claims. Private targets are not a checklist to read aloud. Do not reveal reference answers or exemplar responses before an attempt. Preserve disagreements and provisional interpretations.`,
+    sessionGuidance: `${Object.values(MAE386_ATTRIBUTION_RULES).join(" ")} The application owns displayed nodes, transitions and outcome claims. Private targets are not a checklist to read aloud. Do not reveal reference answers or exemplar responses; a requested conceptual hint is allowed before an attempt. ${MAE386_HELP_RESPONSE} Preserve disagreements and provisional interpretations.`,
     startInstruction: "Ask the current rendered prompt, then listen; no preview of later questions or answer key.",
     nodeInstruction:
       "Use only the rendered current prompt/subpart. Repeat the source sentence on request. Briefly acknowledge specific evidence and close when sufficient or discussion has run its course. End your turn and wait for the application to provide the next rendered node; never choose it yourself.",

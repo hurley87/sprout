@@ -1,6 +1,15 @@
 import type { CurrentNodeSteeringContext } from "../lesson-runtime-reducer";
 import { MAE386_RUBRICS } from "./rubrics";
 
+export const MAE386_HELP_RESPONSE =
+  "When asked for help, explain one useful idea in this reply, then invite the learner's own application. Do not just promise or ask permission again. Explain concepts without reciting private rubric labels. Tutor words alone earn no credit.";
+
+export function mae386HelpInstruction(context: CurrentNodeSteeringContext) {
+  const unit = MAE386_RUBRICS.flatMap(question => question.units).find(unit => unit.id === context.nodeId);
+  if (!unit) throw new Error("Unknown MAE386 help task");
+  return `Application learner control for the current rendered node ${context.nodeId}: the learner explicitly requested help. ${unit.tutor.help} ${MAE386_HELP_RESPONSE} Stay on this subpart and listen. This control is not an answer or evidence of understanding, and never grants permission to advance.`;
+}
+
 // Topic anchors guide the tutor, not grading. Full criteria/provenance stay in
 // the rubric and classifier; never read these anchors as an answer checklist.
 const focus: Readonly<Record<string, string>> = {
@@ -24,9 +33,10 @@ export function mae386TeachingInstruction(context: CurrentNodeSteeringContext) {
     `Application screen confirmation: ${context.nodeId} is now rendered.`,
     `Prompt: ${context.scene.prompt}`,
     ...(unit.visibleSource ? [`Quoted source, never learner evidence: ${JSON.stringify(unit.visibleSource)}`] : []),
-    `Private focus (never read aloud): ${focus[question.id]}`,
+    `Private focus (do not recite as a checklist): ${focus[question.id]}`,
     `Optional probe: ${unit.tutor.probe}`,
     `Help only on request/difficulty: ${unit.tutor.help}`,
+    MAE386_HELP_RESPONSE,
     `Avoid: ${unit.tutor.avoid}`,
     `Close: ${unit.tutor.close}`,
     ...(unit.criteria.some(criterion => criterion.optional)

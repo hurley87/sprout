@@ -282,7 +282,7 @@ export const CONCEPT_RUBRICS: readonly QuestionRubric[] = [
           probe: "What would a reader do on meeting a written word they have never seen before?",
           help: "When requested, explain how combining speech sounds can connect a new written form to a familiar spoken word. Invite an application and record assistance.",
           avoid:
-            "Do not lead with sound it out before the learner attempts the explanation. Do not credit letters instead of pictures as the entire answer or claim universal speed superiority.",
+            "Do not lead with sound it out in an unsolicited initial probe; an explicit help request permits explaining sound combination before an attempt. Do not credit letters instead of pictures as the entire answer or claim universal speed superiority.",
           close:
             "Once the sound representation and decoding advantage are clear, acknowledge and close without a spelling exercise or another example.",
         },

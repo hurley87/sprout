@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import type { ClientCommand, ProviderEvent } from "../lib/events";
 import { MAE386_LESSON } from "../lib/lesson-runtime/mae386-lesson";
+import { MAE386_RUBRICS } from "../lib/lesson-runtime/mae386/rubrics";
 import { COUNTING_LESSON } from "../lib/lesson-runtime/counting-lesson";
 import { LessonRuntime } from "../lib/lesson-runtime/lesson-runtime";
 import { providerEvents, useRuntimeFakeTimers as installRuntimeFakeTimers } from "./helpers/runtime-harness";
@@ -90,6 +91,25 @@ it("support cannot append during recap or extend counting behavior", async () =>
     runtime.stop();
   }
 });
+
+it.each(["q8", "q5-f"])(
+  "%s Help delivers the current authored explanation guidance without inventing an answer",
+  async nodeId => {
+    start(nodeId);
+    transport.receive!({ type: "output.activity", state: "quiet" });
+    await vi.advanceTimersByTimeAsync(600);
+    runtime.requestSupport("help");
+    const command = transport.send.mock.calls.at(-1)![0];
+    if (command.type !== "session.instructions.append") throw new Error("Expected help");
+    const unit = MAE386_RUBRICS.flatMap(question => question.units).find(unit => unit.id === nodeId)!;
+    expect(command.content).toContain(unit.tutor.help);
+    expect(command.content).toContain("in this reply");
+    expect(command.content).not.toContain(unit.referenceAnswer);
+    expect(runtime.snapshot().runtime).toMatchObject({ nodeId, conceptEvidence: {}, hasChildTranscript: false });
+    expect(runtime.snapshot().transcript).toBe("");
+    expect(runtime.snapshot().awaitingSteering).toBe(true);
+  },
+);
 
 it("a UI support request holds stale closure classification until actual new conversation arrives", async () => {
   const fetch = vi.fn(async () => new Response(JSON.stringify({ proposal: null }), { status: 200 }));

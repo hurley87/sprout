@@ -1038,7 +1038,7 @@ export class LessonRuntime {
       );
     }
     const content = request
-      ? learnerSupportInstruction(context, request)
+      ? learnerSupportInstruction(context, request, this.lessonDefinition)
       : teachingInstruction(context, this.lessonDefinition, startLesson, this.terminalText);
     const source = runtimeSource(this.state);
     this.steering = {
