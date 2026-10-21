@@ -4,6 +4,8 @@ import { installLocalSession, type LocalSessionWindow } from "../helpers/local-v
 import { installSyntheticMicrophone } from "../helpers/synthetic-microphone";
 import type { LessonObservationWindow } from "../../lib/lesson-runtime/browser-observation";
 import { MAE386_LESSON } from "../../lib/lesson-runtime/mae386-lesson";
+import { MAE386_RUBRICS } from "../../lib/lesson-runtime/mae386/rubrics";
+import { OUTCOME_LABELS } from "../../lib/lesson-runtime/mae386/question-outcomes";
 
 const current = (page: Page) =>
   page.evaluate(() => (window as LessonObservationWindow).sproutLessonObservation?.read()?.snapshot);
@@ -223,3 +225,159 @@ for (const request of ["help", "repeat"] as const) {
     expect((await current(page))?.questionOutcomes?.questions).toHaveLength(8);
   });
 }
+
+test("mixed authored answers survive grouped skips, natural completion and contradictory secondary export", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const microphone = await installSyntheticMicrophone(page);
+  await installLocalSession(page);
+  const cases = [
+    ["q1", "tokens-and-scratchpad", "independent"],
+    ["q6", "definitions-no-examples", "partial"],
+    ["q8", "separate-word-picture", "incorrect"],
+  ] as const;
+  // Synthetic judgments keyed by authored node only. Injected transcript text is
+  // not recognized speech and these labels make no Jev semantic-accuracy claim.
+  await page.route("**/api/classify", async route => {
+    const input = route.request().postDataJSON();
+    const fixture = cases.find(([id]) => id === input.nodeId);
+    const unit = MAE386_RUBRICS.flatMap(q => q.units).find(u => u.id === input.nodeId);
+    const sample = unit?.examples.find(e => e.name === fixture?.[1]);
+    await route.fulfill({
+      json: {
+        proposal: sample
+          ? {
+              nodeId: input.nodeId,
+              transcriptRevision: input.transcriptRevision,
+              childActivity: "unknown",
+              answerOutcome: fixture![2] === "incorrect" ? "incorrect" : "unclear",
+              supportState: "none",
+              tutorState: "asking",
+              conceptObservations: MAE386_LESSON.nodes[input.nodeId].concepts!.map(c => ({
+                criterionId: c.id,
+                childMessageIndex: 0,
+                observation:
+                  sample.expected[c.id] === "independent"
+                    ? "demonstrated_independent"
+                    : sample.expected[c.id] === "partial"
+                      ? "partial"
+                      : "not_yet",
+              })),
+            }
+          : null,
+      },
+    });
+  });
+  let releaseAssessment!: () => void;
+  const held = new Promise<void>(resolve => {
+    releaseAssessment = resolve;
+  });
+  await page.route("**/api/assess", async route => {
+    await held;
+    // Deliberately overconfident secondary success cannot rewrite live outcomes.
+    await route.fulfill({
+      json: {
+        assessment: {
+          results: Object.fromEntries(
+            Object.values(MAE386_LESSON.nodes).flatMap(node =>
+              (node.concepts ?? []).map(c => [
+                `${node.id}:${c.id}`,
+                {
+                  scores: {
+                    choice: "demonstrated_independent",
+                    confidence: 1,
+                    probabilities: { not_yet: 0, partial: 0, demonstrated_independent: 1, demonstrated_prompted: 0 },
+                  },
+                },
+              ]),
+            ),
+          ),
+        },
+      },
+    });
+  });
+  await page.goto("/demos/mae386?debug=1");
+  await microphone.loadSpeech("answer-three");
+  await page.getByRole("button", { name: "Start practice" }).click();
+  for (const [id, name] of cases) {
+    await waitNode(page, id);
+    const text = MAE386_RUBRICS.flatMap(q => q.units)
+      .find(u => u.id === id)!
+      .examples.find(e => e.name === name)!.turns[0].text;
+    const playback = await microphone.playSpeech("answer-three");
+    await expect.poll(async () => (await current(page))?.runtime?.childSpeaking).toBe(true);
+    await page.evaluate(
+      text => (window as unknown as LocalSessionWindow).sendTranscript("session.input_transcript.delta", text),
+      text,
+    );
+    await microphone.waitForPlayback(playback.id);
+    await expect.poll(async () => (await current(page))?.runtime?.questionAttempts?.[id]?.length).toBe(1);
+    // Observe a fresh tutor response/drain after learner speech before navigation.
+    await waitNode(page, id);
+    await expect(page.getByRole("button", { name: "Skip question", exact: true })).toBeEnabled();
+    await page.getByRole("button", { name: "Skip question", exact: true }).click();
+  }
+  // Leave one Q10 part, then skip the rest of that parent. Q5 is skipped as a
+  // whole: neither path may fabricate answers for unvisited sibling components.
+  await waitNode(page, "q10-1");
+  await page.getByRole("button", { name: "Skip this part", exact: true }).click();
+  await waitNode(page, "q10-2");
+  await expect(page.getByRole("progressbar")).toHaveAttribute("aria-valuetext", "Question 4 of 8");
+  await page.getByRole("button", { name: "Skip whole question", exact: true }).click();
+  for (const id of ["q5-a", "q12", "q14", "q15"]) {
+    await waitNode(page, id);
+    await page
+      .getByRole("button", { name: id === "q5-a" ? "Skip whole question" : "Skip question", exact: true })
+      .click();
+  }
+  await waitNode(page, "recap");
+  const snapshot = await current(page);
+  const frozen = snapshot!.questionOutcomes!;
+  expect(frozen.questions.map(q => q.outcome)).toEqual([
+    "independent",
+    "partial",
+    "incorrect",
+    "skipped",
+    "skipped",
+    "skipped",
+    "skipped",
+    "skipped",
+  ]);
+  expect(frozen.questions[3].components.map(c => c.reached)).toEqual([true, true, false]);
+  expect(frozen.questions[4].components.map(c => c.reached)).toEqual([true, false, false]);
+  const region = page.getByRole("region", { name: "Question outcomes" });
+  for (const question of frozen.questions) await expect(region).toContainText(OUTCOME_LABELS[question.outcome]);
+  const visible = await region.innerText();
+  const spoken = snapshot!.questionRecap!.spoken;
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as LocalSessionWindow).steeringContents.at(-1)))
+    .toContain(JSON.stringify(spoken));
+  releaseAssessment();
+  await expect.poll(async () => (await current(page))?.assessment?.status).toBe("complete");
+  expect((await current(page))?.questionOutcomes).toEqual(frozen);
+  await page.evaluate(text => {
+    const browser = window as unknown as LocalSessionWindow;
+    browser.currentPeer.level.gain.value = 0.15;
+    browser.sendTranscript("session.output_transcript.delta", text);
+  }, spoken);
+  await expect.poll(async () => (await current(page))?.runtime?.outputActivity).toBe("active");
+  await page.evaluate(() => {
+    (window as unknown as LocalSessionWindow).currentPeer.level.gain.value = 0;
+  });
+  await expect(page.getByRole("status")).toHaveText("Session complete");
+  expect(await region.innerText()).toBe(visible);
+  const report = await downloadReport(page);
+  expect(report.questionOutcomes).toEqual(frozen);
+  expect(report.questionRecap.spoken).toBe(spoken);
+  expect(report.assessment.status).toBe("complete");
+  for (const [id, name] of cases) {
+    const text = MAE386_RUBRICS.flatMap(q => q.units)
+      .find(u => u.id === id)!
+      .examples.find(e => e.name === name)!.turns[0].text;
+    expect(
+      report.questionOutcomes.questions.find((q: { questionId: string }) => q.questionId === id).components[0]
+        .attempts[0].text,
+    ).toBe(text);
+  }
+});

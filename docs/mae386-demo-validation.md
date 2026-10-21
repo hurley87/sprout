@@ -1,4 +1,4 @@
-# MAE386 spoken practice route — issue #76, commit 6
+# MAE386 spoken practice route — issue #76, commits 6–7
 
 `/demos/mae386` uses `MAE386_LESSON`, the shared voice-demo lifecycle and controls,
 and the existing WebRTC/classifier/assessment runtime. `?debug=1` opts into the
@@ -68,13 +68,37 @@ new-scene steering and timeline gates remain unchanged.
 
 Browser cases use local peers and synthetic microphone infrastructure, with
 provider credentials disabled. They do not constitute actual GPT-Live/Jev
-microphone acceptance. The broader assessment/regression matrix remains commit 7;
+microphone acceptance. Commit 7 adds the assessment/regression matrix below;
 real microphone acceptance and inspection of its exported diagnostics remain
 commit 8. No live reliability claim or fabricated acceptance evidence is included.
 
+## Commit 7 assessment and browser regression matrix
+
+Reconciled against current [issue #76](https://github.com/hurley87/sprout/issues/76)
+and the typed rubrics/examples in `lib/lesson-runtime/mae386/`. Those examples remain
+the sole authored expectations. This commit adds tests and validation notes only;
+it introduces no answer key, production grader or runtime refactor. Formative
+outcomes remain separate from closure, cumulative mastery and secondary review.
+
+| Boundary                                                                                 | Coverage and evidence limit                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Actual classification route → Jev response validation/mapping → reducer → frozen outcome | `mae386-assessment-flow.test.ts` uses 27 selected authored examples across all seven non-editing questions, plus a rejected tutor-owned Q14 locator. Checks exact learner text, node/visit/revision and local turn identity; earlier speech first classified in a later snapshot retains a null turn ID. Jev responses, source choices and confidence are mocked.                                                                                                               |
+| Reasoning and assistance                                                                 | Q1 paraphrase and helped application; Q6 explanations missing examples versus alternate complete examples; Q12 preserves unaided dimensions while education/synthesis are helped. Tutor reasoning cannot become learner evidence through a forged locator.                                                                                                                                                                                                                      |
+| Special conceptual boundaries                                                            | All three Q5 cases accept authored justified uncertainty under discovery necessity; digital/printed-afterward shortcuts fail. Q8 contrasts sound decoding, letters-only, missing advantage, misconception and ambiguity. Q14 covers two distinct arguments, one reason, duplicate examples and cognitive-inferiority misconception. Q15 covers prediction without optional limits, MRI, qualified critique, model improvement and unresolved belief.                            |
+| Q10 actual two-stage classifier requests                                                 | `mae386-rewrite-classifier.test.ts` adds two authored alternatives per original, after an earlier poorer proposal. Only selected words and that original enter the assessment request. Unchanged-source rejection now covers all three originals. Existing proposal/runtime tests cover echoes, self-correction, worsening latest answers, withdrawal, spans, help, authenticated turn mapping and cumulative-ledger independence. Semantic selection and judgments are mocked. |
+| Actual browser lifecycle and downloaded JSON                                             | `browser/mae386.spec.ts` adds independent/partial/incorrect answers, subpart then whole-parent skips, unvisited sibling detail, natural completion, eight frozen outcomes, spoken/visible snapshot agreement and exported original attempt text. A deliberately contradictory successful secondary assessment cannot change the snapshot. Local WebRTC peers, synthetic microphone audio, injected transcripts and mocked classifications exercise choreography only.           |
+| Preserved regression coverage                                                            | Existing MAE386 browser cases cover early endings, Stop during pending support, media teardown, restart and late failed review; runtime suites cover fragmented authenticated skip/Stop, render identity, final-observation drain and frozen recap races. Full provider-free browser execution also includes the root/counting and Catching Unicorns routes. The unchanged content-hashed append-token fixture remains mandatory.                                               |
+
+No paid provider request or actual learner microphone acceptance is part of this
+matrix. In particular, matching an authored label supplied by a test does not
+establish Jev semantic accuracy, GPT-Live tutor quality or speech recognition
+reliability. Commit 8 still requires actual GPT-Live/Jev microphone scenarios and
+inspection of their exports with date, SHA, flags and expected/observed paths;
+synthetic text/audio must never be presented as that evidence.
+
 ## Validation notes
 
-Validated October 21, 2026:
+Commit 6 baseline, validated October 21, 2026:
 
 - `npm test`: 1,781 tests across 81 files passed.
 - `npm run test:browser -- tests/browser/mae386.spec.ts tests/browser/catching-unicorns.spec.ts tests/browser/lesson.spec.ts --workers=1`:
@@ -85,6 +109,18 @@ Validated October 21, 2026:
 - Q10 source and early-Stop recap mobile screenshots were visually inspected;
   screenshots are local test artifacts, not actual provider-session evidence.
 
+Commit 7, validated October 21, 2026, against approved parent
+`659b2f710e306f4b7a8ef66c81b5cd248e7221c6`:
+
+- `npm test`: 1,817 tests across 82 files passed (36 additional tests).
+- `npm run test:browser -- --workers=1`: all 35 provider-free browser tests
+  passed, including all six MAE386 cases and existing root/Catching Unicorns
+  regressions. The new mixed-outcome case also passed in isolation.
+- `npm run lint`, `npm run typecheck`, `npm run build`, changed-file Prettier
+  (including an explicit Markdown check) and `git diff --check` passed.
+- No production change was necessary. Initial new-test failures were fixture
+  assumptions about partial helped work, historical turn attribution, microphone
+  initialization and fresh playback before navigation, corrected in test setup.
 
 The full repository format check currently reports 41 pre-existing files outside
 this commit's changed paths. Changed files are checked separately without

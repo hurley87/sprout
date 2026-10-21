@@ -83,6 +83,37 @@ it.each(REWRITE_RUBRIC.units)("assesses only the current $id selected words in t
     criteria: { meaning: "incorrect", concise: "incorrect", grammatical: "demonstrated" },
   });
 });
+// Authored alternative spans and judgments are mocked: this verifies actual
+// two-stage request isolation/mapping, not semantic selection by a live Jev.
+it.each(
+  REWRITE_RUBRIC.units.flatMap(unit =>
+    ["alternate", "modest-valid-reduction"].map(suffix => ({
+      unit,
+      sample: unit.examples.find(example => example.name === `${unit.id}-${suffix}`)!,
+    })),
+  ),
+)("maps $sample.name without assessing the prior poorer proposal or tutor source", async ({ unit, sample }) => {
+  const prior = unit.examples.find(example => example.name.endsWith("-meaning-changed"))!.turns[0].text;
+  const text = sample.turns[0].text;
+  const transcript = `Tutor: ${unit.visibleSource}\nChild: ${prior}\nChild: No, my revision is: ${text}`;
+  const t = setup(unit.id, transcript, text);
+  for (const id of gradeIds)
+    t.secondAnswers[id] = choice(Object.keys(t.secondAnswers[id].probabilities), "demonstrated");
+  const result = await classifyConversationStateWithDiagnostics(t.input, new AbortController().signal);
+  expect(t.requests).toHaveLength(2);
+  expect(t.requests[1].state).toEqual({
+    nodeId: unit.id,
+    transcriptRevision: 7,
+    originalSentence: unit.visibleSource,
+    proposedRewrite: text,
+  });
+  expect(result.rewriteAssessment).toBe("complete");
+  expect(result.proposal?.currentRewrite).toMatchObject({
+    state: "complete",
+    assistance: "independent",
+    criteria: { meaning: "demonstrated", concise: "demonstrated", grammatical: "demonstrated" },
+  });
+});
 it.each(["withdrawn", "none", "unresolved"])("makes no assessment request for %s", async state => {
   const t = setup("q10-1", "Child: I withdraw that.", "I withdraw that.", state);
   const result = await classifyConversationStateWithDiagnostics(t.input, new AbortController().signal);
@@ -90,12 +121,15 @@ it.each(["withdrawn", "none", "unresolved"])("makes no assessment request for %s
   expect(result.proposal?.currentRewrite?.state).toBe(state);
   expect(result.proposal?.currentRewrite?.criteria.meaning).toBe("unresolved");
 });
-it("does not assess unchanged source text even if the locator calls it a complete proposal", async () => {
-  const original = String(lesson.nodes["q10-1"].presentation.sourceText);
-  const t = setup("q10-1", `Child: ${original}`, original);
-  await classifyConversationStateWithDiagnostics(t.input, new AbortController().signal);
-  expect(t.requests).toHaveLength(1);
-});
+it.each(REWRITE_RUBRIC.units)(
+  "does not assess unchanged $id source even if the locator calls it a complete proposal",
+  async unit => {
+    const original = unit.visibleSource!;
+    const t = setup(unit.id, `Child: ${original}`, original);
+    await classifyConversationStateWithDiagnostics(t.input, new AbortController().signal);
+    expect(t.requests).toHaveLength(1);
+  },
+);
 it.each(["failure", "model", "schema", "network", "cancelled"])(
   "keeps closure independent of second-stage %s without retry or fallback credit",
   async failure => {
