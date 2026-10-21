@@ -14,6 +14,8 @@ import {
   initialTeachingContext,
   teachingInstruction,
   learnerSupportInstruction,
+  missingAnswerCheckInstruction,
+  supersedeAnswerCheckInstruction,
 } from "./live-context";
 import { SupportClarification } from "./support-clarification";
 import { AnswerRecovery } from "./answer-recovery";
@@ -119,6 +121,7 @@ export class LessonRuntime {
   private terminalTimer?: ReturnType<typeof setTimeout>;
   private terminalText?: string;
   private supportRequestedAt?: { visitId: number; revision: number };
+  private missingAnswerCheck?: { eventId: string; source: ClassificationSource };
   private startupTimer?: ReturnType<typeof setTimeout>;
   private steering?: {
     eventId: string;
@@ -308,6 +311,15 @@ export class LessonRuntime {
     const before = this.state;
     const result = reduceLessonRuntime(before, event, this.lessonDefinition);
     this.state = result.state;
+    // Provisional energy alone is not learner speech. Only an accepted turn or
+    // authenticated learner text can supersede a check already sent to Live.
+    if (
+      before !== this.state &&
+      (event.type === "child.turn.started" ||
+        event.type === "child.turn.confirmed" ||
+        (event.type === "transcript.updated" && event.speaker === "child"))
+    )
+      this.supersedeMissingAnswerCheck();
     if (event.type !== "clock.tick")
       this.log(
         `runtime.event.${event.type}`,
@@ -328,6 +340,7 @@ export class LessonRuntime {
       this.log(effect.type, effect);
       switch (effect.type) {
         case "render.requested":
+          this.supersedeMissingAnswerCheck();
           this.cancelClassification("node_visit_changed");
           // Install the visit boundary synchronously, before React's render/confirmation.
           this.providerFloorMs = Math.max(
@@ -951,9 +964,12 @@ export class LessonRuntime {
 
   private sendAnswerRecovery(source: ClassificationSource) {
     const eventId = `${this.runtimeId}:answer-recovery:${source.visitId}:${source.childTurnId}:${source.transcriptRevision}`;
-    const content = this.state
-      ? answerRecoveryInstruction(this.lessonDefinition, this.state)
-      : this.lessonDefinition.recovery.answerRecoveryInstruction;
+    const missingAnswerCheck = this.lessonDefinition.id === "mae386" && this.state && !this.state.hasChildTranscript;
+    const content = missingAnswerCheck
+      ? missingAnswerCheckInstruction(eventId)
+      : this.state
+        ? answerRecoveryInstruction(this.lessonDefinition, this.state)
+        : this.lessonDefinition.recovery.answerRecoveryInstruction;
     try {
       this.transport.send({
         type: "session.instructions.append",
@@ -962,10 +978,30 @@ export class LessonRuntime {
         content,
       });
       this.log("gpt_live.answer_recovery_append", { eventId, content }, source);
+      if (missingAnswerCheck) this.missingAnswerCheck = { eventId, source };
     } catch {
       this.log("answer_recovery.send_failed", { message: "Scene held; request budget spent." }, source);
     }
     this.publish();
+  }
+
+  private supersedeMissingAnswerCheck() {
+    const check = this.missingAnswerCheck;
+    if (!check || this.status !== "live") return;
+    // Spend before sending: failures cannot produce an append storm on deltas.
+    this.missingAnswerCheck = undefined;
+    const eventId = `${check.eventId}:expired`;
+    const content = supersedeAnswerCheckInstruction(check.eventId);
+    try {
+      this.transport.send({ type: "session.instructions.append", event_id: eventId, delegation_id: null, content });
+      this.log(
+        "gpt_live.answer_recovery_superseded",
+        { eventId, supersededEventId: check.eventId, content },
+        check.source,
+      );
+    } catch {
+      this.log("answer_recovery.supersede_failed", { eventId, supersededEventId: check.eventId }, check.source);
+    }
   }
 
   private cancelClassification(reason: string) {
@@ -1050,6 +1086,7 @@ export class LessonRuntime {
     )
       return;
     this.supportRequestedAt = { visitId: this.state.visitId, revision: this.state.transcriptRevision };
+    this.supersedeMissingAnswerCheck();
     this.cancelClassification("learner_support_requested");
     this.answerRecovery.cancel("learner_support_requested");
     this.log("learner.support_requested", { request });
@@ -1156,6 +1193,7 @@ export class LessonRuntime {
 
   stop(reason = "parent_stop", disconnected = false) {
     if (this.status === "ended") return;
+    this.missingAnswerCheck = undefined;
     this.cancelClassification(reason);
     this.answerRecovery.cancel(reason);
     this.terminalTranscriptRecovery.cancel(reason);

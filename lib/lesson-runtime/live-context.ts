@@ -11,6 +11,15 @@ const completionGuidance =
 
 const targetText = (description: string) => description.replace(/^(?:Source-backed|Transfer rubric)[^:]*:\s*/, "");
 
+/** A check-in is transient, unlike the durable teaching context. */
+export function missingAnswerCheckInstruction(eventId: string) {
+  return `Application connection check ${JSON.stringify(eventId)}: learner speech ended without a matching transcript. This request applies only to the identified visit and turn, once. Only if no later learner speech, answer text or screen change has occurred, gently ask whether they are still there, then listen. If they resume speaking or answer text arrives before you respond, this request expires: listen to their answer instead. Never ask them to repeat an answer already received. Do not supply an answer or infer misunderstanding, mastery or permission to advance. Honor stop immediately.`;
+}
+
+export function supersedeAnswerCheckInstruction(eventId: string) {
+  return `Application connection check ${JSON.stringify(eventId)} has expired because learner activity or the current task changed. This supersedes that check and its repeat-answer instruction. Do not deliver a queued check-in or ask for an answer again. Listen to current learner speech and use the current question's accumulated answer. This update requests no spoken reply, grants no assessment or navigation authority, and must not interrupt the learner. Honor stop immediately.`;
+}
+
 export function answerRecoveryInstruction(lesson: LessonDefinition, state: LessonRuntimeState) {
   const node = lesson.nodes[state.nodeId];
   if (lesson.conversationFirst && state.hasChildTranscript)

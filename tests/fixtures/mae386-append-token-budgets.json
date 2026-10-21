@@ -310,10 +310,17 @@
       }
     },
     "recovery_missing": {
-      "sha256": "b72b3922600b7bc8ecaac93610d3fc298cf9b90b45b246ad1e62448cdf151bbd",
+      "sha256": "ccaba4a956d22757ed1ddc874b142d38c396d20ec2ff299ee896e5205d5a109c",
       "tokens": {
-        "o200k_base": 106,
-        "cl100k_base": 107
+        "o200k_base": 139,
+        "cl100k_base": 139
+      }
+    },
+    "recovery_superseded": {
+      "sha256": "78b5f57c42d888306a0207aacc7b0a325f1a8bff51459d4cc5dcb3961d0df1a5",
+      "tokens": {
+        "o200k_base": 116,
+        "cl100k_base": 117
       }
     },
     "recovery_answer": {

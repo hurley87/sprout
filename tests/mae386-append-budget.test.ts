@@ -14,6 +14,8 @@ import {
   teachingInstruction,
   learnerSupportInstruction,
   answerRecoveryInstruction,
+  missingAnswerCheckInstruction,
+  supersedeAnswerCheckInstruction,
 } from "../lib/lesson-runtime/live-context";
 
 const messages: Record<string, string> = {};
@@ -30,7 +32,10 @@ for (const outcome of Object.keys(OUTCOME_LABELS) as QuestionOutcome[]) {
   const recap = questionRecap({ ...frozen, questions: frozen.questions.map(question => ({ ...question, outcome })) });
   messages[`recap:${outcome}`] = teachingInstruction(currentNodeContext(lesson, "recap"), lesson, false, recap.spoken);
 }
-messages.recovery_missing = answerRecoveryInstruction(lesson, initial);
+// Include a full UUID and maximum safe integer identities, not a short test ID.
+const recoveryEventId = `ffffffff-ffff-4fff-bfff-ffffffffffff:answer-recovery:${Number.MAX_SAFE_INTEGER}:${Number.MAX_SAFE_INTEGER}:${Number.MAX_SAFE_INTEGER}`;
+messages.recovery_missing = missingAnswerCheckInstruction(recoveryEventId);
+messages.recovery_superseded = supersedeAnswerCheckInstruction(recoveryEventId);
 messages.recovery_answer = answerRecoveryInstruction(lesson, { ...initial, hasChildTranscript: true });
 messages.clarification = lesson.recovery.supportClarificationInstruction;
 

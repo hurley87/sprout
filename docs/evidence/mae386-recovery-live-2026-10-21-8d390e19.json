@@ -1,0 +1,3910 @@
+{
+  "schema": "sprout-mae386-recovery-live-extract-v1",
+  "testedCodeSha": "4bfc6356d3af7c8fec6f78ee24738d5ff13324b4",
+  "conclusion": "Scoped check and once-only superseding append observed live; original Q12 repeat-answer symptom absent. Suppression of an undelivered queued check was not exercised.",
+  "provenance": {
+    "input": "User confirmed human microphone test, with prepared Q12 answer. No synthetic audio, injected transcript or mocked provider response used by this acceptance task.",
+    "route": "http://127.0.0.1:3100/demos/mae386?debug=1",
+    "configuredModels": ["gpt-live-1", "jev-1.14.0"],
+    "modelEvidenceLimit": "Models pinned in tested code; normalized export is not a raw provider attestation.",
+    "sourceExport": "/Users/davidhurley/Downloads/sprout-mae386-8d390e19-8cb9-4278-8b0f-296c596e86f4.json",
+    "sourceBytes": 6702407,
+    "sourceSha256": "747daff5e05a0f984bb1dcd7e4322f6219948b45afe25c24352ec1d5c1e78397",
+    "firstEvent": "2026-10-21T20:24:21.073Z",
+    "lastEvent": "2026-10-21T20:26:51.042Z",
+    "sourceEventCount": 2375,
+    "extraction": "Full conversation/outcomes and selected exact diagnostics with original zero-based indexes. Repeated runtime, detector and transient transcript snapshots omitted. Ending event retains reason only. Credential/SDP/raw-body keys recursively removed."
+  },
+  "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+  "status": "ended",
+  "error": null,
+  "lesson": {
+    "id": "mae386",
+    "nodeId": "q14"
+  },
+  "timing": {
+    "childSnapshotDebounceMs": 300,
+    "tutorTranscriptStableMs": 600,
+    "tutorClassificationQuietMs": 500,
+    "quietDrainMs": 250,
+    "clockTickMs": 50,
+    "classifierTimeoutMs": 10000,
+    "steeringAckTimeoutMs": 10000,
+    "startupTimeoutMs": 30000,
+    "microphoneOnsetMs": 80,
+    "microphoneOnsetQuietMs": 150,
+    "microphoneQuietMs": 900
+  },
+  "conversation": [
+    {
+      "nodeId": "q1",
+      "visitId": 1,
+      "transcript": "Tutor: Okay. The question is: What are the two values of exographics discussed in the book? Explain what each lets us do."
+    },
+    {
+      "nodeId": "q6",
+      "visitId": 2,
+      "transcript": "Tutor: Alright, here's the prompt: Explain Kahneman's System 1 and System 2 thinking, and give a convincing example of each."
+    },
+    {
+      "nodeId": "q8",
+      "visitId": 3,
+      "transcript": "Tutor: Here's the question: What does a phonetic writing system represent, and what main advantage does it offer over a pictographic one?\nTutor: Hey, are you still there?\nChild: Next question."
+    },
+    {
+      "nodeId": "q10-1",
+      "visitId": 4,
+      "transcript": "Tutor: Alright, here's the question: How would you say this sentence more concisely while keeping its meaning? \"The reason why he was late is that he overslept.\""
+    },
+    {
+      "nodeId": "q5-a",
+      "visitId": 5,
+      "transcript": "Tutor: Alright, here's the question: Would this belong to the e-Class? Explain what would make exographics necessary for its discovery, or why you are uncertain. Here is the case: \"Any one of the models that implement OpenAI's ChatGPT.\""
+    },
+    {
+      "nodeId": "q12",
+      "visitId": 6,
+      "transcript": "Tutor: Okay, here's the question: Using the book's characteristics, assess whether the Canadian Armed Forces can be considered a techno-literate culture. Explain your reasoning.\nChild: Um\nChild: The qualified yes .Written orders and supply calculations require literacy and arithmetic\nChild: . Specialists develop ideas, rules coordinate large\nChild: groups. And training passes on knowledge\nTutor: Hmm, that's a solid, careful answer. You tied each of the four characteristics to something the CAF does, without overstating it. Nicely reasoned. We can move on."
+    },
+    {
+      "nodeId": "q14",
+      "visitId": 7,
+      "transcript": "Tutor: Here's the question: Take the position that not producing e-Class objects does not mean a society's people are cognitively limited. Give two different arguments supporting that position."
+    }
+  ],
+  "assessment": {
+    "status": "complete",
+    "results": {
+      "q1:reification": {
+        "nodeId": "q1",
+        "criterionId": "reification",
+        "outcome": "uncertain",
+        "scores": {
+          "choice": "not_yet",
+          "confidence": 0.85,
+          "probabilities": {
+            "not_yet": 0.89,
+            "partial": 0.1,
+            "demonstrated_independent": 0.01,
+            "demonstrated_prompted": 0
+          }
+        }
+      },
+      "q1:memory-extension": {
+        "nodeId": "q1",
+        "criterionId": "memory-extension",
+        "outcome": "uncertain",
+        "scores": {
+          "choice": "not_yet",
+          "confidence": 0.83,
+          "probabilities": {
+            "not_yet": 0.87,
+            "partial": 0.12,
+            "demonstrated_independent": 0.01,
+            "demonstrated_prompted": 0
+          }
+        }
+      },
+      "q6:system1-description": {
+        "nodeId": "q6",
+        "criterionId": "system1-description",
+        "outcome": "not_yet",
+        "scores": {
+          "choice": "not_yet",
+          "confidence": 0.99,
+          "probabilities": {
+            "not_yet": 0.99,
+            "partial": 0.01,
+            "demonstrated_independent": 0,
+            "demonstrated_prompted": 0
+          }
+        }
+      },
+      "q6:system1-example": {
+        "nodeId": "q6",
+        "criterionId": "system1-example",
+        "outcome": "not_yet",
+        "scores": {
+          "choice": "not_yet",
+          "confidence": 0.97,
+          "probabilities": {
+            "not_yet": 0.98,
+            "partial": 0.02,
+            "demonstrated_independent": 0,
+            "demonstrated_prompted": 0
+          }
+        }
+      },
+      "q6:system2-description": {
+        "nodeId": "q6",
+        "criterionId": "system2-description",
+        "outcome": "not_yet",
+        "scores": {
+          "choice": "not_yet",
+          "confidence": 0.99,
+          "probabilities": {
+            "not_yet": 0.99,
+            "partial": 0.01,
+            "demonstrated_independent": 0,
+            "demonstrated_prompted": 0
+          }
+        }
+      },
+      "q6:system2-example": {
+        "nodeId": "q6",
+        "criterionId": "system2-example",
+        "outcome": "not_yet",
+        "scores": {
+          "choice": "not_yet",
+          "confidence": 0.96,
+          "probabilities": {
+            "not_yet": 0.97,
+            "partial": 0.03,
+            "demonstrated_independent": 0,
+            "demonstrated_prompted": 0
+          }
+        }
+      },
+      "q8:sound-vs-picture": {
+        "nodeId": "q8",
+        "criterionId": "sound-vs-picture",
+        "outcome": "not_yet",
+        "scores": {
+          "choice": "not_yet",
+          "confidence": 0.91,
+          "probabilities": {
+            "not_yet": 0.93,
+            "partial": 0.07,
+            "demonstrated_independent": 0,
+            "demonstrated_prompted": 0
+          }
+        }
+      },
+      "q8:sound-decoding": {
+        "nodeId": "q8",
+        "criterionId": "sound-decoding",
+        "outcome": "not_yet",
+        "scores": {
+          "choice": "not_yet",
+          "confidence": 0.97,
+          "probabilities": {
+            "not_yet": 0.98,
+            "partial": 0.02,
+            "demonstrated_independent": 0,
+            "demonstrated_prompted": 0
+          }
+        }
+      },
+      "q10-1:meaning": {
+        "nodeId": "q10-1",
+        "criterionId": "meaning",
+        "outcome": "not_yet",
+        "scores": {
+          "choice": "not_yet",
+          "confidence": 1,
+          "probabilities": {
+            "not_yet": 1,
+            "partial": 0,
+            "demonstrated_independent": 0,
+            "demonstrated_prompted": 0
+          }
+        }
+      },
+      "q10-1:concise": {
+        "nodeId": "q10-1",
+        "criterionId": "concise",
+        "outcome": "not_yet",
+        "scores": {
+          "choice": "not_yet",
+          "confidence": 1,
+          "probabilities": {
+            "not_yet": 1,
+            "partial": 0,
+            "demonstrated_independent": 0,
+            "demonstrated_prompted": 0
+          }
+        }
+      },
+      "q10-1:grammatical": {
+        "nodeId": "q10-1",
+        "criterionId": "grammatical",
+        "outcome": "not_yet",
+        "scores": {
+          "choice": "not_yet",
+          "confidence": 1,
+          "probabilities": {
+            "not_yet": 1,
+            "partial": 0,
+            "demonstrated_independent": 0,
+            "demonstrated_prompted": 0
+          }
+        }
+      },
+      "q10-2:meaning": {
+        "nodeId": "q10-2",
+        "criterionId": "meaning",
+        "outcome": "not_yet",
+        "scores": {
+          "choice": "not_yet",
+          "confidence": 1,
+          "probabilities": {
+            "not_yet": 1,
+            "partial": 0,
+            "demonstrated_independent": 0,
+            "demonstrated_prompted": 0
+          }
+        }
+      },
+      "q10-2:concise": {
+        "nodeId": "q10-2",
+        "criterionId": "concise",
+        "outcome": "not_yet",
+        "scores": {
+          "choice": "not_yet",
+          "confidence": 0.99,
+          "probabilities": {
+            "not_yet": 0.99,
+            "partial": 0.01,
+            "demonstrated_independent": 0,
+            "demonstrated_prompted": 0
+          }
+        }
+      },
+      "q10-2:grammatical": {
+        "nodeId": "q10-2",
+        "criterionId": "grammatical",
+        "outcome": "not_yet",
+        "scores": {
+          "choice": "not_yet",
+          "confidence": 0.99,
+          "probabilities": {
+            "not_yet": 0.99,
+            "partial": 0.01,
+            "demonstrated_independent": 0,
+            "demonstrated_prompted": 0
+          }
+        }
+      },
+      "q10-3:meaning": {
+        "nodeId": "q10-3",
+        "criterionId": "meaning",
+        "outcome": "not_yet",
+        "scores": {
+          "choice": "not_yet",
+          "confidence": 0.99,
+          "probabilities": {
+            "not_yet": 0.99,
+            "partial": 0.01,
+            "demonstrated_independent": 0,
+            "demonstrated_prompted": 0
+          }
+        }
+      },
+      "q10-3:concise": {
+        "nodeId": "q10-3",
+        "criterionId": "concise",
+        "outcome": "not_yet",
+        "scores": {
+          "choice": "not_yet",
+          "confidence": 0.97,
+          "probabilities": {
+            "not_yet": 0.98,
+            "partial": 0.02,
+            "demonstrated_independent": 0,
+            "demonstrated_prompted": 0
+          }
+        }
+      },
+      "q10-3:grammatical": {
+        "nodeId": "q10-3",
+        "criterionId": "grammatical",
+        "outcome": "not_yet",
+        "scores": {
+          "choice": "not_yet",
+          "confidence": 0.99,
+          "probabilities": {
+            "not_yet": 0.99,
+            "partial": 0.01,
+            "demonstrated_independent": 0,
+            "demonstrated_prompted": 0
+          }
+        }
+      },
+      "q5-a:discovery-test": {
+        "nodeId": "q5-a",
+        "criterionId": "discovery-test",
+        "outcome": "not_yet",
+        "scores": {
+          "choice": "not_yet",
+          "confidence": 0.99,
+          "probabilities": {
+            "not_yet": 0.99,
+            "partial": 0.01,
+            "demonstrated_independent": 0,
+            "demonstrated_prompted": 0
+          }
+        }
+      },
+      "q5-a:case-reasoning": {
+        "nodeId": "q5-a",
+        "criterionId": "case-reasoning",
+        "outcome": "not_yet",
+        "scores": {
+          "choice": "not_yet",
+          "confidence": 0.99,
+          "probabilities": {
+            "not_yet": 0.99,
+            "partial": 0.01,
+            "demonstrated_independent": 0,
+            "demonstrated_prompted": 0
+          }
+        }
+      },
+      "q5-c:discovery-test": {
+        "nodeId": "q5-c",
+        "criterionId": "discovery-test",
+        "outcome": "uncertain",
+        "scores": {
+          "choice": "not_yet",
+          "confidence": 0.81,
+          "probabilities": {
+            "not_yet": 0.86,
+            "partial": 0.1,
+            "demonstrated_independent": 0.03,
+            "demonstrated_prompted": 0.01
+          }
+        }
+      },
+      "q5-c:case-reasoning": {
+        "nodeId": "q5-c",
+        "criterionId": "case-reasoning",
+        "outcome": "not_yet",
+        "scores": {
+          "choice": "not_yet",
+          "confidence": 0.95,
+          "probabilities": {
+            "not_yet": 0.96,
+            "partial": 0.03,
+            "demonstrated_independent": 0.01,
+            "demonstrated_prompted": 0
+          }
+        }
+      },
+      "q5-f:discovery-test": {
+        "nodeId": "q5-f",
+        "criterionId": "discovery-test",
+        "outcome": "not_yet",
+        "scores": {
+          "choice": "not_yet",
+          "confidence": 0.88,
+          "probabilities": {
+            "not_yet": 0.91,
+            "partial": 0.07,
+            "demonstrated_independent": 0.02,
+            "demonstrated_prompted": 0
+          }
+        }
+      },
+      "q5-f:case-reasoning": {
+        "nodeId": "q5-f",
+        "criterionId": "case-reasoning",
+        "outcome": "not_yet",
+        "scores": {
+          "choice": "not_yet",
+          "confidence": 0.93,
+          "probabilities": {
+            "not_yet": 0.95,
+            "partial": 0.04,
+            "demonstrated_independent": 0.01,
+            "demonstrated_prompted": 0
+          }
+        }
+      },
+      "q12:literacy": {
+        "nodeId": "q12",
+        "criterionId": "literacy",
+        "outcome": "uncertain",
+        "scores": {
+          "choice": "demonstrated_independent",
+          "confidence": 0.85,
+          "probabilities": {
+            "not_yet": 0,
+            "partial": 0.1,
+            "demonstrated_independent": 0.89,
+            "demonstrated_prompted": 0.01
+          }
+        }
+      },
+      "q12:innovation": {
+        "nodeId": "q12",
+        "criterionId": "innovation",
+        "outcome": "uncertain",
+        "scores": {
+          "choice": "demonstrated_independent",
+          "confidence": 0.47,
+          "probabilities": {
+            "not_yet": 0.01,
+            "partial": 0.38,
+            "demonstrated_independent": 0.6,
+            "demonstrated_prompted": 0.01
+          }
+        }
+      },
+      "q12:coordination": {
+        "nodeId": "q12",
+        "criterionId": "coordination",
+        "outcome": "uncertain",
+        "scores": {
+          "choice": "partial",
+          "confidence": 0.32,
+          "probabilities": {
+            "not_yet": 0.03,
+            "partial": 0.49,
+            "demonstrated_independent": 0.46,
+            "demonstrated_prompted": 0.02
+          }
+        }
+      },
+      "q12:education": {
+        "nodeId": "q12",
+        "criterionId": "education",
+        "outcome": "uncertain",
+        "scores": {
+          "choice": "demonstrated_independent",
+          "confidence": 0.61,
+          "probabilities": {
+            "not_yet": 0.02,
+            "partial": 0.25,
+            "demonstrated_independent": 0.71,
+            "demonstrated_prompted": 0.02
+          }
+        }
+      },
+      "q12:qualified-assessment": {
+        "nodeId": "q12",
+        "criterionId": "qualified-assessment",
+        "outcome": "uncertain",
+        "scores": {
+          "choice": "demonstrated_independent",
+          "confidence": 0.8,
+          "probabilities": {
+            "not_yet": 0,
+            "partial": 0.14,
+            "demonstrated_independent": 0.85,
+            "demonstrated_prompted": 0.01
+          }
+        }
+      },
+      "q14:no-innate-inferiority": {
+        "nodeId": "q14",
+        "criterionId": "no-innate-inferiority",
+        "outcome": "not_yet",
+        "scores": {
+          "choice": "not_yet",
+          "confidence": 0.93,
+          "probabilities": {
+            "not_yet": 0.95,
+            "partial": 0.04,
+            "demonstrated_independent": 0.01,
+            "demonstrated_prompted": 0
+          }
+        }
+      },
+      "q14:first-argument": {
+        "nodeId": "q14",
+        "criterionId": "first-argument",
+        "outcome": "not_yet",
+        "scores": {
+          "choice": "not_yet",
+          "confidence": 0.92,
+          "probabilities": {
+            "not_yet": 0.94,
+            "partial": 0.05,
+            "demonstrated_independent": 0.01,
+            "demonstrated_prompted": 0
+          }
+        }
+      },
+      "q14:second-distinct-argument": {
+        "nodeId": "q14",
+        "criterionId": "second-distinct-argument",
+        "outcome": "uncertain",
+        "scores": {
+          "choice": "not_yet",
+          "confidence": 0.84,
+          "probabilities": {
+            "not_yet": 0.88,
+            "partial": 0.11,
+            "demonstrated_independent": 0.01,
+            "demonstrated_prompted": 0
+          }
+        }
+      },
+      "q15:incomplete-not-worthless": {
+        "nodeId": "q15",
+        "criterionId": "incomplete-not-worthless",
+        "outcome": "not_yet",
+        "scores": {
+          "choice": "not_yet",
+          "confidence": 0.91,
+          "probabilities": {
+            "not_yet": 0.93,
+            "partial": 0.05,
+            "demonstrated_independent": 0.01,
+            "demonstrated_prompted": 0
+          }
+        }
+      },
+      "q15:substantive-use": {
+        "nodeId": "q15",
+        "criterionId": "substantive-use",
+        "outcome": "uncertain",
+        "scores": {
+          "choice": "not_yet",
+          "confidence": 0.48,
+          "probabilities": {
+            "not_yet": 0.61,
+            "partial": 0.29,
+            "demonstrated_independent": 0.09,
+            "demonstrated_prompted": 0.01
+          }
+        }
+      }
+    }
+  },
+  "questionOutcomes": {
+    "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+    "frozenAtMs": 149607.5,
+    "questions": [
+      {
+        "questionId": "q1",
+        "title": "Two values of exographics",
+        "outcome": "skipped",
+        "components": [
+          {
+            "nodeId": "q1",
+            "outcome": "skipped",
+            "reached": true,
+            "skipped": true,
+            "assessment": "none",
+            "criteria": [
+              {
+                "id": "reification",
+                "authored": {
+                  "id": "reification",
+                  "basis": "source-backed",
+                  "sources": ["reification"],
+                  "description": "Explains reification: inscribing visible representations of abstract concepts makes them available for manipulation/combination in reasoning. Accept clear paraphrases without the label; physically creating the represented thing is incorrect."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "memory-extension",
+                "authored": {
+                  "id": "memory-extension",
+                  "basis": "source-backed",
+                  "sources": ["memory"],
+                  "description": "Explains memory extension: external records hold information/intermediate steps for reuse, reducing demands on limited memory and enabling extended reasoning. Naming memory or saying writing lasts longer without that reasoning function is partial."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              }
+            ],
+            "attempts": [],
+            "rewrite": null,
+            "optionalDimensions": []
+          }
+        ]
+      },
+      {
+        "questionId": "q6",
+        "title": "System 1 and System 2",
+        "outcome": "skipped",
+        "components": [
+          {
+            "nodeId": "q6",
+            "outcome": "skipped",
+            "reached": true,
+            "skipped": true,
+            "assessment": "none",
+            "criteria": [
+              {
+                "id": "system1-description",
+                "authored": {
+                  "id": "system1-description",
+                  "basis": "source-backed",
+                  "sources": ["systems"],
+                  "description": "Describes System 1 as quick/intuitive/automatic rather than deliberate sequential effort; speed alone without a process distinction is partial."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "system1-example",
+                "authored": {
+                  "id": "system1-example",
+                  "basis": "course-inference",
+                  "sources": ["systems"],
+                  "description": "Gives a plausible concrete System 1 example and makes its quick/intuitive process clear. Do not require the book's exact examples or label an entire activity inherently System 1."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "system2-description",
+                "authored": {
+                  "id": "system2-description",
+                  "basis": "source-backed",
+                  "sources": ["systems"],
+                  "description": "Describes System 2 as deliberate, slower, effortful analytical thinking; not a guarantee of correctness."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "system2-example",
+                "authored": {
+                  "id": "system2-example",
+                  "basis": "course-inference",
+                  "sources": ["systems"],
+                  "description": "Gives a plausible concrete System 2 example with deliberate checking/reasoning, distinct from merely asserting an activity is difficult."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              }
+            ],
+            "attempts": [],
+            "rewrite": null,
+            "optionalDimensions": []
+          }
+        ]
+      },
+      {
+        "questionId": "q8",
+        "title": "Phonetic and pictographic writing",
+        "outcome": "unattempted",
+        "components": [
+          {
+            "nodeId": "q8",
+            "outcome": "unattempted",
+            "reached": true,
+            "skipped": false,
+            "assessment": "none",
+            "criteria": [
+              {
+                "id": "sound-vs-picture",
+                "authored": {
+                  "id": "sound-vs-picture",
+                  "basis": "source-backed",
+                  "sources": ["phonetic"],
+                  "description": "Contrasts visual symbols representing speech sounds with pictures/concepts. Letters versus pictures without saying letters represent sounds is partial; avoid treating the manuscript's simplified comparison as a taxonomy of all real mixed writing systems."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "sound-decoding",
+                "authored": {
+                  "id": "sound-decoding",
+                  "basis": "source-backed",
+                  "sources": ["phonetic"],
+                  "description": "Explains the central advantage: combine represented sounds to decode an unfamiliar written word, potentially recognizing an already-known spoken word. Saying easier, fewer symbols, or faster without this mechanism is partial, not full explanation."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              }
+            ],
+            "attempts": [],
+            "rewrite": null,
+            "optionalDimensions": []
+          }
+        ]
+      },
+      {
+        "questionId": "q10",
+        "title": "Concise spoken rewriting",
+        "outcome": "skipped",
+        "components": [
+          {
+            "nodeId": "q10-1",
+            "outcome": "skipped",
+            "reached": true,
+            "skipped": true,
+            "assessment": "none",
+            "criteria": [
+              {
+                "id": "meaning",
+                "authored": {
+                  "id": "meaning",
+                  "basis": "course-inference",
+                  "sources": ["memory", "reification"],
+                  "description": "For Q10(a), sentence 1, judge only the latest complete, non-withdrawn student-proposed rewrite of the visible original. Preserve its propositions and relations: Retain both lateness and oversleeping and the causal direction: oversleeping explains lateness. Merely saying he overslept omits the lateness claim. Quoted source text is not a submission. Tutor suggestions are not learner proposals until adopted and used in the learner's own response; simple echoes establish no independent demonstration."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "concise",
+                "authored": {
+                  "id": "concise",
+                  "basis": "course-inference",
+                  "sources": ["memory"],
+                  "description": "The actual proposed revision uses fewer spoken words by removing redundant structure while preserving meaning. Any genuine reduction satisfying meaning and grammar can count; do not require maximum compression, every possible redundancy removed, an exact word count or a single target sentence. An unchanged original is not a concise rewrite. A shorter meaning-changing sentence does not demonstrate meaning-preserving concision; an incomplete proposition remains partial."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "grammatical",
+                "authored": {
+                  "id": "grammatical",
+                  "basis": "course-inference",
+                  "sources": ["memory"],
+                  "description": "The proposed spoken sentence is grammatically coherent. Judge the intended spoken wording, not ASR punctuation, spelling, accents or disfluencies outside the proposal. Uncertain transcription needs clarification, not a grammar penalty. A deliberately quoted original alone provides no proposed-rewrite evidence."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              }
+            ],
+            "attempts": [],
+            "rewrite": null,
+            "optionalDimensions": []
+          },
+          {
+            "nodeId": "q10-2",
+            "outcome": "skipped",
+            "reached": false,
+            "skipped": true,
+            "assessment": "none",
+            "criteria": [
+              {
+                "id": "meaning",
+                "authored": {
+                  "id": "meaning",
+                  "basis": "course-inference",
+                  "sources": ["memory", "reification"],
+                  "description": "For Q10(a), sentence 2, judge only the latest complete, non-withdrawn student-proposed rewrite of the visible original. Preserve its propositions and relations: Retain joint work on the same project. They can refer to the already established pair; do not require an explicit two. Together is redundant with collaborated, but necessary to preserve joint work when collaborated is replaced by worked. Quoted source text is not a submission. Tutor suggestions are not learner proposals until adopted and used in the learner's own response; simple echoes establish no independent demonstration."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "concise",
+                "authored": {
+                  "id": "concise",
+                  "basis": "course-inference",
+                  "sources": ["memory"],
+                  "description": "The actual proposed revision uses fewer spoken words by removing redundant structure while preserving meaning. Any genuine reduction satisfying meaning and grammar can count; do not require maximum compression, every possible redundancy removed, an exact word count or a single target sentence. An unchanged original is not a concise rewrite. A shorter meaning-changing sentence does not demonstrate meaning-preserving concision; an incomplete proposition remains partial."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "grammatical",
+                "authored": {
+                  "id": "grammatical",
+                  "basis": "course-inference",
+                  "sources": ["memory"],
+                  "description": "The proposed spoken sentence is grammatically coherent. Judge the intended spoken wording, not ASR punctuation, spelling, accents or disfluencies outside the proposal. Uncertain transcription needs clarification, not a grammar penalty. A deliberately quoted original alone provides no proposed-rewrite evidence."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              }
+            ],
+            "attempts": [],
+            "rewrite": null,
+            "optionalDimensions": []
+          },
+          {
+            "nodeId": "q10-3",
+            "outcome": "skipped",
+            "reached": false,
+            "skipped": true,
+            "assessment": "none",
+            "criteria": [
+              {
+                "id": "meaning",
+                "authored": {
+                  "id": "meaning",
+                  "basis": "course-inference",
+                  "sources": ["memory", "reification"],
+                  "description": "For Q10(b), judge only the latest complete, non-withdrawn student-proposed rewrite of the visible original. Preserve its propositions and relations: Retain all three categories, ownership and the building-for-thinking relationship. Accept comprises, consists of, is made up of or another grammatical equivalent, with actual shortening. No spelling or punctuation judgment. The manuscript is not a usage authority on comprised of; prefer uncontroversial alternatives without treating a disputed usage preference as an absolute spoken-grammar rule. Quoted source text is not a submission. Tutor suggestions are not learner proposals until adopted and used in the learner's own response; simple echoes establish no independent demonstration."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "concise",
+                "authored": {
+                  "id": "concise",
+                  "basis": "course-inference",
+                  "sources": ["memory"],
+                  "description": "The actual proposed revision uses fewer spoken words by removing redundant structure while preserving meaning. Any genuine reduction satisfying meaning and grammar can count; do not require maximum compression, every possible redundancy removed, an exact word count or a single target sentence. An unchanged original is not a concise rewrite. A shorter meaning-changing sentence does not demonstrate meaning-preserving concision; an incomplete proposition remains partial."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "grammatical",
+                "authored": {
+                  "id": "grammatical",
+                  "basis": "course-inference",
+                  "sources": ["memory"],
+                  "description": "The proposed spoken sentence is grammatically coherent. Judge the intended spoken wording, not ASR punctuation, spelling, accents or disfluencies outside the proposal. Uncertain transcription needs clarification, not a grammar penalty. A deliberately quoted original alone provides no proposed-rewrite evidence."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              }
+            ],
+            "attempts": [],
+            "rewrite": null,
+            "optionalDimensions": []
+          }
+        ]
+      },
+      {
+        "questionId": "q5",
+        "title": "Applying the e-Class discovery test",
+        "outcome": "skipped",
+        "components": [
+          {
+            "nodeId": "q5-a",
+            "outcome": "skipped",
+            "reached": true,
+            "skipped": true,
+            "assessment": "none",
+            "criteria": [
+              {
+                "id": "discovery-test",
+                "authored": {
+                  "id": "discovery-test",
+                  "basis": "source-backed",
+                  "sources": ["eclass"],
+                  "description": "Applies the e-Class test to discovery/development requiring exographics, rather than current use of technology, reading ability, or later documentation."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "case-reasoning",
+                "authored": {
+                  "id": "case-reasoning",
+                  "basis": "course-inference",
+                  "sources": ["computing", "eclass"],
+                  "description": "Relates the model's discovery to explicit mathematical/code representations and their cognitive role, or gives reasoned uncertainty about that necessity and identifies missing evidence. Yes is a defensible inference, not a mandatory model-specific book verdict. A different conclusion requires a coherent account of discovery without required exographics; a bare no is insufficient."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              }
+            ],
+            "attempts": [],
+            "rewrite": null,
+            "optionalDimensions": []
+          },
+          {
+            "nodeId": "q5-c",
+            "outcome": "skipped",
+            "reached": false,
+            "skipped": true,
+            "assessment": "none",
+            "criteria": [
+              {
+                "id": "discovery-test",
+                "authored": {
+                  "id": "discovery-test",
+                  "basis": "source-backed",
+                  "sources": ["eclass"],
+                  "description": "Uses required-for-discovery rather than appeared-in-print as the e-Class test."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "case-reasoning",
+                "authored": {
+                  "id": "case-reasoning",
+                  "basis": "course-inference",
+                  "sources": ["oralCreation", "eclass"],
+                  "description": "Explains plausible oral composition/transmission versus later inscription and bounds what is known about this named rhyme. A qualified nonmembership or justified uncertainty is acceptable; a different argument must establish necessity, not merely usefulness, of writing."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              }
+            ],
+            "attempts": [],
+            "rewrite": null,
+            "optionalDimensions": []
+          },
+          {
+            "nodeId": "q5-f",
+            "outcome": "skipped",
+            "reached": false,
+            "skipped": true,
+            "assessment": "none",
+            "criteria": [
+              {
+                "id": "discovery-test",
+                "authored": {
+                  "id": "discovery-test",
+                  "basis": "source-backed",
+                  "sources": ["eclass"],
+                  "description": "Applies necessity of exographics for discovery, not whether the object is a tool, can be diagrammed, or has a modern written scientific explanation."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "case-reasoning",
+                "authored": {
+                  "id": "case-reasoning",
+                  "basis": "course-inference",
+                  "sources": ["oralCreation", "eclass"],
+                  "description": "Explains how physical trial, observation and demonstration could enable discovery of spinning/spindle design, or states a reasoned evidence gap. Distinguishes yarn from the specific spindle; archaeological age and modern material science alone do not settle membership."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              }
+            ],
+            "attempts": [],
+            "rewrite": null,
+            "optionalDimensions": []
+          }
+        ]
+      },
+      {
+        "questionId": "q12",
+        "title": "The CAF as a techno-literate culture",
+        "outcome": "partial",
+        "components": [
+          {
+            "nodeId": "q12",
+            "outcome": "partial",
+            "reached": true,
+            "skipped": false,
+            "assessment": "unresolved",
+            "criteria": [
+              {
+                "id": "literacy",
+                "authored": {
+                  "id": "literacy",
+                  "basis": "course-inference",
+                  "sources": ["culture"],
+                  "description": "Applies widespread basic reading, writing and arithmetic to a plausible CAF practice (e.g. written orders, reports, logistical calculations) or explains its institutional dependence on wider society. Listing literacy without application is partial."
+                },
+                "evidence": {
+                  "criterionId": "literacy",
+                  "status": "demonstrated",
+                  "understanding": "independent",
+                  "source": {
+                    "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+                    "nodeId": "q12",
+                    "visitId": 6,
+                    "childTurnId": 7,
+                    "transcriptRevision": 176,
+                    "childMessageIndex": 1,
+                    "childTranscript": "Um\nThe qualified yes .Written orders and supply calculations require literacy and arithmetic\n. Specialists develop ideas, rules coordinate large\ngroups. And training passes on knowledge"
+                  },
+                  "promptingHistory": [
+                    {
+                      "source": {
+                        "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+                        "nodeId": "q12",
+                        "visitId": 6,
+                        "childTurnId": 7,
+                        "transcriptRevision": 176,
+                        "childMessageIndex": 1,
+                        "childTranscript": "Um\nThe qualified yes .Written orders and supply calculations require literacy and arithmetic\n. Specialists develop ideas, rules coordinate large\ngroups. And training passes on knowledge"
+                      },
+                      "prompted": false
+                    }
+                  ]
+                },
+                "rewriteResult": null
+              },
+              {
+                "id": "innovation",
+                "authored": {
+                  "id": "innovation",
+                  "basis": "course-inference",
+                  "sources": ["culture"],
+                  "description": "Applies a smaller group advancing ideas to plausible specialists/research/doctrine development, or explains how the CAF depends on outside innovators. Owning advanced equipment alone is insufficient."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "coordination",
+                "authored": {
+                  "id": "coordination",
+                  "basis": "course-inference",
+                  "sources": ["culture"],
+                  "description": "Applies structures and norms enabling large groups of strangers to coexist/cooperate to rules, roles, procedures or related institutions. Do not require the CAF to be decentralized in precisely the same way as the manuscript's city examples."
+                },
+                "evidence": {
+                  "criterionId": "coordination",
+                  "status": "demonstrated",
+                  "understanding": "independent",
+                  "source": {
+                    "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+                    "nodeId": "q12",
+                    "visitId": 6,
+                    "childTurnId": 7,
+                    "transcriptRevision": 201,
+                    "childMessageIndex": 1,
+                    "childTranscript": "Um\nThe qualified yes .Written orders and supply calculations require literacy and arithmetic\n. Specialists develop ideas, rules coordinate large\ngroups. And training passes on knowledge"
+                  },
+                  "promptingHistory": [
+                    {
+                      "source": {
+                        "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+                        "nodeId": "q12",
+                        "visitId": 6,
+                        "childTurnId": 7,
+                        "transcriptRevision": 201,
+                        "childMessageIndex": 1,
+                        "childTranscript": "Um\nThe qualified yes .Written orders and supply calculations require literacy and arithmetic\n. Specialists develop ideas, rules coordinate large\ngroups. And training passes on knowledge"
+                      },
+                      "prompted": false
+                    }
+                  ]
+                },
+                "rewriteResult": null
+              },
+              {
+                "id": "education",
+                "authored": {
+                  "id": "education",
+                  "basis": "course-inference",
+                  "sources": ["culture"],
+                  "description": "Applies substantial education/training passing on basic and advanced knowledge, including a concrete practice or a reasoned account of dependence on wider educational institutions."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "qualified-assessment",
+                "authored": {
+                  "id": "qualified-assessment",
+                  "basis": "open-ended-argument",
+                  "sources": ["culture"],
+                  "description": "Connects the four applied characteristics to a defensible qualified yes/no assessment, acknowledging institution-versus-society scope where relevant. Do not require yes or invented precise institutional facts."
+                },
+                "evidence": {
+                  "criterionId": "qualified-assessment",
+                  "status": "demonstrated",
+                  "understanding": "independent",
+                  "source": {
+                    "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+                    "nodeId": "q12",
+                    "visitId": 6,
+                    "childTurnId": 7,
+                    "transcriptRevision": 201,
+                    "childMessageIndex": 1,
+                    "childTranscript": "Um\nThe qualified yes .Written orders and supply calculations require literacy and arithmetic\n. Specialists develop ideas, rules coordinate large\ngroups. And training passes on knowledge"
+                  },
+                  "promptingHistory": [
+                    {
+                      "source": {
+                        "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+                        "nodeId": "q12",
+                        "visitId": 6,
+                        "childTurnId": 7,
+                        "transcriptRevision": 201,
+                        "childMessageIndex": 1,
+                        "childTranscript": "Um\nThe qualified yes .Written orders and supply calculations require literacy and arithmetic\n. Specialists develop ideas, rules coordinate large\ngroups. And training passes on knowledge"
+                      },
+                      "prompted": false
+                    }
+                  ]
+                },
+                "rewriteResult": null
+              }
+            ],
+            "attempts": [
+              {
+                "source": {
+                  "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+                  "visitId": 6,
+                  "childTurnId": 7,
+                  "nodeId": "q12",
+                  "transcriptRevision": 176
+                },
+                "text": "groups. And training passes on knowledge",
+                "outcome": "unclear"
+              },
+              {
+                "source": {
+                  "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+                  "visitId": 6,
+                  "childTurnId": 7,
+                  "nodeId": "q12",
+                  "transcriptRevision": 201
+                },
+                "text": "groups. And training passes on knowledge",
+                "outcome": "unclear"
+              }
+            ],
+            "rewrite": null,
+            "optionalDimensions": []
+          }
+        ]
+      },
+      {
+        "questionId": "q14",
+        "title": "Culture and cognitive potential",
+        "outcome": "unattempted",
+        "components": [
+          {
+            "nodeId": "q14",
+            "outcome": "unattempted",
+            "reached": true,
+            "skipped": false,
+            "assessment": "none",
+            "criteria": [
+              {
+                "id": "no-innate-inferiority",
+                "authored": {
+                  "id": "no-innate-inferiority",
+                  "basis": "source-backed",
+                  "sources": ["learningPotential", "cognitiveDivide"],
+                  "description": "Explains or clearly endorses the required distinction: absence of e-Class products does not imply innate cognitive inferiority. This is the assigned argumentative position, not a demand for unreasoned agreement. Do not claim no task-performance differences can exist."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "first-argument",
+                "authored": {
+                  "id": "first-argument",
+                  "basis": "open-ended-argument",
+                  "sources": ["cognitiveDivide"],
+                  "description": "Provides one substantive reason linked to the conclusion, e.g. sophisticated oral-cultural innovation, educability with opportunity/tools, task/test familiarity, or a bounded evolutionary argument. Bare equality slogans or names of artifacts without the inferential link are insufficient."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "second-distinct-argument",
+                "authored": {
+                  "id": "second-distinct-argument",
+                  "basis": "open-ended-argument",
+                  "sources": ["learningPotential", "cognitiveDivide"],
+                  "description": "Provides a second substantive reason with a genuinely different inferential basis from the first. Two examples of sophisticated innovation or two paraphrases of equal ability are only one argument. Accept other coherent, evidence-aware arguments; do not require the exemplar's exact pair. Additional good reasons do not make an answer wrong."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              }
+            ],
+            "attempts": [],
+            "rewrite": null,
+            "optionalDimensions": []
+          }
+        ]
+      },
+      {
+        "questionId": "q15",
+        "title": "Useful science without ultimate explanation",
+        "outcome": "unattempted",
+        "components": [
+          {
+            "nodeId": "q15",
+            "outcome": "unattempted",
+            "reached": false,
+            "skipped": false,
+            "assessment": "none",
+            "criteria": [
+              {
+                "id": "incomplete-not-worthless",
+                "authored": {
+                  "id": "incomplete-not-worthless",
+                  "basis": "open-ended-argument",
+                  "sources": ["imagination", "scientificUse"],
+                  "description": "Addresses the challenge by distinguishing lack of an ultimate explanation from absence of scientific value. May qualify or criticize explanatory limits, but gives a reasoned account rather than merely agreeing with the suggested opening."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "substantive-use",
+                "authored": {
+                  "id": "substantive-use",
+                  "basis": "open-ended-argument",
+                  "sources": ["scientificUse"],
+                  "description": "Develops at least one concrete, defensible mechanism of value, such as prediction enabling planning, practical technology, organizing observations, or improvement through testing. No mandatory checklist of all four prediction/evidence/testability/revisability terms and no requirement for multiple arguments."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              }
+            ],
+            "attempts": [],
+            "rewrite": null,
+            "optionalDimensions": [
+              {
+                "id": "evidence-and-limits",
+                "optional": true,
+                "basis": "open-ended-argument",
+                "sources": ["imagination", "scientificUse"],
+                "description": "Optional extension: explains an evidential constraint or limit on the usefulness claim, such as checking predictions against observations, revising failure, comparing evidence, or using a model within tested bounds. Its absence must not reduce an otherwise complete argument to partial. This is an authored feedback dimension, not a quoted manuscript rule. Explicit misconceptions about science may still affect the required argument criteria; missing this optional extension alone cannot.",
+                "assessed": false
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "questionRecap": {
+    "label": "Session ended early",
+    "questions": [
+      {
+        "questionId": "q1",
+        "title": "Two values of exographics",
+        "outcome": "skipped",
+        "components": [
+          {
+            "nodeId": "q1",
+            "outcome": "skipped",
+            "reached": true,
+            "skipped": true,
+            "assessment": "none",
+            "criteria": [
+              {
+                "id": "reification",
+                "authored": {
+                  "id": "reification",
+                  "basis": "source-backed",
+                  "sources": ["reification"],
+                  "description": "Explains reification: inscribing visible representations of abstract concepts makes them available for manipulation/combination in reasoning. Accept clear paraphrases without the label; physically creating the represented thing is incorrect."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "memory-extension",
+                "authored": {
+                  "id": "memory-extension",
+                  "basis": "source-backed",
+                  "sources": ["memory"],
+                  "description": "Explains memory extension: external records hold information/intermediate steps for reuse, reducing demands on limited memory and enabling extended reasoning. Naming memory or saying writing lasts longer without that reasoning function is partial."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              }
+            ],
+            "attempts": [],
+            "rewrite": null,
+            "optionalDimensions": []
+          }
+        ]
+      },
+      {
+        "questionId": "q6",
+        "title": "System 1 and System 2",
+        "outcome": "skipped",
+        "components": [
+          {
+            "nodeId": "q6",
+            "outcome": "skipped",
+            "reached": true,
+            "skipped": true,
+            "assessment": "none",
+            "criteria": [
+              {
+                "id": "system1-description",
+                "authored": {
+                  "id": "system1-description",
+                  "basis": "source-backed",
+                  "sources": ["systems"],
+                  "description": "Describes System 1 as quick/intuitive/automatic rather than deliberate sequential effort; speed alone without a process distinction is partial."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "system1-example",
+                "authored": {
+                  "id": "system1-example",
+                  "basis": "course-inference",
+                  "sources": ["systems"],
+                  "description": "Gives a plausible concrete System 1 example and makes its quick/intuitive process clear. Do not require the book's exact examples or label an entire activity inherently System 1."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "system2-description",
+                "authored": {
+                  "id": "system2-description",
+                  "basis": "source-backed",
+                  "sources": ["systems"],
+                  "description": "Describes System 2 as deliberate, slower, effortful analytical thinking; not a guarantee of correctness."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "system2-example",
+                "authored": {
+                  "id": "system2-example",
+                  "basis": "course-inference",
+                  "sources": ["systems"],
+                  "description": "Gives a plausible concrete System 2 example with deliberate checking/reasoning, distinct from merely asserting an activity is difficult."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              }
+            ],
+            "attempts": [],
+            "rewrite": null,
+            "optionalDimensions": []
+          }
+        ]
+      },
+      {
+        "questionId": "q8",
+        "title": "Phonetic and pictographic writing",
+        "outcome": "unattempted",
+        "components": [
+          {
+            "nodeId": "q8",
+            "outcome": "unattempted",
+            "reached": true,
+            "skipped": false,
+            "assessment": "none",
+            "criteria": [
+              {
+                "id": "sound-vs-picture",
+                "authored": {
+                  "id": "sound-vs-picture",
+                  "basis": "source-backed",
+                  "sources": ["phonetic"],
+                  "description": "Contrasts visual symbols representing speech sounds with pictures/concepts. Letters versus pictures without saying letters represent sounds is partial; avoid treating the manuscript's simplified comparison as a taxonomy of all real mixed writing systems."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "sound-decoding",
+                "authored": {
+                  "id": "sound-decoding",
+                  "basis": "source-backed",
+                  "sources": ["phonetic"],
+                  "description": "Explains the central advantage: combine represented sounds to decode an unfamiliar written word, potentially recognizing an already-known spoken word. Saying easier, fewer symbols, or faster without this mechanism is partial, not full explanation."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              }
+            ],
+            "attempts": [],
+            "rewrite": null,
+            "optionalDimensions": []
+          }
+        ]
+      },
+      {
+        "questionId": "q10",
+        "title": "Concise spoken rewriting",
+        "outcome": "skipped",
+        "components": [
+          {
+            "nodeId": "q10-1",
+            "outcome": "skipped",
+            "reached": true,
+            "skipped": true,
+            "assessment": "none",
+            "criteria": [
+              {
+                "id": "meaning",
+                "authored": {
+                  "id": "meaning",
+                  "basis": "course-inference",
+                  "sources": ["memory", "reification"],
+                  "description": "For Q10(a), sentence 1, judge only the latest complete, non-withdrawn student-proposed rewrite of the visible original. Preserve its propositions and relations: Retain both lateness and oversleeping and the causal direction: oversleeping explains lateness. Merely saying he overslept omits the lateness claim. Quoted source text is not a submission. Tutor suggestions are not learner proposals until adopted and used in the learner's own response; simple echoes establish no independent demonstration."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "concise",
+                "authored": {
+                  "id": "concise",
+                  "basis": "course-inference",
+                  "sources": ["memory"],
+                  "description": "The actual proposed revision uses fewer spoken words by removing redundant structure while preserving meaning. Any genuine reduction satisfying meaning and grammar can count; do not require maximum compression, every possible redundancy removed, an exact word count or a single target sentence. An unchanged original is not a concise rewrite. A shorter meaning-changing sentence does not demonstrate meaning-preserving concision; an incomplete proposition remains partial."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "grammatical",
+                "authored": {
+                  "id": "grammatical",
+                  "basis": "course-inference",
+                  "sources": ["memory"],
+                  "description": "The proposed spoken sentence is grammatically coherent. Judge the intended spoken wording, not ASR punctuation, spelling, accents or disfluencies outside the proposal. Uncertain transcription needs clarification, not a grammar penalty. A deliberately quoted original alone provides no proposed-rewrite evidence."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              }
+            ],
+            "attempts": [],
+            "rewrite": null,
+            "optionalDimensions": []
+          },
+          {
+            "nodeId": "q10-2",
+            "outcome": "skipped",
+            "reached": false,
+            "skipped": true,
+            "assessment": "none",
+            "criteria": [
+              {
+                "id": "meaning",
+                "authored": {
+                  "id": "meaning",
+                  "basis": "course-inference",
+                  "sources": ["memory", "reification"],
+                  "description": "For Q10(a), sentence 2, judge only the latest complete, non-withdrawn student-proposed rewrite of the visible original. Preserve its propositions and relations: Retain joint work on the same project. They can refer to the already established pair; do not require an explicit two. Together is redundant with collaborated, but necessary to preserve joint work when collaborated is replaced by worked. Quoted source text is not a submission. Tutor suggestions are not learner proposals until adopted and used in the learner's own response; simple echoes establish no independent demonstration."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "concise",
+                "authored": {
+                  "id": "concise",
+                  "basis": "course-inference",
+                  "sources": ["memory"],
+                  "description": "The actual proposed revision uses fewer spoken words by removing redundant structure while preserving meaning. Any genuine reduction satisfying meaning and grammar can count; do not require maximum compression, every possible redundancy removed, an exact word count or a single target sentence. An unchanged original is not a concise rewrite. A shorter meaning-changing sentence does not demonstrate meaning-preserving concision; an incomplete proposition remains partial."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "grammatical",
+                "authored": {
+                  "id": "grammatical",
+                  "basis": "course-inference",
+                  "sources": ["memory"],
+                  "description": "The proposed spoken sentence is grammatically coherent. Judge the intended spoken wording, not ASR punctuation, spelling, accents or disfluencies outside the proposal. Uncertain transcription needs clarification, not a grammar penalty. A deliberately quoted original alone provides no proposed-rewrite evidence."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              }
+            ],
+            "attempts": [],
+            "rewrite": null,
+            "optionalDimensions": []
+          },
+          {
+            "nodeId": "q10-3",
+            "outcome": "skipped",
+            "reached": false,
+            "skipped": true,
+            "assessment": "none",
+            "criteria": [
+              {
+                "id": "meaning",
+                "authored": {
+                  "id": "meaning",
+                  "basis": "course-inference",
+                  "sources": ["memory", "reification"],
+                  "description": "For Q10(b), judge only the latest complete, non-withdrawn student-proposed rewrite of the visible original. Preserve its propositions and relations: Retain all three categories, ownership and the building-for-thinking relationship. Accept comprises, consists of, is made up of or another grammatical equivalent, with actual shortening. No spelling or punctuation judgment. The manuscript is not a usage authority on comprised of; prefer uncontroversial alternatives without treating a disputed usage preference as an absolute spoken-grammar rule. Quoted source text is not a submission. Tutor suggestions are not learner proposals until adopted and used in the learner's own response; simple echoes establish no independent demonstration."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "concise",
+                "authored": {
+                  "id": "concise",
+                  "basis": "course-inference",
+                  "sources": ["memory"],
+                  "description": "The actual proposed revision uses fewer spoken words by removing redundant structure while preserving meaning. Any genuine reduction satisfying meaning and grammar can count; do not require maximum compression, every possible redundancy removed, an exact word count or a single target sentence. An unchanged original is not a concise rewrite. A shorter meaning-changing sentence does not demonstrate meaning-preserving concision; an incomplete proposition remains partial."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "grammatical",
+                "authored": {
+                  "id": "grammatical",
+                  "basis": "course-inference",
+                  "sources": ["memory"],
+                  "description": "The proposed spoken sentence is grammatically coherent. Judge the intended spoken wording, not ASR punctuation, spelling, accents or disfluencies outside the proposal. Uncertain transcription needs clarification, not a grammar penalty. A deliberately quoted original alone provides no proposed-rewrite evidence."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              }
+            ],
+            "attempts": [],
+            "rewrite": null,
+            "optionalDimensions": []
+          }
+        ]
+      },
+      {
+        "questionId": "q5",
+        "title": "Applying the e-Class discovery test",
+        "outcome": "skipped",
+        "components": [
+          {
+            "nodeId": "q5-a",
+            "outcome": "skipped",
+            "reached": true,
+            "skipped": true,
+            "assessment": "none",
+            "criteria": [
+              {
+                "id": "discovery-test",
+                "authored": {
+                  "id": "discovery-test",
+                  "basis": "source-backed",
+                  "sources": ["eclass"],
+                  "description": "Applies the e-Class test to discovery/development requiring exographics, rather than current use of technology, reading ability, or later documentation."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "case-reasoning",
+                "authored": {
+                  "id": "case-reasoning",
+                  "basis": "course-inference",
+                  "sources": ["computing", "eclass"],
+                  "description": "Relates the model's discovery to explicit mathematical/code representations and their cognitive role, or gives reasoned uncertainty about that necessity and identifies missing evidence. Yes is a defensible inference, not a mandatory model-specific book verdict. A different conclusion requires a coherent account of discovery without required exographics; a bare no is insufficient."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              }
+            ],
+            "attempts": [],
+            "rewrite": null,
+            "optionalDimensions": []
+          },
+          {
+            "nodeId": "q5-c",
+            "outcome": "skipped",
+            "reached": false,
+            "skipped": true,
+            "assessment": "none",
+            "criteria": [
+              {
+                "id": "discovery-test",
+                "authored": {
+                  "id": "discovery-test",
+                  "basis": "source-backed",
+                  "sources": ["eclass"],
+                  "description": "Uses required-for-discovery rather than appeared-in-print as the e-Class test."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "case-reasoning",
+                "authored": {
+                  "id": "case-reasoning",
+                  "basis": "course-inference",
+                  "sources": ["oralCreation", "eclass"],
+                  "description": "Explains plausible oral composition/transmission versus later inscription and bounds what is known about this named rhyme. A qualified nonmembership or justified uncertainty is acceptable; a different argument must establish necessity, not merely usefulness, of writing."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              }
+            ],
+            "attempts": [],
+            "rewrite": null,
+            "optionalDimensions": []
+          },
+          {
+            "nodeId": "q5-f",
+            "outcome": "skipped",
+            "reached": false,
+            "skipped": true,
+            "assessment": "none",
+            "criteria": [
+              {
+                "id": "discovery-test",
+                "authored": {
+                  "id": "discovery-test",
+                  "basis": "source-backed",
+                  "sources": ["eclass"],
+                  "description": "Applies necessity of exographics for discovery, not whether the object is a tool, can be diagrammed, or has a modern written scientific explanation."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "case-reasoning",
+                "authored": {
+                  "id": "case-reasoning",
+                  "basis": "course-inference",
+                  "sources": ["oralCreation", "eclass"],
+                  "description": "Explains how physical trial, observation and demonstration could enable discovery of spinning/spindle design, or states a reasoned evidence gap. Distinguishes yarn from the specific spindle; archaeological age and modern material science alone do not settle membership."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              }
+            ],
+            "attempts": [],
+            "rewrite": null,
+            "optionalDimensions": []
+          }
+        ]
+      },
+      {
+        "questionId": "q12",
+        "title": "The CAF as a techno-literate culture",
+        "outcome": "partial",
+        "components": [
+          {
+            "nodeId": "q12",
+            "outcome": "partial",
+            "reached": true,
+            "skipped": false,
+            "assessment": "unresolved",
+            "criteria": [
+              {
+                "id": "literacy",
+                "authored": {
+                  "id": "literacy",
+                  "basis": "course-inference",
+                  "sources": ["culture"],
+                  "description": "Applies widespread basic reading, writing and arithmetic to a plausible CAF practice (e.g. written orders, reports, logistical calculations) or explains its institutional dependence on wider society. Listing literacy without application is partial."
+                },
+                "evidence": {
+                  "criterionId": "literacy",
+                  "status": "demonstrated",
+                  "understanding": "independent",
+                  "source": {
+                    "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+                    "nodeId": "q12",
+                    "visitId": 6,
+                    "childTurnId": 7,
+                    "transcriptRevision": 176,
+                    "childMessageIndex": 1,
+                    "childTranscript": "Um\nThe qualified yes .Written orders and supply calculations require literacy and arithmetic\n. Specialists develop ideas, rules coordinate large\ngroups. And training passes on knowledge"
+                  },
+                  "promptingHistory": [
+                    {
+                      "source": {
+                        "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+                        "nodeId": "q12",
+                        "visitId": 6,
+                        "childTurnId": 7,
+                        "transcriptRevision": 176,
+                        "childMessageIndex": 1,
+                        "childTranscript": "Um\nThe qualified yes .Written orders and supply calculations require literacy and arithmetic\n. Specialists develop ideas, rules coordinate large\ngroups. And training passes on knowledge"
+                      },
+                      "prompted": false
+                    }
+                  ]
+                },
+                "rewriteResult": null
+              },
+              {
+                "id": "innovation",
+                "authored": {
+                  "id": "innovation",
+                  "basis": "course-inference",
+                  "sources": ["culture"],
+                  "description": "Applies a smaller group advancing ideas to plausible specialists/research/doctrine development, or explains how the CAF depends on outside innovators. Owning advanced equipment alone is insufficient."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "coordination",
+                "authored": {
+                  "id": "coordination",
+                  "basis": "course-inference",
+                  "sources": ["culture"],
+                  "description": "Applies structures and norms enabling large groups of strangers to coexist/cooperate to rules, roles, procedures or related institutions. Do not require the CAF to be decentralized in precisely the same way as the manuscript's city examples."
+                },
+                "evidence": {
+                  "criterionId": "coordination",
+                  "status": "demonstrated",
+                  "understanding": "independent",
+                  "source": {
+                    "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+                    "nodeId": "q12",
+                    "visitId": 6,
+                    "childTurnId": 7,
+                    "transcriptRevision": 201,
+                    "childMessageIndex": 1,
+                    "childTranscript": "Um\nThe qualified yes .Written orders and supply calculations require literacy and arithmetic\n. Specialists develop ideas, rules coordinate large\ngroups. And training passes on knowledge"
+                  },
+                  "promptingHistory": [
+                    {
+                      "source": {
+                        "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+                        "nodeId": "q12",
+                        "visitId": 6,
+                        "childTurnId": 7,
+                        "transcriptRevision": 201,
+                        "childMessageIndex": 1,
+                        "childTranscript": "Um\nThe qualified yes .Written orders and supply calculations require literacy and arithmetic\n. Specialists develop ideas, rules coordinate large\ngroups. And training passes on knowledge"
+                      },
+                      "prompted": false
+                    }
+                  ]
+                },
+                "rewriteResult": null
+              },
+              {
+                "id": "education",
+                "authored": {
+                  "id": "education",
+                  "basis": "course-inference",
+                  "sources": ["culture"],
+                  "description": "Applies substantial education/training passing on basic and advanced knowledge, including a concrete practice or a reasoned account of dependence on wider educational institutions."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "qualified-assessment",
+                "authored": {
+                  "id": "qualified-assessment",
+                  "basis": "open-ended-argument",
+                  "sources": ["culture"],
+                  "description": "Connects the four applied characteristics to a defensible qualified yes/no assessment, acknowledging institution-versus-society scope where relevant. Do not require yes or invented precise institutional facts."
+                },
+                "evidence": {
+                  "criterionId": "qualified-assessment",
+                  "status": "demonstrated",
+                  "understanding": "independent",
+                  "source": {
+                    "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+                    "nodeId": "q12",
+                    "visitId": 6,
+                    "childTurnId": 7,
+                    "transcriptRevision": 201,
+                    "childMessageIndex": 1,
+                    "childTranscript": "Um\nThe qualified yes .Written orders and supply calculations require literacy and arithmetic\n. Specialists develop ideas, rules coordinate large\ngroups. And training passes on knowledge"
+                  },
+                  "promptingHistory": [
+                    {
+                      "source": {
+                        "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+                        "nodeId": "q12",
+                        "visitId": 6,
+                        "childTurnId": 7,
+                        "transcriptRevision": 201,
+                        "childMessageIndex": 1,
+                        "childTranscript": "Um\nThe qualified yes .Written orders and supply calculations require literacy and arithmetic\n. Specialists develop ideas, rules coordinate large\ngroups. And training passes on knowledge"
+                      },
+                      "prompted": false
+                    }
+                  ]
+                },
+                "rewriteResult": null
+              }
+            ],
+            "attempts": [
+              {
+                "source": {
+                  "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+                  "visitId": 6,
+                  "childTurnId": 7,
+                  "nodeId": "q12",
+                  "transcriptRevision": 176
+                },
+                "text": "groups. And training passes on knowledge",
+                "outcome": "unclear"
+              },
+              {
+                "source": {
+                  "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+                  "visitId": 6,
+                  "childTurnId": 7,
+                  "nodeId": "q12",
+                  "transcriptRevision": 201
+                },
+                "text": "groups. And training passes on knowledge",
+                "outcome": "unclear"
+              }
+            ],
+            "rewrite": null,
+            "optionalDimensions": []
+          }
+        ]
+      },
+      {
+        "questionId": "q14",
+        "title": "Culture and cognitive potential",
+        "outcome": "unattempted",
+        "components": [
+          {
+            "nodeId": "q14",
+            "outcome": "unattempted",
+            "reached": true,
+            "skipped": false,
+            "assessment": "none",
+            "criteria": [
+              {
+                "id": "no-innate-inferiority",
+                "authored": {
+                  "id": "no-innate-inferiority",
+                  "basis": "source-backed",
+                  "sources": ["learningPotential", "cognitiveDivide"],
+                  "description": "Explains or clearly endorses the required distinction: absence of e-Class products does not imply innate cognitive inferiority. This is the assigned argumentative position, not a demand for unreasoned agreement. Do not claim no task-performance differences can exist."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "first-argument",
+                "authored": {
+                  "id": "first-argument",
+                  "basis": "open-ended-argument",
+                  "sources": ["cognitiveDivide"],
+                  "description": "Provides one substantive reason linked to the conclusion, e.g. sophisticated oral-cultural innovation, educability with opportunity/tools, task/test familiarity, or a bounded evolutionary argument. Bare equality slogans or names of artifacts without the inferential link are insufficient."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "second-distinct-argument",
+                "authored": {
+                  "id": "second-distinct-argument",
+                  "basis": "open-ended-argument",
+                  "sources": ["learningPotential", "cognitiveDivide"],
+                  "description": "Provides a second substantive reason with a genuinely different inferential basis from the first. Two examples of sophisticated innovation or two paraphrases of equal ability are only one argument. Accept other coherent, evidence-aware arguments; do not require the exemplar's exact pair. Additional good reasons do not make an answer wrong."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              }
+            ],
+            "attempts": [],
+            "rewrite": null,
+            "optionalDimensions": []
+          }
+        ]
+      },
+      {
+        "questionId": "q15",
+        "title": "Useful science without ultimate explanation",
+        "outcome": "unattempted",
+        "components": [
+          {
+            "nodeId": "q15",
+            "outcome": "unattempted",
+            "reached": false,
+            "skipped": false,
+            "assessment": "none",
+            "criteria": [
+              {
+                "id": "incomplete-not-worthless",
+                "authored": {
+                  "id": "incomplete-not-worthless",
+                  "basis": "open-ended-argument",
+                  "sources": ["imagination", "scientificUse"],
+                  "description": "Addresses the challenge by distinguishing lack of an ultimate explanation from absence of scientific value. May qualify or criticize explanatory limits, but gives a reasoned account rather than merely agreeing with the suggested opening."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              },
+              {
+                "id": "substantive-use",
+                "authored": {
+                  "id": "substantive-use",
+                  "basis": "open-ended-argument",
+                  "sources": ["scientificUse"],
+                  "description": "Develops at least one concrete, defensible mechanism of value, such as prediction enabling planning, practical technology, organizing observations, or improvement through testing. No mandatory checklist of all four prediction/evidence/testability/revisability terms and no requirement for multiple arguments."
+                },
+                "evidence": null,
+                "rewriteResult": null
+              }
+            ],
+            "attempts": [],
+            "rewrite": null,
+            "optionalDimensions": [
+              {
+                "id": "evidence-and-limits",
+                "optional": true,
+                "basis": "open-ended-argument",
+                "sources": ["imagination", "scientificUse"],
+                "description": "Optional extension: explains an evidential constraint or limit on the usefulness claim, such as checking predictions against observations, revising failure, comparing evidence, or using a model within tested bounds. Its absence must not reduce an otherwise complete argument to partial. This is an authored feedback dimension, not a quoted manuscript rule. Explicit misconceptions about science may still affect the required argument criteria; missing this optional extension alone cannot.",
+                "assessed": false
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "spoken": "Q1: skipped. Q6: skipped. Q8: unattempted. Q10: skipped. Q5: skipped. Q12: partially demonstrated. Q14: unattempted. Q15: unattempted. Thanks for the discussion."
+  },
+  "navigationHistory": [
+    {
+      "source": {
+        "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+        "visitId": 1,
+        "childTurnId": 0,
+        "nodeId": "q1",
+        "transcriptRevision": 20
+      },
+      "questionId": "q1",
+      "intent": {
+        "action": "skip",
+        "scope": "subpart"
+      },
+      "hasChildTranscript": false,
+      "skippedNodeIds": [],
+      "atMs": 13870.800000071526
+    },
+    {
+      "source": {
+        "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+        "visitId": 2,
+        "childTurnId": 0,
+        "nodeId": "q6",
+        "transcriptRevision": 40
+      },
+      "questionId": "q6",
+      "intent": {
+        "action": "skip",
+        "scope": "subpart"
+      },
+      "hasChildTranscript": false,
+      "skippedNodeIds": [],
+      "atMs": 26269.700000047684
+    },
+    {
+      "source": {
+        "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+        "visitId": 3,
+        "childTurnId": 2,
+        "nodeId": "q8",
+        "transcriptRevision": 65
+      },
+      "questionId": "q8",
+      "intent": {
+        "action": "next",
+        "scope": "question"
+      },
+      "hasChildTranscript": true,
+      "skippedNodeIds": [],
+      "atMs": 49123.700000047684
+    },
+    {
+      "source": {
+        "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+        "visitId": 4,
+        "childTurnId": 2,
+        "nodeId": "q10-1",
+        "transcriptRevision": 92
+      },
+      "questionId": "q10",
+      "intent": {
+        "action": "skip",
+        "scope": "question"
+      },
+      "hasChildTranscript": false,
+      "skippedNodeIds": ["q10-2", "q10-3"],
+      "atMs": 61553.200000047684
+    },
+    {
+      "source": {
+        "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+        "visitId": 5,
+        "childTurnId": 3,
+        "nodeId": "q5-a",
+        "transcriptRevision": 129
+      },
+      "questionId": "q5",
+      "intent": {
+        "action": "skip",
+        "scope": "question"
+      },
+      "hasChildTranscript": false,
+      "skippedNodeIds": ["q5-c", "q5-f"],
+      "atMs": 80886.5
+    },
+    {
+      "source": {
+        "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+        "visitId": 6,
+        "childTurnId": 7,
+        "nodeId": "q12",
+        "transcriptRevision": 201
+      },
+      "questionId": "q12",
+      "intent": "tutor_closure",
+      "hasChildTranscript": true,
+      "skippedNodeIds": [],
+      "atMs": 135728.70000004768
+    }
+  ],
+  "events": [
+    {
+      "sourceEventIndex": 29,
+      "timestamp": "2026-10-21T20:24:26.350Z",
+      "atMs": 5277.700000047684,
+      "type": "gpt_live.context_appended",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 1,
+      "childTurnId": 0,
+      "nodeId": "q1",
+      "transcriptRevision": 0,
+      "transcriptSpeaker": "unknown",
+      "detail": {
+        "type": "context.appended",
+        "eventId": "event_EbX9GsAxvHFdhtMNpaMDv",
+        "name": "session.instructions.appended",
+        "clientEventId": "8d390e19-8cb9-4278-8b0f-296c596e86f4:steer:1",
+        "startMs": 600,
+        "endMs": 1200,
+        "sourceId": 1
+      }
+    },
+    {
+      "sourceEventIndex": 214,
+      "timestamp": "2026-10-21T20:24:34.944Z",
+      "atMs": 13871.200000047684,
+      "type": "runtime.event.scene.skipped",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 1,
+      "childTurnId": 0,
+      "nodeId": "q1",
+      "transcriptRevision": 20,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "event": {
+          "type": "scene.skipped",
+          "source": {
+            "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+            "visitId": 1,
+            "childTurnId": 0
+          },
+          "scope": "subpart",
+          "atMs": 13870.800000071526
+        },
+        "accepted": true
+      }
+    },
+    {
+      "sourceEventIndex": 235,
+      "timestamp": "2026-10-21T20:24:36.022Z",
+      "atMs": 14949.5,
+      "type": "gpt_live.context_appended",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 2,
+      "childTurnId": 0,
+      "nodeId": "q6",
+      "transcriptRevision": 20,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "type": "context.appended",
+        "eventId": "event_EbX9PBAeNZ5VFGL9NbVgd",
+        "name": "session.instructions.appended",
+        "clientEventId": "8d390e19-8cb9-4278-8b0f-296c596e86f4:steer:2",
+        "startMs": 10600,
+        "endMs": 11200,
+        "sourceId": 1
+      }
+    },
+    {
+      "sourceEventIndex": 413,
+      "timestamp": "2026-10-21T20:24:47.342Z",
+      "atMs": 26269.700000047684,
+      "type": "runtime.event.scene.skipped",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 2,
+      "childTurnId": 0,
+      "nodeId": "q6",
+      "transcriptRevision": 40,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "event": {
+          "type": "scene.skipped",
+          "source": {
+            "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+            "visitId": 2,
+            "childTurnId": 0
+          },
+          "scope": "subpart",
+          "atMs": 26269.700000047684
+        },
+        "accepted": true
+      }
+    },
+    {
+      "sourceEventIndex": 433,
+      "timestamp": "2026-10-21T20:24:48.309Z",
+      "atMs": 27236.200000047684,
+      "type": "gpt_live.context_appended",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 3,
+      "childTurnId": 0,
+      "nodeId": "q8",
+      "transcriptRevision": 40,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "type": "context.appended",
+        "eventId": "event_EbX9cfp3OtNJ7Aaz7kLEj",
+        "name": "session.instructions.appended",
+        "clientEventId": "8d390e19-8cb9-4278-8b0f-296c596e86f4:steer:3",
+        "startMs": 23200,
+        "endMs": 23800,
+        "sourceId": 1
+      }
+    },
+    {
+      "sourceEventIndex": 594,
+      "timestamp": "2026-10-21T20:24:56.760Z",
+      "atMs": 35687.200000047684,
+      "type": "microphone.speech_started",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 3,
+      "childTurnId": 0,
+      "nodeId": "q8",
+      "transcriptRevision": 59,
+      "transcriptSpeaker": "tutor",
+      "detail": null
+    },
+    {
+      "sourceEventIndex": 607,
+      "timestamp": "2026-10-21T20:24:59.160Z",
+      "atMs": 38087.200000047684,
+      "type": "microphone.speech_stopped",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 3,
+      "childTurnId": 1,
+      "nodeId": "q8",
+      "transcriptRevision": 59,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "quietMs": 900
+      }
+    },
+    {
+      "sourceEventIndex": 611,
+      "timestamp": "2026-10-21T20:24:59.161Z",
+      "atMs": 38088,
+      "type": "answer_recovery.scheduled",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 3,
+      "childTurnId": 1,
+      "nodeId": "q8",
+      "transcriptRevision": 59,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "waitMs": 4000,
+        "reason": "missing_transcript"
+      }
+    },
+    {
+      "sourceEventIndex": 640,
+      "timestamp": "2026-10-21T20:25:03.161Z",
+      "atMs": 42088.60000002384,
+      "type": "answer_recovery.requested",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 3,
+      "childTurnId": 1,
+      "nodeId": "q8",
+      "transcriptRevision": 59,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "waitMs": 4000,
+        "reason": "missing_transcript"
+      }
+    },
+    {
+      "sourceEventIndex": 642,
+      "timestamp": "2026-10-21T20:25:03.162Z",
+      "atMs": 42089.200000047684,
+      "type": "gpt_live.answer_recovery_append",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 3,
+      "childTurnId": 1,
+      "nodeId": "q8",
+      "transcriptRevision": 59,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "eventId": "8d390e19-8cb9-4278-8b0f-296c596e86f4:answer-recovery:3:1:59",
+        "content": "Application connection check \"8d390e19-8cb9-4278-8b0f-296c596e86f4:answer-recovery:3:1:59\": learner speech ended without a matching transcript. This request applies only to the identified visit and turn, once. Only if no later learner speech, answer text or screen change has occurred, gently ask whether they are still there, then listen. If they resume speaking or answer text arrives before you respond, this request expires: listen to their answer instead. Never ask them to repeat an answer already received. Do not supply an answer or infer misunderstanding, mastery or permission to advance. Honor stop immediately."
+      }
+    },
+    {
+      "sourceEventIndex": 646,
+      "timestamp": "2026-10-21T20:25:04.003Z",
+      "atMs": 42930.40000009537,
+      "type": "gpt_live.context_appended",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 3,
+      "childTurnId": 1,
+      "nodeId": "q8",
+      "transcriptRevision": 59,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "type": "context.appended",
+        "eventId": "event_EbX9rwleBEgB7XU4x4RZY",
+        "name": "session.instructions.appended",
+        "clientEventId": "8d390e19-8cb9-4278-8b0f-296c596e86f4:answer-recovery:3:1:59",
+        "startMs": 39400,
+        "endMs": 39800,
+        "sourceId": 1
+      }
+    },
+    {
+      "sourceEventIndex": 687,
+      "timestamp": "2026-10-21T20:25:07.411Z",
+      "atMs": 46338.10000002384,
+      "type": "microphone.speech_started",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 3,
+      "childTurnId": 1,
+      "nodeId": "q8",
+      "transcriptRevision": 63,
+      "transcriptSpeaker": "tutor",
+      "detail": null
+    },
+    {
+      "sourceEventIndex": 688,
+      "timestamp": "2026-10-21T20:25:07.411Z",
+      "atMs": 46338.300000071526,
+      "type": "gpt_live.answer_recovery_superseded",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 3,
+      "childTurnId": 1,
+      "nodeId": "q8",
+      "transcriptRevision": 59,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "eventId": "8d390e19-8cb9-4278-8b0f-296c596e86f4:answer-recovery:3:1:59:expired",
+        "supersededEventId": "8d390e19-8cb9-4278-8b0f-296c596e86f4:answer-recovery:3:1:59",
+        "content": "Application connection check \"8d390e19-8cb9-4278-8b0f-296c596e86f4:answer-recovery:3:1:59\" has expired because learner activity or the current task changed. This supersedes that check and its repeat-answer instruction. Do not deliver a queued check-in or ask for an answer again. Listen to current learner speech and use the current question's accumulated answer. This update requests no spoken reply, grants no assessment or navigation authority, and must not interrupt the learner. Honor stop immediately."
+      }
+    },
+    {
+      "sourceEventIndex": 694,
+      "timestamp": "2026-10-21T20:25:08.184Z",
+      "atMs": 47111.10000002384,
+      "type": "gpt_live.context_appended",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 3,
+      "childTurnId": 2,
+      "nodeId": "q8",
+      "transcriptRevision": 63,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "type": "context.appended",
+        "eventId": "event_EbX9wyrSswlMAcbIql6uZ",
+        "name": "session.instructions.appended",
+        "clientEventId": "8d390e19-8cb9-4278-8b0f-296c596e86f4:answer-recovery:3:1:59:expired",
+        "startMs": 43600,
+        "endMs": 44000,
+        "sourceId": 1
+      }
+    },
+    {
+      "sourceEventIndex": 702,
+      "timestamp": "2026-10-21T20:25:09.110Z",
+      "atMs": 48037.200000047684,
+      "type": "microphone.speech_stopped",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 3,
+      "childTurnId": 2,
+      "nodeId": "q8",
+      "transcriptRevision": 64,
+      "transcriptSpeaker": "child",
+      "detail": {
+        "quietMs": 900.0999999999767
+      }
+    },
+    {
+      "sourceEventIndex": 710,
+      "timestamp": "2026-10-21T20:25:09.685Z",
+      "atMs": 48611.800000071526,
+      "type": "runtime.event.conversation.advance.requested",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 3,
+      "childTurnId": 2,
+      "nodeId": "q8",
+      "transcriptRevision": 65,
+      "transcriptSpeaker": "child",
+      "detail": {
+        "event": {
+          "type": "conversation.advance.requested",
+          "intent": {
+            "action": "next",
+            "scope": "question"
+          },
+          "source": {
+            "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+            "visitId": 3,
+            "childTurnId": 2,
+            "nodeId": "q8",
+            "transcriptRevision": 65
+          },
+          "transcriptSnapshot": "Tutor: Here's the question: What does a phonetic writing system represent, and what main advantage does it offer over a pictographic one?\nTutor: Hey, are you still there?\nChild: Next question.",
+          "atMs": 48611.800000071526
+        },
+        "accepted": true
+      }
+    },
+    {
+      "sourceEventIndex": 727,
+      "timestamp": "2026-10-21T20:25:11.149Z",
+      "atMs": 50076.40000009537,
+      "type": "gpt_live.context_appended",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 4,
+      "childTurnId": 2,
+      "nodeId": "q10-1",
+      "transcriptRevision": 65,
+      "transcriptSpeaker": "child",
+      "detail": {
+        "type": "context.appended",
+        "eventId": "event_EbX9zX9cZ8pKCK3uK5m6D",
+        "name": "session.instructions.appended",
+        "clientEventId": "8d390e19-8cb9-4278-8b0f-296c596e86f4:steer:4",
+        "startMs": 46400,
+        "endMs": 47000,
+        "sourceId": 1
+      }
+    },
+    {
+      "sourceEventIndex": 927,
+      "timestamp": "2026-10-21T20:25:22.626Z",
+      "atMs": 61553.300000071526,
+      "type": "runtime.event.scene.skipped",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 4,
+      "childTurnId": 2,
+      "nodeId": "q10-1",
+      "transcriptRevision": 92,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "event": {
+          "type": "scene.skipped",
+          "source": {
+            "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+            "visitId": 4,
+            "childTurnId": 2
+          },
+          "scope": "question",
+          "atMs": 61553.200000047684
+        },
+        "accepted": true
+      }
+    },
+    {
+      "sourceEventIndex": 947,
+      "timestamp": "2026-10-21T20:25:23.732Z",
+      "atMs": 62659.10000002384,
+      "type": "gpt_live.context_appended",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 5,
+      "childTurnId": 2,
+      "nodeId": "q5-a",
+      "transcriptRevision": 92,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "type": "context.appended",
+        "eventId": "event_EbXABXtwtZ0vF24t5uCYl",
+        "name": "session.instructions.appended",
+        "clientEventId": "8d390e19-8cb9-4278-8b0f-296c596e86f4:steer:5",
+        "startMs": 59200,
+        "endMs": 59800,
+        "sourceId": 1
+      }
+    },
+    {
+      "sourceEventIndex": 1242,
+      "timestamp": "2026-10-21T20:25:37.777Z",
+      "atMs": 76704,
+      "type": "microphone.speech_started",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 5,
+      "childTurnId": 2,
+      "nodeId": "q5-a",
+      "transcriptRevision": 129,
+      "transcriptSpeaker": "tutor",
+      "detail": null
+    },
+    {
+      "sourceEventIndex": 1263,
+      "timestamp": "2026-10-21T20:25:40.193Z",
+      "atMs": 79120.5,
+      "type": "microphone.speech_stopped",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 5,
+      "childTurnId": 3,
+      "nodeId": "q5-a",
+      "transcriptRevision": 129,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "quietMs": 900
+      }
+    },
+    {
+      "sourceEventIndex": 1267,
+      "timestamp": "2026-10-21T20:25:40.194Z",
+      "atMs": 79120.90000009537,
+      "type": "answer_recovery.scheduled",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 5,
+      "childTurnId": 3,
+      "nodeId": "q5-a",
+      "transcriptRevision": 129,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "waitMs": 4000,
+        "reason": "missing_transcript"
+      }
+    },
+    {
+      "sourceEventIndex": 1275,
+      "timestamp": "2026-10-21T20:25:41.959Z",
+      "atMs": 80886.5,
+      "type": "answer_recovery.cancelled",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 5,
+      "childTurnId": 3,
+      "nodeId": "q5-a",
+      "transcriptRevision": 129,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "reason": "scene_skipped"
+      }
+    },
+    {
+      "sourceEventIndex": 1276,
+      "timestamp": "2026-10-21T20:25:41.959Z",
+      "atMs": 80886.5,
+      "type": "runtime.event.scene.skipped",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 5,
+      "childTurnId": 3,
+      "nodeId": "q5-a",
+      "transcriptRevision": 129,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "event": {
+          "type": "scene.skipped",
+          "source": {
+            "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+            "visitId": 5,
+            "childTurnId": 3
+          },
+          "scope": "question",
+          "atMs": 80886.5
+        },
+        "accepted": true
+      }
+    },
+    {
+      "sourceEventIndex": 1295,
+      "timestamp": "2026-10-21T20:25:42.856Z",
+      "atMs": 81783.70000004768,
+      "type": "gpt_live.context_appended",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 6,
+      "childTurnId": 3,
+      "nodeId": "q12",
+      "transcriptRevision": 129,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "type": "context.appended",
+        "eventId": "event_EbXAUNBXQltl9eaPjAohg",
+        "name": "session.instructions.appended",
+        "clientEventId": "8d390e19-8cb9-4278-8b0f-296c596e86f4:steer:6",
+        "startMs": 78800,
+        "endMs": 79400,
+        "sourceId": 1
+      }
+    },
+    {
+      "sourceEventIndex": 1536,
+      "timestamp": "2026-10-21T20:25:57.127Z",
+      "atMs": 96053.90000009537,
+      "type": "microphone.speech_started",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 6,
+      "childTurnId": 3,
+      "nodeId": "q12",
+      "transcriptRevision": 151,
+      "transcriptSpeaker": "tutor",
+      "detail": null
+    },
+    {
+      "sourceEventIndex": 1553,
+      "timestamp": "2026-10-21T20:25:59.910Z",
+      "atMs": 98837.20000004768,
+      "type": "microphone.speech_stopped",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 6,
+      "childTurnId": 4,
+      "nodeId": "q12",
+      "transcriptRevision": 152,
+      "transcriptSpeaker": "child",
+      "detail": {
+        "quietMs": 900
+      }
+    },
+    {
+      "sourceEventIndex": 1561,
+      "timestamp": "2026-10-21T20:26:00.214Z",
+      "atMs": 99141.5,
+      "type": "classifier.started",
+      "classifierVersion": "conversation-state-v2",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 6,
+      "childTurnId": 4,
+      "nodeId": "q12",
+      "transcriptRevision": 152,
+      "transcriptSpeaker": "child",
+      "detail": {
+        "trigger": "microphone.speech_stopped",
+        "transcript": "Tutor: Okay, here's the question: Using the book's characteristics, assess whether the Canadian Armed Forces can be considered a techno-literate culture. Explain your reasoning.\nChild: Um"
+      }
+    },
+    {
+      "sourceEventIndex": 1563,
+      "timestamp": "2026-10-21T20:26:00.595Z",
+      "atMs": 99522.70000004768,
+      "type": "classifier.mapping",
+      "classifierVersion": "conversation-state-v2",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 6,
+      "childTurnId": 4,
+      "nodeId": "q12",
+      "transcriptRevision": 152,
+      "transcriptSpeaker": "child",
+      "detail": {
+        "classifierVersion": "conversation-state-v2",
+        "decision": "accepted",
+        "outcome": "hold_scene",
+        "outputs": {
+          "objectiveState": {
+            "choice": "no_attempt",
+            "confidence": 0.94,
+            "probabilities": {
+              "completed": 0,
+              "incorrect": 0,
+              "unclear_or_incomplete": 0.05,
+              "unresolved_help": 0,
+              "no_attempt": 0.95
+            }
+          },
+          "tutorState": {
+            "choice": "asking",
+            "confidence": 0.94,
+            "probabilities": {
+              "confirmed_completion": 0,
+              "clarifying": 0,
+              "helping": 0,
+              "asking": 0.95,
+              "other": 0.05
+            }
+          },
+          "concepts": {
+            "concept_literacy": {
+              "choice": "not_yet",
+              "confidence": 1,
+              "probabilities": {
+                "not_yet": 1,
+                "partial": 0,
+                "demonstrated_independent": 0,
+                "demonstrated_prompted": 0
+              }
+            },
+            "concept_innovation": {
+              "choice": "not_yet",
+              "confidence": 1,
+              "probabilities": {
+                "not_yet": 1,
+                "partial": 0,
+                "demonstrated_independent": 0,
+                "demonstrated_prompted": 0
+              }
+            },
+            "concept_coordination": {
+              "choice": "not_yet",
+              "confidence": 1,
+              "probabilities": {
+                "not_yet": 1,
+                "partial": 0,
+                "demonstrated_independent": 0,
+                "demonstrated_prompted": 0
+              }
+            },
+            "concept_education": {
+              "choice": "not_yet",
+              "confidence": 0.99,
+              "probabilities": {
+                "not_yet": 0.99,
+                "partial": 0.01,
+                "demonstrated_independent": 0,
+                "demonstrated_prompted": 0
+              }
+            },
+            "concept_qualified-assessment": {
+              "choice": "not_yet",
+              "confidence": 0.99,
+              "probabilities": {
+                "not_yet": 0.99,
+                "partial": 0.01,
+                "demonstrated_independent": 0,
+                "demonstrated_prompted": 0
+              }
+            }
+          },
+          "sources": {
+            "source_literacy": {
+              "choice": "none",
+              "confidence": 1,
+              "probabilities": {
+                "none": 1
+              }
+            },
+            "sourceEnd_literacy": {
+              "choice": "none",
+              "confidence": 1,
+              "probabilities": {
+                "none": 1
+              }
+            },
+            "source_innovation": {
+              "choice": "none",
+              "confidence": 1,
+              "probabilities": {
+                "none": 1
+              }
+            },
+            "sourceEnd_innovation": {
+              "choice": "none",
+              "confidence": 1,
+              "probabilities": {
+                "none": 1
+              }
+            },
+            "source_coordination": {
+              "choice": "none",
+              "confidence": 1,
+              "probabilities": {
+                "none": 1
+              }
+            },
+            "sourceEnd_coordination": {
+              "choice": "none",
+              "confidence": 1,
+              "probabilities": {
+                "none": 1
+              }
+            },
+            "source_education": {
+              "choice": "none",
+              "confidence": 1,
+              "probabilities": {
+                "none": 1
+              }
+            },
+            "sourceEnd_education": {
+              "choice": "none",
+              "confidence": 1,
+              "probabilities": {
+                "none": 1
+              }
+            },
+            "source_qualified-assessment": {
+              "choice": "none",
+              "confidence": 1,
+              "probabilities": {
+                "none": 1
+              }
+            },
+            "sourceEnd_qualified-assessment": {
+              "choice": "none",
+              "confidence": 1,
+              "probabilities": {
+                "none": 1
+              }
+            }
+          }
+        },
+        "labelCompletionEligible": false,
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        },
+        "nodeId": "q12",
+        "transcriptRevision": 152,
+        "elapsedMs": 370.79408300016075
+      }
+    },
+    {
+      "sourceEventIndex": 1564,
+      "timestamp": "2026-10-21T20:26:00.595Z",
+      "atMs": 99522.70000004768,
+      "type": "classifier.result",
+      "classifierVersion": "conversation-state-v2",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 6,
+      "childTurnId": 4,
+      "nodeId": "q12",
+      "transcriptRevision": 152,
+      "transcriptSpeaker": "child",
+      "detail": {
+        "proposal": {
+          "nodeId": "q12",
+          "transcriptRevision": 152,
+          "childActivity": "unknown",
+          "answerOutcome": "none",
+          "supportState": "none",
+          "tutorState": "asking",
+          "conceptObservations": [
+            {
+              "criterionId": "literacy",
+              "observation": "not_yet",
+              "childMessageIndex": null
+            },
+            {
+              "criterionId": "innovation",
+              "observation": "not_yet",
+              "childMessageIndex": null
+            },
+            {
+              "criterionId": "coordination",
+              "observation": "not_yet",
+              "childMessageIndex": null
+            },
+            {
+              "criterionId": "education",
+              "observation": "not_yet",
+              "childMessageIndex": null
+            },
+            {
+              "criterionId": "qualified-assessment",
+              "observation": "not_yet",
+              "childMessageIndex": null
+            }
+          ]
+        },
+        "elapsedMs": 381.2000000476837
+      }
+    },
+    {
+      "sourceEventIndex": 1567,
+      "timestamp": "2026-10-21T20:26:00.596Z",
+      "atMs": 99523.20000004768,
+      "type": "answer_recovery.scheduled",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 6,
+      "childTurnId": 4,
+      "nodeId": "q12",
+      "transcriptRevision": 152,
+      "transcriptSpeaker": "child",
+      "detail": {
+        "waitMs": 4000,
+        "reason": "semantic_hold"
+      }
+    },
+    {
+      "sourceEventIndex": 1586,
+      "timestamp": "2026-10-21T20:26:04.597Z",
+      "atMs": 103524.40000009537,
+      "type": "answer_recovery.requested",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 6,
+      "childTurnId": 4,
+      "nodeId": "q12",
+      "transcriptRevision": 152,
+      "transcriptSpeaker": "child",
+      "detail": {
+        "waitMs": 4000,
+        "reason": "semantic_hold"
+      }
+    },
+    {
+      "sourceEventIndex": 1587,
+      "timestamp": "2026-10-21T20:26:04.598Z",
+      "atMs": 103524.90000009537,
+      "type": "gpt_live.answer_recovery_append",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 6,
+      "childTurnId": 4,
+      "nodeId": "q12",
+      "transcriptRevision": 152,
+      "transcriptSpeaker": "child",
+      "detail": {
+        "eventId": "8d390e19-8cb9-4278-8b0f-296c596e86f4:answer-recovery:6:4:152",
+        "content": "Application conversation guidance: assessment uncertainty must not hold this question. Use the learner’s accumulated answers. Follow the current scene tutor brief for targeted scaffolding when the learner struggles or asks for help; otherwise ask one useful, non-leading follow-up if meaning is unclear. Tutor-supplied content alone is not learner mastery. If the explanation is sufficient or the discussion has run its course, say we can move on and end without a question. Honor a request for the next question. Never ask for repetition to satisfy assessment attribution, claim uncertain concepts are mastered, or wait for an evaluation. The application owns question order and will supply the next rendered screen."
+      }
+    },
+    {
+      "sourceEventIndex": 1591,
+      "timestamp": "2026-10-21T20:26:05.391Z",
+      "atMs": 104318.40000009537,
+      "type": "gpt_live.context_appended",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 6,
+      "childTurnId": 4,
+      "nodeId": "q12",
+      "transcriptRevision": 152,
+      "transcriptSpeaker": "child",
+      "detail": {
+        "type": "context.appended",
+        "eventId": "event_EbXArdvnexLQo5BWgSjln",
+        "name": "session.instructions.appended",
+        "clientEventId": "8d390e19-8cb9-4278-8b0f-296c596e86f4:answer-recovery:6:4:152",
+        "startMs": 102000,
+        "endMs": 102400,
+        "sourceId": 1
+      }
+    },
+    {
+      "sourceEventIndex": 1609,
+      "timestamp": "2026-10-21T20:26:07.260Z",
+      "atMs": 106187.30000007153,
+      "type": "microphone.speech_started",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 6,
+      "childTurnId": 4,
+      "nodeId": "q12",
+      "transcriptRevision": 152,
+      "transcriptSpeaker": "child",
+      "detail": null
+    },
+    {
+      "sourceEventIndex": 1676,
+      "timestamp": "2026-10-21T20:26:14.860Z",
+      "atMs": 113787.30000007153,
+      "type": "microphone.speech_stopped",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 6,
+      "childTurnId": 5,
+      "nodeId": "q12",
+      "transcriptRevision": 163,
+      "transcriptSpeaker": "child",
+      "detail": {
+        "quietMs": 900
+      }
+    },
+    {
+      "sourceEventIndex": 1689,
+      "timestamp": "2026-10-21T20:26:15.543Z",
+      "atMs": 114470.70000004768,
+      "type": "microphone.speech_started",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 6,
+      "childTurnId": 5,
+      "nodeId": "q12",
+      "transcriptRevision": 164,
+      "transcriptSpeaker": "child",
+      "detail": null
+    },
+    {
+      "sourceEventIndex": 1729,
+      "timestamp": "2026-10-21T20:26:20.327Z",
+      "atMs": 119254.20000004768,
+      "type": "microphone.speech_stopped",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 6,
+      "childTurnId": 6,
+      "nodeId": "q12",
+      "transcriptRevision": 170,
+      "transcriptSpeaker": "child",
+      "detail": {
+        "quietMs": 916.6999999999534
+      }
+    },
+    {
+      "sourceEventIndex": 1737,
+      "timestamp": "2026-10-21T20:26:20.510Z",
+      "atMs": 119437.60000002384,
+      "type": "microphone.speech_started",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 6,
+      "childTurnId": 6,
+      "nodeId": "q12",
+      "transcriptRevision": 170,
+      "transcriptSpeaker": "child",
+      "detail": null
+    },
+    {
+      "sourceEventIndex": 1767,
+      "timestamp": "2026-10-21T20:26:23.644Z",
+      "atMs": 122570.80000007153,
+      "type": "microphone.speech_stopped",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 6,
+      "childTurnId": 7,
+      "nodeId": "q12",
+      "transcriptRevision": 175,
+      "transcriptSpeaker": "child",
+      "detail": {
+        "quietMs": 900.0999999999767
+      }
+    },
+    {
+      "sourceEventIndex": 1779,
+      "timestamp": "2026-10-21T20:26:24.149Z",
+      "atMs": 123076.30000007153,
+      "type": "classifier.started",
+      "classifierVersion": "conversation-state-v2",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 6,
+      "childTurnId": 7,
+      "nodeId": "q12",
+      "transcriptRevision": 176,
+      "transcriptSpeaker": "child",
+      "detail": {
+        "trigger": "child_transcript_stabilized",
+        "transcript": "Tutor: Okay, here's the question: Using the book's characteristics, assess whether the Canadian Armed Forces can be considered a techno-literate culture. Explain your reasoning.\nChild: Um\nChild: The qualified yes .Written orders and supply calculations require literacy and arithmetic\nChild: . Specialists develop ideas, rules coordinate large\nChild: groups. And training passes on knowledge"
+      }
+    },
+    {
+      "sourceEventIndex": 1781,
+      "timestamp": "2026-10-21T20:26:24.454Z",
+      "atMs": 123381.70000004768,
+      "type": "classifier.mapping",
+      "classifierVersion": "conversation-state-v2",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 6,
+      "childTurnId": 7,
+      "nodeId": "q12",
+      "transcriptRevision": 176,
+      "transcriptSpeaker": "child",
+      "detail": {
+        "classifierVersion": "conversation-state-v2",
+        "decision": "accepted",
+        "outcome": "hold_scene",
+        "outputs": {
+          "objectiveState": {
+            "choice": "completed",
+            "confidence": 0.46,
+            "probabilities": {
+              "completed": 0.57,
+              "incorrect": 0.05,
+              "unclear_or_incomplete": 0.37,
+              "unresolved_help": 0.01,
+              "no_attempt": 0
+            }
+          },
+          "tutorState": {
+            "choice": "asking",
+            "confidence": 0.85,
+            "probabilities": {
+              "confirmed_completion": 0.02,
+              "clarifying": 0.01,
+              "helping": 0,
+              "asking": 0.88,
+              "other": 0.09
+            }
+          },
+          "concepts": {
+            "concept_literacy": {
+              "choice": "demonstrated_independent",
+              "confidence": 0.96,
+              "probabilities": {
+                "not_yet": 0,
+                "partial": 0.03,
+                "demonstrated_independent": 0.97,
+                "demonstrated_prompted": 0
+              }
+            },
+            "concept_innovation": {
+              "choice": "demonstrated_independent",
+              "confidence": 0.73,
+              "probabilities": {
+                "not_yet": 0.02,
+                "partial": 0.18,
+                "demonstrated_independent": 0.8,
+                "demonstrated_prompted": 0
+              }
+            },
+            "concept_coordination": {
+              "choice": "demonstrated_independent",
+              "confidence": 0.84,
+              "probabilities": {
+                "not_yet": 0.01,
+                "partial": 0.11,
+                "demonstrated_independent": 0.88,
+                "demonstrated_prompted": 0
+              }
+            },
+            "concept_education": {
+              "choice": "demonstrated_independent",
+              "confidence": 0.53,
+              "probabilities": {
+                "not_yet": 0.02,
+                "partial": 0.33,
+                "demonstrated_independent": 0.65,
+                "demonstrated_prompted": 0
+              }
+            },
+            "concept_qualified-assessment": {
+              "choice": "demonstrated_independent",
+              "confidence": 0.85,
+              "probabilities": {
+                "not_yet": 0,
+                "partial": 0.11,
+                "demonstrated_independent": 0.89,
+                "demonstrated_prompted": 0
+              }
+            }
+          },
+          "sources": {
+            "source_literacy": {
+              "choice": "message_1",
+              "confidence": 0.98,
+              "probabilities": {
+                "none": 0.01,
+                "message_1": 0.99
+              }
+            },
+            "source_innovation": {
+              "choice": "message_1",
+              "confidence": 0.98,
+              "probabilities": {
+                "none": 0.01,
+                "message_1": 0.99
+              }
+            },
+            "source_coordination": {
+              "choice": "message_1",
+              "confidence": 0.98,
+              "probabilities": {
+                "none": 0.01,
+                "message_1": 0.99
+              }
+            },
+            "source_education": {
+              "choice": "message_1",
+              "confidence": 0.94,
+              "probabilities": {
+                "none": 0.03,
+                "message_1": 0.97
+              }
+            },
+            "source_qualified-assessment": {
+              "choice": "message_1",
+              "confidence": 1,
+              "probabilities": {
+                "none": 0,
+                "message_1": 1
+              }
+            }
+          }
+        },
+        "labelCompletionEligible": false,
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        },
+        "nodeId": "q12",
+        "transcriptRevision": 176,
+        "elapsedMs": 294.8633329998702
+      }
+    },
+    {
+      "sourceEventIndex": 1782,
+      "timestamp": "2026-10-21T20:26:24.454Z",
+      "atMs": 123381.70000004768,
+      "type": "classifier.result",
+      "classifierVersion": "conversation-state-v2",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 6,
+      "childTurnId": 7,
+      "nodeId": "q12",
+      "transcriptRevision": 176,
+      "transcriptSpeaker": "child",
+      "detail": {
+        "proposal": {
+          "nodeId": "q12",
+          "transcriptRevision": 176,
+          "childActivity": "unknown",
+          "answerOutcome": "unclear",
+          "supportState": "none",
+          "tutorState": "unknown",
+          "conceptObservations": [
+            {
+              "criterionId": "literacy",
+              "observation": "demonstrated_independent",
+              "childMessageIndex": 1
+            }
+          ]
+        },
+        "elapsedMs": 305.39999997615814
+      }
+    },
+    {
+      "sourceEventIndex": 1797,
+      "timestamp": "2026-10-21T20:26:26.028Z",
+      "atMs": 124955.10000002384,
+      "type": "answer_recovery.cancelled",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 6,
+      "childTurnId": 7,
+      "nodeId": "q12",
+      "transcriptRevision": 176,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "reason": "turn_or_eligibility_changed"
+      }
+    },
+    {
+      "sourceEventIndex": 2110,
+      "timestamp": "2026-10-21T20:26:36.435Z",
+      "atMs": 135362.40000009537,
+      "type": "classifier.started",
+      "classifierVersion": "conversation-state-v2",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 6,
+      "childTurnId": 7,
+      "nodeId": "q12",
+      "transcriptRevision": 201,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "trigger": "tutor_utterance_stable",
+        "transcript": "Tutor: Okay, here's the question: Using the book's characteristics, assess whether the Canadian Armed Forces can be considered a techno-literate culture. Explain your reasoning.\nChild: Um\nChild: The qualified yes .Written orders and supply calculations require literacy and arithmetic\nChild: . Specialists develop ideas, rules coordinate large\nChild: groups. And training passes on knowledge\nTutor: Hmm, that's a solid, careful answer. You tied each of the four characteristics to something the CAF does, without overstating it. Nicely reasoned. We can move on."
+      }
+    },
+    {
+      "sourceEventIndex": 2113,
+      "timestamp": "2026-10-21T20:26:36.801Z",
+      "atMs": 135728.70000004768,
+      "type": "classifier.mapping",
+      "classifierVersion": "conversation-state-v2",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 6,
+      "childTurnId": 7,
+      "nodeId": "q12",
+      "transcriptRevision": 201,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "classifierVersion": "conversation-state-v2",
+        "decision": "accepted",
+        "outcome": "allow_semantic_completion_evidence",
+        "outputs": {
+          "objectiveState": {
+            "choice": "completed",
+            "confidence": 0.81,
+            "probabilities": {
+              "completed": 0.85,
+              "incorrect": 0.03,
+              "unclear_or_incomplete": 0.12,
+              "unresolved_help": 0,
+              "no_attempt": 0
+            }
+          },
+          "tutorState": {
+            "choice": "confirmed_completion",
+            "confidence": 1,
+            "probabilities": {
+              "confirmed_completion": 1,
+              "clarifying": 0,
+              "helping": 0,
+              "asking": 0,
+              "other": 0
+            }
+          },
+          "concepts": {
+            "concept_literacy": {
+              "choice": "demonstrated_independent",
+              "confidence": 0.97,
+              "probabilities": {
+                "not_yet": 0,
+                "partial": 0.02,
+                "demonstrated_independent": 0.98,
+                "demonstrated_prompted": 0
+              }
+            },
+            "concept_innovation": {
+              "choice": "demonstrated_independent",
+              "confidence": 0.56,
+              "probabilities": {
+                "not_yet": 0.03,
+                "partial": 0.3,
+                "demonstrated_independent": 0.67,
+                "demonstrated_prompted": 0
+              }
+            },
+            "concept_coordination": {
+              "choice": "demonstrated_independent",
+              "confidence": 0.87,
+              "probabilities": {
+                "not_yet": 0.01,
+                "partial": 0.09,
+                "demonstrated_independent": 0.9,
+                "demonstrated_prompted": 0
+              }
+            },
+            "concept_education": {
+              "choice": "demonstrated_independent",
+              "confidence": 0.39,
+              "probabilities": {
+                "not_yet": 0.03,
+                "partial": 0.43,
+                "demonstrated_independent": 0.54,
+                "demonstrated_prompted": 0
+              }
+            },
+            "concept_qualified-assessment": {
+              "choice": "demonstrated_independent",
+              "confidence": 0.95,
+              "probabilities": {
+                "not_yet": 0,
+                "partial": 0.04,
+                "demonstrated_independent": 0.96,
+                "demonstrated_prompted": 0
+              }
+            }
+          },
+          "sources": {
+            "source_literacy": {
+              "choice": "message_1",
+              "confidence": 1,
+              "probabilities": {
+                "none": 0,
+                "message_1": 1
+              }
+            },
+            "source_innovation": {
+              "choice": "message_1",
+              "confidence": 0.94,
+              "probabilities": {
+                "none": 0.03,
+                "message_1": 0.97
+              }
+            },
+            "source_coordination": {
+              "choice": "message_1",
+              "confidence": 1,
+              "probabilities": {
+                "none": 0,
+                "message_1": 1
+              }
+            },
+            "source_education": {
+              "choice": "message_1",
+              "confidence": 0.86,
+              "probabilities": {
+                "none": 0.07,
+                "message_1": 0.93
+              }
+            },
+            "source_qualified-assessment": {
+              "choice": "message_1",
+              "confidence": 1,
+              "probabilities": {
+                "none": 0,
+                "message_1": 1
+              }
+            }
+          }
+        },
+        "labelCompletionEligible": true,
+        "thresholds": {
+          "HIGH": 0.9,
+          "LOW": 0.1,
+          "COMPETITOR_CEILING": 0.2,
+          "MIN_MARGIN": 0.7
+        },
+        "nodeId": "q12",
+        "transcriptRevision": 201,
+        "elapsedMs": 355.06191600020975
+      }
+    },
+    {
+      "sourceEventIndex": 2114,
+      "timestamp": "2026-10-21T20:26:36.801Z",
+      "atMs": 135728.70000004768,
+      "type": "classifier.result",
+      "classifierVersion": "conversation-state-v2",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 6,
+      "childTurnId": 7,
+      "nodeId": "q12",
+      "transcriptRevision": 201,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "proposal": {
+          "nodeId": "q12",
+          "transcriptRevision": 201,
+          "childActivity": "unknown",
+          "answerOutcome": "unclear",
+          "supportState": "none",
+          "tutorState": "acknowledging",
+          "conceptObservations": [
+            {
+              "criterionId": "literacy",
+              "observation": "demonstrated_independent",
+              "childMessageIndex": 1
+            },
+            {
+              "criterionId": "coordination",
+              "observation": "demonstrated_independent",
+              "childMessageIndex": 1
+            },
+            {
+              "criterionId": "qualified-assessment",
+              "observation": "demonstrated_independent",
+              "childMessageIndex": 1
+            }
+          ]
+        },
+        "elapsedMs": 366.2999999523163
+      }
+    },
+    {
+      "sourceEventIndex": 2132,
+      "timestamp": "2026-10-21T20:26:37.847Z",
+      "atMs": 136773.90000009537,
+      "type": "gpt_live.context_appended",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 7,
+      "childTurnId": 7,
+      "nodeId": "q14",
+      "transcriptRevision": 201,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "type": "context.appended",
+        "eventId": "event_EbXBNrh1ZPLbGWAGg9lc4",
+        "name": "session.instructions.appended",
+        "clientEventId": "8d390e19-8cb9-4278-8b0f-296c596e86f4:steer:7",
+        "startMs": 135000,
+        "endMs": 135600,
+        "sourceId": 1
+      }
+    },
+    {
+      "sourceEventIndex": 2373,
+      "timestamp": "2026-10-21T20:26:50.681Z",
+      "atMs": 149607.90000009537,
+      "type": "lesson.ended",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 7,
+      "childTurnId": 7,
+      "nodeId": "q14",
+      "transcriptRevision": 226,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "reason": "parent_stop"
+      }
+    },
+    {
+      "sourceEventIndex": 2374,
+      "timestamp": "2026-10-21T20:26:51.042Z",
+      "atMs": 149969,
+      "type": "assessment.completed",
+      "runtimeId": "8d390e19-8cb9-4278-8b0f-296c596e86f4",
+      "visitId": 7,
+      "childTurnId": 7,
+      "nodeId": "q14",
+      "transcriptRevision": 226,
+      "transcriptSpeaker": "tutor",
+      "detail": {
+        "assessment": {
+          "status": "complete",
+          "results": {
+            "q1:reification": {
+              "nodeId": "q1",
+              "criterionId": "reification",
+              "outcome": "uncertain",
+              "scores": {
+                "choice": "not_yet",
+                "confidence": 0.85,
+                "probabilities": {
+                  "not_yet": 0.89,
+                  "partial": 0.1,
+                  "demonstrated_independent": 0.01,
+                  "demonstrated_prompted": 0
+                }
+              }
+            },
+            "q1:memory-extension": {
+              "nodeId": "q1",
+              "criterionId": "memory-extension",
+              "outcome": "uncertain",
+              "scores": {
+                "choice": "not_yet",
+                "confidence": 0.83,
+                "probabilities": {
+                  "not_yet": 0.87,
+                  "partial": 0.12,
+                  "demonstrated_independent": 0.01,
+                  "demonstrated_prompted": 0
+                }
+              }
+            },
+            "q6:system1-description": {
+              "nodeId": "q6",
+              "criterionId": "system1-description",
+              "outcome": "not_yet",
+              "scores": {
+                "choice": "not_yet",
+                "confidence": 0.99,
+                "probabilities": {
+                  "not_yet": 0.99,
+                  "partial": 0.01,
+                  "demonstrated_independent": 0,
+                  "demonstrated_prompted": 0
+                }
+              }
+            },
+            "q6:system1-example": {
+              "nodeId": "q6",
+              "criterionId": "system1-example",
+              "outcome": "not_yet",
+              "scores": {
+                "choice": "not_yet",
+                "confidence": 0.97,
+                "probabilities": {
+                  "not_yet": 0.98,
+                  "partial": 0.02,
+                  "demonstrated_independent": 0,
+                  "demonstrated_prompted": 0
+                }
+              }
+            },
+            "q6:system2-description": {
+              "nodeId": "q6",
+              "criterionId": "system2-description",
+              "outcome": "not_yet",
+              "scores": {
+                "choice": "not_yet",
+                "confidence": 0.99,
+                "probabilities": {
+                  "not_yet": 0.99,
+                  "partial": 0.01,
+                  "demonstrated_independent": 0,
+                  "demonstrated_prompted": 0
+                }
+              }
+            },
+            "q6:system2-example": {
+              "nodeId": "q6",
+              "criterionId": "system2-example",
+              "outcome": "not_yet",
+              "scores": {
+                "choice": "not_yet",
+                "confidence": 0.96,
+                "probabilities": {
+                  "not_yet": 0.97,
+                  "partial": 0.03,
+                  "demonstrated_independent": 0,
+                  "demonstrated_prompted": 0
+                }
+              }
+            },
+            "q8:sound-vs-picture": {
+              "nodeId": "q8",
+              "criterionId": "sound-vs-picture",
+              "outcome": "not_yet",
+              "scores": {
+                "choice": "not_yet",
+                "confidence": 0.91,
+                "probabilities": {
+                  "not_yet": 0.93,
+                  "partial": 0.07,
+                  "demonstrated_independent": 0,
+                  "demonstrated_prompted": 0
+                }
+              }
+            },
+            "q8:sound-decoding": {
+              "nodeId": "q8",
+              "criterionId": "sound-decoding",
+              "outcome": "not_yet",
+              "scores": {
+                "choice": "not_yet",
+                "confidence": 0.97,
+                "probabilities": {
+                  "not_yet": 0.98,
+                  "partial": 0.02,
+                  "demonstrated_independent": 0,
+                  "demonstrated_prompted": 0
+                }
+              }
+            },
+            "q10-1:meaning": {
+              "nodeId": "q10-1",
+              "criterionId": "meaning",
+              "outcome": "not_yet",
+              "scores": {
+                "choice": "not_yet",
+                "confidence": 1,
+                "probabilities": {
+                  "not_yet": 1,
+                  "partial": 0,
+                  "demonstrated_independent": 0,
+                  "demonstrated_prompted": 0
+                }
+              }
+            },
+            "q10-1:concise": {
+              "nodeId": "q10-1",
+              "criterionId": "concise",
+              "outcome": "not_yet",
+              "scores": {
+                "choice": "not_yet",
+                "confidence": 1,
+                "probabilities": {
+                  "not_yet": 1,
+                  "partial": 0,
+                  "demonstrated_independent": 0,
+                  "demonstrated_prompted": 0
+                }
+              }
+            },
+            "q10-1:grammatical": {
+              "nodeId": "q10-1",
+              "criterionId": "grammatical",
+              "outcome": "not_yet",
+              "scores": {
+                "choice": "not_yet",
+                "confidence": 1,
+                "probabilities": {
+                  "not_yet": 1,
+                  "partial": 0,
+                  "demonstrated_independent": 0,
+                  "demonstrated_prompted": 0
+                }
+              }
+            },
+            "q10-2:meaning": {
+              "nodeId": "q10-2",
+              "criterionId": "meaning",
+              "outcome": "not_yet",
+              "scores": {
+                "choice": "not_yet",
+                "confidence": 1,
+                "probabilities": {
+                  "not_yet": 1,
+                  "partial": 0,
+                  "demonstrated_independent": 0,
+                  "demonstrated_prompted": 0
+                }
+              }
+            },
+            "q10-2:concise": {
+              "nodeId": "q10-2",
+              "criterionId": "concise",
+              "outcome": "not_yet",
+              "scores": {
+                "choice": "not_yet",
+                "confidence": 0.99,
+                "probabilities": {
+                  "not_yet": 0.99,
+                  "partial": 0.01,
+                  "demonstrated_independent": 0,
+                  "demonstrated_prompted": 0
+                }
+              }
+            },
+            "q10-2:grammatical": {
+              "nodeId": "q10-2",
+              "criterionId": "grammatical",
+              "outcome": "not_yet",
+              "scores": {
+                "choice": "not_yet",
+                "confidence": 0.99,
+                "probabilities": {
+                  "not_yet": 0.99,
+                  "partial": 0.01,
+                  "demonstrated_independent": 0,
+                  "demonstrated_prompted": 0
+                }
+              }
+            },
+            "q10-3:meaning": {
+              "nodeId": "q10-3",
+              "criterionId": "meaning",
+              "outcome": "not_yet",
+              "scores": {
+                "choice": "not_yet",
+                "confidence": 0.99,
+                "probabilities": {
+                  "not_yet": 0.99,
+                  "partial": 0.01,
+                  "demonstrated_independent": 0,
+                  "demonstrated_prompted": 0
+                }
+              }
+            },
+            "q10-3:concise": {
+              "nodeId": "q10-3",
+              "criterionId": "concise",
+              "outcome": "not_yet",
+              "scores": {
+                "choice": "not_yet",
+                "confidence": 0.97,
+                "probabilities": {
+                  "not_yet": 0.98,
+                  "partial": 0.02,
+                  "demonstrated_independent": 0,
+                  "demonstrated_prompted": 0
+                }
+              }
+            },
+            "q10-3:grammatical": {
+              "nodeId": "q10-3",
+              "criterionId": "grammatical",
+              "outcome": "not_yet",
+              "scores": {
+                "choice": "not_yet",
+                "confidence": 0.99,
+                "probabilities": {
+                  "not_yet": 0.99,
+                  "partial": 0.01,
+                  "demonstrated_independent": 0,
+                  "demonstrated_prompted": 0
+                }
+              }
+            },
+            "q5-a:discovery-test": {
+              "nodeId": "q5-a",
+              "criterionId": "discovery-test",
+              "outcome": "not_yet",
+              "scores": {
+                "choice": "not_yet",
+                "confidence": 0.99,
+                "probabilities": {
+                  "not_yet": 0.99,
+                  "partial": 0.01,
+                  "demonstrated_independent": 0,
+                  "demonstrated_prompted": 0
+                }
+              }
+            },
+            "q5-a:case-reasoning": {
+              "nodeId": "q5-a",
+              "criterionId": "case-reasoning",
+              "outcome": "not_yet",
+              "scores": {
+                "choice": "not_yet",
+                "confidence": 0.99,
+                "probabilities": {
+                  "not_yet": 0.99,
+                  "partial": 0.01,
+                  "demonstrated_independent": 0,
+                  "demonstrated_prompted": 0
+                }
+              }
+            },
+            "q5-c:discovery-test": {
+              "nodeId": "q5-c",
+              "criterionId": "discovery-test",
+              "outcome": "uncertain",
+              "scores": {
+                "choice": "not_yet",
+                "confidence": 0.81,
+                "probabilities": {
+                  "not_yet": 0.86,
+                  "partial": 0.1,
+                  "demonstrated_independent": 0.03,
+                  "demonstrated_prompted": 0.01
+                }
+              }
+            },
+            "q5-c:case-reasoning": {
+              "nodeId": "q5-c",
+              "criterionId": "case-reasoning",
+              "outcome": "not_yet",
+              "scores": {
+                "choice": "not_yet",
+                "confidence": 0.95,
+                "probabilities": {
+                  "not_yet": 0.96,
+                  "partial": 0.03,
+                  "demonstrated_independent": 0.01,
+                  "demonstrated_prompted": 0
+                }
+              }
+            },
+            "q5-f:discovery-test": {
+              "nodeId": "q5-f",
+              "criterionId": "discovery-test",
+              "outcome": "not_yet",
+              "scores": {
+                "choice": "not_yet",
+                "confidence": 0.88,
+                "probabilities": {
+                  "not_yet": 0.91,
+                  "partial": 0.07,
+                  "demonstrated_independent": 0.02,
+                  "demonstrated_prompted": 0
+                }
+              }
+            },
+            "q5-f:case-reasoning": {
+              "nodeId": "q5-f",
+              "criterionId": "case-reasoning",
+              "outcome": "not_yet",
+              "scores": {
+                "choice": "not_yet",
+                "confidence": 0.93,
+                "probabilities": {
+                  "not_yet": 0.95,
+                  "partial": 0.04,
+                  "demonstrated_independent": 0.01,
+                  "demonstrated_prompted": 0
+                }
+              }
+            },
+            "q12:literacy": {
+              "nodeId": "q12",
+              "criterionId": "literacy",
+              "outcome": "uncertain",
+              "scores": {
+                "choice": "demonstrated_independent",
+                "confidence": 0.85,
+                "probabilities": {
+                  "not_yet": 0,
+                  "partial": 0.1,
+                  "demonstrated_independent": 0.89,
+                  "demonstrated_prompted": 0.01
+                }
+              }
+            },
+            "q12:innovation": {
+              "nodeId": "q12",
+              "criterionId": "innovation",
+              "outcome": "uncertain",
+              "scores": {
+                "choice": "demonstrated_independent",
+                "confidence": 0.47,
+                "probabilities": {
+                  "not_yet": 0.01,
+                  "partial": 0.38,
+                  "demonstrated_independent": 0.6,
+                  "demonstrated_prompted": 0.01
+                }
+              }
+            },
+            "q12:coordination": {
+              "nodeId": "q12",
+              "criterionId": "coordination",
+              "outcome": "uncertain",
+              "scores": {
+                "choice": "partial",
+                "confidence": 0.32,
+                "probabilities": {
+                  "not_yet": 0.03,
+                  "partial": 0.49,
+                  "demonstrated_independent": 0.46,
+                  "demonstrated_prompted": 0.02
+                }
+              }
+            },
+            "q12:education": {
+              "nodeId": "q12",
+              "criterionId": "education",
+              "outcome": "uncertain",
+              "scores": {
+                "choice": "demonstrated_independent",
+                "confidence": 0.61,
+                "probabilities": {
+                  "not_yet": 0.02,
+                  "partial": 0.25,
+                  "demonstrated_independent": 0.71,
+                  "demonstrated_prompted": 0.02
+                }
+              }
+            },
+            "q12:qualified-assessment": {
+              "nodeId": "q12",
+              "criterionId": "qualified-assessment",
+              "outcome": "uncertain",
+              "scores": {
+                "choice": "demonstrated_independent",
+                "confidence": 0.8,
+                "probabilities": {
+                  "not_yet": 0,
+                  "partial": 0.14,
+                  "demonstrated_independent": 0.85,
+                  "demonstrated_prompted": 0.01
+                }
+              }
+            },
+            "q14:no-innate-inferiority": {
+              "nodeId": "q14",
+              "criterionId": "no-innate-inferiority",
+              "outcome": "not_yet",
+              "scores": {
+                "choice": "not_yet",
+                "confidence": 0.93,
+                "probabilities": {
+                  "not_yet": 0.95,
+                  "partial": 0.04,
+                  "demonstrated_independent": 0.01,
+                  "demonstrated_prompted": 0
+                }
+              }
+            },
+            "q14:first-argument": {
+              "nodeId": "q14",
+              "criterionId": "first-argument",
+              "outcome": "not_yet",
+              "scores": {
+                "choice": "not_yet",
+                "confidence": 0.92,
+                "probabilities": {
+                  "not_yet": 0.94,
+                  "partial": 0.05,
+                  "demonstrated_independent": 0.01,
+                  "demonstrated_prompted": 0
+                }
+              }
+            },
+            "q14:second-distinct-argument": {
+              "nodeId": "q14",
+              "criterionId": "second-distinct-argument",
+              "outcome": "uncertain",
+              "scores": {
+                "choice": "not_yet",
+                "confidence": 0.84,
+                "probabilities": {
+                  "not_yet": 0.88,
+                  "partial": 0.11,
+                  "demonstrated_independent": 0.01,
+                  "demonstrated_prompted": 0
+                }
+              }
+            },
+            "q15:incomplete-not-worthless": {
+              "nodeId": "q15",
+              "criterionId": "incomplete-not-worthless",
+              "outcome": "not_yet",
+              "scores": {
+                "choice": "not_yet",
+                "confidence": 0.91,
+                "probabilities": {
+                  "not_yet": 0.93,
+                  "partial": 0.05,
+                  "demonstrated_independent": 0.01,
+                  "demonstrated_prompted": 0
+                }
+              }
+            },
+            "q15:substantive-use": {
+              "nodeId": "q15",
+              "criterionId": "substantive-use",
+              "outcome": "uncertain",
+              "scores": {
+                "choice": "not_yet",
+                "confidence": 0.48,
+                "probabilities": {
+                  "not_yet": 0.61,
+                  "partial": 0.29,
+                  "demonstrated_independent": 0.09,
+                  "demonstrated_prompted": 0.01
+                }
+              }
+            }
+          }
+        },
+        "visitCount": 7
+      }
+    }
+  ]
+}
