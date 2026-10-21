@@ -1,8 +1,14 @@
+import {
+  freezeQuestionOutcomes,
+  type QuestionAttempt,
+  type QuestionObservation,
+  type QuestionOutcomeSnapshot,
+} from "./mae386/question-outcomes";
 import { projectRewrite, type RewriteProjection, type RewriteTranscript } from "./mae386/rewrite-proposal";
 import type { OutputActivityEvent } from "../events";
 import { parseConversationStateProposal } from "./conversation-state-classifier";
 import { currentNodeContext, isLessonNodeId, type LessonDefinition } from "./lesson-definition";
-import { transcriptMessages } from "./tutor-observation";
+import { substantiveLearnerText, transcriptMessages } from "./tutor-observation";
 import {
   learnerNavigationIntent,
   parseLearnerNavigationText,
@@ -114,6 +120,10 @@ export type LessonRuntimeState = {
   /** Pre-turn candidate for completed control-only speech. Never current evidence
    * while new learner words are pending, and never restored from history. */
   readonly rewriteTurn?: { readonly source: RuntimeSource; readonly prior: RewriteProjection["current"] } | null;
+  /** MAE386-only accepted outcomes, frozen once at recap entry or Stop. */
+  readonly questionOutcomes?: QuestionOutcomeSnapshot;
+  readonly questionAttempts?: Readonly<Record<string, readonly QuestionAttempt[]>>;
+  readonly questionObservations?: Readonly<Record<string, QuestionObservation>>;
   /** Session-local cumulative evidence; a new runtime always starts empty. */
   readonly conceptEvidence: Readonly<Record<string, ConceptEvidenceRecord>>;
   readonly pendingRender: {
@@ -157,6 +167,11 @@ export type LessonRuntimeEvent = { readonly atMs: number } & (
       readonly source: ClassificationSource;
       readonly transcriptSnapshot: string;
       readonly intent?: NavigationIntent;
+    }
+  | {
+      readonly type: "question.observation";
+      readonly source: ClassificationSource;
+      readonly status: QuestionObservation["status"];
     }
   | { readonly type: "terminal.transcript.checked"; readonly source: RuntimeSource; readonly complete: boolean }
   | { readonly type: "terminal.learner.resolved"; readonly source: RuntimeSource }
@@ -238,6 +253,7 @@ export function createLessonRuntime(
     ...(Object.values(lesson.nodes).some(node => node.currentRewrite)
       ? { rewriteProposals: {}, rewriteTurn: null }
       : {}),
+    ...(lesson.id === "mae386" ? { questionAttempts: {}, questionObservations: {} } : {}),
     conceptEvidence: {},
     pendingRender: null,
   };
@@ -329,8 +345,8 @@ function sameRender(expected: RenderIdentity, actual: RenderIdentity) {
 }
 
 /** Cancel an unconfirmed transition. A new runtime/render is required to resume after interruption. */
-function stopped(state: LessonRuntimeState): LessonRuntimeState {
-  return {
+function stopped(state: LessonRuntimeState, lesson: LessonDefinition): LessonRuntimeState {
+  const next: LessonRuntimeState = {
     ...state,
     ...clearedEvidence,
     ...clearedNavigation(state),
@@ -344,6 +360,9 @@ function stopped(state: LessonRuntimeState): LessonRuntimeState {
     childCandidate: null,
     interruptedExchange: null,
   };
+  return next.questionAttempts && !next.questionOutcomes
+    ? { ...next, questionOutcomes: freezeQuestionOutcomes(lesson, next) }
+    : next;
 }
 
 function outputHasDrained(state: LessonRuntimeState, lesson: LessonDefinition) {
@@ -363,6 +382,14 @@ function finish(state: LessonRuntimeState, lesson: LessonDefinition): LessonRunt
   if (!hasCurrentCompletionEvidence(next, lesson) || !drained || next.childSpeaking) {
     return { state: next, effects: [] };
   }
+  const edge = lesson.nodes[next.nodeId].onSuccess;
+  if (
+    next.questionObservations?.[next.nodeId]?.status === "pending" &&
+    sameClassificationSource(next, next.questionObservations[next.nodeId].source) &&
+    edge.kind === "node" &&
+    lesson.nodes[edge.nodeId].completeAfterTutorOutput
+  )
+    return { state: next, effects: [] };
   if (lesson.requirePresentationConfirmation) return { state: { ...next, transitionReady: true }, effects: [] };
   return requestAuthoredTransition(next, lesson, {
     ...runtimeSource(next),
@@ -453,7 +480,7 @@ export function reduceLessonRuntime(
     return ignored;
   if (event.type === "stop" || event.type === "disconnect") {
     return event.runtimeId === state.runtimeId
-      ? { state: stopped({ ...state, nowMs: event.atMs }), effects: [] }
+      ? { state: stopped({ ...state, nowMs: event.atMs }, lesson), effects: [] }
       : ignored;
   }
   const terminalRendering =
@@ -499,7 +526,7 @@ export function reduceLessonRuntime(
       (terminalRendering && (!state.tutorOutputDrained || !outputHasDrained({ ...state, nowMs: event.atMs }, lesson)))
     )
       return ignored;
-    const next: LessonRuntimeState = {
+    let next: LessonRuntimeState = {
       ...state,
       nowMs: event.atMs,
       phase: state.lessonComplete ? "complete" : "active",
@@ -510,6 +537,8 @@ export function reduceLessonRuntime(
         : {}),
       pendingRender: null,
     };
+    if (next.questionAttempts && !next.questionOutcomes && lesson.nodes[next.nodeId].completeAfterTutorOutput)
+      next = { ...next, questionOutcomes: freezeQuestionOutcomes(lesson, next) };
     if (next.lessonComplete) {
       return { state: next, effects: [{ type: "lesson.completed", renderToken: event.identity.token }] };
     }
@@ -543,6 +572,24 @@ export function reduceLessonRuntime(
       nodeId: state.nodeId,
       transcriptRevision: state.transcriptRevision,
     };
+    const edge = lesson.nodes[state.nodeId].onSuccess;
+    if (
+      state.questionObservations?.[state.nodeId]?.status === "pending" &&
+      sameClassificationSource(state, state.questionObservations[state.nodeId].source) &&
+      edge.kind === "node" &&
+      lesson.nodes[edge.nodeId].completeAfterTutorOutput
+    ) {
+      return finish(
+        {
+          ...state,
+          nowMs: event.atMs,
+          conversationAdvanceRequested: "learner",
+          navigationIntent: { action: "skip", scope: event.scope ?? "subpart" },
+          navigationSource: origin,
+        },
+        lesson,
+      );
+    }
     const skipped: LessonRuntimeState = {
       ...state,
       ...clearedEvidence,
@@ -596,7 +643,7 @@ export function reduceLessonRuntime(
     // Terminal output is handled above by suspending render confirmation.
     if (state.lessonComplete && lesson.nodes[state.nodeId].completeAfterTutorOutput && event.type !== "output.activity")
       return ignored;
-    return { state: stopped({ ...state, nowMs: event.atMs }), effects: [] };
+    return { state: stopped({ ...state, nowMs: event.atMs }, lesson), effects: [] };
   }
   if (state.phase !== "active" || !sameSource(state, event.source)) return ignored;
 
@@ -892,12 +939,37 @@ export function reduceLessonRuntime(
       next = { ...next, consumedRevision: state.transcriptRevision };
       // A missing-turn recheck can establish conversational closure only. Do not
       // attribute historical child words or new mastery to the microphone-only turn.
+      const evidenceMessages = transcriptMessages(event.transcriptSnapshot ?? "") ?? [];
+      const content = (text: string) => (text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).join(" ");
+      const eligibleText = (text: string, index: number) =>
+        substantiveLearnerText(text) &&
+        !parseLearnerNavigationText(text) &&
+        !isLearnerStopText(text) &&
+        content(text) !== content(String(currentNode.presentation.sourceText ?? "")) &&
+        !evidenceMessages
+          .slice(0, index)
+          .some(message => message.speaker === "Tutor" && content(message.text).includes(content(text)));
+      const observations = next.questionAttempts
+        ? proposal.conceptObservations?.filter(observation => {
+            const start = observation.childMessageIndex;
+            if (start === null) return false;
+            if (start === undefined)
+              return (
+                evidenceMessages.filter(
+                  (message, index) => message.speaker === "Child" && eligibleText(message.text, index),
+                ).length === 1
+              );
+            return evidenceMessages
+              .slice(start, (observation.childMessageEndIndex ?? start) + 1)
+              .some((message, offset) => message.speaker === "Child" && eligibleText(message.text, start + offset));
+          })
+        : proposal.conceptObservations;
       const conceptResult = state.hasChildTranscript
         ? applyConceptObservations(
             next.conceptEvidence,
             currentNode,
             event.source,
-            proposal.conceptObservations,
+            observations,
             event.transcriptSnapshot,
           )
         : { conceptEvidence: next.conceptEvidence, effects: [] };
@@ -927,6 +999,43 @@ export function reduceLessonRuntime(
             },
           },
         };
+      }
+      if (next.questionAttempts && state.hasChildTranscript && !currentNode.currentRewrite) {
+        const utterance = state.learnerUtterance;
+        const text = utterance?.text.trim();
+        const messages = transcriptMessages(event.transcriptSnapshot ?? "") ?? [];
+        const normalized = (value: string) => (value.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).join(" ");
+        const sourceText = String(currentNode.presentation.sourceText ?? "");
+        const authentic =
+          utterance &&
+          sameSource(state, utterance.source) &&
+          text &&
+          messages.some(message => message.speaker === "Child" && message.text.includes(text));
+        if (
+          authentic &&
+          substantiveLearnerText(text) &&
+          !parseLearnerNavigationText(text) &&
+          !isLearnerStopText(text) &&
+          normalized(text) !== normalized(sourceText) &&
+          !messages
+            .slice(
+              0,
+              messages.findLastIndex(message => message.speaker === "Child" && message.text.includes(text)),
+            )
+            .some(message => message.speaker === "Tutor" && normalized(message.text).includes(normalized(text))) &&
+          proposal.answerOutcome !== "none"
+        ) {
+          next = {
+            ...next,
+            questionAttempts: {
+              ...next.questionAttempts,
+              [next.nodeId]: [
+                ...(next.questionAttempts[next.nodeId] ?? []),
+                { source: event.source, text, outcome: proposal.answerOutcome },
+              ],
+            },
+          };
+        }
       }
       additionalEffects = conceptResult.effects;
       if (lesson.conversationFirst) {
@@ -1032,8 +1141,46 @@ export function reduceLessonRuntime(
         return ignored;
       next = { ...next, terminalLearnerPending: false };
       break;
+    case "question.observation":
+      if (!next.questionObservations || !sameClassificationSource(state, event.source)) return ignored;
+      next = {
+        ...next,
+        questionObservations: {
+          ...next.questionObservations,
+          [next.nodeId]: { source: event.source, status: event.status },
+        },
+      };
+      break;
     case "clock.tick":
       break;
+  }
+  // Only a complete authenticated turn can leave unreviewed words behind.
+  // Interim command prefixes while speaking must never create answer uncertainty.
+  if (
+    next.questionObservations &&
+    !next.childSpeaking &&
+    (event.type === "child.turn.ended" || (event.type === "transcript.updated" && event.speaker === "child"))
+  ) {
+    const utterance = next.learnerUtterance;
+    if (utterance && sameSource(next, utterance.source)) {
+      const words = utterance.text;
+      const content = (text: string) => (text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).join(" ");
+      const observations = { ...next.questionObservations };
+      const prior = observations[next.nodeId];
+      const control = parseLearnerNavigationText(words) || isLearnerStopText(words);
+      if (
+        substantiveLearnerText(words) &&
+        !control &&
+        content(words) !== content(String(lesson.nodes[next.nodeId].presentation.sourceText ?? ""))
+      ) {
+        observations[next.nodeId] = { source: utterance.source, status: "unreviewed" };
+      } else if (prior && sameSource(next, prior.source) && prior.status !== "settled") {
+        // A late full-turn revision can complete control-only speech after an
+        // earlier fragment ended. It grants no attempted-answer history.
+        delete observations[next.nodeId];
+      }
+      next = { ...next, questionObservations: observations };
+    }
   }
   const result = finish(next, lesson);
   return { ...result, effects: [...additionalEffects, ...result.effects] };

@@ -357,6 +357,10 @@ it.each([["Stop."], ["St", "op."]])(
       rewriteProposals: { "q10-1": { current: accepted, history } },
     });
     expect(runtime.snapshot().runtime?.conceptEvidence).toEqual(mastery);
+    expect(runtime.snapshot().questionRecap?.label).toBe("Session ended early");
+    expect(
+      runtime.snapshot().questionOutcomes?.questions.find(q => q.questionId === "q10")?.components[0],
+    ).toMatchObject({ outcome: "independent", rewrite: accepted });
   },
 );
 it.each([
@@ -375,6 +379,10 @@ it.each([
   expect(runtime.snapshot().runtime?.navigationHistory?.at(-1)?.intent).toEqual({ action: "skip", scope });
   expect(runtime.snapshot().runtime?.rewriteProposals?.["q10-1"]).toMatchObject({ current: accepted, history });
   expect(runtime.snapshot().runtime?.rewriteProposals?.[target]).toBeUndefined();
+  runtime.stop();
+  expect(runtime.snapshot().questionOutcomes?.questions.find(q => q.questionId === "q10")?.components[0]).toMatchObject(
+    { outcome: "independent", rewrite: accepted },
+  );
 });
 it("UI Stop remains a preserving control", async () => {
   const { accepted, history } = await acceptedRewrite();
@@ -467,6 +475,10 @@ it.each(
     expect(result.current).not.toEqual(accepted);
     expect(result.history).toEqual(projection.history);
     expect(result.history[0]).toEqual(accepted);
+    runtime.stop();
+    expect(
+      runtime.snapshot().questionOutcomes?.questions.find(q => q.questionId === "q10")?.components[0].outcome,
+    ).toBe(assessed && kind === "replacement" ? "incorrect" : "unresolved");
   },
 );
 it.each([
@@ -513,3 +525,27 @@ it("a substantive late suffix revokes a restored skip candidate before departure
   expect(transport.close).toHaveBeenCalledOnce();
   expect(runtime.snapshot().runtime?.rewriteProposals?.["q10-1"]).toMatchObject({ current: null, history });
 });
+
+it.each([
+  { node: "q5-a", parts: ["Skip ", "this question."], skipped: true },
+  { node: "q10-1", parts: ["Next ", "question."], skipped: false },
+  { node: "q10-1", parts: ["St", "op."], skipped: false },
+])(
+  "fragmented control-only speech at $node leaves no attempted-answer uncertainty",
+  async ({ node, parts, skipped }) => {
+    start(node);
+    transport.receive!({ type: "output.activity", state: "quiet" });
+    controlFragments(parts);
+    transport.receive!({ type: "microphone.speech_stopped", quietMs: 900 });
+    if (parts[0] !== "St") {
+      await vi.advanceTimersByTimeAsync(1500);
+      runtime.confirmRendered(runtime.snapshot().display);
+      runtime.stop();
+    }
+    const component = runtime
+      .snapshot()
+      .questionOutcomes!.questions.flatMap(q => q.components)
+      .find(c => c.nodeId === node)!;
+    expect(component).toMatchObject({ outcome: skipped ? "skipped" : "unattempted", attempts: [], assessment: "none" });
+  },
+);

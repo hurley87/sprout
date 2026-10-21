@@ -3,7 +3,7 @@ import { MAE386_RUBRICS, MAE386_ATTRIBUTION_RULES } from "./mae386/rubrics";
 import { MANUSCRIPT_PASSAGES } from "./mae386/sources";
 
 /** Authored content and grouped navigation. Q10 current-proposal assessment.
- * Eight-question outcomes remain later work; this is not yet a working demo. */
+ * Outcomes freeze at committed recap entry or Stop. Route UI remains later work. */
 export const MAE386_QUESTION_GROUPS = MAE386_RUBRICS.map(question => ({
   questionId: question.id,
   originalNumber: Number(question.id.slice(1)),

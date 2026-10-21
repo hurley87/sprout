@@ -1,3 +1,4 @@
+import { questionRecap, type QuestionOutcomeSnapshot } from "./mae386/question-outcomes";
 import type { RewriteTranscript } from "./mae386/rewrite-proposal";
 import { learnerNavigationIntent, parseLearnerNavigationText, isLearnerStopText } from "./conversation-progression";
 import { terminalRecapComplete } from "./terminal-recap";
@@ -63,6 +64,8 @@ export type LessonSnapshot = {
   display: RenderIdentity;
   transcript: string;
   recapText?: string;
+  questionOutcomes?: QuestionOutcomeSnapshot;
+  questionRecap?: ReturnType<typeof questionRecap>;
   error: string | null;
   awaitingSteering: boolean;
   diagnostics: readonly LessonDiagnostic[];
@@ -239,6 +242,10 @@ export class LessonRuntime {
       display: this.display,
       transcript: this.transcript,
       recapText: this.terminalText,
+      questionOutcomes: this.state?.questionOutcomes,
+      questionRecap: this.state?.questionOutcomes
+        ? questionRecap(this.state.questionOutcomes, this.state.phase === "stopped")
+        : undefined,
       error: this.error,
       awaitingSteering: Boolean(this.steering),
       diagnostics: this.journal.recent(),
@@ -323,7 +330,11 @@ export class LessonRuntime {
           this.fragments = [];
           this.transcript = "";
           this.log("transcript.reset", { reason: "node_visit_committed", providerFloorMs: this.providerFloorMs });
-          if (effect.identity.nodeId && this.lessonDefinition.nodes[effect.identity.nodeId].completeAfterTutorOutput)
+          if (
+            this.lessonDefinition.id !== "mae386" &&
+            effect.identity.nodeId &&
+            this.lessonDefinition.nodes[effect.identity.nodeId].completeAfterTutorOutput
+          )
             // Freeze before React can render or asynchronous assessment can settle.
             this.terminalText ??= evidenceRecap(this.lessonDefinition, this.state);
           this.display = effect.identity;
@@ -768,6 +779,9 @@ export class LessonRuntime {
     this.lastClassifiedKey = key;
     const abort = new AbortController();
     this.classification = { abort, source, speaker };
+    if (this.state.questionObservations)
+      this.dispatch({ type: "question.observation", source, status: "pending", atMs: this.now() });
+    let observationSettled = false;
     this.log("classifier.started", { trigger, transcript }, source, speaker);
     this.publish();
     const startedAtMs = this.now();
@@ -838,6 +852,7 @@ export class LessonRuntime {
           atMs: this.now(),
         });
       }
+      observationSettled = proposal !== null;
       // Usable evidence does not rule out a hold: a concept proposal may be
       // partial, or learner speech may have interrupted tutor confirmation.
       if (
@@ -885,6 +900,13 @@ export class LessonRuntime {
         );
     } finally {
       if (this.classification?.abort === abort) this.classification = undefined;
+      if (!abort.signal.aborted && this.status === "live" && this.state?.questionObservations)
+        this.dispatch({
+          type: "question.observation",
+          source,
+          status: observationSettled ? "settled" : "unavailable",
+          atMs: this.now(),
+        });
       // A failed/held recheck must still recover conversationally. Cancelled or
       // superseded responses may neither advance nor issue a stale recovery prompt.
       if (
@@ -934,7 +956,9 @@ export class LessonRuntime {
     const eventId = `${this.runtimeId}:steer:${this.state.visitId}`;
     const terminal = this.lessonDefinition.nodes[context.nodeId].completeAfterTutorOutput;
     if (terminal) {
-      this.terminalText ??= evidenceRecap(this.lessonDefinition, this.state);
+      this.terminalText ??= this.state.questionOutcomes
+        ? questionRecap(this.state.questionOutcomes).spoken
+        : evidenceRecap(this.lessonDefinition, this.state);
       this.terminalTimer = setTimeout(
         () =>
           this.fail(
@@ -993,7 +1017,14 @@ export class LessonRuntime {
     )
       return;
     const source = runtimeSource(this.state);
-    this.cancelClassification("scene_skipped");
+    const edge = this.lessonDefinition.nodes[this.state.nodeId].onSuccess;
+    const drainFinalObservation =
+      this.state.questionObservations &&
+      this.classification &&
+      JSON.stringify(this.classification.source) === JSON.stringify(classificationSource(this.state)) &&
+      edge.kind === "node" &&
+      this.lessonDefinition.nodes[edge.nodeId].completeAfterTutorOutput;
+    if (!drainFinalObservation) this.cancelClassification("scene_skipped");
     this.answerRecovery.cancel("scene_skipped");
     this.dispatch({ type: "scene.skipped", source, scope, atMs: this.now() });
   }
@@ -1083,7 +1114,6 @@ export class LessonRuntime {
       };
     }
     this.status = "ended";
-    void this.assessConversation();
     this.log("lesson.ended", { reason, runtime: this.state });
     // Request provider close when possible, then release all local resources immediately.
     try {
@@ -1092,6 +1122,7 @@ export class LessonRuntime {
       /* Already disconnected. */
     }
     this.transport.close();
+    void this.assessConversation();
     this.publish();
   }
 
