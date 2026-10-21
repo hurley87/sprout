@@ -218,3 +218,298 @@ it("an empty segment without an authenticated command still receives bounded rec
     1,
   );
 });
+
+it("projects latest rewrite words onto actual learner turns through the runtime transcript grouping", async () => {
+  const { rewriteWords } = await import("../lib/lesson-runtime/mae386/rewrite-proposal");
+  const events = start();
+  const good = "He was late because he overslept.";
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (_url, init) => {
+      const input = JSON.parse(init.body);
+      const words = rewriteWords(input.transcript);
+      const start = words.findLastIndex(word => word.text === "He");
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          proposal: {
+            nodeId: input.nodeId,
+            transcriptRevision: input.transcriptRevision,
+            childActivity: "unknown",
+            answerOutcome: "unclear",
+            supportState: "none",
+            tutorState: "asking",
+            conceptObservations: [],
+            currentRewrite: {
+              state: "complete",
+              start: words[start].id,
+              end: words.at(-1)!.id,
+              assistance: "independent",
+              criteria: { meaning: "demonstrated", concise: "demonstrated", grammatical: "demonstrated" },
+            },
+          },
+        }),
+      };
+    }),
+  );
+  events.childTurn("He overslept because he was late.", 100);
+  await vi.advanceTimersByTimeAsync(1500);
+  const earlierTurn = runtime.snapshot().runtime!.childTurnId;
+  events.childTurn(`No, my revision is: ${good}`, 400);
+  await vi.advanceTimersByTimeAsync(1500);
+  const state = runtime.snapshot().runtime!;
+  const attempt = state.rewriteProposals?.["q10-1"]?.current;
+  expect(attempt).toMatchObject({ text: good, outcome: "independent", source: { transcriptRevision: 2 } });
+  expect(state.childTurnId).toBeGreaterThan(earlierTurn);
+  expect(attempt!.words.every(word => word.childTurnId === state.childTurnId)).toBe(true);
+  expect(attempt!.context[0].text).toContain("He overslept because he was late.");
+  expect(attempt!.words[0].start).toBeGreaterThan(30);
+  const preserved = state.rewriteProposals!["q10-1"];
+  transport.receive!({ type: "output.activity", state: "quiet" });
+  events.childTurn("Next.", 700);
+  await vi.advanceTimersByTimeAsync(1500);
+  expect(runtime.snapshot().runtime?.nodeId).toBe("q10-2");
+  runtime.confirmRendered(runtime.snapshot().display);
+  const steering = transport.send.mock.calls.at(-1)![0];
+  if (steering.type !== "session.instructions.append") throw new Error("Expected steering");
+  events.acknowledgeSteering(steering.event_id, 1000);
+  // A navigation-only revision pending assessment does not carry the preceding
+  // sentence's success into a sibling; its earlier accepted attempt remains history.
+  expect(runtime.snapshot().runtime?.rewriteProposals?.["q10-1"]?.history).toEqual(preserved.history);
+  expect(runtime.snapshot().runtime?.rewriteProposals?.["q10-1"]?.current).toEqual(preserved.current);
+  expect(runtime.snapshot().runtime?.rewriteProposals?.["q10-2"]).toBeUndefined();
+});
+
+async function acceptedRewrite() {
+  const { rewriteWords } = await import("../lib/lesson-runtime/mae386/rewrite-proposal");
+  const events = start();
+  const answer = "He was late because he overslept.";
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (_url, init) => {
+      const input = JSON.parse(init.body);
+      const words = rewriteWords(input.transcript);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          proposal: {
+            nodeId: input.nodeId,
+            transcriptRevision: input.transcriptRevision,
+            childActivity: "unknown",
+            answerOutcome: "unclear",
+            supportState: "none",
+            tutorState: "asking",
+            conceptObservations: [],
+            currentRewrite: {
+              state: "complete",
+              start: words[0].id,
+              end: words.at(-1)!.id,
+              assistance: "independent",
+              criteria: { meaning: "demonstrated", concise: "demonstrated", grammatical: "demonstrated" },
+            },
+          },
+        }),
+      };
+    }),
+  );
+  events.childTurn(answer, 100);
+  await vi.advanceTimersByTimeAsync(1500);
+  const state = runtime.snapshot().runtime!;
+  const projection = state.rewriteProposals!["q10-1"];
+  expect(projection.current).toMatchObject({
+    text: answer,
+    outcome: "independent",
+    source: { childTurnId: state.childTurnId, transcriptRevision: 1 },
+  });
+  expect(projection.current!.words.every(word => word.childTurnId === state.childTurnId)).toBe(true);
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() => new Promise(() => {})),
+  );
+  return { events, accepted: projection.current!, history: projection.history, mastery: state.conceptEvidence };
+}
+function controlFragments(parts: readonly string[], atMs = 400) {
+  transport.receive!({ type: "microphone.activity_started" });
+  for (const [index, delta] of parts.entries()) {
+    transport.receive!({
+      type: "transcript",
+      speaker: "child",
+      delta,
+      startMs: atMs + index * 51,
+      endMs: atMs + index * 51 + 50,
+    });
+  }
+}
+it.each([["Stop."], ["St", "op."]])(
+  "preserves the accepted rewrite through spoken Stop fragments %j",
+  async (...parts) => {
+    const { accepted, history, mastery } = await acceptedRewrite();
+    transport.receive!({ type: "output.activity", state: "active" });
+    controlFragments(parts);
+    expect(transport.close).not.toHaveBeenCalled();
+    expect(runtime.snapshot().runtime?.rewriteProposals?.["q10-1"]?.current).toBeNull(); // Still speaking: no control authority yet.
+    transport.receive!({ type: "microphone.speech_stopped", quietMs: 900 });
+    expect(transport.close).toHaveBeenCalledOnce();
+    expect(runtime.snapshot().runtime).toMatchObject({
+      phase: "stopped",
+      rewriteProposals: { "q10-1": { current: accepted, history } },
+    });
+    expect(runtime.snapshot().runtime?.conceptEvidence).toEqual(mastery);
+  },
+);
+it.each([
+  { parts: ["Skip ", "this one."], target: "q10-2", scope: "subpart" },
+  { parts: ["Skip this ", "question."], target: "q5-a", scope: "question" },
+])("preserves the accepted rewrite after fragmented $scope skip", async ({ parts, target, scope }) => {
+  const { accepted, history } = await acceptedRewrite();
+  transport.receive!({ type: "output.activity", state: "quiet" });
+  controlFragments(parts);
+  expect(runtime.snapshot().runtime?.rewriteProposals?.["q10-1"]?.current).toBeNull();
+  transport.receive!({ type: "microphone.speech_stopped", quietMs: 900 });
+  expect(runtime.snapshot().runtime?.rewriteProposals?.["q10-1"]?.current).toEqual(accepted);
+  await vi.advanceTimersByTimeAsync(1500);
+  expect(runtime.snapshot().runtime?.nodeId).toBe(target);
+  runtime.confirmRendered(runtime.snapshot().display);
+  expect(runtime.snapshot().runtime?.navigationHistory?.at(-1)?.intent).toEqual({ action: "skip", scope });
+  expect(runtime.snapshot().runtime?.rewriteProposals?.["q10-1"]).toMatchObject({ current: accepted, history });
+  expect(runtime.snapshot().runtime?.rewriteProposals?.[target]).toBeUndefined();
+});
+it("UI Stop remains a preserving control", async () => {
+  const { accepted, history } = await acceptedRewrite();
+  runtime.stop();
+  expect(transport.close).toHaveBeenCalledOnce();
+  expect(runtime.snapshot().runtime).toMatchObject({
+    phase: "stopped",
+    rewriteProposals: { "q10-1": { current: accepted, history } },
+  });
+});
+
+async function revisedRewrite(kind: "replacement" | "withdrawal", assessed: boolean) {
+  const base = await acceptedRewrite();
+  const text =
+    kind === "replacement"
+      ? "Actually replace that with: He overslept because he was late."
+      : "I withdraw my answer. I haven't got a replacement yet.";
+  if (assessed) {
+    const { rewriteWords } = await import("../lib/lesson-runtime/mae386/rewrite-proposal");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url, init) => {
+        const input = JSON.parse(init.body);
+        const words = rewriteWords(input.transcript);
+        const tokens = (kind === "replacement" ? "He overslept because he was late." : text).split(" ");
+        const index = words.findLastIndex((_, index) =>
+          tokens.every((token, offset) => words[index + offset]?.text === token),
+        );
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            proposal: {
+              nodeId: input.nodeId,
+              transcriptRevision: input.transcriptRevision,
+              childActivity: "unknown",
+              answerOutcome: "unclear",
+              supportState: "none",
+              tutorState: "asking",
+              conceptObservations: [],
+              currentRewrite: {
+                state: kind === "replacement" ? "complete" : "withdrawn",
+                start: words[index].id,
+                end: words.at(-1)!.id,
+                assistance: "independent",
+                criteria:
+                  kind === "replacement"
+                    ? { meaning: "incorrect", concise: "incorrect", grammatical: "demonstrated" }
+                    : { meaning: "unresolved", concise: "unresolved", grammatical: "unresolved" },
+              },
+            },
+          }),
+        };
+      }),
+    );
+  }
+  base.events.childTurn(text, 400);
+  await vi.advanceTimersByTimeAsync(1500);
+  const projection = runtime.snapshot().runtime!.rewriteProposals!["q10-1"];
+  if (assessed) expect(projection.current?.outcome).toBe(kind === "replacement" ? "incorrect" : "unresolved");
+  else expect(projection.current).toBeNull();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() => new Promise(() => {})),
+  );
+  return { ...base, projection };
+}
+it.each(
+  (["replacement", "withdrawal"] as const).flatMap(kind =>
+    [true, false].flatMap(assessed =>
+      (["Stop.", "Skip this one."] as const).map(command => ({ kind, assessed, command })),
+    ),
+  ),
+)(
+  "never restores older credit after $kind (assessed=$assessed) followed by $command",
+  async ({ kind, assessed, command }) => {
+    const { projection, accepted } = await revisedRewrite(kind, assessed);
+    transport.receive!({ type: "output.activity", state: command === "Stop." ? "active" : "quiet" });
+    controlFragments([command.slice(0, 2), command.slice(2)], 800);
+    transport.receive!({ type: "microphone.speech_stopped", quietMs: 900 });
+    if (command === "Stop.") {
+      expect(transport.close).toHaveBeenCalledOnce();
+      expect(runtime.snapshot().runtime?.phase).toBe("stopped");
+    } else {
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(runtime.snapshot().runtime?.nodeId).toBe("q10-2");
+    }
+    const result = runtime.snapshot().runtime!.rewriteProposals!["q10-1"];
+    expect(result.current).toEqual(projection.current);
+    expect(result.current).not.toEqual(accepted);
+    expect(result.history).toEqual(projection.history);
+    expect(result.history[0]).toEqual(accepted);
+  },
+);
+it.each([
+  ["Skip this ", "answer; I withdraw my proposal."],
+  ["St", "op. Actually, replace my answer with: He overslept because he was late."],
+  ["The tutor said ", '"Stop."'],
+])("does not restore a candidate from a control-like prefix %j", async (...parts) => {
+  const { history } = await acceptedRewrite();
+  transport.receive!({ type: "output.activity", state: "quiet" });
+  controlFragments(parts);
+  transport.receive!({ type: "microphone.speech_stopped", quietMs: 900 });
+  await vi.advanceTimersByTimeAsync(1500);
+  expect(transport.close).not.toHaveBeenCalled();
+  expect(runtime.snapshot().runtime?.nodeId).toBe("q10-1");
+  expect(runtime.snapshot().runtime?.rewriteProposals?.["q10-1"]).toMatchObject({ current: null, history });
+});
+it("revalidates late command fragments against the same completed authenticated turn", async () => {
+  const { accepted, history } = await acceptedRewrite();
+  controlFragments(["St"]);
+  transport.receive!({ type: "microphone.speech_stopped", quietMs: 900 });
+  expect(transport.close).not.toHaveBeenCalled();
+  expect(runtime.snapshot().runtime?.rewriteProposals?.["q10-1"]?.current).toBeNull();
+  transport.receive!({ type: "transcript", speaker: "child", delta: "op.", startMs: 451, endMs: 500 });
+  expect(transport.close).toHaveBeenCalledOnce();
+  expect(runtime.snapshot().runtime?.rewriteProposals?.["q10-1"]).toMatchObject({ current: accepted, history });
+});
+
+it("a substantive late suffix revokes a restored skip candidate before departure", async () => {
+  const { history } = await acceptedRewrite();
+  transport.receive!({ type: "output.activity", state: "active" }); // Hold the existing audio-drain gate.
+  controlFragments(["Skip this one."]);
+  transport.receive!({ type: "microphone.speech_stopped", quietMs: 900 });
+  expect(runtime.snapshot().runtime?.rewriteProposals?.["q10-1"]?.current?.outcome).toBe("independent");
+  transport.receive!({
+    type: "transcript",
+    speaker: "child",
+    delta: " Actually I withdraw my answer.",
+    startMs: 451,
+    endMs: 500,
+  });
+  expect(runtime.snapshot().runtime?.rewriteProposals?.["q10-1"]?.current).toBeNull();
+  controlFragments(["St", "op."], 800);
+  transport.receive!({ type: "microphone.speech_stopped", quietMs: 900 });
+  expect(transport.close).toHaveBeenCalledOnce();
+  expect(runtime.snapshot().runtime?.rewriteProposals?.["q10-1"]).toMatchObject({ current: null, history });
+});

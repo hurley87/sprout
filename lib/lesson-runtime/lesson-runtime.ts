@@ -1,3 +1,4 @@
+import type { RewriteTranscript } from "./mae386/rewrite-proposal";
 import { learnerNavigationIntent, parseLearnerNavigationText, isLearnerStopText } from "./conversation-progression";
 import { terminalRecapComplete } from "./terminal-recap";
 import { evidenceRecap } from "./evidence-recap";
@@ -615,10 +616,31 @@ export class LessonRuntime {
       source,
       speaker,
     );
+    const rewriteTurns: RewriteTranscript["turns"][number][] = [];
+    if (this.lessonDefinition.nodes[this.state!.nodeId]?.currentRewrite) {
+      let messageIndex = -1;
+      let previousSpeaker = "";
+      let length = 0;
+      for (const message of messages.filter(message => message.text.trim())) {
+        const trimmed = message.text.trim();
+        if (previousSpeaker === message.speaker) length += 1;
+        else {
+          messageIndex++;
+          length = 0;
+          previousSpeaker = message.speaker;
+        }
+        if (message.speaker === "Child")
+          rewriteTurns.push({ messageIndex, start: length, end: length + trimmed.length, childTurnId: message.turn });
+        length += trimmed.length;
+      }
+    }
     this.dispatch({
       type: "transcript.updated",
       source,
       revision: this.revision,
+      ...(this.lessonDefinition.nodes[this.state!.nodeId]?.currentRewrite
+        ? { rewriteTranscript: { text, turns: rewriteTurns } }
+        : {}),
       speaker,
       transcriptSnapshot: text,
       ...(speaker === "child" && this.lessonDefinition.questionGroups
@@ -788,6 +810,7 @@ export class LessonRuntime {
         "diagnostic" in body ? body.diagnostic : undefined,
         this.lessonDefinition,
         source.nodeId,
+        transcript,
       );
       this.log(
         diagnostic ? "classifier.mapping" : "classifier.mapping_unavailable",

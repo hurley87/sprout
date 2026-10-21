@@ -9,6 +9,7 @@ import {
 import { isLessonNodeId, type LessonDefinition } from "./lesson-definition";
 export type LiveClassificationDiagnostic = {
   classifierVersion: typeof CLASSIFIER_VERSION;
+  rewriteAssessment?: ConversationStateDecision["rewriteAssessment"];
   decision: ConversationStateDecision["status"];
   outcome: ConversationStateDecision["outcome"];
   reason?: string;
@@ -42,6 +43,7 @@ export function parseLiveClassificationDiagnostic(
   value: unknown,
   lesson?: LessonDefinition,
   currentNodeId?: string,
+  transcript?: string,
 ): LiveClassificationDiagnostic | null {
   if (!record(value)) return null;
   if (
@@ -58,7 +60,10 @@ export function parseLiveClassificationDiagnostic(
     )
   )
     return null;
-  if (lesson && (!isLessonNodeId(lesson, value.nodeId) || (currentNodeId !== undefined && currentNodeId !== value.nodeId)))
+  if (
+    lesson &&
+    (!isLessonNodeId(lesson, value.nodeId) || (currentNodeId !== undefined && currentNodeId !== value.nodeId))
+  )
     return null;
   if (
     !["accepted", "abstained"].includes(value.decision as string) ||
@@ -69,18 +74,28 @@ export function parseLiveClassificationDiagnostic(
   if (value.decision === "abstained" && (typeof value.reason !== "string" || !reasons.includes(value.reason)))
     return null;
   if (value.decision === "accepted" && value.reason !== undefined) return null;
+  if (
+    value.rewriteAssessment !== undefined &&
+    (!["complete", "unavailable", "not_requested"].includes(value.rewriteAssessment as string) ||
+      !lesson?.nodes[value.nodeId]?.currentRewrite)
+  )
+    return null;
   let outputs: ConversationStateOutputs | null = null;
   if (record(value.outputs)) {
     if (
-      Object.keys(value.outputs).some(key => !["objectiveState", "tutorState", "concepts", "sources"].includes(key)) ||
+      Object.keys(value.outputs).some(
+        key => !["objectiveState", "tutorState", "concepts", "sources", "rewrite"].includes(key),
+      ) ||
       (!lesson && value.outputs.concepts !== undefined)
     )
       return null;
-    const authoredConcepts = lesson && isLessonNodeId(lesson, value.nodeId) ? lesson.nodes[value.nodeId].concepts ?? [] : [];
+    const authoredConcepts =
+      lesson && isLessonNodeId(lesson, value.nodeId) ? (lesson.nodes[value.nodeId].concepts ?? []) : [];
     const concepts = value.outputs.concepts;
     if (concepts !== undefined && !record(concepts)) return null;
-    if ((authoredConcepts.length > 0) !== (concepts !== undefined)) return null;
-    if (concepts && Object.keys(concepts).some(id => !authoredConcepts.some(concept => `concept_${concept.id}` === id))) return null;
+    if (authoredConcepts.length > 0 !== (concepts !== undefined)) return null;
+    if (concepts && Object.keys(concepts).some(id => !authoredConcepts.some(concept => `concept_${concept.id}` === id)))
+      return null;
     const answers: Record<string, unknown> = {};
     for (const id of ["objectiveState", "tutorState"]) {
       const output = value.outputs[id];
@@ -94,9 +109,18 @@ export function parseLiveClassificationDiagnostic(
       for (const [id, output] of Object.entries(value.outputs.sources))
         answers[id] = record(output) ? { ...output, type: "choice" } : output;
     }
-    outputs = normalizeConversationOutputs({ answers }, lesson, lesson ? value.nodeId as string : undefined);
-  }
-  else if (value.outputs !== null) return null;
+    if (value.outputs.rewrite !== undefined) {
+      if (!record(value.outputs.rewrite) || transcript === undefined) return null;
+      for (const [id, output] of Object.entries(value.outputs.rewrite))
+        answers[id] = record(output) ? { ...output, type: "choice" } : output;
+    }
+    outputs = normalizeConversationOutputs(
+      { answers },
+      lesson,
+      lesson ? (value.nodeId as string) : undefined,
+      lesson?.nodes[value.nodeId]?.currentRewrite ? transcript : undefined,
+    );
+  } else if (value.outputs !== null) return null;
   if (value.outputs !== null && !outputs) return null;
   if (value.decision === "accepted" && (!outputs || value.outcome === "unresolved")) return null;
   if (value.decision === "abstained" && value.outcome !== "unresolved") return null;
@@ -109,15 +133,22 @@ export function parseLiveClassificationDiagnostic(
   if (
     value.labelCompletionEligible !== labelCompletionEligible ||
     (value.decision === "accepted" &&
-      (!outputs || (hasConceptQuestions ? (!completionEligible && !confidentConcepts) : (!genericConfident && !completionEligible)) ||
+      (!outputs ||
+        (hasConceptQuestions
+          ? !completionEligible && !confidentConcepts && !outputs.rewrite
+          : !genericConfident && !completionEligible) ||
         (value.outcome === "allow_semantic_completion_evidence") !== completionEligible ||
         (value.outcome === "hold_scene") !== !completionEligible)) ||
-    (value.decision === "abstained" && value.reason === "no_confident_concept_observation" &&
+    (value.decision === "abstained" &&
+      value.reason === "no_confident_concept_observation" &&
       (!outputs?.concepts || completionEligible || confidentConcepts))
   )
     return null;
   return {
     classifierVersion: CLASSIFIER_VERSION,
+    ...(value.rewriteAssessment
+      ? { rewriteAssessment: value.rewriteAssessment as ConversationStateDecision["rewriteAssessment"] }
+      : {}),
     decision: value.decision as ConversationStateDecision["status"],
     outcome: value.outcome as ConversationStateDecision["outcome"],
     ...(value.reason ? { reason: value.reason as string } : {}),

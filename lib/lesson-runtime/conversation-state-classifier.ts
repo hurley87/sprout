@@ -1,3 +1,4 @@
+import { parseRewriteProposal, type RewriteProposal } from "./mae386/rewrite-proposal";
 import type { LessonDefinition } from "./lesson-definition";
 
 export const CHILD_ACTIVITIES = ["unknown", "waiting", "thinking", "answering"] as const;
@@ -11,11 +12,20 @@ export type SupportState = (typeof SUPPORT_STATES)[number];
 
 export const TUTOR_STATES = ["unknown", "asking", "listening", "clarifying", "helping", "acknowledging"] as const;
 export type TutorState = (typeof TUTOR_STATES)[number];
-export const CONCEPT_OBSERVATIONS = ["not_yet", "partial", "demonstrated_independent", "demonstrated_prompted"] as const;
+export const CONCEPT_OBSERVATIONS = [
+  "not_yet",
+  "partial",
+  "demonstrated_independent",
+  "demonstrated_prompted",
+] as const;
 export type ConceptObservation = (typeof CONCEPT_OBSERVATIONS)[number];
 // The provider still returns four labels. The mapper may settle demonstration
 // without asserting which prompting label was responsible for that confidence.
-export const PROPOSED_CONCEPT_OBSERVATIONS = [...CONCEPT_OBSERVATIONS, "demonstrated_unattributed", "partial_uncertain"] as const;
+export const PROPOSED_CONCEPT_OBSERVATIONS = [
+  ...CONCEPT_OBSERVATIONS,
+  "demonstrated_unattributed",
+  "partial_uncertain",
+] as const;
 export type ProposedConceptObservation = {
   readonly criterionId: string;
   readonly observation: (typeof PROPOSED_CONCEPT_OBSERVATIONS)[number];
@@ -48,6 +58,8 @@ export type ConversationStateProposal = {
   readonly supportState: SupportState;
   /** Transcript classification describes the latest tutor message, not live speech activity. */
   readonly tutorState: TutorState;
+  /** Opted-in current proposal; never cumulative mastery or navigation authority. */
+  readonly currentRewrite?: RewriteProposal;
   /** Optional classifier interpretations; the reducer validates authorship and owns accepted evidence. */
   readonly conceptObservations?: readonly ProposedConceptObservation[];
 };
@@ -78,6 +90,7 @@ const PROPOSAL_KEYS = [
   "supportState",
   "tutorState",
   "conceptObservations",
+  "currentRewrite",
 ] as const;
 
 /** Closed runtime payload: reject commands, future-node context, and evidence/review metadata. */
@@ -86,9 +99,11 @@ export function parseConversationStateProposal(value: unknown): ConversationStat
   const proposal = value as Record<string, unknown>;
   const keys = Object.keys(proposal);
   if (
-    (keys.length !== PROPOSAL_KEYS.length && keys.length !== PROPOSAL_KEYS.length - 1) ||
     keys.some(key => !PROPOSAL_KEYS.includes(key as (typeof PROPOSAL_KEYS)[number])) ||
-    (keys.length === PROPOSAL_KEYS.length) !== ("conceptObservations" in proposal)
+    ["nodeId", "transcriptRevision", "childActivity", "answerOutcome", "supportState", "tutorState"].some(
+      key => !Object.hasOwn(proposal, key),
+    ) ||
+    ("currentRewrite" in proposal && !parseRewriteProposal(proposal.currentRewrite))
   )
     return null;
 
@@ -114,18 +129,30 @@ export function parseConversationStateProposal(value: unknown): ConversationStat
     conceptObservations = [];
     for (const item of proposal.conceptObservations) {
       if (
-        !item || typeof item !== "object" || Array.isArray(item) ||
-        Object.keys(item).some(key => !["criterionId", "observation", "childMessageIndex", "childMessageEndIndex"].includes(key)) ||
-        ("childMessageIndex" in item && item.childMessageIndex !== null &&
+        !item ||
+        typeof item !== "object" ||
+        Array.isArray(item) ||
+        Object.keys(item).some(
+          key => !["criterionId", "observation", "childMessageIndex", "childMessageEndIndex"].includes(key),
+        ) ||
+        ("childMessageIndex" in item &&
+          item.childMessageIndex !== null &&
           (!Number.isSafeInteger(item.childMessageIndex) || (item.childMessageIndex as number) < 0)) ||
         ("childMessageEndIndex" in item &&
-          (!Number.isSafeInteger(item.childMessageEndIndex) || !Number.isSafeInteger(item.childMessageIndex) ||
-            item.childMessageIndex === null || item.childMessageEndIndex <= item.childMessageIndex)) ||
-        typeof item.criterionId !== "string" || !item.criterionId ||
-        typeof item.observation !== "string" || !PROPOSED_CONCEPT_OBSERVATIONS.includes(item.observation as ProposedConceptObservation["observation"]) ||
+          (!Number.isSafeInteger(item.childMessageEndIndex) ||
+            !Number.isSafeInteger(item.childMessageIndex) ||
+            item.childMessageIndex === null ||
+            item.childMessageEndIndex <= item.childMessageIndex)) ||
+        typeof item.criterionId !== "string" ||
+        !item.criterionId ||
+        typeof item.observation !== "string" ||
+        !PROPOSED_CONCEPT_OBSERVATIONS.includes(item.observation as ProposedConceptObservation["observation"]) ||
         conceptObservations.some(existing => existing.criterionId === item.criterionId)
-      ) return null;
-      conceptObservations.push({ criterionId: item.criterionId, observation: item.observation as ProposedConceptObservation["observation"],
+      )
+        return null;
+      conceptObservations.push({
+        criterionId: item.criterionId,
+        observation: item.observation as ProposedConceptObservation["observation"],
         ...("childMessageIndex" in item ? { childMessageIndex: item.childMessageIndex as number | null } : {}),
         ...("childMessageEndIndex" in item ? { childMessageEndIndex: item.childMessageEndIndex as number } : {}),
       });
@@ -138,6 +165,7 @@ export function parseConversationStateProposal(value: unknown): ConversationStat
     answerOutcome: proposal.answerOutcome as AnswerOutcome,
     supportState: proposal.supportState as SupportState,
     tutorState: proposal.tutorState as TutorState,
+    ...("currentRewrite" in proposal ? { currentRewrite: parseRewriteProposal(proposal.currentRewrite)! } : {}),
     ...(conceptObservations === undefined ? {} : { conceptObservations }),
   };
 }

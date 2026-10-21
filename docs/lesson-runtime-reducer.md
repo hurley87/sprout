@@ -367,7 +367,71 @@ combine these departure facts with accepted learner evidence and visit text.
 An authenticated direct spoken “Stop” in grouped lessons calls the existing
 teardown immediately after speech-end, regardless of tutor playback or pending
 assessment. Quoted, reported, negated or unbound text cannot authorize it. UI Stop
-continues to release media immediately in every lesson. MAE386's route, latest
-Q10 proposal assessment and immutable early/natural recap remain later commits.
+continues to release media immediately in every lesson. MAE386's route and immutable early/natural recap remain later commits.
 Deterministic tests use reducer events and local transport doubles; they do not
 establish live GPT-Live/Jev semantic reliability.
+
+
+### MAE386 current spoken-rewrite projection
+
+Only Q10 nodes opt into `currentRewrite`. The existing concept questions and
+strongest-evidence ledger remain cumulative; `rewriteProposals[nodeId]` is a
+separate current-answer projection inside the same reducer, never a mastery or
+navigation authority.
+
+The existing Jev observer first locates one latest complete, non-withdrawn proposal
+and its assistance, using word-boundary Choice options from the exact revision.
+This distinguishes a replacement from quotation, tutor echo, aside, withdrawal
+or unfinished speech. Then, only for a located complete proposal, one additional
+Jev request assesses meaning, concision and spoken grammar against the authored
+criteria. All three receive the **same selected words and original sentence**;
+earlier learner answers and tutor suggestions are absent from that request.
+Other lessons still make one request. Both steps share the existing request's
+abort/deadline; neither retries nor falls back to an earlier proposal. A failed
+second step keeps the located proposal unresolved and exports
+`rewriteAssessment: unavailable`; accepted tutor closure and cumulative evidence
+from the first step remain available. Cancellation discards the whole result.
+Non-complete/withdrawn selections need no second request.
+
+The reducer accepts the closed selection only with the exact app-owned
+runtime/visit/turn/node/revision and literal snapshot. Selected words carry
+message/character boundaries and actual authenticated learner turn IDs projected
+from runtime fragments. Consecutive role-labelled lines may merge, but their
+actual turn IDs stay distinct. Missing word attribution leaves the claim
+unresolved. Full ordered snapshot context preserves original/tutor quotations,
+prior attempts, help and asides separately from `words`/`text`, which contain only
+the selected learner proposal. Exact source/tutor echoes cannot become successful
+proposals even from overconfident scores; lexical checks reject copying only,
+never determine semantic correctness.
+
+A later incorrect complete replacement becomes current even after an independent
+correct attempt. Withdrawal without replacement is unresolved. An aside or
+unfinished non-withdrawing edit does not replace the last complete proposal;
+Jev must locate that same prior proposal. Relevant tutor help applies to the
+selected proposal; later tutor speech cannot retroactively prompt it. Independent
+spans crossing substantive tutor content remain unresolved in attribution.
+
+New learner words clear `current` while awaiting assessment, preventing stale
+success claims during a replacement or withdrawal. A confirmed learner turn
+captures only the current proposal from the same runtime/node/visit as a dormant
+pre-turn candidate. At speech-end, the complete authenticated turn must match the
+existing Stop or next/skip grammar before that exact candidate can become current
+again. Fragment prefixes do not authorize preservation. Late fragments revalidate
+the full text of that same ended turn; a substantive suffix revokes preservation.
+Tutor-only updates preserve current without supplying learner evidence. The
+candidate expires at the next confirmed turn, visit change or teardown and is
+never recovered from history. Thus Stop releases media immediately with the
+original proposal/provenance intact, and an earlier correct answer cannot return
+when a later replacement/withdrawal was assessed or is still pending. UI Stop
+also preserves the current projection. Navigation never waits for mastery. A
+pending assessment has no current result, and an unavailable assessment is
+unresolved; earlier accepted snapshots remain in `history` for diagnostics and
+must not supply fallback credit. History
+is a sequence of accepted snapshot assessments, not an invented count of student
+attempts; even attempts first seen together remain in full snapshot context.
+
+Tests use authored rubric examples and injected semantic scores/locators. They
+verify selection plumbing, exact provenance, replacement/withdrawal/assistance,
+stale-source rejection, isolated assessment inputs and legacy regressions. They
+do not establish live Jev selection/grading reliability. Two-stage latency and
+live semantic behavior still require the planned microphone acceptance work.

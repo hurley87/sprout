@@ -1,3 +1,4 @@
+import { projectRewrite, type RewriteProjection, type RewriteTranscript } from "./mae386/rewrite-proposal";
 import type { OutputActivityEvent } from "../events";
 import { parseConversationStateProposal } from "./conversation-state-classifier";
 import { currentNodeContext, isLessonNodeId, type LessonDefinition } from "./lesson-definition";
@@ -5,6 +6,7 @@ import { transcriptMessages } from "./tutor-observation";
 import {
   learnerNavigationIntent,
   parseLearnerNavigationText,
+  isLearnerStopText,
   type NavigationIntent,
   closingTutorExchange,
   matchesTutorClosure,
@@ -106,7 +108,13 @@ export type LessonRuntimeState = {
     readonly messageIndex: number;
     readonly text: string;
   } | null;
-  /** Session-local evidence; a new runtime always starts empty. */
+  /** Current answers and snapshot history, isolated from cumulative mastery. */
+  readonly rewriteProposals?: Readonly<Record<string, RewriteProjection>>;
+  readonly rewriteTranscript?: RewriteTranscript | null;
+  /** Pre-turn candidate for completed control-only speech. Never current evidence
+   * while new learner words are pending, and never restored from history. */
+  readonly rewriteTurn?: { readonly source: RuntimeSource; readonly prior: RewriteProjection["current"] } | null;
+  /** Session-local cumulative evidence; a new runtime always starts empty. */
   readonly conceptEvidence: Readonly<Record<string, ConceptEvidenceRecord>>;
   readonly pendingRender: {
     readonly identity: RenderIdentity;
@@ -133,6 +141,7 @@ export type LessonRuntimeEvent = { readonly atMs: number } & (
       readonly revision: number;
       /** App-owned projection of authenticated provider fragments sharing this learner turn. */
       readonly learnerTurnText?: string;
+      readonly rewriteTranscript?: RewriteTranscript;
       readonly speaker: "child" | "tutor" | "unknown";
       readonly transcriptSnapshot?: string;
     }
@@ -226,6 +235,9 @@ export function createLessonRuntime(
     ...(lesson.questionGroups
       ? { navigationHistory: [], navigationIntent: null, navigationSource: null, learnerUtterance: null }
       : {}),
+    ...(Object.values(lesson.nodes).some(node => node.currentRewrite)
+      ? { rewriteProposals: {}, rewriteTurn: null }
+      : {}),
     conceptEvidence: {},
     pendingRender: null,
   };
@@ -244,6 +256,26 @@ export function classificationSource(state: LessonRuntimeState): ClassificationS
   )
     return null;
   return { ...runtimeSource(state), nodeId: state.nodeId, transcriptRevision: state.transcriptRevision };
+}
+
+function rewriteForCurrentVisit(state: LessonRuntimeState) {
+  const current = state.rewriteProposals?.[state.nodeId]?.current;
+  return current?.source.runtimeId === state.runtimeId &&
+    current.source.visitId === state.visitId &&
+    current.source.nodeId === state.nodeId
+    ? current
+    : null;
+}
+
+/** Whole authenticated turn grammar only; partial prefixes confer no authority. */
+function controlRewritePrior(state: LessonRuntimeState, text: string | undefined) {
+  const turn = state.rewriteTurn;
+  return text !== undefined &&
+    turn &&
+    sameSource(state, turn.source) &&
+    (isLearnerStopText(text) || parseLearnerNavigationText(text))
+    ? turn.prior
+    : null;
 }
 
 function validTime(atMs: number) {
@@ -302,6 +334,7 @@ function stopped(state: LessonRuntimeState): LessonRuntimeState {
     ...state,
     ...clearedEvidence,
     ...clearedNavigation(state),
+    ...(state.rewriteProposals ? { rewriteTurn: null } : {}),
     nodeId: state.pendingRender?.origin.nodeId ?? state.nodeId,
     phase: "stopped",
     lessonComplete: state.pendingRender ? false : state.lessonComplete,
@@ -384,6 +417,7 @@ function requestAuthoredTransition(
       ...clearedEvidence,
       ...clearedNavigation(next),
       ...(lesson.questionGroups ? { learnerUtterance: null } : {}),
+      ...(next.rewriteProposals ? { rewriteTurn: null } : {}),
       // Keep delivery evidence until the terminal screen has actually committed;
       // resumed output can suspend that confirmation without closing the voice.
       ...(edge.kind === "complete" && node.completeAfterTutorOutput
@@ -618,6 +652,14 @@ export function reduceLessonRuntime(
                 tutorOutputObserved: state.tutorOutputObserved,
               }
             : null,
+        ...(lesson.nodes[state.nodeId].currentRewrite
+          ? {
+              rewriteTurn: {
+                source: { ...runtimeSource(state), childTurnId: state.childTurnId + 1 },
+                prior: rewriteForCurrentVisit(state),
+              },
+            }
+          : {}),
         childTurnId: state.childTurnId + 1,
         hasChildTurn: true,
         hasChildTranscript: false,
@@ -664,6 +706,25 @@ export function reduceLessonRuntime(
     case "child.turn.ended":
       if (!state.childSpeaking) return ignored;
       next = { ...next, childSpeaking: false, childCandidate: null };
+      if (lesson.nodes[state.nodeId].currentRewrite && state.hasChildTranscript) {
+        const projection = state.rewriteProposals?.[state.nodeId];
+        if (projection)
+          next = {
+            ...next,
+            rewriteProposals: {
+              ...state.rewriteProposals,
+              [state.nodeId]: {
+                ...projection,
+                current: controlRewritePrior(
+                  state,
+                  state.learnerUtterance && sameSource(state, state.learnerUtterance.source)
+                    ? state.learnerUtterance.text
+                    : undefined,
+                ),
+              },
+            },
+          };
+      }
       break;
     case "transcript.updated": {
       if (!Number.isSafeInteger(event.revision) || event.revision <= state.transcriptRevision) return ignored;
@@ -674,6 +735,30 @@ export function reduceLessonRuntime(
       const exchange =
         lesson.conversationFirst && event.speaker === "child" ? closingTutorExchange(event.transcriptSnapshot) : null;
       const closure = matchesTutorClosure(exchange, state.tutorClosure) ? state.tutorClosure : null;
+      if (lesson.nodes[state.nodeId].currentRewrite) {
+        next = {
+          ...next,
+          rewriteTranscript: event.transcriptSnapshot
+            ? {
+                text: event.transcriptSnapshot,
+                turns: event.rewriteTranscript?.text === event.transcriptSnapshot ? event.rewriteTranscript.turns : [],
+              }
+            : null,
+          rewriteProposals: {
+            ...state.rewriteProposals,
+            [state.nodeId]: {
+              revision: event.revision,
+              current:
+                event.speaker === "tutor"
+                  ? (state.rewriteProposals?.[state.nodeId]?.current ?? null)
+                  : event.speaker === "child" && state.hasChildTurn && !state.childSpeaking
+                    ? controlRewritePrior(state, event.learnerTurnText)
+                    : null,
+              history: state.rewriteProposals?.[state.nodeId]?.history ?? [],
+            },
+          },
+        };
+      }
       next = {
         ...next,
         ...(event.speaker === "tutor" ? {} : { ...clearedEvidence, ...clearedNavigation(state) }),
@@ -788,6 +873,9 @@ export function reduceLessonRuntime(
         event.source.nodeId !== state.nodeId ||
         event.source.transcriptRevision !== state.transcriptRevision ||
         proposal.nodeId !== state.nodeId ||
+        (currentNode.currentRewrite &&
+          proposal.currentRewrite &&
+          state.rewriteTranscript?.text !== event.transcriptSnapshot) ||
         (currentNode.concepts?.length &&
           (!proposal.conceptObservations ||
             proposal.conceptObservations.some(
@@ -815,6 +903,31 @@ export function reduceLessonRuntime(
         : { conceptEvidence: next.conceptEvidence, effects: [] };
       if (conceptResult.conceptEvidence !== next.conceptEvidence)
         next = { ...next, conceptEvidence: conceptResult.conceptEvidence };
+      if (
+        currentNode.currentRewrite &&
+        state.hasChildTranscript &&
+        proposal.currentRewrite &&
+        state.rewriteTranscript?.text === event.transcriptSnapshot
+      ) {
+        const attempt = projectRewrite(
+          proposal.currentRewrite,
+          event.source,
+          event.transcriptSnapshot!,
+          state.rewriteTranscript,
+          String(currentNode.presentation.sourceText),
+        );
+        next = {
+          ...next,
+          rewriteProposals: {
+            ...next.rewriteProposals,
+            [currentNode.id]: {
+              revision: event.source.transcriptRevision,
+              current: attempt,
+              history: [...(state.rewriteProposals?.[currentNode.id]?.history ?? []), attempt],
+            },
+          },
+        };
+      }
       additionalEffects = conceptResult.effects;
       if (lesson.conversationFirst) {
         const exchange = closingTutorExchange(event.transcriptSnapshot);

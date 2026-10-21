@@ -2,8 +2,8 @@ import { validateLessonDefinition, type LessonDefinition, type LessonNodeDefinit
 import { MAE386_RUBRICS, MAE386_ATTRIBUTION_RULES } from "./mae386/rubrics";
 import { MANUSCRIPT_PASSAGES } from "./mae386/sources";
 
-/** Authored content and grouped navigation. Q10 current-proposal assessment and
- * eight-question outcomes remain later work; this is not yet a working demo. */
+/** Authored content and grouped navigation. Q10 current-proposal assessment.
+ * Eight-question outcomes remain later work; this is not yet a working demo. */
 export const MAE386_QUESTION_GROUPS = MAE386_RUBRICS.map(question => ({
   questionId: question.id,
   originalNumber: Number(question.id.slice(1)),
@@ -66,6 +66,7 @@ for (const [index, { question, unit }] of units.entries()) {
           })
           .join(" / ")}`,
       })),
+    ...(question.id === "q10" ? { currentRewrite: true } : {}),
     completionPolicy: "allow_unresolved",
     onSuccess: { kind: "node", nodeId: units[index + 1]?.unit.id ?? "recap" },
   };
