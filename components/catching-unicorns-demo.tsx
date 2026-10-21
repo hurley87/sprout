@@ -1,33 +1,21 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import styles from "./catching-unicorns-demo.module.css";
-import { attachLessonObservation, type LessonObservationWindow } from "@/lib/lesson-runtime/browser-observation";
+import { useVoiceDemo } from "./voice-demo/use-voice-demo";
+import { VoiceDemoControls } from "./voice-demo/controls";
+import { scrubSecrets } from "./voice-demo/diagnostics";
 import { CATCHING_UNICORNS_LESSON } from "@/lib/lesson-runtime/catching-unicorns-lesson";
-import { LESSON_TIMING, LessonRuntime, type LessonSnapshot } from "@/lib/lesson-runtime/lesson-runtime";
+import { LESSON_TIMING, type LessonRuntime } from "@/lib/lesson-runtime/lesson-runtime";
 import type { RenderIdentity } from "@/lib/lesson-runtime/lesson-runtime-reducer";
 import { sceneConcepts, EvidenceState, sceneIds, questionIds } from "./catching-unicorns/presentation-helpers";
 import { ScenePresentation } from "./catching-unicorns/scene-presentation";
 
 export { ScenePresentation } from "./catching-unicorns/scene-presentation";
 
-function ScrubSecrets(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(ScrubSecrets);
-  if (typeof value !== "object" || value === null) return value;
-  return Object.fromEntries(
-    Object.entries(value)
-      .filter(
-        ([key]) =>
-          !/(?:secret|credential|authorization|api.?key|sdp|raw.?body|provider.?body|access.?token)/iu.test(key),
-      )
-      .map(([key, nested]) => [key, ScrubSecrets(nested)]),
-  );
-}
-
-function safeExport(runtime: LessonRuntime) {
+function diagnosticReport(runtime: LessonRuntime) {
   const report = runtime.report();
   const current = runtime.snapshot();
-  return ScrubSecrets({
+  return {
     ...report,
     lesson: {
       id: CATCHING_UNICORNS_LESSON.id,
@@ -43,78 +31,16 @@ function safeExport(runtime: LessonRuntime) {
       ]),
     ),
     transcript: current.transcript,
-  });
+  };
 }
 
 export default function CatchingUnicornsDemo({ debug = false }: { debug?: boolean }) {
-  const audio = useRef<HTMLAudioElement>(null);
-  const sceneRef = useRef<HTMLDivElement>(null);
-  const runtime = useRef<LessonRuntime | null>(null);
-  const [snapshot, setSnapshot] = useState<LessonSnapshot | null>(null);
+  const { audio, sceneRef, snapshot, live, start, stop, download } = useVoiceDemo({
+    lesson: CATCHING_UNICORNS_LESSON,
+    exportReport: diagnosticReport,
+    exportPrefix: "sprout-catching-unicorns",
+  });
   const display = snapshot?.display;
-  const live = snapshot !== null && snapshot.status !== "ended";
-
-  useEffect(() => {
-    if (!display || snapshot?.status === "ended") return;
-    const current = runtime.current;
-    let second = 0;
-    const first = requestAnimationFrame(() => {
-      second = requestAnimationFrame(() => {
-        const element = sceneRef.current;
-        if (
-          element?.dataset.renderToken === display.token &&
-          element.dataset.nodeId === (display.nodeId ?? "complete") &&
-          element.dataset.sceneId === (display.sceneId ?? "complete")
-        )
-          current?.confirmRendered(display);
-      });
-    });
-    return () => {
-      cancelAnimationFrame(first);
-      cancelAnimationFrame(second);
-    };
-  }, [display, snapshot?.status]);
-
-  useEffect(() => {
-    const detach = attachLessonObservation(window as LessonObservationWindow, () => runtime.current);
-    const hidden = () => {
-      if (document.hidden) runtime.current?.stop("page_hidden");
-    };
-    const leave = () => runtime.current?.stop("page_left");
-    document.addEventListener("visibilitychange", hidden);
-    window.addEventListener("pagehide", leave);
-    return () => {
-      document.removeEventListener("visibilitychange", hidden);
-      window.removeEventListener("pagehide", leave);
-      runtime.current?.stop("unmounted");
-      detach();
-    };
-  }, []);
-
-  function start() {
-    if (!audio.current || live) return;
-    runtime.current?.stop("restarted");
-    const current = new LessonRuntime(
-      audio.current,
-      value => {
-        if (runtime.current === current) setSnapshot(value);
-      },
-      CATCHING_UNICORNS_LESSON,
-    );
-    runtime.current = current;
-    setSnapshot(current.snapshot());
-  }
-
-  function download() {
-    if (!runtime.current) return;
-    const report = safeExport(runtime.current);
-    const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }));
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `sprout-catching-unicorns-${runtime.current.snapshot().runtime?.runtimeId ?? "session"}.json`;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
 
   const state = snapshot?.runtime;
   const nodeId = state?.nodeId ?? CATCHING_UNICORNS_LESSON.initialNodeId;
@@ -184,24 +110,17 @@ export default function CatchingUnicornsDemo({ debug = false }: { debug?: boolea
             </span>
             {snapshot?.error && <span role="alert">{snapshot.error}</span>}
           </div>
-          <div className={styles.controls}>
-            {!live && (
-              <button className={styles.startButton} onClick={start}>
-                {completed ? "Restart discussion" : "Start discussion"}
-              </button>
-            )}
-            {snapshot?.status === "ended" ? (
-              <button className={styles.button} onClick={download}>
-                Download diagnostics
-              </button>
-            ) : (
-              !completed && (
-                <button className={styles.button} disabled={!live} onClick={() => runtime.current?.stop()}>
-                  Stop
-                </button>
-              )
-            )}
-          </div>
+          <VoiceDemoControls
+            snapshot={snapshot}
+            live={live}
+            completed={completed}
+            start={start}
+            stop={stop}
+            download={download}
+            startLabel="Start discussion"
+            restartLabel="Restart discussion"
+            classNames={{ controls: styles.controls, startButton: styles.startButton, button: styles.button }}
+          />
         </footer>
       </div>
       {debug &&
@@ -308,7 +227,7 @@ export default function CatchingUnicornsDemo({ debug = false }: { debug?: boolea
                     {event.atMs.toFixed(0)} ms · {event.type} · {event.nodeId}
                   </summary>
                   <pre className="overflow-auto whitespace-pre-wrap p-2">
-                    {JSON.stringify(ScrubSecrets(event), null, 2)}
+                    {JSON.stringify(scrubSecrets(event), null, 2)}
                   </pre>
                 </details>
               ))}
