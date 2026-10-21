@@ -1,4 +1,4 @@
-# MAE386 spoken practice route — issue #76, commits 6–7
+# MAE386 spoken practice route — issue #76, commits 6–8
 
 `/demos/mae386` uses `MAE386_LESSON`, the shared voice-demo lifecycle and controls,
 and the existing WebRTC/classifier/assessment runtime. `?debug=1` opts into the
@@ -125,3 +125,120 @@ Commit 7, validated October 21, 2026, against approved parent
 The full repository format check currently reports 41 pre-existing files outside
 this commit's changed paths. Changed files are checked separately without
 reformatting unrelated implementation or historical experiments.
+
+
+## Commit 8: actual microphone evidence, October 21, 2026
+
+**Acceptance remains incomplete.** This human microphone run exposed tutor and
+assessment problems and did not exercise several required scenarios. It is useful
+failure evidence, not a successful acceptance sign-off. No production fix, new
+provider replay, synthetic replacement dialogue or additional paid run was made.
+
+### Identity and reproducibility
+
+- Tested code: `918fccbc5ffbc1df2b3146bf6ddab06023048f20`, branch
+  `codex/76-mae386-spoken-practice`, verified before setup and after export review.
+  This evidence-only commit is parented to that code. Source files were unchanged
+  during the run. Original untracked `output/` teacher packet remains unstaged.
+- October 21, 2026, **15:49:55–16:03:38 America/Toronto**
+  (`19:49:55.577–20:03:38.808 UTC`), approximately 13 minutes 43 seconds.
+- Built UI: `http://127.0.0.1:3100/demos/mae386?debug=1`, Chrome.
+  Only `debug=1`; normal production runtime/provider paths, no observer bridge,
+  transcript injection, synthetic microphone or mocked provider responses.
+  The human confirmed participation and supplied the downloaded JSON. Prepared
+  sample answers were supplied beforehand; this is scripted product evaluation,
+  not evidence of unaided subject knowledge.
+- Server configuration at tested SHA: `gpt-live-1`, voice `marin`, `store: false`;
+  Jev `jev-1.14.0`, `conversation-state-v2`, unchanged thresholds. Model identities
+  are code configuration, not independent attestations from raw provider bodies.
+  Only presence of `OPENAI_API_KEY` and `TYPESAFE_API_KEY` was checked/reported.
+- A dedicated Next dev server was started in the approved worktree on free port
+  3100, passing the existing local credential configuration through the child
+  environment. No unrelated server was stopped. Initial direct `node --env-file`
+  launches failed locally because Next forwarded the flag through `NODE_OPTIONS`;
+  spawning Next without inherited exec arguments resolved setup before the run.
+- Actual microphone settings (event 3): mono, 48 kHz, 16-bit samples, latency
+  0.01 seconds; echo cancellation, noise suppression and auto gain enabled.
+- Runtime: `c7d94b28-b76b-4ed1-9493-d008cb58d2d9`; 13,009 diagnostic events,
+  73 classifier starts, 57 normalized mappings, 51 results, 6 abstentions and
+  22 cancellations. Counts include superseded work, not unique accepted answers
+  or a billable-request total.
+
+Actual downloaded export (unchanged, local only):
+
+`/Users/davidhurley/Downloads/sprout-mae386-c7d94b28-b76b-4ed1-9493-d008cb58d2d9.json`
+
+- Bytes: `191872443` (approximately 183 MiB).
+- SHA-256: `0087844c0cde63217c2d4900ed337eb6e752b4f5d0daae902539a96edf6eb227`.
+- Durable scrubbed projection:
+  [mae386-live-2026-10-21-c7d94b28.json](evidence/mae386-live-2026-10-21-c7d94b28.json).
+  It preserves full visit conversations, final evidence/proposal provenance,
+  navigation, frozen outcomes, secondary review and 279 selected diagnostics with
+  zero-based `sourceEventIndex` back into the original export. Repeated runtime
+  snapshots, detector windows and transient transcript snapshots are omitted;
+  steering retains only identity and displayed scene, and the ending event retains
+  its reason. This is an extract, not a new UI export. Credential/SDP/raw-body keys
+  are recursively excluded; none were present in the selected projection.
+  Extract SHA-256: `bf261c610b79a0e3a861beb3821dfa32539c49553e39262e3a71c31d65dc517f`.
+  The original remains available to inspect omitted timing windows.
+
+### Expected versus observed
+
+| Scenario / expectation | Actual observation and provenance | Result / limit |
+| --- | --- | --- |
+| Q1 own explanation, independent evidence | Both functions recorded from learner text. Reification source: visit 1, turn 3, revision 28; memory extension: turn 6, revision 55. Frozen Q1 is independent. Tutor acknowledgment remains separate. | Observed; independence means relative to the in-session tutor, not independence from the prepared script. |
+| Q10 unchanged source echo earns no rewrite credit | The original appears only in the tutor prompt. The learner instead said “He was late because he overslept.” Current proposal has six learner words, turn 40, revision 456; all three criteria demonstrated. | Correct alternative observed; learner-source echo rejection was **not exercised live**. |
+| Q10 self-correction and latest poorer/withdrawn replacement | Each sentence has one learner proposal. No Q10 correction, poorer replacement or withdrawal is in the retained conversation or proposal history. The rhyme answer contains a self-correction, but that does not test Q10 projection semantics. | **Not exercised live**; deterministic coverage does not substitute for the required live Q10 correction. |
+| Q10 second sentence accepts a meaning-preserving revision | “They, yeah, they collaborated on the project” is heard. At revisions 491 and 502, Jev's preferred start probabilities are 0.64 and 0.72, below the 0.9 gate. Final assistance probability 0.85 is also below threshold. The app falls back to `start: none`, assistance unknown, empty words, null selected text and `rewriteAssessment: not_requested`; the frozen subpart is unresolved. Tutor nevertheless says it keeps the meaning and moves on. Events 5622 and 5799. | Observed assessment limitation: a plausible spoken revision receives no settled rewrite assessment. The model returned valid candidate locators; confidence gating, not a nonexistent provider locator, causes the fallback. No false independent credit. |
+| Q10 third sentence preserves meaning; tutor avoids unsupported approval | Learner says “He uses habits, heuristics, and external scaffolds, to think,” omitting toolkit composition and the building relationship. Jev prefers meaning incorrect (0.61 then 0.52), below threshold, so final criteria remain unresolved. Tutor says “that keeps the meaning and trims the extra words.” Events 6206 and 6341. | Tutor approval conflicts with the authored preservation requirement; recap conservatively remains unresolved. This is one proposal, not a latest-poorer replacement test. |
+| Help delivers substance, followed by assisted application | Q8: learner asks “Yeah, can you explain it” and “Are you explaining it”; tutor replies “Sure!” and “I'll take a swing at connecting that idea,” without the explanation before the UI skip. Q5-f: “What's the discovery test” gets “lemme just put that idea in plain words,” with no definition before the learner answer. Later tutor feedback does supply the tinkering/diagrams distinction, with no later learner application. No Help/Repeat button event exists. | Help fulfillment problem observed. No successful help → learner application → assisted outcome chain is established. Do not relabel independent/uncertain evidence as assisted solely because help was requested. |
+| Subparts stay under Q10/Q5; explicit next versus next question differs | All three Q10 nodes and all three Q5 nodes are visited in order; steering scene `questionId` remains q10 or q5. Each departure is tutor closure. Only explicit UI skip is ordinary Q8, scope subpart. No parent-skip command or skipped sibling exists. | Authored tutor closure observed; explicit subpart-versus-parent navigation **not exercised live**. JSON establishes grouped identities, not a screenshot of visible progress. |
+| Q12 receives and responds to the spoken answer | The final answer is in both the visit transcript and classifier request at revision 1212, event 12782. Tutor then says “I didn't catch your answer. Are you still there?” and asks for the answer again. Earlier app recovery was requested at 746733 ms (events 11968/11970); the final answer snapshot arrives at 811448 ms and the check-in transcript at 816098 ms. | Recovery/tutor timing problem observed. The export proves an earlier app missing-text request and a later misleading check-in; it does not prove the internal provider scheduling cause or an audio-device fault. |
+| Explicit early Stop releases session, freezes all eight outcomes | One `lesson.ended`, event 13007 at 822864.9 ms, reason `parent_stop`, phase stopped, lessonComplete false, label “Session ended early.” No spoken stop is in the transcript: this is UI Stop. Q14/Q15 remain unattempted. No transcript events follow Stop. | Early-stop state observed. Export alone does not instrument ended capture-track state or verify physical media-release latency; deterministic browser teardown coverage supplies that check. |
+| Late secondary assessment does not rewrite recap | `assessment.completed`, event 13008, arrives approximately 368 ms after Stop. Final `questionOutcomes` equals the snapshot in the original ending event and `runtime.questionOutcomes`; `questionRecap.questions` matches it exactly. Secondary Q6 judgments differ, but the frozen Q6 stays partial. | Observed: secondary review does not overwrite frozen claims. No natural spoken recap occurred. |
+
+Final frozen question outcomes, in authored order:
+
+| Question | Outcome | Component detail |
+| --- | --- | --- |
+| Q1 | Independent | Both functions recorded from learner sources. |
+| Q6 | Partial | System 2 description/example retained; System 1 evidence not retained in live snapshot. Secondary review differs without changing it. |
+| Q8 | Unresolved | Reached and explicitly skipped after help request. |
+| Q10 | Unresolved | First sentence independent; second and third unresolved. |
+| Q5 | Unresolved | ChatGPT unresolved; rhyme partial; spindle unresolved. |
+| Q12 | Unresolved | Reached; no settled demonstration before Stop. |
+| Q14 | Unattempted | Not reached. |
+| Q15 | Unattempted | Not reached. |
+
+### Verification and follow-up boundary
+
+Re-read the actual downloaded JSON, verified original byte count/hash, inspected
+all ten visit conversations and Q10 histories, and compared source runtime/visit/
+turn/revision identities. Equality checks establish eight groups and the same
+frozen snapshot in final runtime, ending-event runtime and recap. No post-Stop
+transcript snapshot exists. The source export lacks independent capture-track
+teardown instrumentation and raw provider model attestation; do not infer those
+from the absence of further events.
+
+Focused deterministic verification on tested code:
+
+```sh
+npm test -- tests/mae386-recap-runtime.test.ts tests/mae386-question-outcomes.test.ts tests/mae386-navigation.test.ts tests/mae386-rewrite-proposal.test.ts
+```
+
+All **137 tests across four files passed**. Existing commit 7 browser coverage
+(`natural recap renders all eight frozen questions and speaks the same snapshot`,
+plus mixed-outcome/secondary-review coverage) supplies the other ending's
+provider-free check; the reviewed baseline is 35 passing browser tests. It was not
+rerun against the credential-enabled acceptance server. That coverage does not
+establish a natural provider-spoken recap.
+
+Remaining acceptance needs: Q10 learner-source echo, spoken correction and latest
+poorer/withdrawn proposal; a fulfilled hint followed by learner application with
+assistance provenance; explicit subpart versus parent navigation. Escalate the
+observed uncertain-span behavior, unfulfilled help, unsupported rewrite praise and
+misleading recovery check-in for product review before substantive fixes. The
+large export is a separate diagnostic-size concern. No threshold adjustment,
+prompt edit or runtime change is included here. Any substantive fix requires
+fresh live evidence at its new SHA. A single session cannot establish semantic
+reliability, even after remaining scenarios are covered.
