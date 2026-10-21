@@ -3,7 +3,9 @@ import { parseConversationStateProposal } from "./conversation-state-classifier"
 import { currentNodeContext, isLessonNodeId, type LessonDefinition } from "./lesson-definition";
 import { transcriptMessages } from "./tutor-observation";
 import {
-  learnerRequestedNext,
+  learnerNavigationIntent,
+  parseLearnerNavigationText,
+  type NavigationIntent,
   closingTutorExchange,
   matchesTutorClosure,
   tutorAcknowledgedClosure,
@@ -41,6 +43,16 @@ export type CurrentNodeSteeringContext = {
   readonly tutorBrief: string;
   readonly completionCriteria?: readonly { readonly id: string; readonly description: string }[];
   readonly completionPolicy?: string;
+};
+/** Departure facts, not assessment outcomes. Transcript presence is not an attempted answer.
+ * Actual learner text remains in the existing visit transcript with this source identity. */
+export type NavigationRecord = {
+  readonly source: ClassificationSource;
+  readonly questionId: string;
+  readonly intent: NavigationIntent | "tutor_closure";
+  readonly hasChildTranscript: boolean;
+  readonly skippedNodeIds: readonly string[];
+  readonly atMs: number;
 };
 export type LessonRuntimeState = {
   readonly runtimeId: string;
@@ -81,6 +93,12 @@ export type LessonRuntimeState = {
   /** True when accepted evidence is ready to advance after an application-owned review action. */
   readonly transitionReady: boolean;
   readonly conversationAdvanceRequested?: "learner" | "tutor" | false;
+  /** Latest authenticated learner turn in this visit, retained across textless microphone segments.
+   * Command authority only; never a substitute for current-turn assessment evidence. */
+  readonly learnerUtterance?: { readonly source: ClassificationSource; readonly text: string } | null;
+  readonly navigationIntent?: NavigationIntent | null;
+  readonly navigationSource?: ClassificationSource | null;
+  readonly navigationHistory?: readonly NavigationRecord[];
   /** Classifier-accepted closure of this tutor message, independent of the latest speaker.
    * Suspended during a new learner turn until its text proves to be a brief acknowledgment. */
   readonly tutorClosure?: {
@@ -93,6 +111,7 @@ export type LessonRuntimeState = {
   readonly pendingRender: {
     readonly identity: RenderIdentity;
     readonly origin: ClassificationSource;
+    readonly navigation?: NavigationRecord;
   } | null;
 };
 
@@ -102,12 +121,18 @@ export type LessonRuntimeEvent = { readonly atMs: number } & (
   | { readonly type: "child.candidate.started"; readonly source: RuntimeSource }
   | { readonly type: "child.candidate.discarded"; readonly source: RuntimeSource }
   | { readonly type: "child.turn.confirmed"; readonly source: RuntimeSource }
-  | { readonly type: "conversation.recheck.requested"; readonly source: ClassificationSource; readonly transcriptSnapshot?: string }
+  | {
+      readonly type: "conversation.recheck.requested";
+      readonly source: ClassificationSource;
+      readonly transcriptSnapshot?: string;
+    }
   | { readonly type: "child.turn.ended"; readonly source: RuntimeSource }
   | {
       readonly type: "transcript.updated";
       readonly source: RuntimeSource;
       readonly revision: number;
+      /** App-owned projection of authenticated provider fragments sharing this learner turn. */
+      readonly learnerTurnText?: string;
       readonly speaker: "child" | "tutor" | "unknown";
       readonly transcriptSnapshot?: string;
     }
@@ -122,12 +147,13 @@ export type LessonRuntimeEvent = { readonly atMs: number } & (
       readonly type: "conversation.advance.requested";
       readonly source: ClassificationSource;
       readonly transcriptSnapshot: string;
+      readonly intent?: NavigationIntent;
     }
   | { readonly type: "terminal.transcript.checked"; readonly source: RuntimeSource; readonly complete: boolean }
   | { readonly type: "terminal.learner.resolved"; readonly source: RuntimeSource }
   | { readonly type: "clock.tick"; readonly source: RuntimeSource }
   | { readonly type: "render.confirmed"; readonly runtimeId: string; readonly identity: RenderIdentity }
-  | { readonly type: "scene.skipped"; readonly source: RuntimeSource }
+  | { readonly type: "scene.skipped"; readonly source: RuntimeSource; readonly scope?: NavigationIntent["scope"] }
   | { readonly type: "presentation.continued"; readonly source: ClassificationSource }
   | { readonly type: "stop"; readonly runtimeId: string }
   | { readonly type: "disconnect"; readonly runtimeId: string }
@@ -158,6 +184,10 @@ const clearedEvidence = {
   conversationAdvanceRequested: false,
   tutorClosure: null,
 } as const;
+
+function clearedNavigation(state: LessonRuntimeState) {
+  return state.navigationHistory ? { navigationIntent: null, navigationSource: null } : {};
+}
 
 /** The initial authored scene must already be rendered. Use a fresh runtimeId for every start/reconnect. */
 export function createLessonRuntime(
@@ -193,6 +223,9 @@ export function createLessonRuntime(
     nowMs: atMs,
     phase: "active",
     lessonComplete: false,
+    ...(lesson.questionGroups
+      ? { navigationHistory: [], navigationIntent: null, navigationSource: null, learnerUtterance: null }
+      : {}),
     conceptEvidence: {},
     pendingRender: null,
   };
@@ -204,7 +237,12 @@ export function runtimeSource(state: LessonRuntimeState): RuntimeSource {
 
 /** Capture alongside the exact transcript snapshot before awaiting a classification. */
 export function classificationSource(state: LessonRuntimeState): ClassificationSource | null {
-  if (state.phase !== "active" || state.childSpeaking || (!state.hasChildTranscript && !state.interruptedExchange?.ready)) return null;
+  if (
+    state.phase !== "active" ||
+    state.childSpeaking ||
+    (!state.hasChildTranscript && !state.interruptedExchange?.ready)
+  )
+    return null;
   return { ...runtimeSource(state), nodeId: state.nodeId, transcriptRevision: state.transcriptRevision };
 }
 
@@ -263,6 +301,7 @@ function stopped(state: LessonRuntimeState): LessonRuntimeState {
   return {
     ...state,
     ...clearedEvidence,
+    ...clearedNavigation(state),
     nodeId: state.pendingRender?.origin.nodeId ?? state.nodeId,
     phase: "stopped",
     lessonComplete: state.pendingRender ? false : state.lessonComplete,
@@ -304,10 +343,27 @@ function requestAuthoredTransition(
   next: LessonRuntimeState,
   lesson: LessonDefinition,
   origin: ClassificationSource,
+  explicitIntent?: NavigationIntent,
 ): LessonRuntimeResult {
   // The only transition authority is this authored edge. No model-selected destination is read.
   const node = lesson.nodes[next.nodeId];
-  const edge = lesson.nodes[next.nodeId].onSuccess;
+  const group = lesson.questionGroups?.find(group => group.nodeIds.includes(node.id));
+  const intent = explicitIntent ?? next.navigationIntent;
+  const skippedNodeIds =
+    group && intent?.scope === "question" ? group.nodeIds.slice(group.nodeIds.indexOf(node.id) + 1) : [];
+  // Jump only by walking authored sibling edges. Never read a destination from a command/model.
+  const lastNode = skippedNodeIds.at(-1) ?? node.id;
+  const edge = lesson.nodes[lastNode].onSuccess;
+  const navigation: NavigationRecord | undefined = group
+    ? {
+        source: explicitIntent ? origin : (next.navigationSource ?? origin),
+        questionId: group.questionId,
+        intent: intent ?? "tutor_closure",
+        hasChildTranscript: next.hasChildTranscript,
+        skippedNodeIds,
+        atMs: next.nowMs,
+      }
+    : undefined;
   const visitId = next.visitId + 1;
   const identity: RenderIdentity = {
     token: JSON.stringify([next.runtimeId, visitId]),
@@ -316,7 +372,7 @@ function requestAuthoredTransition(
   };
   const conceptEvidence = { ...next.conceptEvidence };
   if (edge.kind === "node") {
-    for (const criterionId of edge.carryForwardCriteria ?? []) {
+    for (const criterionId of skippedNodeIds.length ? [] : (edge.carryForwardCriteria ?? [])) {
       const sourceRecord = conceptEvidence[conceptKey(node.id, criterionId)];
       if (sourceRecord?.status !== "demonstrated") continue;
       conceptEvidence[conceptKey(edge.nodeId, criterionId)] = { ...sourceRecord, criterionId };
@@ -326,6 +382,8 @@ function requestAuthoredTransition(
     state: {
       ...next,
       ...clearedEvidence,
+      ...clearedNavigation(next),
+      ...(lesson.questionGroups ? { learnerUtterance: null } : {}),
       // Keep delivery evidence until the terminal screen has actually committed;
       // resumed output can suspend that confirmation without closing the voice.
       ...(edge.kind === "complete" && node.completeAfterTutorOutput
@@ -343,7 +401,7 @@ function requestAuthoredTransition(
       consumedRevision: null,
       phase: "rendering",
       lessonComplete: edge.kind === "complete",
-      pendingRender: { identity, origin },
+      pendingRender: { identity, origin, ...(navigation ? { navigation } : {}) },
       conceptEvidence,
     },
     effects: [{ type: "render.requested", identity }],
@@ -404,14 +462,18 @@ export function reduceLessonRuntime(
       state.phase !== "rendering" ||
       !state.pendingRender ||
       !sameRender(state.pendingRender.identity, event.identity) ||
-      (terminalRendering &&
-        (!state.tutorOutputDrained || !outputHasDrained({ ...state, nowMs: event.atMs }, lesson)))
+      (terminalRendering && (!state.tutorOutputDrained || !outputHasDrained({ ...state, nowMs: event.atMs }, lesson)))
     )
       return ignored;
     const next: LessonRuntimeState = {
       ...state,
       nowMs: event.atMs,
       phase: state.lessonComplete ? "complete" : "active",
+      ...(state.pendingRender.navigation
+        ? {
+            navigationHistory: [...(state.navigationHistory ?? []), state.pendingRender.navigation],
+          }
+        : {}),
       pendingRender: null,
     };
     if (next.lessonComplete) {
@@ -450,9 +512,10 @@ export function reduceLessonRuntime(
     const skipped: LessonRuntimeState = {
       ...state,
       ...clearedEvidence,
+      ...clearedNavigation(state),
       nowMs: event.atMs,
-      hasChildTurn: false,
-      hasChildTranscript: false,
+      hasChildTurn: state.hasChildTurn,
+      hasChildTranscript: state.hasChildTranscript,
       childSpeaking: false,
       childCandidate: null,
       consumedRevision: null,
@@ -461,7 +524,7 @@ export function reduceLessonRuntime(
       lessonComplete: false,
       pendingRender: null,
     };
-    return requestAuthoredTransition(skipped, lesson, origin);
+    return requestAuthoredTransition(skipped, lesson, origin, { action: "skip", scope: event.scope ?? "subpart" });
   }
   if (event.type === "presentation.continued") {
     const quietDrained =
@@ -530,6 +593,7 @@ export function reduceLessonRuntime(
       next = {
         ...next,
         ...clearedEvidence,
+        ...clearedNavigation(state),
         tutorClosure: lesson.conversationFirst ? state.tutorClosure : null,
         // Terminal transcript/audio evidence belongs to this recap visit, not a
         // microphone turn. Activity blocks completion but is not new learner text.
@@ -570,6 +634,7 @@ export function reduceLessonRuntime(
       next = {
         ...next,
         ...clearedEvidence,
+        ...clearedNavigation(state),
         hasChildTranscript: state.childCandidate.hasChildTranscript,
         tutorOutputObserved: state.childCandidate.tutorOutputObserved,
         // Recap output quiet is independent of microphone activity. Other nodes
@@ -606,19 +671,32 @@ export function reduceLessonRuntime(
         const confirmed = reduceLessonRuntime(state, { ...event, type: "child.turn.started" }, lesson).state;
         return reduceLessonRuntime(confirmed, { ...event, source: runtimeSource(confirmed) }, lesson);
       }
-      const exchange = lesson.conversationFirst && event.speaker === "child"
-        ? closingTutorExchange(event.transcriptSnapshot) : null;
+      const exchange =
+        lesson.conversationFirst && event.speaker === "child" ? closingTutorExchange(event.transcriptSnapshot) : null;
       const closure = matchesTutorClosure(exchange, state.tutorClosure) ? state.tutorClosure : null;
       next = {
         ...next,
-        ...(event.speaker === "tutor" ? {} : clearedEvidence),
+        ...(event.speaker === "tutor" ? {} : { ...clearedEvidence, ...clearedNavigation(state) }),
         tutorClosure: closure,
+        ...(lesson.questionGroups && event.speaker !== "tutor"
+          ? {
+              learnerUtterance:
+                event.speaker === "child" && state.hasChildTurn && event.learnerTurnText !== undefined
+                  ? {
+                      text: event.learnerTurnText,
+                      source: { ...event.source, nodeId: state.nodeId, transcriptRevision: event.revision },
+                    }
+                  : null,
+            }
+          : {}),
         // A brief acknowledgment belongs to the preceding exchange. Keep its
         // observed audio even when classification of the close is still in flight.
-        ...(exchange ? {
-          tutorOutputObserved: state.tutorOutputObserved || !!state.interruptedExchange?.tutorOutputObserved,
-          quietSinceMs: state.outputActivity === "quiet" ? (state.quietSinceMs ?? event.atMs) : null,
-        } : {}),
+        ...(exchange
+          ? {
+              tutorOutputObserved: state.tutorOutputObserved || !!state.interruptedExchange?.tutorOutputObserved,
+              quietSinceMs: state.outputActivity === "quiet" ? (state.quietSinceMs ?? event.atMs) : null,
+            }
+          : {}),
         childCandidate: event.speaker === "tutor" ? state.childCandidate : null,
         interruptedExchange: event.speaker === "tutor" ? state.interruptedExchange : null,
         transcriptRevision: event.revision,
@@ -627,8 +705,11 @@ export function reduceLessonRuntime(
           event.speaker === "child" ? state.hasChildTurn : event.speaker === "tutor" && state.hasChildTranscript,
         consumedRevision: null,
         conversationAdvanceRequested:
-          event.speaker === "tutor" && state.conversationAdvanceRequested === "learner" ? "learner"
-            : closure && exchange?.complete ? "tutor" : false,
+          event.speaker === "tutor" && state.conversationAdvanceRequested === "learner"
+            ? "learner"
+            : closure && exchange?.complete
+              ? "tutor"
+              : false,
         // Answer acceptance remains revision-bound, independently of conversational closure.
         answerAccepted: false,
         acknowledgmentObserved: false,
@@ -662,23 +743,31 @@ export function reduceLessonRuntime(
         // tutor output already invalidate tutorClosure in transcript.updated.
         conversationAdvanceRequested:
           exchange?.complete && matchesTutorClosure(exchange, state.tutorClosure)
-            ? "tutor" : state.conversationAdvanceRequested,
+            ? "tutor"
+            : state.conversationAdvanceRequested,
         // Without a retained close, require a fresh exact-source proposal.
         consumedRevision: null,
       };
       break;
     }
     case "conversation.advance.requested": {
+      const intent = lesson.questionGroups
+        ? parseLearnerNavigationText(state.learnerUtterance?.text ?? "")
+        : learnerNavigationIntent(event.transcriptSnapshot);
       if (
         !lesson.conversationFirst ||
         !sameClassificationSource(state, event.source) ||
         state.childSpeaking ||
-        !learnerRequestedNext(event.transcriptSnapshot)
+        !intent ||
+        (event.intent && (event.intent.action !== intent.action || event.intent.scope !== intent.scope))
       )
         return ignored;
       next = {
         ...next,
         conversationAdvanceRequested: "learner",
+        ...(lesson.questionGroups
+          ? { navigationIntent: intent, navigationSource: state.learnerUtterance!.source }
+          : {}),
         quietSinceMs:
           state.outputActivity === "quiet"
             ? state.conversationAdvanceRequested === "learner"
@@ -717,7 +806,11 @@ export function reduceLessonRuntime(
       // attribute historical child words or new mastery to the microphone-only turn.
       const conceptResult = state.hasChildTranscript
         ? applyConceptObservations(
-            next.conceptEvidence, currentNode, event.source, proposal.conceptObservations, event.transcriptSnapshot,
+            next.conceptEvidence,
+            currentNode,
+            event.source,
+            proposal.conceptObservations,
+            event.transcriptSnapshot,
           )
         : { conceptEvidence: next.conceptEvidence, effects: [] };
       if (conceptResult.conceptEvidence !== next.conceptEvidence)
@@ -728,14 +821,12 @@ export function reduceLessonRuntime(
         const tutorClosed = tutorAcknowledgedClosure(proposal.tutorState, state.transcriptSource, exchange);
         next = {
           ...next,
-          tutorClosure: tutorClosed && exchange
-            ? { messageIndex: exchange.messageIndex, text: exchange.text, source: event.source } : null,
+          tutorClosure:
+            tutorClosed && exchange
+              ? { messageIndex: exchange.messageIndex, text: exchange.text, source: event.source }
+              : null,
           conversationAdvanceRequested:
-            next.conversationAdvanceRequested === "learner"
-              ? "learner"
-              : tutorClosed
-                ? "tutor"
-                : false,
+            next.conversationAdvanceRequested === "learner" ? "learner" : tutorClosed ? "tutor" : false,
         };
         break;
       }
@@ -744,7 +835,7 @@ export function reduceLessonRuntime(
         proposal.supportState !== "none" ||
         proposal.childActivity === "answering"
       ) {
-        next = { ...next, ...clearedEvidence };
+        next = { ...next, ...clearedEvidence, ...clearedNavigation(state) };
         break;
       }
       next = {

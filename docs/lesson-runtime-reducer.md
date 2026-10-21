@@ -324,3 +324,50 @@ quiet and use that existing budget to request conversational recovery.
 recorded provider-event timing through the first recovery boundary. Its classifier
 responses are deterministic doubles; it does not validate live model accuracy or
 establish whether microphone activity was treadmill noise.
+
+### Opt-in authored question/subpart navigation
+
+MAE386 uses `LessonDefinition.questionGroups`: an ordered partition of authored
+conversation nodes, validated against their existing success edges. Q10's three
+sentences and Q5's three cases each share one parent question. The
+`authoredQuestionProgress` projection reports eight parent questions and separate
+subpart positions; recap has no counted position. No additional progression
+cursor or model-selected destination is introduced.
+
+For grouped lessons, a bounded authenticated learner request becomes a typed
+`NavigationIntent` (`action: next | skip`, `scope: subpart | question`). “Next”,
+“move on”, and “skip this one” follow one node edge. “Next question” and “skip this
+question” follow the final sibling's authored edge, recording remaining siblings
+as skipped. Tutor closure always follows one node edge. “I don't know” alone,
+quoted/reported commands, contradictory scopes and substantive additions are not
+navigation. Grouped lessons capture `learnerUtterance` from authenticated provider
+fragments sharing an actual learner turn ID. Separate consecutive learner turns
+are not merged for command recognition; fragments within one turn stay together.
+A textless microphone segment may revalidate the latest authenticated navigation
+request in the same visit, retaining its original source identity. New learner
+text replaces that request; no command is inferred from unconfirmed text. The
+same request parser controls navigation and missing-transcript recovery, avoiding
+a state where both are suppressed. Assessment still requires its existing
+current-turn evidence. Legacy lessons retain their existing transcript grammar.
+All advance/skip paths retain speech-end, quiet drain, exact render and steering
+gates. UI `skipScene()` defaults to one subpart; `skipScene("question")` skips the
+remaining siblings only when groups are authored.
+
+The existing reducer carries an optional `navigationHistory` for grouped lessons.
+Each departure records its source runtime/node/visit/turn/revision, parent ID,
+intent, transcript presence, skipped sibling node IDs and local transition time.
+The original navigation source survives later tutor revisions. History commits
+only with the exact render confirmation; Stop during an unconfirmed transition
+cancels the pending departure. Repeated confirmations cannot duplicate history.
+The existing conversation-visit transcripts retain actual learner words:
+`hasChildTranscript` does **not** mean a substantive answer was attempted, and
+neither navigation nor closure grants mastery. Future question outcomes must
+combine these departure facts with accepted learner evidence and visit text.
+
+An authenticated direct spoken “Stop” in grouped lessons calls the existing
+teardown immediately after speech-end, regardless of tutor playback or pending
+assessment. Quoted, reported, negated or unbound text cannot authorize it. UI Stop
+continues to release media immediately in every lesson. MAE386's route, latest
+Q10 proposal assessment and immutable early/natural recap remain later commits.
+Deterministic tests use reducer events and local transport doubles; they do not
+establish live GPT-Live/Jev semantic reliability.

@@ -2,10 +2,8 @@ import { validateLessonDefinition, type LessonDefinition, type LessonNodeDefinit
 import { MAE386_RUBRICS, MAE386_ATTRIBUTION_RULES } from "./mae386/rubrics";
 import { MANUSCRIPT_PASSAGES } from "./mae386/sources";
 
-/** Content registration only. Q10 current-proposal assessment, navigation intent
- * distinctions and eight-question outcome projection are later implementation
- * commits; this definition alone must not be advertised as a working demo.
- */
+/** Authored content and grouped navigation. Q10 current-proposal assessment and
+ * eight-question outcomes remain later work; this is not yet a working demo. */
 export const MAE386_QUESTION_GROUPS = MAE386_RUBRICS.map(question => ({
   questionId: question.id,
   originalNumber: Number(question.id.slice(1)),
@@ -90,10 +88,11 @@ const lesson: LessonDefinition = {
   id: "mae386",
   initialNodeId: "q1",
   conversationFirst: true,
+  questionGroups: MAE386_QUESTION_GROUPS,
   nodes,
   recovery: {
     supportClarificationInstruction:
-      "Ask one non-leading clarification of the learner's meaning. Offer a targeted hint only on request/difficulty. I don't know alone is not navigation. Preserve uncertainty and honor explicit skip/stop.",
+      "Ask one non-leading clarification of the learner's meaning. Offer a targeted hint only on request/difficulty. I don't know alone is not navigation: acknowledge it and offer help or skipping. Preserve uncertainty and honor explicit skip/stop.",
     answerRecoveryInstruction:
       "Invite the learner's own explanation without supplying missing answers. Close a discussion that has run its course without upgrading its evidence. The application owns all transitions.",
   },

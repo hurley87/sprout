@@ -3,14 +3,23 @@ import { transcriptMessages } from "./tutor-observation";
 
 /** Recognize only complete navigation commands and short explanations surrounding them.
  * Every sentence must match the grammar; never search inside answers or quotations. */
-export function learnerRequestedNext(transcript: string) {
-  const text = transcriptMessages(transcript)
-    ?.findLast(message => message.speaker === "Child")
-    ?.text.trim()
-    .replace(/\s+/gu, " ");
-  if (!text) return false;
+export type NavigationIntent = {
+  readonly action: "next" | "skip";
+  readonly scope: "subpart" | "question";
+};
+
+/** Legacy role-labelled transcript wrapper. Grouped runtimes parse authenticated turns directly. */
+export function learnerNavigationIntent(transcript: string, authored = false): NavigationIntent | null {
+  const text = transcriptMessages(transcript)?.findLast(message => message.speaker === "Child")?.text;
+  return parseLearnerNavigationText(text ?? "", authored);
+}
+
+/** Parse one application-authenticated learner turn; do not merge distinct turns or inspect role labels. */
+export function parseLearnerNavigationText(turnText: string, authored = true): NavigationIntent | null {
+  const text = turnText.trim().replace(/\s+/gu, " ");
+  if (!text) return null;
   const sentences = text.split(/(?<=[.!?])\s+/u);
-  let requested = false;
+  let requested: NavigationIntent | null = null;
   for (const sentence of sentences) {
     const command = sentence
       .replace(/[.!?]+$/u, "")
@@ -19,15 +28,23 @@ export function learnerRequestedNext(transcript: string) {
       .replace(/^i think\s+/iu, "")
       .replace(/^please[,.]?\s+/iu, "")
       .replace(/,? please$/iu, "");
-    const directRequest = [
-      /^next(?: question)?(?:,? then)?$/iu,
-      /^(?:can|could) i (?:have|get) (?:the )?next question$/iu,
-      /^i(?:['’]d| would) like (?:the )?next question$/iu,
-      /^let['’]s do (?:the )?next question$/iu,
-      /^(?:(?:let['’]s|can we|could we|i(?:['’]d| would) like to)\s+)?(?:move on|(?:go|move|skip)(?: on)? to (?:the )?next(?: question)?|skip (?:this|that|the)(?: question)?)$/iu,
-    ].some(pattern => pattern.test(command));
+    const directRequest =
+      (authored && /^(?:(?:can|could) we )?skip (?:this|that) one$/iu.test(command)) ||
+      [
+        /^next(?: question)?(?:,? then)?$/iu,
+        /^(?:can|could) i (?:have|get) (?:the )?next question$/iu,
+        /^i(?:['’]d| would) like (?:the )?next question$/iu,
+        /^let['’]s do (?:the )?next question$/iu,
+        /^(?:(?:let['’]s|can we|could we|i(?:['’]d| would) like to)\s+)?(?:move on|(?:go|move|skip)(?: on)? to (?:the )?next(?: question)?|skip (?:this|that|the)(?: question)?)$/iu,
+      ].some(pattern => pattern.test(command));
     if (directRequest) {
-      requested = true;
+      const intent: NavigationIntent = {
+        action: /\bskip\b/iu.test(command) ? "skip" : "next",
+        scope: /\bquestion\b/iu.test(command) ? "question" : "subpart",
+      };
+      // Conflicting scopes in one utterance are ambiguous, never a graph command.
+      if (authored && requested && requested.scope !== intent.scope) return null;
+      requested = intent;
       continue;
     }
     // Explanations alone never request navigation. Questions, disagreement and
@@ -40,9 +57,19 @@ export function learnerRequestedNext(transcript: string) {
         /^i(?:['’]m| am) done with (?:this|that|the) question$/iu,
       ].some(pattern => pattern.test(explanation))
     )
-      return false;
+      return null;
   }
   return requested;
+}
+
+/** Existing callers only need a boolean; authored callers retain the typed intent. */
+export function learnerRequestedNext(transcript: string, authored = false) {
+  return learnerNavigationIntent(transcript, authored) !== null;
+}
+
+/** Parse one authenticated turn. Quoted, reported, conditional or extended speech is not Stop. */
+export function isLearnerStopText(turnText: string) {
+  return /^(?:please[ ,]+)?stop(?: (?:the |this )?(?:session|practice))?(?:,? please)?[.!]*$/iu.test(turnText.trim());
 }
 
 /** This only bounds what may follow a classified tutor close; it never establishes closure. */

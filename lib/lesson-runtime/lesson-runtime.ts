@@ -1,3 +1,4 @@
+import { learnerNavigationIntent, parseLearnerNavigationText, isLearnerStopText } from "./conversation-progression";
 import { terminalRecapComplete } from "./terminal-recap";
 import { evidenceRecap } from "./evidence-recap";
 import { normalizeAssessment, type ConversationAssessment, type ConversationVisit } from "./conversation-assessment";
@@ -16,7 +17,6 @@ export type { LessonDiagnostic, LessonEventCursor } from "./diagnostic-journal";
 import { parseLiveClassificationDiagnostic } from "./live-classification-diagnostic";
 import {
   classificationSource,
-  learnerRequestedNext,
   hasCurrentCompletionEvidence,
   meetsAuthoredCompletionPolicy,
   createLessonRuntime,
@@ -176,12 +176,18 @@ export class LessonRuntime {
       this.lessonDefinition.conversationFirst
         ? source => {
             this.dispatch({
-              type: "conversation.recheck.requested", source, transcriptSnapshot: this.transcript, atMs: this.now(),
+              type: "conversation.recheck.requested",
+              source,
+              transcriptSnapshot: this.transcript,
+              atMs: this.now(),
             });
             // Dispatch may restore an accepted close and even commit its scene.
             // Neither outcome may fall through to the recovery prompt callback.
-            if (this.state && (this.state.visitId !== source.visitId ||
-              hasCurrentCompletionEvidence(this.state, this.lessonDefinition))) return true;
+            if (
+              this.state &&
+              (this.state.visitId !== source.visitId || hasCurrentCompletionEvidence(this.state, this.lessonDefinition))
+            )
+              return true;
             if (!this.state?.interruptedExchange?.ready) return false;
             this.log("conversation.recheck.started", null, source);
             this.scheduleClassification("missing_transcript_recheck");
@@ -348,7 +354,8 @@ export class LessonRuntime {
   private scheduleClock() {
     clearTimeout(this.clockTimer);
     const terminalRendering =
-      this.state?.phase === "rendering" && this.state.lessonComplete &&
+      this.state?.phase === "rendering" &&
+      this.state.lessonComplete &&
       this.lessonDefinition.nodes[this.state.nodeId].completeAfterTutorOutput;
     if (
       !this.state ||
@@ -448,7 +455,7 @@ export class LessonRuntime {
               this.state.terminalLearnerPending
             )
               this.terminalTranscriptRecovery.arm(this.state, !this.steering);
-            else if (!this.lessonDefinition.conversationFirst || !learnerRequestedNext(this.transcript))
+            else if (!this.lessonDefinition.conversationFirst || !this.requestedNavigation())
               this.answerRecovery.arm(this.state, !this.steering);
           }
           this.scheduleClassification(event.type);
@@ -614,6 +621,14 @@ export class LessonRuntime {
       revision: this.revision,
       speaker,
       transcriptSnapshot: text,
+      ...(speaker === "child" && this.lessonDefinition.questionGroups
+        ? {
+            learnerTurnText: this.fragments
+              .filter(item => item.event.speaker === "child" && item.source.childTurnId === source.childTurnId)
+              .map(item => item.event.delta)
+              .join(""),
+          }
+        : {}),
       atMs: this.now(),
     });
     if (
@@ -632,8 +647,27 @@ export class LessonRuntime {
     this.scheduleClassification(`${speaker}_transcript_stabilized`);
   }
 
+  private requestedNavigation() {
+    return this.lessonDefinition.questionGroups
+      ? parseLearnerNavigationText(this.state?.learnerUtterance?.text ?? "")
+      : learnerNavigationIntent(this.transcript);
+  }
+
   private scheduleClassification(trigger: string) {
     clearTimeout(this.stabilizationTimer);
+    // Stop needs authenticated ended learner speech, but never waits for playback drain or Jev.
+    if (
+      this.lessonDefinition.questionGroups &&
+      this.state?.hasChildTranscript &&
+      this.state.phase === "active" &&
+      !this.state.childSpeaking &&
+      !this.steering &&
+      this.state.learnerUtterance?.source.childTurnId === this.state.childTurnId &&
+      isLearnerStopText(this.state.learnerUtterance.text)
+    ) {
+      this.stop("learner_stop");
+      return;
+    }
     if (this.state && this.lessonDefinition.nodes[this.state.nodeId].completeAfterTutorOutput) return;
     if (this.lessonDefinition.conversationFirst && this.state && !this.steering) {
       const source =
@@ -644,7 +678,8 @@ export class LessonRuntime {
               transcriptRevision: this.state.transcriptRevision,
             }
           : null;
-      if (source && learnerRequestedNext(this.transcript)) {
+      const intent = this.requestedNavigation();
+      if (source && intent) {
         // Debounce navigation too: an immediately following microphone segment
         // must get a chance to revoke it before any quiet-drain transition.
         this.stabilizationTimer = setTimeout(() => {
@@ -660,6 +695,7 @@ export class LessonRuntime {
             return;
           this.dispatch({
             type: "conversation.advance.requested",
+            intent,
             source,
             transcriptSnapshot: this.transcript,
             atMs: this.now(),
@@ -689,7 +725,8 @@ export class LessonRuntime {
       return;
     }
     if (this.state) {
-      const closed = this.lessonDefinition.conversationFirst && hasCurrentCompletionEvidence(this.state, this.lessonDefinition);
+      const closed =
+        this.lessonDefinition.conversationFirst && hasCurrentCompletionEvidence(this.state, this.lessonDefinition);
       if (closed) this.answerRecovery.cancel("conversation_closed");
       else this.answerRecovery.observe(this.state, this.status === "live" && !this.steering);
     }
@@ -912,7 +949,7 @@ export class LessonRuntime {
   }
 
   /** Advance along the authored edge without turning a skip into understanding evidence. */
-  skipScene() {
+  skipScene(scope: "subpart" | "question" = "subpart") {
     if (
       !this.state ||
       this.status !== "live" ||
@@ -935,7 +972,7 @@ export class LessonRuntime {
     const source = runtimeSource(this.state);
     this.cancelClassification("scene_skipped");
     this.answerRecovery.cancel("scene_skipped");
-    this.dispatch({ type: "scene.skipped", source, atMs: this.now() });
+    this.dispatch({ type: "scene.skipped", source, scope, atMs: this.now() });
   }
 
   /** Continue after an accepted reveal has been committed to the application presentation. */

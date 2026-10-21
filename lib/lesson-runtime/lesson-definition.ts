@@ -21,6 +21,11 @@ export type ConceptCriterionDefinition = {
   readonly description: string;
 };
 
+export type QuestionGroupDefinition = {
+  readonly questionId: string;
+  readonly nodeIds: readonly string[];
+};
+
 export type LessonDefinition = {
   readonly id: string;
   readonly initialNodeId: string;
@@ -28,6 +33,8 @@ export type LessonDefinition = {
   readonly requirePresentationConfirmation?: boolean;
   /** Conversational closure advances independently of assessment/mastery. */
   readonly conversationFirst?: boolean;
+  /** Opt in to ordered subpart/parent navigation and counted question progress. */
+  readonly questionGroups?: readonly QuestionGroupDefinition[];
   /** Concise topic labels for an accepted-evidence terminal close. No answer text. */
   readonly recapTopics?: Readonly<Record<string, string>>;
   readonly nodes: Readonly<Record<string, LessonNodeDefinition>>;
@@ -90,6 +97,29 @@ export function validateLessonDefinition(value: LessonDefinition): LessonDefinit
         throw new Error(`Lesson edge from ${id} carries a concept not authored on its target node`);
     }
   }
+  if (value.questionGroups) {
+    const groups = value.questionGroups;
+    const ids = groups.flatMap(group => group.nodeIds);
+    if (
+      !value.conversationFirst ||
+      !groups.length ||
+      new Set(groups.map(group => group.questionId)).size !== groups.length ||
+      groups.some(group => !group.questionId || !group.nodeIds.length) ||
+      new Set(ids).size !== ids.length ||
+      ids.some(id => !value.nodes[id] || value.nodes[id].completeAfterTutorOutput) ||
+      ids[0] !== value.initialNodeId ||
+      Object.values(value.nodes).some(node => !node.completeAfterTutorOutput && !ids.includes(node.id))
+    )
+      throw new Error("Question groups must partition the authored conversation nodes in order");
+    for (const [index, id] of ids.entries()) {
+      const edge = value.nodes[id].onSuccess;
+      if (
+        edge.kind !== "node" ||
+        (ids[index + 1] ? edge.nodeId !== ids[index + 1] : !value.nodes[edge.nodeId].completeAfterTutorOutput)
+      )
+        throw new Error("Question groups must follow the authored node edges to a terminal recap");
+    }
+  }
   if (!Object.keys(value.classifier.objectiveCriteria).length || !Object.keys(value.classifier.tutorCriteria).length)
     throw new Error("Lesson classifier criteria must be authored");
   if (
@@ -114,10 +144,28 @@ export function currentNodeContext(lesson: LessonDefinition, nodeId: string) {
     scene: { id: String(sceneId ?? node.id), ...sceneFacts },
     learningObjective: node.learningObjective,
     tutorBrief: node.tutorBrief,
-    ...(node.concepts?.length ? {
-      // Private assessment targets, not presentation/reveal payloads.
-      completionCriteria: node.concepts,
-      completionPolicy: node.completionPolicy,
-    } : {}),
+    ...(node.concepts?.length
+      ? {
+          // Private assessment targets, not presentation/reveal payloads.
+          completionCriteria: node.concepts,
+          completionPolicy: node.completionPolicy,
+        }
+      : {}),
+  };
+}
+
+/** One counted parent question across every subpart; recap is not another question. */
+export function authoredQuestionProgress(lesson: LessonDefinition, nodeId: string) {
+  const groups = lesson.questionGroups;
+  if (!groups) return null;
+  const index = groups.findIndex(group => group.nodeIds.includes(nodeId));
+  if (index < 0) return null;
+  const group = groups[index];
+  return {
+    questionId: group.questionId,
+    questionNumber: index + 1,
+    questionCount: groups.length,
+    subpartNumber: group.nodeIds.indexOf(nodeId) + 1,
+    subpartCount: group.nodeIds.length,
   };
 }
