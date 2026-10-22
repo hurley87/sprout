@@ -170,8 +170,9 @@ Actual downloaded export (unchanged, local only):
 
 - Bytes: `191872443` (approximately 183 MiB).
 - SHA-256: `0087844c0cde63217c2d4900ed337eb6e752b4f5d0daae902539a96edf6eb227`.
-- Durable scrubbed projection:
-  [mae386-live-2026-10-21-c7d94b28.json](evidence/mae386-live-2026-10-21-c7d94b28.json).
+- Locally retained scrubbed projection:
+  `mae386-live-2026-10-21-c7d94b28.json` (see the
+  [historical artifact archive](evidence/README.md)).
   It preserves full visit conversations, final evidence/proposal provenance,
   navigation, frozen outcomes, secondary review and 279 selected diagnostics with
   zero-based `sourceEventIndex` back into the original export. Repeated runtime

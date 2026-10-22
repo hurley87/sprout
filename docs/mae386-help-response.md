@@ -7,7 +7,7 @@ recap semantics are unchanged.
 
 ## Failure and bounded response
 
-The original [live run](evidence/mae386-live-2026-10-21-c7d94b28.json) captured Q8's
+The original [historical live run](evidence/README.md) captured Q8's
 “can you explain it” and “Are you explaining it” receiving promises without the
 explanation. Q5-f's “What's the discovery test” also received an offer rather than
 the definition before the learner continued. A prompt conflict was a plausible
@@ -80,7 +80,8 @@ Original file, unchanged:
 Bytes: `3989621`; SHA-256:
 `c4f505fc6c4c308d79b2f51695c48b4be80a5218fac3e87919e5ce88295b19ea`.
 
-Durable [scrubbed extract](evidence/mae386-help-live-2026-10-21-a04fe1f9.json) retains
+Locally retained `mae386-help-live-2026-10-21-a04fe1f9.json`
+(see the [historical artifact archive](evidence/README.md)) retains
 all visit conversations, outcomes, navigation and secondary assessment, with
 selected exact diagnostics and their zero-based original event indexes. It omits
 repeated runtime/detector snapshots and retains only declared fields for the

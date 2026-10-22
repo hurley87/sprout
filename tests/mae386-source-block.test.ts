@@ -17,11 +17,10 @@ import { classificationSource, runtimeSource } from "../lib/lesson-runtime/lesso
 import { JEV_MODEL } from "../lib/jev";
 
 const captured = JSON.parse(
-  readFileSync(new URL("../docs/evidence/mae386-live-2026-10-21-c7d94b28.json", import.meta.url), "utf8"),
+  readFileSync(new URL("./fixtures/mae386-source-block-2026-10-21.json", import.meta.url), "utf8"),
 );
-const transcript: string = captured.conversation.find((visit: { nodeId: string }) => visit.nodeId === "q6").transcript;
-const recorded = captured.events.find((event: { sourceEventIndex: number }) => event.sourceEventIndex === 2118).detail
-  .outputs;
+const transcript: string = captured.transcript;
+const recorded = captured.recordedOutputs;
 const input = { lesson, nodeId: "q6", transcriptRevision: 207, transcript };
 function choice(options: readonly string[], selected: string, probability = 1) {
   return {

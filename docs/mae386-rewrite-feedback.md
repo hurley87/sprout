@@ -27,8 +27,9 @@ recaps are historical records and are not regraded by this update.
 
 ## Human evidence and earlier interpretation
 
-The original checked-in extract
-`docs/evidence/mae386-live-2026-10-21-c7d94b28.json`, events 6206/6341, records
+The original locally retained extract
+`mae386-live-2026-10-21-c7d94b28.json` (see the
+[historical artifact archive](evidence/README.md)), events 6206/6341, records
 “He uses habits, heuristics, and external scaffolds, to think” followed by tutor
 approval. Its unresolved recap is preserved. The earlier strict interpretation
 called that approval unsupported; under the user's new calibration this rewrite

@@ -9,7 +9,7 @@ rewrite selection, evidence attribution and recap semantics are unchanged.
 In runtime `c7d94b28-b76b-4ed1-9493-d008cb58d2d9`, the app sent Q12's missing-text
 check at 746734 ms, before the first learner transcript at 750109 ms. A full answer
 was available by 811448 ms, but the tutor then delivered the earlier “I didn't
-catch your answer” instruction. See the original [live evidence extract](evidence/mae386-live-2026-10-21-c7d94b28.json)
+catch your answer” instruction. See the original [historical live evidence extract](evidence/README.md)
 and [acceptance report](mae386-demo-validation.md#commit-8-actual-microphone-evidence-october-21-2026).
 
 MAE386 missing-text checks now carry their app-owned event identity (runtime,
@@ -77,7 +77,8 @@ Original export, unchanged:
 Bytes: `6702407`; SHA-256:
 `747daff5e05a0f984bb1dcd7e4322f6219948b45afe25c24352ec1d5c1e78397`.
 
-Durable [scrubbed extract](evidence/mae386-recovery-live-2026-10-21-8d390e19.json),
+Locally retained `mae386-recovery-live-2026-10-21-8d390e19.json`
+(see the [historical artifact archive](evidence/README.md)),
 146,374 bytes, SHA-256:
 `e6e457502d588c2772b723c139bdf4e0a913c06aefcd55fc83719fe21c447dfc`.
 It preserves full visit conversations, frozen outcomes, secondary assessment,

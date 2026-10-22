@@ -7,7 +7,7 @@ question navigation or frozen-recap rule changes.
 
 ## Captured failure and scope
 
-The original [microphone export extract](evidence/mae386-live-2026-10-21-c7d94b28.json)
+The original [historical microphone export extract](evidence/README.md)
 shows Q6's System 1 description/example judged independently demonstrated at
 0.96/1.00, but source boundaries split across neutral tutor backchannels failed
 the separate locator thresholds. Final live revision 207 (original event 2118)
