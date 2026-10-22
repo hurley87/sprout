@@ -107,12 +107,9 @@ describe("Q10 spoken meaning feedback", () => {
     [
       "q10-3",
       [
-        "toolkit composition",
-        "habits",
-        "heuristics",
-        "external scaffolds",
-        "building them to think",
-        "Use alone omits",
+        "Accept his use of all three thinking resources",
+        "Toolkit/building details are optional nuance",
+        "without requiring revision",
       ],
     ],
   ] as const;
@@ -120,7 +117,7 @@ describe("Q10 spoken meaning feedback", () => {
     const message = teachingInstruction(currentNodeContext(MAE386_LESSON, id), MAE386_LESSON);
     for (const anchor of anchors) expect(message).toContain(anchor);
     expect(message).toContain("Compare retained/omitted meaning before praise");
-    expect(message).toContain("If lost/unclear, name one gap or clarify");
+    expect(message).toContain("If core meaning is lost/unclear, name one gap or clarify");
     expect(message).toContain("shorter alone is insufficient");
     expect(message).toContain("Accept paraphrases");
     expect(message).toContain("Latest complete non-withdrawn");
@@ -138,7 +135,37 @@ describe("Q10 spoken meaning feedback", () => {
   it("keeps full criteria available if Q10 is the initial provider context", () => {
     const config = createLiveSessionConfig({ ...MAE386_LESSON, initialNodeId: "q10-3" });
     const initial = config.input[0].content[0].text;
-    expect(initial).toContain("Retain all three categories, ownership and the building-for-thinking relationship");
+    expect(initial).toContain(
+      "explicit toolkit composition and his building those resources are optional nuance, not required for credit",
+    );
     expect(initial).not.toContain("Two acceptable authored examples");
   });
+});
+
+it("projects the calibrated Q10-3 core/nuance distinction to both assessment paths", () => {
+  const cumulative = assessmentQuestions(MAE386_LESSON);
+  const live = conversationStateQuestions(MAE386_LESSON, "q10-3");
+  for (const text of [cumulative["q10-3:meaning"].instructions, live.concept_meaning.instructions]) {
+    expect(text).toContain("Retain habits, heuristics and external scaffolds as resources he uses for thinking");
+    expect(text).toContain("optional nuance, not required for credit");
+    expect(text).toContain("Accept use-based paraphrases with or without building details");
+    expect(text).not.toContain("Retain all three categories, ownership and the building-for-thinking relationship");
+  }
+  const unit = MAE386_RUBRICS.find(q => q.id === "q10")!.units[2];
+  for (const name of ["use-based", "use-based-with-building", "use-based-spoken-repair"]) {
+    expect(unit.examples.find(e => e.name === `q10-3-${name}`)?.expected).toEqual({
+      meaning: "independent",
+      concise: "independent",
+      grammatical: "independent",
+    });
+  }
+  expect(unit.examples.find(e => e.name === "q10-3-thinking-purpose-missing")?.expected.meaning).toBe("partial");
+  expect(unit.examples.find(e => e.name === "q10-3-thinking-contradicted")?.expected.meaning).toBe("incorrect");
+  expect(unit.examples.find(e => e.name === "q10-3-nuance-feedback-then-own-revision")?.expected.meaning).toBe(
+    "assisted",
+  );
+  const teaching = teachingInstruction(currentNodeContext(MAE386_LESSON, "q10-3"), MAE386_LESSON);
+  expect(teaching).toContain("do not ask for more polishing");
+  for (const sample of unit.examples.filter(e => e.name.includes("use-based")))
+    expect(teaching).not.toContain(sample.turns[0].text);
 });

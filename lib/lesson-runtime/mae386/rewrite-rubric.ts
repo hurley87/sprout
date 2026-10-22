@@ -43,7 +43,7 @@ const sentences = [
   {
     id: "q10-3",
     preservation:
-      "Keep his toolkit composition (habits, heuristics, external scaffolds) and his building them to think. Use alone omits both.",
+      "Accept his use of all three thinking resources. Toolkit/building details are optional nuance; note loss without requiring revision.",
     part: "Q10(b)",
     original: "His toolkit is comprised of the habits, heuristics, and external scaffolds he builds in order to think.",
     answer: "His toolkit consists of the habits, heuristics, and external scaffolds he builds to think.",
@@ -54,9 +54,9 @@ const sentences = [
     bad: "His toolkit consists only of habits.",
     ambiguous: "His toolkit comprises... habits, heuristics, and... I lost the rest.",
     partial: "His toolkit consists of habits and heuristics.",
-    note: "Retain all three categories, ownership and the building-for-thinking relationship. Accept comprises, consists of, is made up of or another grammatical equivalent, with actual shortening. No spelling or punctuation judgment. The manuscript is not a usage authority on comprised of; prefer uncontroversial alternatives without treating a disputed usage preference as an absolute spoken-grammar rule.",
+    note: "Retain habits, heuristics and external scaffolds as resources he uses for thinking. This core meaning suffices: explicit toolkit composition and his building those resources are optional nuance, not required for credit. Accept use-based paraphrases with or without building details; the thinking purpose must remain. The tutor may briefly note lost nuance without marking an otherwise acceptable rewrite wrong or requiring further revision. Accept comprises, consists of, is made up of or another grammatical equivalent, with actual shortening. No spelling or punctuation judgment. The manuscript is not a usage authority on comprised of; prefer uncontroversial alternatives without treating a disputed usage preference as an absolute spoken-grammar rule.",
     partialReason:
-      "Retains the toolkit and two categories but omits external scaffolds and the building-for-thinking relationship; shortening alone is insufficient.",
+      "Retains the toolkit and two categories but omits external scaffolds and the thinking purpose; these are core meaning, unlike optional composition/building nuance.",
   },
 ] as const;
 
@@ -71,14 +71,14 @@ const units: RubricUnit[] = sentences.map(s => ({
       id: "meaning",
       basis: "course-inference",
       sources: ["memory", "reification"],
-      description: `For ${s.part}, judge only the latest complete, non-withdrawn student-proposed rewrite of the visible original. Preserve its propositions and relations: ${s.note} Quoted source text is not a submission. Tutor suggestions are not learner proposals until adopted and used in the learner's own response; simple echoes establish no independent demonstration.`,
+      description: `For ${s.part}, judge only the latest complete, non-withdrawn student-proposed rewrite of the visible original. Preserve core meaning under this sentence's standard: ${s.note} Quoted source text is not a submission. Tutor suggestions are not learner proposals until adopted and used in the learner's own response; simple echoes establish no independent demonstration.`,
     },
     {
       id: "concise",
       basis: "course-inference",
       sources: ["memory"],
       description:
-        "The actual proposed revision uses fewer spoken words by removing redundant structure while preserving meaning. Any genuine reduction satisfying meaning and grammar can count; do not require maximum compression, every possible redundancy removed, an exact word count or a single target sentence. An unchanged original is not a concise rewrite. A shorter meaning-changing sentence does not demonstrate meaning-preserving concision; an incomplete proposition remains partial.",
+        "The actual proposed revision uses fewer spoken words by removing redundant structure while preserving the sentence's required core meaning. Allowed nuance loss alone is not a material meaning change. Any genuine reduction satisfying meaning and grammar can count; do not require maximum compression, every possible redundancy removed, an exact word count or a single target sentence. An unchanged original is not a concise rewrite. A shorter meaning-changing sentence does not demonstrate meaning-preserving concision; an incomplete proposition remains partial.",
     },
     {
       id: "grammatical",
@@ -95,11 +95,62 @@ const units: RubricUnit[] = sentences.map(s => ({
     avoid:
       "Do not rewrite first, demand typing, evaluate punctuation, or treat a quotation as a proposal. Do not combine parts of different proposals into an answer the learner never submitted.",
     close:
-      "Acknowledge a sufficient revision once; clarify ambiguity once. Close on settled discussion/explicit navigation, preserving the latest proposal outcome even if worse than before.",
+      "Acknowledge a sufficient revision once; do not ask for more polishing. Clarify ambiguity once. Close on settled discussion/navigation; latest proposal outcome governs.",
   },
   review:
     "Provisional authored spoken-editing standard: the exam itself supplies the editing task, not the manuscript. Chapter 1 pp. 29–30 and 35–38 establish external symbolic reasoning, NOT a canonical concise-writing key or grammar rule. Usage judgments and interpreting preserved meaning are course inferences; Bill's calibration is needed for official marks only. Do not impose a minimum degree of shortening beyond a genuine reduction.",
   examples: [
+    ...(s.id === "q10-3"
+      ? [
+          e(
+            "q10-3-use-based",
+            "alternate",
+            "He uses habits, heuristics, and external scaffolds to think.",
+            labels("independent"),
+            "User-calibrated acceptable compression: all three resources and thinking purpose remain. Toolkit composition and building are optional nuance; their omission earns no penalty.",
+          ),
+          e(
+            "q10-3-use-based-with-building",
+            "alternate",
+            "He uses habits, heuristics, and external scaffolds he builds to think.",
+            labels("independent"),
+            "Accepts use-based wording with building restored; explicit toolkit composition is optional nuance, not a missing requirement.",
+          ),
+          e(
+            "q10-3-use-based-spoken-repair",
+            "alternate",
+            "His — he uses habits, heuristics, and external scaffolds he builds to think.",
+            labels("independent"),
+            "An abandoned initial His is a spoken self-repair, not a grammar error; assess the complete use-based proposal that follows.",
+          ),
+          e(
+            "q10-3-thinking-purpose-missing",
+            "partial",
+            "His toolkit consists of habits, heuristics, and external scaffolds.",
+            labels("partial", "partial", "independent"),
+            "All three categories alone omit the required thinking purpose. Optional composition/building nuance does not waive core meaning.",
+          ),
+          e(
+            "q10-3-thinking-contradicted",
+            "incorrect",
+            "He avoids habits, heuristics, and external scaffolds when thinking.",
+            labels("incorrect", "incorrect", "independent"),
+            "Materially contradicts his use of the resources for thinking; this is not an acceptable loss of nuance.",
+          ),
+          e(
+            "q10-3-nuance-feedback-then-own-revision",
+            "assisted",
+            [
+              learner("He uses habits, heuristics, and external scaffolds to think."),
+              tutor("That works. It leaves the building detail implicit; no further revision is needed."),
+              learner("My final revision is: He uses habits, heuristics, and external scaffolds he builds to think."),
+            ],
+            labels("assisted"),
+            "Both formulations are acceptable. A substantive tutor cue about building precedes the voluntary final revision; preserve conservative assisted provenance.",
+            [3],
+          ),
+        ]
+      : []),
     e(
       `${s.id}-complete`,
       "complete",

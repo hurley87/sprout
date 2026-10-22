@@ -405,8 +405,8 @@ Two acceptable authored examples: He was late because he overslept. / Because he
 
 **Atomic evidence criteria:**
 
-- **meaning** [required; course-inference; passages: memory, reification]: For Q10(a), sentence 1, judge only the latest complete, non-withdrawn student-proposed rewrite of the visible original. Preserve its propositions and relations: Retain both lateness and oversleeping and the causal direction: oversleeping explains lateness. Merely saying he overslept omits the lateness claim. Quoted source text is not a submission. Tutor suggestions are not learner proposals until adopted and used in the learner's own response; simple echoes establish no independent demonstration.
-- **concise** [required; course-inference; passages: memory]: The actual proposed revision uses fewer spoken words by removing redundant structure while preserving meaning. Any genuine reduction satisfying meaning and grammar can count; do not require maximum compression, every possible redundancy removed, an exact word count or a single target sentence. An unchanged original is not a concise rewrite. A shorter meaning-changing sentence does not demonstrate meaning-preserving concision; an incomplete proposition remains partial.
+- **meaning** [required; course-inference; passages: memory, reification]: For Q10(a), sentence 1, judge only the latest complete, non-withdrawn student-proposed rewrite of the visible original. Preserve core meaning under this sentence's standard: Retain both lateness and oversleeping and the causal direction: oversleeping explains lateness. Merely saying he overslept omits the lateness claim. Quoted source text is not a submission. Tutor suggestions are not learner proposals until adopted and used in the learner's own response; simple echoes establish no independent demonstration.
+- **concise** [required; course-inference; passages: memory]: The actual proposed revision uses fewer spoken words by removing redundant structure while preserving the sentence's required core meaning. Allowed nuance loss alone is not a material meaning change. Any genuine reduction satisfying meaning and grammar can count; do not require maximum compression, every possible redundancy removed, an exact word count or a single target sentence. An unchanged original is not a concise rewrite. A shorter meaning-changing sentence does not demonstrate meaning-preserving concision; an incomplete proposition remains partial.
 - **grammatical** [required; course-inference; passages: memory]: The proposed spoken sentence is grammatically coherent. Judge the intended spoken wording, not ASR punctuation, spelling, accents or disfluencies outside the proposal. Uncertain transcription needs clarification, not a grammar penalty. A deliberately quoted original alone provides no proposed-rewrite evidence.
 
 **Review boundary:** Provisional authored spoken-editing standard: the exam itself supplies the editing task, not the manuscript. Chapter 1 pp. 29–30 and 35–38 establish external symbolic reasoning, NOT a canonical concise-writing key or grammar rule. Usage judgments and interpreting preserved meaning are course inferences; Bill's calibration is needed for official marks only. Do not impose a minimum degree of shortening beyond a genuine reduction.
@@ -417,7 +417,7 @@ Two acceptable authored examples: He was late because he overslept. / Because he
 - **probe:** Which words are part of your final proposed sentence?
 - **help:** Repeat the original exactly on request; that is source access, not answer-giving. If help is requested, explain one redundant construction and invite their own full revision. Record help relevant to the final proposal; repeating a supplied solution alone is not a demonstration.
 - **avoid:** Do not rewrite first, demand typing, evaluate punctuation, or treat a quotation as a proposal. Do not combine parts of different proposals into an answer the learner never submitted.
-- **close:** Acknowledge a sufficient revision once; clarify ambiguity once. Close on settled discussion/explicit navigation, preserving the latest proposal outcome even if worse than before.
+- **close:** Acknowledge a sufficient revision once; do not ask for more polishing. Clarify ambiguity once. Close on settled discussion/navigation; latest proposal outcome governs.
 
 **Named learner examples:**
 
@@ -563,8 +563,8 @@ Two acceptable authored examples: They collaborated on the project. / They worke
 
 **Atomic evidence criteria:**
 
-- **meaning** [required; course-inference; passages: memory, reification]: For Q10(a), sentence 2, judge only the latest complete, non-withdrawn student-proposed rewrite of the visible original. Preserve its propositions and relations: Retain joint work on the same project. They can refer to the already established pair; do not require an explicit two. Together is redundant with collaborated, but necessary to preserve joint work when collaborated is replaced by worked. Quoted source text is not a submission. Tutor suggestions are not learner proposals until adopted and used in the learner's own response; simple echoes establish no independent demonstration.
-- **concise** [required; course-inference; passages: memory]: The actual proposed revision uses fewer spoken words by removing redundant structure while preserving meaning. Any genuine reduction satisfying meaning and grammar can count; do not require maximum compression, every possible redundancy removed, an exact word count or a single target sentence. An unchanged original is not a concise rewrite. A shorter meaning-changing sentence does not demonstrate meaning-preserving concision; an incomplete proposition remains partial.
+- **meaning** [required; course-inference; passages: memory, reification]: For Q10(a), sentence 2, judge only the latest complete, non-withdrawn student-proposed rewrite of the visible original. Preserve core meaning under this sentence's standard: Retain joint work on the same project. They can refer to the already established pair; do not require an explicit two. Together is redundant with collaborated, but necessary to preserve joint work when collaborated is replaced by worked. Quoted source text is not a submission. Tutor suggestions are not learner proposals until adopted and used in the learner's own response; simple echoes establish no independent demonstration.
+- **concise** [required; course-inference; passages: memory]: The actual proposed revision uses fewer spoken words by removing redundant structure while preserving the sentence's required core meaning. Allowed nuance loss alone is not a material meaning change. Any genuine reduction satisfying meaning and grammar can count; do not require maximum compression, every possible redundancy removed, an exact word count or a single target sentence. An unchanged original is not a concise rewrite. A shorter meaning-changing sentence does not demonstrate meaning-preserving concision; an incomplete proposition remains partial.
 - **grammatical** [required; course-inference; passages: memory]: The proposed spoken sentence is grammatically coherent. Judge the intended spoken wording, not ASR punctuation, spelling, accents or disfluencies outside the proposal. Uncertain transcription needs clarification, not a grammar penalty. A deliberately quoted original alone provides no proposed-rewrite evidence.
 
 **Review boundary:** Provisional authored spoken-editing standard: the exam itself supplies the editing task, not the manuscript. Chapter 1 pp. 29–30 and 35–38 establish external symbolic reasoning, NOT a canonical concise-writing key or grammar rule. Usage judgments and interpreting preserved meaning are course inferences; Bill's calibration is needed for official marks only. Do not impose a minimum degree of shortening beyond a genuine reduction.
@@ -575,7 +575,7 @@ Two acceptable authored examples: They collaborated on the project. / They worke
 - **probe:** Which words are part of your final proposed sentence?
 - **help:** Repeat the original exactly on request; that is source access, not answer-giving. If help is requested, explain one redundant construction and invite their own full revision. Record help relevant to the final proposal; repeating a supplied solution alone is not a demonstration.
 - **avoid:** Do not rewrite first, demand typing, evaluate punctuation, or treat a quotation as a proposal. Do not combine parts of different proposals into an answer the learner never submitted.
-- **close:** Acknowledge a sufficient revision once; clarify ambiguity once. Close on settled discussion/explicit navigation, preserving the latest proposal outcome even if worse than before.
+- **close:** Acknowledge a sufficient revision once; do not ask for more polishing. Clarify ambiguity once. Close on settled discussion/navigation; latest proposal outcome governs.
 
 **Named learner examples:**
 
@@ -717,25 +717,75 @@ Learner evidence turn(s): 2. Simple repetition of the supplied solution is neith
 
 **Reference answer (authored):**
 
-Two acceptable authored examples: His toolkit consists of the habits, heuristics, and external scaffolds he builds to think. / His toolkit comprises the habits, heuristics, and external scaffolds he builds to think. These are illustrations, not exact-match keys. Retain all three categories, ownership and the building-for-thinking relationship. Accept comprises, consists of, is made up of or another grammatical equivalent, with actual shortening. No spelling or punctuation judgment. The manuscript is not a usage authority on comprised of; prefer uncontroversial alternatives without treating a disputed usage preference as an absolute spoken-grammar rule.
+Two acceptable authored examples: His toolkit consists of the habits, heuristics, and external scaffolds he builds to think. / His toolkit comprises the habits, heuristics, and external scaffolds he builds to think. These are illustrations, not exact-match keys. Retain habits, heuristics and external scaffolds as resources he uses for thinking. This core meaning suffices: explicit toolkit composition and his building those resources are optional nuance, not required for credit. Accept use-based paraphrases with or without building details; the thinking purpose must remain. The tutor may briefly note lost nuance without marking an otherwise acceptable rewrite wrong or requiring further revision. Accept comprises, consists of, is made up of or another grammatical equivalent, with actual shortening. No spelling or punctuation judgment. The manuscript is not a usage authority on comprised of; prefer uncontroversial alternatives without treating a disputed usage preference as an absolute spoken-grammar rule.
 
 **Atomic evidence criteria:**
 
-- **meaning** [required; course-inference; passages: memory, reification]: For Q10(b), judge only the latest complete, non-withdrawn student-proposed rewrite of the visible original. Preserve its propositions and relations: Retain all three categories, ownership and the building-for-thinking relationship. Accept comprises, consists of, is made up of or another grammatical equivalent, with actual shortening. No spelling or punctuation judgment. The manuscript is not a usage authority on comprised of; prefer uncontroversial alternatives without treating a disputed usage preference as an absolute spoken-grammar rule. Quoted source text is not a submission. Tutor suggestions are not learner proposals until adopted and used in the learner's own response; simple echoes establish no independent demonstration.
-- **concise** [required; course-inference; passages: memory]: The actual proposed revision uses fewer spoken words by removing redundant structure while preserving meaning. Any genuine reduction satisfying meaning and grammar can count; do not require maximum compression, every possible redundancy removed, an exact word count or a single target sentence. An unchanged original is not a concise rewrite. A shorter meaning-changing sentence does not demonstrate meaning-preserving concision; an incomplete proposition remains partial.
+- **meaning** [required; course-inference; passages: memory, reification]: For Q10(b), judge only the latest complete, non-withdrawn student-proposed rewrite of the visible original. Preserve core meaning under this sentence's standard: Retain habits, heuristics and external scaffolds as resources he uses for thinking. This core meaning suffices: explicit toolkit composition and his building those resources are optional nuance, not required for credit. Accept use-based paraphrases with or without building details; the thinking purpose must remain. The tutor may briefly note lost nuance without marking an otherwise acceptable rewrite wrong or requiring further revision. Accept comprises, consists of, is made up of or another grammatical equivalent, with actual shortening. No spelling or punctuation judgment. The manuscript is not a usage authority on comprised of; prefer uncontroversial alternatives without treating a disputed usage preference as an absolute spoken-grammar rule. Quoted source text is not a submission. Tutor suggestions are not learner proposals until adopted and used in the learner's own response; simple echoes establish no independent demonstration.
+- **concise** [required; course-inference; passages: memory]: The actual proposed revision uses fewer spoken words by removing redundant structure while preserving the sentence's required core meaning. Allowed nuance loss alone is not a material meaning change. Any genuine reduction satisfying meaning and grammar can count; do not require maximum compression, every possible redundancy removed, an exact word count or a single target sentence. An unchanged original is not a concise rewrite. A shorter meaning-changing sentence does not demonstrate meaning-preserving concision; an incomplete proposition remains partial.
 - **grammatical** [required; course-inference; passages: memory]: The proposed spoken sentence is grammatically coherent. Judge the intended spoken wording, not ASR punctuation, spelling, accents or disfluencies outside the proposal. Uncertain transcription needs clarification, not a grammar penalty. A deliberately quoted original alone provides no proposed-rewrite evidence.
 
 **Review boundary:** Provisional authored spoken-editing standard: the exam itself supplies the editing task, not the manuscript. Chapter 1 pp. 29–30 and 35–38 establish external symbolic reasoning, NOT a canonical concise-writing key or grammar rule. Usage judgments and interpreting preserved meaning are course inferences; Bill's calibration is needed for official marks only. Do not impose a minimum degree of shortening beyond a genuine reduction.
 
 **Tutor conduct:**
 
-- **preservation:** Keep his toolkit composition (habits, heuristics, external scaffolds) and his building them to think. Use alone omits both.
+- **preservation:** Accept his use of all three thinking resources. Toolkit/building details are optional nuance; note loss without requiring revision.
 - **probe:** Which words are part of your final proposed sentence?
 - **help:** Repeat the original exactly on request; that is source access, not answer-giving. If help is requested, explain one redundant construction and invite their own full revision. Record help relevant to the final proposal; repeating a supplied solution alone is not a demonstration.
 - **avoid:** Do not rewrite first, demand typing, evaluate punctuation, or treat a quotation as a proposal. Do not combine parts of different proposals into an answer the learner never submitted.
-- **close:** Acknowledge a sufficient revision once; clarify ambiguity once. Close on settled discussion/explicit navigation, preserving the latest proposal outcome even if worse than before.
+- **close:** Acknowledge a sufficient revision once; do not ask for more polishing. Clarify ambiguity once. Close on settled discussion/navigation; latest proposal outcome governs.
 
 **Named learner examples:**
+
+#### q10-3-use-based [alternate]
+
+1. **learner:** He uses habits, heuristics, and external scaffolds to think.
+
+Expected criteria: meaning = **independent**; concise = **independent**; grammatical = **independent**.
+
+Learner evidence turn(s): 1. User-calibrated acceptable compression: all three resources and thinking purpose remain. Toolkit composition and building are optional nuance; their omission earns no penalty.
+
+#### q10-3-use-based-with-building [alternate]
+
+1. **learner:** He uses habits, heuristics, and external scaffolds he builds to think.
+
+Expected criteria: meaning = **independent**; concise = **independent**; grammatical = **independent**.
+
+Learner evidence turn(s): 1. Accepts use-based wording with building restored; explicit toolkit composition is optional nuance, not a missing requirement.
+
+#### q10-3-use-based-spoken-repair [alternate]
+
+1. **learner:** His — he uses habits, heuristics, and external scaffolds he builds to think.
+
+Expected criteria: meaning = **independent**; concise = **independent**; grammatical = **independent**.
+
+Learner evidence turn(s): 1. An abandoned initial His is a spoken self-repair, not a grammar error; assess the complete use-based proposal that follows.
+
+#### q10-3-thinking-purpose-missing [partial]
+
+1. **learner:** His toolkit consists of habits, heuristics, and external scaffolds.
+
+Expected criteria: meaning = **partial**; concise = **partial**; grammatical = **independent**.
+
+Learner evidence turn(s): 1. All three categories alone omit the required thinking purpose. Optional composition/building nuance does not waive core meaning.
+
+#### q10-3-thinking-contradicted [incorrect]
+
+1. **learner:** He avoids habits, heuristics, and external scaffolds when thinking.
+
+Expected criteria: meaning = **incorrect**; concise = **incorrect**; grammatical = **independent**.
+
+Learner evidence turn(s): 1. Materially contradicts his use of the resources for thinking; this is not an acceptable loss of nuance.
+
+#### q10-3-nuance-feedback-then-own-revision [assisted]
+
+1. **learner:** He uses habits, heuristics, and external scaffolds to think.
+2. **tutor:** That works. It leaves the building detail implicit; no further revision is needed.
+3. **learner:** My final revision is: He uses habits, heuristics, and external scaffolds he builds to think.
+
+Expected criteria: meaning = **assisted**; concise = **assisted**; grammatical = **assisted**.
+
+Learner evidence turn(s): 3. Both formulations are acceptable. A substantive tutor cue about building precedes the voluntary final revision; preserve conservative assisted provenance.
 
 #### q10-3-complete [complete]
 
@@ -759,7 +809,7 @@ Learner evidence turn(s): 1. A different complete valid formulation; exemplars a
 
 Expected criteria: meaning = **partial**; concise = **partial**; grammatical = **independent**.
 
-Learner evidence turn(s): 1. Retains the toolkit and two categories but omits external scaffolds and the building-for-thinking relationship; shortening alone is insufficient.
+Learner evidence turn(s): 1. Retains the toolkit and two categories but omits external scaffolds and the thinking purpose; these are core meaning, unlike optional composition/building nuance.
 
 #### q10-3-modest-valid-reduction [complete]
 

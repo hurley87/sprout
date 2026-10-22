@@ -184,6 +184,12 @@ Actual downloaded export (unchanged, local only):
 
 ### Expected versus observed
 
+Q10-3 calibration update: the table below preserves the original observation and
+its then-current interpretation. The user subsequently accepted the use-based
+rewrite as correct with optional nuance loss; composition/building details are
+no longer required for credit. See [the current Q10 feedback standard](mae386-rewrite-feedback.md).
+The historical unresolved outcome is unchanged.
+
 | Scenario / expectation | Actual observation and provenance | Result / limit |
 | --- | --- | --- |
 | Q1 own explanation, independent evidence | Both functions recorded from learner text. Reification source: visit 1, turn 3, revision 28; memory extension: turn 6, revision 55. Frozen Q1 is independent. Tutor acknowledgment remains separate. | Observed; independence means relative to the in-session tutor, not independence from the prepared script. |

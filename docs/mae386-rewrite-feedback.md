@@ -1,53 +1,77 @@
 # Q10 spoken meaning feedback
 
-One bounded follow-up to parent `94e2e227b10edde511e63dfcda25a2fb46026906`.
+## Current user calibration
 
-The checked-in human microphone extract
-`docs/evidence/mae386-live-2026-10-21-c7d94b28.json`, original events 6206 and
-6341, records Q10-3: “He uses habits, heuristics, and external scaffolds, to
-think.” The tutor nevertheless says it keeps the meaning and trims extra words.
-The final recap stays unresolved; meaning judgments of incorrect at .61 and .52
-remain below the existing acceptance threshold. The original Downloads JSON was
-unavailable in this checkout session; this confirmation uses the checked-in
-extract and `docs/mae386-demo-validation.md`.
+This rubric update follows local commit
+`da409a755f1d913791798725beef3f7bf1300569`. The user accepts the Q10-3 use-based
+rewrites as right answers, though less precise, and requests that the tutor may
+point out lost nuance. This supersedes the earlier requirement that every
+composition/building relationship remain explicit.
 
-Provider context is not universally missing the rubric. `createLiveSessionConfig`
-serializes the initial node's complete context, including criterion descriptions;
-starting at Q10 would carry those requirements. MAE386 normally starts at Q1.
-Subsequent speech updates use `mae386TeachingInstruction`, whose Q10 focus was
-generic. Assessment requests independently carry the current sentence criteria.
+For Q10-3, all three resources (habits, heuristics, external scaffolds) and his
+use of them for thinking are the required core meaning. Explicit toolkit
+composition and building details are optional nuance. Both “He uses habits,
+heuristics, and external scaffolds to think” and the variant adding “he builds”
+are acceptable shorter spoken rewrites. An abandoned initial “His” before a
+complete “he uses…” proposal is a speech repair, not a grammar error. These are
+examples, not exact-match keys. Tutor feedback may briefly note the nuance
+without rejecting an acceptable answer or demanding further revision. Once a
+revision is sufficient, acknowledge it once without asking for more polishing.
 
-Each Q10 unit now supplies a compact private preservation cue to the actual
-spoken scene update. Q10-3 explicitly covers toolkit composition, all three
-categories and building for thinking; use alone is insufficient. Shared Q10
-feedback guidance compares retained/omitted meaning before praise, names one gap
-or asks one clarification for lost/unclear meaning, and accepts paraphrases.
-No reference solution is supplied. Feedback stays brief and criteria stay private.
-Closure wording is compressed to retain the existing append budget; settled
-discussion and explicit navigation still permit closure without mastery.
+Missing a category or the thinking purpose remains incomplete; materially
+contradicting use for thinking remains incorrect. Q10-1's causal direction and
+Q10-2's joint work requirement remain unchanged. Required criterion IDs, confidence
+thresholds, assistance attribution, latest-complete-proposal/withdrawal guards,
+recovery/help and conversation-first navigation remain unchanged. Existing frozen
+recaps are historical records and are not regraded by this update.
 
-Assessment thresholds/policy, proposal selection/withdrawal, attribution,
-recovery/help and frozen recap logic are unchanged. Deferred attribution
-limitations and full issue #76 acceptance remain outside this fix.
+## Human evidence and earlier interpretation
 
-Provider-free regressions check all three delivered sentence cues, missing-meaning
-feedback guidance, paraphrase acceptance, reference-example privacy, full initial
-context and browser scene-update delivery. They verify instruction contracts and
-transport, not the provider's semantic judgments or generated speech.
+The original checked-in extract
+`docs/evidence/mae386-live-2026-10-21-c7d94b28.json`, events 6206/6341, records
+“He uses habits, heuristics, and external scaffolds, to think” followed by tutor
+approval. Its unresolved recap is preserved. The earlier strict interpretation
+called that approval unsupported; under the user's new calibration this rewrite
+is acceptable, and lost composition/building detail is optional feedback.
 
-Fresh human microphone validation remains required. In separate fresh Q10-3
-attempts, compare a complete shorter paraphrase retaining composition and building
-for thinking against “He uses habits, heuristics, and external scaffolds, to
-think.” Expect brief specific acknowledgment for the valid revision; for the
-meaning-changing revision, expect a targeted gap/clarification without blanket
-meaning-preservation praise or a supplied solution. Allow next/skip/stop normally;
-inspect exported speech and frozen outcomes separately. Also spot-check Q10-1
-causal reversal and Q10-2 “They worked on the project” against valid paraphrases.
-Do not equate tutor approval with independently demonstrated assessment evidence.
+The later user-supplied session
+`sprout-mae386-1a176403-7463-43f7-baab-44628090cdb2.json` contains a valid
+composition-based rewrite, then the use-based version, then a spoken repair into
+the use-based version with building restored. Tutor feedback first accepted the
+fuller version, noted lost composition/building nuance in the use-based version,
+and accepted the final version. The user accepts these rewrites; the rubric now
+reflects that judgment. Final attribution remained unresolved in that historical
+session; this content calibration does not fix deferred locator limitations or
+change its frozen result.
 
-Validation: 1,872 provider-free unit tests, ESLint, Next type generation plus
-TypeScript, production build, changed-file formatting and diff whitespace checks
-pass. Offline `o200k_base`/`cl100k_base` recalibration changes only the three Q10
-teaching messages. The maximum is 393 proxy tokens and 1,984 bytes, below the
-unchanged 450-token/2,000-byte regression caps and documented 500-token append
-limit. These counters are proxies, not an exact provider token count.
+## Provider context and verification
+
+`createLiveSessionConfig` serializes full criteria for the initial node. The
+normal lesson starts at Q1; later speech updates use compact
+`mae386TeachingInstruction` cues. Q10-3's full criteria, cumulative/live assessment
+projections and compact tutor cue now share the core/nuance distinction. Reference
+solutions remain private. The separate uncommitted debug shortcut starts at Q10-3
+and therefore supplies fuller initial Q10 context; it is not part of this commit.
+
+Authored examples cover both accepted use-based variants, spoken repair, missing
+thinking purpose, material contradiction, and a voluntary revision after a
+substantive tutor cue with conservative assisted provenance. Provider-free tests
+verify instruction projection and mocked two-stage selection/grading transport;
+they cannot establish live provider semantic accuracy or generated speech.
+
+Fresh human microphone validation remains pending under the revised standard.
+Test the two accepted use-based variants in separate fresh sessions. Expect brief
+acceptance; an optional nuance note must not require another revision. Compare a
+missing-category or materially contradictory rewrite, where targeted feedback is
+appropriate. Also test through the normal Q1-to-Q10 flow to exercise compact
+scene updates separately from the direct-start provider context. Inspect tutor
+speech and assessment/recap outcomes separately. Full issue #76 acceptance and
+deferred attribution work remain outside this change.
+
+Provider-free validation in the current checkout (including the separate pending
+shortcut): 1,882 unit tests, lint, typecheck, production build, generated rubric
+synchronization, formatting and whitespace checks pass. Offline append-budget
+recalibration keeps the unchanged limits: maximum 1,983 bytes and 392 tokens with
+`cl100k_base` (385 with `o200k_base`). Tokenizers are regression proxies, not the
+provider's exact counter. The shortcut's pending API test assertion was updated
+to the calibrated criterion wording, but its files remain outside this commit.

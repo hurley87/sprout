@@ -87,7 +87,11 @@ it.each(REWRITE_RUBRIC.units)("assesses only the current $id selected words in t
 // two-stage request isolation/mapping, not semantic selection by a live Jev.
 it.each(
   REWRITE_RUBRIC.units.flatMap(unit =>
-    ["alternate", "modest-valid-reduction"].map(suffix => ({
+    [
+      "alternate",
+      "modest-valid-reduction",
+      ...(unit.id === "q10-3" ? ["use-based", "use-based-with-building", "use-based-spoken-repair"] : []),
+    ].map(suffix => ({
       unit,
       sample: unit.examples.find(example => example.name === `${unit.id}-${suffix}`)!,
     })),
@@ -107,6 +111,11 @@ it.each(
     originalSentence: unit.visibleSource,
     proposedRewrite: text,
   });
+  if (unit.id === "q10-3") {
+    // Mocked semantic labels verify transport/mapping, not live grading accuracy.
+    expect(JSON.stringify(t.requests[1].questions)).toContain("optional nuance, not required for credit");
+    expect(JSON.stringify(t.requests[1].questions)).toContain("the thinking purpose must remain");
+  }
   expect(result.rewriteAssessment).toBe("complete");
   expect(result.proposal?.currentRewrite).toMatchObject({
     state: "complete",
@@ -202,6 +211,22 @@ it("uses canonical disfluent boundaries without deleting learner words or relaxi
     start: "word_1_0",
     end: "word_1_6",
     assistance: "independent",
+    criteria: { meaning: "demonstrated", concise: "demonstrated", grammatical: "demonstrated" },
+  });
+});
+
+it("keeps assisted attribution for an acceptable voluntary revision after a substantive nuance cue", async () => {
+  const text = "He uses habits, heuristics, and external scaffolds he builds to think.";
+  const transcript = `Child: He uses habits, heuristics, and external scaffolds to think.\nTutor: That works; it leaves building implicit. No revision is needed.\nChild: My final revision is: ${text}`;
+  const t = setup("q10-3", transcript, text);
+  t.answers.rewrite_assistance = choice(Object.keys(t.answers.rewrite_assistance.probabilities), "assisted");
+  for (const id of gradeIds)
+    t.secondAnswers[id] = choice(Object.keys(t.secondAnswers[id].probabilities), "demonstrated");
+  const result = await classifyConversationStateWithDiagnostics(t.input, new AbortController().signal);
+  expect(t.requests[1].state.proposedRewrite).toBe(text);
+  expect(result.proposal?.currentRewrite).toMatchObject({
+    state: "complete",
+    assistance: "assisted",
     criteria: { meaning: "demonstrated", concise: "demonstrated", grammatical: "demonstrated" },
   });
 });
