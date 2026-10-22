@@ -4,7 +4,7 @@ import { JEV_MODEL } from "../lib/jev";
 import { MAE386_LESSON } from "../lib/lesson-runtime/mae386-lesson";
 import { MAE386_RUBRICS } from "../lib/lesson-runtime/mae386/rubrics";
 import { currentNodeContext } from "../lib/lesson-runtime/lesson-definition";
-import { teachingInstruction } from "../lib/lesson-runtime/live-context";
+import { createLiveSessionConfig, teachingInstruction } from "../lib/lesson-runtime/live-context";
 import { assessmentQuestions } from "../lib/lesson-runtime/conversation-assessment";
 import { conversationStateQuestions } from "../lib/lesson-runtime/conversation-observer-contract";
 
@@ -96,5 +96,49 @@ describe("MAE386 review fixes: source context and optional reasoning", () => {
     const message = teachingInstruction(currentNodeContext(MAE386_LESSON, "q15"), MAE386_LESSON);
     expect(message).toContain("Optional strengths");
     expect(message).toContain("never required for a complete answer");
+  });
+});
+
+// Instruction delivery regressions only: no mocked response establishes live speech quality.
+describe("Q10 spoken meaning feedback", () => {
+  const cases = [
+    ["q10-1", ["lateness", "oversleeping explains lateness"]],
+    ["q10-2", ["joint work", "same project", "Worked alone"]],
+    [
+      "q10-3",
+      [
+        "toolkit composition",
+        "habits",
+        "heuristics",
+        "external scaffolds",
+        "building them to think",
+        "Use alone omits",
+      ],
+    ],
+  ] as const;
+  it.each(cases)("%s delivers sentence relations and a meaning-before-praise guard", (id, anchors) => {
+    const message = teachingInstruction(currentNodeContext(MAE386_LESSON, id), MAE386_LESSON);
+    for (const anchor of anchors) expect(message).toContain(anchor);
+    expect(message).toContain("Compare retained/omitted meaning before praise");
+    expect(message).toContain("If lost/unclear, name one gap or clarify");
+    expect(message).toContain("shorter alone is insufficient");
+    expect(message).toContain("Accept paraphrases");
+    expect(message).toContain("Latest complete non-withdrawn");
+    expect(message).toContain("never borrow earlier proposals, source echoes or tutor words");
+    expect(message).toContain("no reference solution");
+    expect(message).toContain("Private focus (do not recite as a checklist)");
+    for (const unit of MAE386_RUBRICS.find(q => q.id === "q10")!.units) {
+      for (const suffix of ["-complete", "-alternate", "-modest-valid-reduction"]) {
+        const example = unit.examples.find(e => e.name === `${unit.id}${suffix}`)!;
+        expect(message).not.toContain(example.turns[0].text);
+      }
+      if (unit.id !== id) expect(message).not.toContain(unit.tutor.preservation);
+    }
+  });
+  it("keeps full criteria available if Q10 is the initial provider context", () => {
+    const config = createLiveSessionConfig({ ...MAE386_LESSON, initialNodeId: "q10-3" });
+    const initial = config.input[0].content[0].text;
+    expect(initial).toContain("Retain all three categories, ownership and the building-for-thinking relationship");
+    expect(initial).not.toContain("Two acceptable authored examples");
   });
 });

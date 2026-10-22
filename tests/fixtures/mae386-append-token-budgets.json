@@ -65,10 +65,10 @@
       }
     },
     "q10-1:teaching": {
-      "sha256": "37ce4b51a0fae6522b7c5d220f63c0581c684043ddc9c09a6b317887cedde1cc",
+      "sha256": "703471fc98f1ec2e42e13c5b5e0af262c99c8aebd8b1de7dfb9a4444bc8a5e55",
       "tokens": {
-        "o200k_base": 335,
-        "cl100k_base": 338
+        "o200k_base": 369,
+        "cl100k_base": 373
       }
     },
     "q10-1:help": {
@@ -86,10 +86,10 @@
       }
     },
     "q10-2:teaching": {
-      "sha256": "ca32e9050a65ae0c4e6962497f03bf74eeb951c8af868ab10741a896c9093e90",
+      "sha256": "38806f2d985d1ffc6dfc1981b6e9e16fde802380d3ed9cf72d2e7558088f04ee",
       "tokens": {
-        "o200k_base": 332,
-        "cl100k_base": 335
+        "o200k_base": 368,
+        "cl100k_base": 373
       }
     },
     "q10-2:help": {
@@ -107,10 +107,10 @@
       }
     },
     "q10-3:teaching": {
-      "sha256": "667a57886d7fe25f4ab873fc55554b014727103e89eca20d4614f6a52e77da33",
+      "sha256": "67e4b4a3fabf2a2a121fb5a427a4db9b679e337cb8c17a732599ddca8bd5560f",
       "tokens": {
-        "o200k_base": 344,
-        "cl100k_base": 348
+        "o200k_base": 387,
+        "cl100k_base": 393
       }
     },
     "q10-3:help": {

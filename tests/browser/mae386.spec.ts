@@ -102,6 +102,11 @@ test("current Q10/Q5 parts stay grouped; support controls, Stop and late assessm
     await expect(page.getByRole("progressbar")).toHaveAttribute("aria-valuetext", "Question 4 of 8");
     await expect(page.getByRole("region", { name: "Current question" })).toContainText(`Sentence ${index + 1} of 3`);
     await expect(page.locator("blockquote")).toHaveText(String(MAE386_LESSON.nodes[id].presentation.sourceText));
+    // Verify the real scene-update transport, without generating provider speech.
+    const unit = MAE386_RUBRICS.find(question => question.id === "q10")!.units[index];
+    const steering = await page.evaluate(() => (window as unknown as LocalSessionWindow).steeringContents.at(-1));
+    expect(steering).toContain(unit.tutor.preservation);
+    expect(steering).toContain("Compare retained/omitted meaning before praise");
     await expect(page.getByRole("button", { name: "Skip this part" })).toBeEnabled();
     if (index === 2) await page.screenshot({ path: testInfo.outputPath("q10-original-mobile.png"), fullPage: true });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

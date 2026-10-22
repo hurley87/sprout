@@ -413,10 +413,11 @@ Two acceptable authored examples: He was late because he overslept. / Because he
 
 **Tutor conduct:**
 
+- **preservation:** Keep lateness, oversleeping and their causal direction: oversleeping explains lateness.
 - **probe:** Which words are part of your final proposed sentence?
 - **help:** Repeat the original exactly on request; that is source access, not answer-giving. If help is requested, explain one redundant construction and invite their own full revision. Record help relevant to the final proposal; repeating a supplied solution alone is not a demonstration.
 - **avoid:** Do not rewrite first, demand typing, evaluate punctuation, or treat a quotation as a proposal. Do not combine parts of different proposals into an answer the learner never submitted.
-- **close:** Acknowledge a sufficient revision once. If still ambiguous, ask one clarification. Close one subpart on settled discussion/explicit navigation, preserving the latest proposal outcome even if it is worse than an earlier attempt.
+- **close:** Acknowledge a sufficient revision once; clarify ambiguity once. Close on settled discussion/explicit navigation, preserving the latest proposal outcome even if worse than before.
 
 **Named learner examples:**
 
@@ -570,10 +571,11 @@ Two acceptable authored examples: They collaborated on the project. / They worke
 
 **Tutor conduct:**
 
+- **preservation:** Keep joint work on the same project; they can name the pair. Worked alone does not express collaboration.
 - **probe:** Which words are part of your final proposed sentence?
 - **help:** Repeat the original exactly on request; that is source access, not answer-giving. If help is requested, explain one redundant construction and invite their own full revision. Record help relevant to the final proposal; repeating a supplied solution alone is not a demonstration.
 - **avoid:** Do not rewrite first, demand typing, evaluate punctuation, or treat a quotation as a proposal. Do not combine parts of different proposals into an answer the learner never submitted.
-- **close:** Acknowledge a sufficient revision once. If still ambiguous, ask one clarification. Close one subpart on settled discussion/explicit navigation, preserving the latest proposal outcome even if it is worse than an earlier attempt.
+- **close:** Acknowledge a sufficient revision once; clarify ambiguity once. Close on settled discussion/explicit navigation, preserving the latest proposal outcome even if worse than before.
 
 **Named learner examples:**
 
@@ -727,10 +729,11 @@ Two acceptable authored examples: His toolkit consists of the habits, heuristics
 
 **Tutor conduct:**
 
+- **preservation:** Keep his toolkit composition (habits, heuristics, external scaffolds) and his building them to think. Use alone omits both.
 - **probe:** Which words are part of your final proposed sentence?
 - **help:** Repeat the original exactly on request; that is source access, not answer-giving. If help is requested, explain one redundant construction and invite their own full revision. Record help relevant to the final proposal; repeating a supplied solution alone is not a demonstration.
 - **avoid:** Do not rewrite first, demand typing, evaluate punctuation, or treat a quotation as a proposal. Do not combine parts of different proposals into an answer the learner never submitted.
-- **close:** Acknowledge a sufficient revision once. If still ambiguous, ask one clarification. Close one subpart on settled discussion/explicit navigation, preserving the latest proposal outcome even if it is worse than an earlier attempt.
+- **close:** Acknowledge a sufficient revision once; clarify ambiguity once. Close on settled discussion/explicit navigation, preserving the latest proposal outcome even if worse than before.
 
 **Named learner examples:**
 

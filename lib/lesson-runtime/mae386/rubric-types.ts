@@ -32,6 +32,8 @@ export type RubricUnit = {
   referenceAnswer: string;
   criteria: readonly Criterion[];
   tutor: {
+    /** Compact private meaning relations for spoken rewrite feedback; never an answer key. */
+    preservation?: string;
     probe: string;
     help: string;
     avoid: string;
