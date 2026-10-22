@@ -62,7 +62,20 @@ export function conversationStateQuestions(lesson: LessonDefinition, nodeId?: st
           "cultural-agreement":
             "Explaining a shared understanding or shared language for what symbols mean is sufficient; the words culture and convention are not required.",
         }
-      : {};
+      : lesson.id === "mae386"
+        ? {
+            "memory-extension":
+              "External storage freeing limited memory for bigger problems is sufficient. A learner saying extends short-term memory while explicitly storing ideas outside the head describes external support, not a claim of increased biological memory capacity.",
+            "system2-description":
+              "Deliberately considering possible responses and choosing among them is sufficient analytical thinking; no special vocabulary or guarantee of optimal correctness is required.",
+            "system2-example":
+              "A single concrete situation may illustrate both systems. In an established driving/cut-off situation, deliberately considering reactions and choosing a response can be its System 2 example; do not require a second scenario or infer a missing example from generic process labels alone.",
+            "sound-vs-picture":
+              "Explaining that phonetic writing lets us sound out words, contrasted with pictographic pictures, sufficiently identifies what the two represent. Extra claims about ease of drawing/sharing are not the decoding advantage, but do not erase this contrast. Locate the learner's sound/picture contrast, not their later explanation of decoding alone; the decoding criterion is separate.",
+            "sound-decoding":
+              "Sounding out an unfamiliar written word and matching it to a word known from speech fully explains decoding. A tutor asking how sounds help with an unfamiliar word names the task but does not give the decoding mechanism or the link to already known speech; the learner supplying that link in their own words is independent. A tutor actually explaining or demonstrating that mechanism before the answer is substantive help.",
+          }
+        : {};
   const criterionText = (concept: { id: string; description: string }) =>
     `${concept.description} ${paraphrases[concept.id] ?? ""}`.trim();
   const questions: { objectiveState: Question; tutorState: Question; [key: string]: Question } = {
@@ -115,7 +128,10 @@ export function conversationStateQuestions(lesson: LessonDefinition, nodeId?: st
           not_yet: "No relevant learner evidence for this concept is present.",
           partial: "Relevant evidence is incomplete, ambiguous, or does not yet establish understanding.",
           demonstrated_independent:
-            "The learner explains the concept accurately in their own words without tutor-supplied answer content or a simple echo. Answering a neutral clarification in their own words is independent; being asked about a criterion does not itself make the answer prompted.",
+            "The learner explains the concept accurately in their own words without tutor-supplied answer content or a simple echo. Answering a neutral clarification in their own words is independent; being asked about a criterion does not itself make the answer prompted." +
+            (lesson.id === "mae386"
+              ? " A probe may name the task or missing aspect without supplying its mechanism; directing attention alone is not answer-giving. Judge whether the actual explanatory content was supplied before the learner used it."
+              : ""),
           demonstrated_prompted:
             "The learner explains the concept accurately using relevant tutor-supplied scaffolding or answer content, adding their own explanation or application beyond a simple echo; do not label it independent.",
         },
@@ -455,7 +471,7 @@ export function interpretConversationOutputs(
         conceptObservations[index] = {
           ...observation,
           childMessageIndex: located ? block.start : null,
-          ...(located ? { childMessageEndIndex: block.end } : {}),
+          ...(located && block.end > block.start ? { childMessageEndIndex: block.end } : {}),
         };
         continue;
       }

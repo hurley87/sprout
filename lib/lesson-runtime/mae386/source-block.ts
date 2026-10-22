@@ -39,7 +39,7 @@ export function learnerSourceBlocks(transcript: string) {
   }
   flush();
   // Keep the existing single-message path when there is no fragmented block.
-  return blocks.some(block => block.end > block.start) ? blocks : [];
+  return blocks.length > 1 || blocks.some(block => block.end > block.start) ? blocks : [];
 }
 
 /** Compatibility helper for callers expecting exactly one neutral block. */

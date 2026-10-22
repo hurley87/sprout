@@ -39,7 +39,7 @@ export type ConceptEvidenceRecord = {
 type ConceptObservationSource = Pick<
   ConceptEvidenceReference,
   "runtimeId" | "nodeId" | "visitId" | "transcriptRevision"
-> & { readonly childTurnId: number };
+> & { readonly childTurnId: number | null };
 
 export type ConceptRevealEffect = {
   readonly type: "concept.revealed";

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { afterEach, expect, it, vi } from "vitest";
 import { MAE386_LESSON as lesson } from "../lib/lesson-runtime/mae386-lesson";
 import { CATCHING_UNICORNS_LESSON } from "../lib/lesson-runtime/catching-unicorns-lesson";
-import { neutralLearnerSourceBlock } from "../lib/lesson-runtime/mae386/source-block";
+import { neutralLearnerSourceBlock, learnerSourceBlocks } from "../lib/lesson-runtime/mae386/source-block";
 import {
   conversationStateQuestions,
   normalizeConversationOutputs,
@@ -152,10 +152,16 @@ it.each([
   "Yes, the answer is automatic thinking.",
   "What do you mean?",
   "Hmm, think about deliberate checking.",
-])("substantive tutor context keeps existing source selection: %s", tutor => {
+])("substantive tutor context separates source candidates: %s", tutor => {
   const text = `Child: Fast thinking is\nTutor: ${tutor}\nChild: an automatic reaction.`;
   expect(neutralLearnerSourceBlock(text)).toBeNull();
-  expect(conversationStateQuestions(lesson, "q6", text)).toHaveProperty("sourceEnd_system1-description");
+  expect(learnerSourceBlocks(text).map(block => [block.start, block.end])).toEqual([
+    [0, 0],
+    [2, 2],
+  ]);
+  expect(
+    Object.keys(conversationStateQuestions(lesson, "q6", text)["sourceSpan_system1-description"].criteria),
+  ).toEqual(["none", "span_0_0", "span_2_2"]);
 });
 
 it("does not enable block selection for other lessons or Q10", () => {

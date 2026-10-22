@@ -106,7 +106,7 @@ test("current Q10/Q5 parts stay grouped; support controls, Stop and late assessm
     const unit = MAE386_RUBRICS.find(question => question.id === "q10")!.units[index];
     const steering = await page.evaluate(() => (window as unknown as LocalSessionWindow).steeringContents.at(-1));
     expect(steering).toContain(unit.tutor.preservation);
-    expect(steering).toContain("Compare retained/omitted meaning before praise");
+    expect(steering).toContain("Compare core meaning before praise");
     await expect(page.getByRole("button", { name: "Skip this part" })).toBeEnabled();
     if (index === 2) await page.screenshot({ path: testInfo.outputPath("q10-original-mobile.png"), fullPage: true });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -337,6 +337,9 @@ test("mixed authored answers survive grouped skips, natural completion and contr
       .click();
   }
   await waitNode(page, "recap");
+  // Node selection precedes React's render acknowledgment. The immutable
+  // snapshot exists only after that acknowledgment commits recap entry.
+  await expect.poll(async () => (await current(page))?.questionOutcomes?.questions.length).toBe(8);
   const snapshot = await current(page);
   const frozen = snapshot!.questionOutcomes!;
   expect(frozen.questions.map(q => q.outcome)).toEqual([

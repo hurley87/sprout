@@ -4,7 +4,12 @@ import {
   type QuestionObservation,
   type QuestionOutcomeSnapshot,
 } from "./mae386/question-outcomes";
-import { projectRewrite, type RewriteProjection, type RewriteTranscript } from "./mae386/rewrite-proposal";
+import {
+  projectRewrite,
+  rewriteWords,
+  type RewriteProjection,
+  type RewriteTranscript,
+} from "./mae386/rewrite-proposal";
 import { mae386NeutralBackchannel } from "./mae386/source-block";
 import type { OutputActivityEvent } from "../events";
 import { acceptsLearnerAnswerIndependently } from "./counting-answer-policy";
@@ -119,6 +124,8 @@ export type LessonRuntimeState = {
   /** Current answers and snapshot history, isolated from cumulative mastery. */
   readonly rewriteProposals?: Readonly<Record<string, RewriteProjection>>;
   readonly rewriteTranscript?: RewriteTranscript | null;
+  /** Exact app-authenticated conceptual transcript, scoped to this visit. */
+  readonly learnerTranscript?: RewriteTranscript | null;
   /** Pre-turn candidate for completed control-only speech. Never current evidence
    * while new learner words are pending, and never restored from history. */
   readonly rewriteTurn?: { readonly source: RuntimeSource; readonly prior: RewriteProjection["current"] } | null;
@@ -154,6 +161,7 @@ export type LessonRuntimeEvent = { readonly atMs: number } & (
       /** App-owned projection of authenticated provider fragments sharing this learner turn. */
       readonly learnerTurnText?: string;
       readonly rewriteTranscript?: RewriteTranscript;
+      readonly learnerTranscript?: RewriteTranscript;
       readonly speaker: "child" | "tutor" | "unknown";
       readonly transcriptSnapshot?: string;
     }
@@ -478,6 +486,7 @@ function requestAuthoredTransition(
       lessonComplete: edge.kind === "complete",
       pendingRender: { identity, origin, ...(navigation ? { navigation } : {}) },
       conceptEvidence,
+      ...(lesson.id === "mae386" ? { learnerTranscript: null } : {}),
     },
     effects: [{ type: "render.requested", identity }],
   };
@@ -806,6 +815,13 @@ export function reduceLessonRuntime(
       const exchange =
         lesson.conversationFirst && event.speaker === "child" ? closingTutorExchange(event.transcriptSnapshot) : null;
       const closure = matchesTutorClosure(exchange, state.tutorClosure) ? state.tutorClosure : null;
+      if (lesson.id === "mae386" && !lesson.nodes[state.nodeId].currentRewrite) {
+        next = {
+          ...next,
+          learnerTranscript:
+            event.learnerTranscript?.text === event.transcriptSnapshot ? event.learnerTranscript : null,
+        };
+      }
       if (lesson.nodes[state.nodeId].currentRewrite) {
         next = {
           ...next,
@@ -965,8 +981,36 @@ export function reduceLessonRuntime(
         return ignore("proposal_guard_rejected");
       if (state.consumedRevision === state.transcriptRevision) return ignore("revision_already_consumed");
       next = { ...next, consumedRevision: state.transcriptRevision };
-      // A missing-turn recheck can establish conversational closure only. Do not
-      // attribute historical child words or new mastery to the microphone-only turn.
+      // A textless turn is not evidence. MAE386 rechecks may assess previously
+      // authenticated words in the exact current-visit snapshot, with null
+      // conceptual turn identity rather than crediting the microphone-only turn.
+      const historicalRecheck =
+        lesson.id === "mae386" && !state.hasChildTranscript && !!state.interruptedExchange?.ready;
+      const historicalTranscript = currentNode.currentRewrite ? state.rewriteTranscript : state.learnerTranscript;
+      const historicalWords =
+        historicalRecheck && historicalTranscript && historicalTranscript.text === event.transcriptSnapshot
+          ? rewriteWords(event.transcriptSnapshot ?? "").filter(word =>
+              historicalTranscript.turns.some(
+                turn =>
+                  turn.messageIndex === word.messageIndex &&
+                  turn.start <= word.start &&
+                  turn.end >= word.end &&
+                  Number.isSafeInteger(turn.childTurnId) &&
+                  turn.childTurnId > 0,
+              ),
+            )
+          : [];
+      const historicalObservations = historicalRecheck
+        ? proposal.conceptObservations?.filter(observation => {
+            const start = observation.childMessageIndex;
+            if (start === null || start === undefined) return false;
+            const end = observation.childMessageEndIndex ?? start;
+            const selected = rewriteWords(event.transcriptSnapshot ?? "").filter(
+              word => word.messageIndex >= start && word.messageIndex <= end,
+            );
+            return selected.length > 0 && selected.every(word => historicalWords.some(auth => auth.id === word.id));
+          })
+        : undefined;
       const evidenceMessages = transcriptMessages(event.transcriptSnapshot ?? "") ?? [];
       const content = (text: string) => (text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).join(" ");
       const eligibleText = (text: string, index: number) =>
@@ -992,21 +1036,24 @@ export function reduceLessonRuntime(
               .some((message, offset) => message.speaker === "Child" && eligibleText(message.text, start + offset));
           })
         : proposal.conceptObservations;
-      const conceptResult = state.hasChildTranscript
-        ? applyConceptObservations(
-            next.conceptEvidence,
-            currentNode,
-            event.source,
-            observations,
-            event.transcriptSnapshot,
-            lesson.id === "mae386" && !currentNode.currentRewrite ? mae386NeutralBackchannel : undefined,
-          )
-        : { conceptEvidence: next.conceptEvidence, effects: [] };
+      const conceptResult =
+        state.hasChildTranscript || historicalObservations?.length
+          ? applyConceptObservations(
+              next.conceptEvidence,
+              currentNode,
+              historicalRecheck ? { ...event.source, childTurnId: null } : event.source,
+              historicalRecheck
+                ? historicalObservations?.filter(observation => observations?.includes(observation))
+                : observations,
+              event.transcriptSnapshot,
+              lesson.id === "mae386" && !currentNode.currentRewrite ? mae386NeutralBackchannel : undefined,
+            )
+          : { conceptEvidence: next.conceptEvidence, effects: [] };
       if (conceptResult.conceptEvidence !== next.conceptEvidence)
         next = { ...next, conceptEvidence: conceptResult.conceptEvidence };
       if (
         currentNode.currentRewrite &&
-        state.hasChildTranscript &&
+        (state.hasChildTranscript || historicalWords.length > 0) &&
         proposal.currentRewrite &&
         state.rewriteTranscript?.text === event.transcriptSnapshot
       ) {

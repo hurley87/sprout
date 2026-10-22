@@ -85,11 +85,12 @@ export function rewriteQuestions(
       boundaries,
     ),
     rewrite_assistance: question(
-      "Attribute assistance to the selected proposal only. Relevant earlier tutor help still counts; later help cannot retroactively prompt it.",
+      "Attribute assistance to the selected proposal only. Relevant earlier tutor help still counts; later help cannot retroactively prompt it. Evaluative feedback such as something feels redundant and a request for the final version supply no solution or editing method: they are neutral clarification, not substantive scaffolding. Naming redundant words, suggesting an edit or supplying replacement wording is help. Mark the learner independent when no relevant answer-giving occurred; reserve unknown for genuinely ambiguous history.",
       {
         independent:
-          "Learner-authored revision without relevant answer-giving; neutral clarification/source repetition is not help.",
-        assisted: "Learner uses relevant tutor scaffolding and adds their own application beyond a simple echo.",
+          "Learner-authored revision without a supplied solution, identified redundant phrase or suggested editing operation. A source repetition, evaluative comment or request to give a final version alone supplies no edit content and remains independent.",
+        assisted:
+          "Before this proposal the tutor identifies a redundant phrase, suggests a concrete edit or supplies solution content, and the learner uses it with their own application beyond a simple echo. Mere feedback or an invitation to revise is insufficient.",
         echo: "Learner merely repeats a tutor-supplied solution; no demonstration.",
         unknown: "Assistance cannot be established, or there is no complete selected proposal.",
       },

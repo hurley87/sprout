@@ -143,7 +143,12 @@ it.each(scenarios)(
                 ? "open"
                 : id.startsWith("concept_")
                   ? observation[label]
-                  : `message_${evidenceTurn - 1}`;
+                  : id.startsWith("sourceSpan_")
+                    ? Object.keys(question.criteria).find(key => {
+                        const match = /^span_(\d+)_(\d+)$/.exec(key);
+                        return match && Number(match[1]) <= evidenceTurn - 1 && Number(match[2]) >= evidenceTurn - 1;
+                      })!
+                    : `message_${evidenceTurn - 1}`;
         // Ambiguous authored meaning is a low-confidence partial, never a fabricated error.
         const uncertain = id.startsWith("concept_") && label === "unresolved";
         return [

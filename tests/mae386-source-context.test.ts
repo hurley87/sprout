@@ -116,13 +116,15 @@ describe("Q10 spoken meaning feedback", () => {
   it.each(cases)("%s delivers sentence relations and a meaning-before-praise guard", (id, anchors) => {
     const message = teachingInstruction(currentNodeContext(MAE386_LESSON, id), MAE386_LESSON);
     for (const anchor of anchors) expect(message).toContain(anchor);
-    expect(message).toContain("Compare retained/omitted meaning before praise");
-    expect(message).toContain("If core meaning is lost/unclear, name one gap or clarify");
-    expect(message).toContain("shorter alone is insufficient");
-    expect(message).toContain("Accept paraphrases");
+    expect(message).toContain("Compare core meaning before praise");
+    expect(message).toContain(
+      "Request revision only for a specific meaning, tense, grammar or redundancy gap; name it",
+    );
+    expect(message).toContain("Never demand maximum compression");
+    expect(message).toContain("Accept spoken repairs");
     expect(message).toContain("Latest complete non-withdrawn");
-    expect(message).toContain("never borrow earlier proposals, source echoes or tutor words");
-    expect(message).toContain("no reference solution");
+    expect(message).toContain("no source/tutor echoes");
+    expect(message).toContain("reference solution");
     expect(message).toContain("Private focus (do not recite as a checklist)");
     for (const unit of MAE386_RUBRICS.find(q => q.id === "q10")!.units) {
       for (const suffix of ["-complete", "-alternate", "-modest-valid-reduction"]) {

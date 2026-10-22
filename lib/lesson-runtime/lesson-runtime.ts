@@ -731,7 +731,7 @@ export class LessonRuntime {
       speaker,
     );
     const rewriteTurns: RewriteTranscript["turns"][number][] = [];
-    if (this.lessonDefinition.nodes[this.state!.nodeId]?.currentRewrite) {
+    if (this.lessonDefinition.id === "mae386" || this.lessonDefinition.nodes[this.state!.nodeId]?.currentRewrite) {
       let messageIndex = -1;
       let previousSpeaker = "";
       let length = 0;
@@ -754,7 +754,9 @@ export class LessonRuntime {
       revision: this.revision,
       ...(this.lessonDefinition.nodes[this.state!.nodeId]?.currentRewrite
         ? { rewriteTranscript: { text, turns: rewriteTurns } }
-        : {}),
+        : this.lessonDefinition.id === "mae386"
+          ? { learnerTranscript: { text, turns: rewriteTurns } }
+          : {}),
       speaker,
       transcriptSnapshot: text,
       ...(speaker === "child" && this.lessonDefinition.questionGroups
