@@ -139,9 +139,11 @@ it.each(scenarios)(
               : "unclear_or_incomplete"
             : id === "tutorState"
               ? "asking"
-              : id.startsWith("concept_")
-                ? observation[label]
-                : `message_${evidenceTurn - 1}`;
+              : id === "discussionClosure"
+                ? "open"
+                : id.startsWith("concept_")
+                  ? observation[label]
+                  : `message_${evidenceTurn - 1}`;
         // Ambiguous authored meaning is a low-confidence partial, never a fabricated error.
         const uncertain = id.startsWith("concept_") && label === "unresolved";
         return [

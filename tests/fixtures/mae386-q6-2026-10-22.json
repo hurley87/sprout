@@ -1,0 +1,181 @@
+{
+  "sourceFile": "sprout-mae386-5ce19ff1-531e-45e3-a1d6-859165533f5f.json",
+  "sourceSha256": "36aae91d50d938b10cb962890c2981c45990884a61a4d0b0e06babb9aef33c8e",
+  "sourceEventIndex": 2953,
+  "transcript": "Tutor: Okay. Explain Kahneman's System one and System two thinking and give a convincing example of each.\nChild: [tongue click ]So system one is all about... Uh, it's that fast, intuitive, reactionary response to any sort of... [sigh ]external stimulus\nTutor: Mm-hmm.\nChild: Um, think about driving and someone cuts you\nTutor: Yeah.\nChild: off, your- your immediate reaction might be to be upset and\nChild: wanna do something. Um, system two is all about that thoughtful\nChild: , slower\nTutor: Mm-hmm.\nChild: Uh, more considered approach where you're thinking through the ,what just happened and- and then taking your time to formulate a response... That\nChild: may be saying\nTutor: Go on.\nChild: You know, I don't need to get upset here that someone cut me off. It happened and\nChild: ... And I can get past it\nTutor: Yeah, that's a strong example. System one is that snap reaction. And system two is taking a breath and working\nTutor: through it step by step.\nTutor: How does the thinking play out in the moment for you in that switch\nTutor: from the quick reaction to the more careful check?\nChild: [tongue click ]How does it play out\nChild: ? [tongue click] Um\nChild: ... I guess you're just flooded with thoughts on... and all the different\nChild: [breath ]all the different ways you can react to a certain situation and then System two thinking's all about optimizing and picking the best, the best response available that you've come up with\nTutor: Yeah, that lands for me. You've shown the quick gut reaction and then the slower sift through options to choose a response.",
+  "transcriptRevision": 331,
+  "recordedOutputs": {
+    "objectiveState": {
+      "choice": "completed",
+      "confidence": 0.97,
+      "probabilities": {
+        "completed": 0.98,
+        "incorrect": 0,
+        "unclear_or_incomplete": 0.02,
+        "unresolved_help": 0,
+        "no_attempt": 0
+      }
+    },
+    "tutorState": {
+      "choice": "confirmed_completion",
+      "confidence": 0.81,
+      "probabilities": {
+        "confirmed_completion": 0.85,
+        "clarifying": 0.02,
+        "helping": 0.05,
+        "asking": 0.07,
+        "other": 0.01
+      }
+    },
+    "concepts": {
+      "concept_system1-description": {
+        "choice": "demonstrated_independent",
+        "confidence": 0.99,
+        "probabilities": {
+          "not_yet": 0,
+          "partial": 0.01,
+          "demonstrated_independent": 0.99,
+          "demonstrated_prompted": 0
+        }
+      },
+      "concept_system1-example": {
+        "choice": "demonstrated_independent",
+        "confidence": 1,
+        "probabilities": {
+          "not_yet": 0,
+          "partial": 0,
+          "demonstrated_independent": 1,
+          "demonstrated_prompted": 0
+        }
+      },
+      "concept_system2-description": {
+        "choice": "demonstrated_independent",
+        "confidence": 0.96,
+        "probabilities": {
+          "not_yet": 0,
+          "partial": 0.02,
+          "demonstrated_independent": 0.97,
+          "demonstrated_prompted": 0.01
+        }
+      },
+      "concept_system2-example": {
+        "choice": "demonstrated_independent",
+        "confidence": 0.97,
+        "probabilities": {
+          "not_yet": 0,
+          "partial": 0.01,
+          "demonstrated_independent": 0.98,
+          "demonstrated_prompted": 0.01
+        }
+      }
+    },
+    "sources": {
+      "source_system1-description": {
+        "choice": "message_1",
+        "confidence": 1,
+        "probabilities": {
+          "none": 0,
+          "message_1": 1,
+          "message_3": 0,
+          "message_5": 0,
+          "message_7": 0,
+          "message_9": 0,
+          "message_11": 0
+        }
+      },
+      "sourceEnd_system1-description": {
+        "choice": "message_1",
+        "confidence": 0.99,
+        "probabilities": {
+          "none": 0,
+          "message_1": 0.99,
+          "message_3": 0,
+          "message_5": 0.01,
+          "message_7": 0,
+          "message_9": 0,
+          "message_11": 0
+        }
+      },
+      "source_system1-example": {
+        "choice": "message_5",
+        "confidence": 0.66,
+        "probabilities": {
+          "none": 0,
+          "message_1": 0.01,
+          "message_3": 0.27,
+          "message_5": 0.71,
+          "message_7": 0,
+          "message_9": 0.01,
+          "message_11": 0
+        }
+      },
+      "sourceEnd_system1-example": {
+        "choice": "message_5",
+        "confidence": 0.95,
+        "probabilities": {
+          "none": 0,
+          "message_1": 0,
+          "message_3": 0.01,
+          "message_5": 0.96,
+          "message_7": 0,
+          "message_9": 0.03,
+          "message_11": 0
+        }
+      },
+      "source_system2-description": {
+        "choice": "message_5",
+        "confidence": 0.42,
+        "probabilities": {
+          "none": 0,
+          "message_1": 0,
+          "message_3": 0,
+          "message_5": 0.5,
+          "message_7": 0.48,
+          "message_9": 0,
+          "message_11": 0.02
+        }
+      },
+      "sourceEnd_system2-description": {
+        "choice": "message_7",
+        "confidence": 0.87,
+        "probabilities": {
+          "none": 0,
+          "message_1": 0,
+          "message_3": 0,
+          "message_5": 0.01,
+          "message_7": 0.89,
+          "message_9": 0.05,
+          "message_11": 0.05
+        }
+      },
+      "source_system2-example": {
+        "choice": "message_7",
+        "confidence": 0.45,
+        "probabilities": {
+          "none": 0,
+          "message_1": 0,
+          "message_3": 0.02,
+          "message_5": 0.11,
+          "message_7": 0.53,
+          "message_9": 0.31,
+          "message_11": 0.03
+        }
+      },
+      "sourceEnd_system2-example": {
+        "choice": "message_9",
+        "confidence": 0.88,
+        "probabilities": {
+          "none": 0,
+          "message_1": 0,
+          "message_3": 0,
+          "message_5": 0.01,
+          "message_7": 0.04,
+          "message_9": 0.9,
+          "message_11": 0.05
+        }
+      }
+    }
+  },
+  "recordedOutcome": "partial",
+  "note": "Transcript and historical scores only. New block/closure selections in tests are mocked, not fresh provider acceptance."
+}

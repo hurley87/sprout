@@ -84,7 +84,7 @@ export function parseLiveClassificationDiagnostic(
   if (record(value.outputs)) {
     if (
       Object.keys(value.outputs).some(
-        key => !["objectiveState", "tutorState", "concepts", "sources", "rewrite"].includes(key),
+        key => !["objectiveState", "tutorState", "discussionClosure", "concepts", "sources", "rewrite"].includes(key),
       ) ||
       (!lesson && value.outputs.concepts !== undefined)
     )
@@ -97,7 +97,11 @@ export function parseLiveClassificationDiagnostic(
     if (concepts && Object.keys(concepts).some(id => !authoredConcepts.some(concept => `concept_${concept.id}` === id)))
       return null;
     const answers: Record<string, unknown> = {};
-    for (const id of ["objectiveState", "tutorState"]) {
+    for (const id of [
+      "objectiveState",
+      "tutorState",
+      ...(value.outputs.discussionClosure !== undefined ? ["discussionClosure"] : []),
+    ]) {
       const output = value.outputs[id];
       answers[id] = record(output) ? { ...output, type: "choice" } : output;
     }

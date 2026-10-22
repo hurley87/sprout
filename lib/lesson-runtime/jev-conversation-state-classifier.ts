@@ -85,7 +85,9 @@ export async function executeConversationObserver(
     if (!node?.currentRewrite) {
       // Historical diagnostics retain their original locator schema. A fresh
       // block request must receive exactly that schema, never a legacy answer.
-      if (Object.keys(locatingRequest.questions).some(id => id.startsWith("sourceSpan_"))) {
+      if (
+        Object.keys(locatingRequest.questions).some(id => id.startsWith("sourceSpan_") || id === "discussionClosure")
+      ) {
         if (
           !("answers" in body) ||
           !body.answers ||

@@ -1,27 +1,49 @@
 import { neutralTutorAcknowledgment, substantiveLearnerText, transcriptMessages } from "../tutor-observation";
 
-/** The captured adult discussion uses a standalone "Hmm" as a backchannel.
+/** The captured adult discussion uses "Hmm" and "Go on" as content-free backchannels.
  * Do not broaden the shared counting/Catching Unicorns predicate. */
 export const mae386NeutralBackchannel = (text: string) =>
-  neutralTutorAcknowledgment(text) || /^hmm[.!?]?$/iu.test(text.trim());
+  neutralTutorAcknowledgment(text) || /^(?:hmm|go on)[.!?]?$/iu.test(text.trim());
 
-/** One candidate, not a semantic verdict. Keep the literal transcript and every
- * original index; never join across substantive tutor speech or across visits. */
-export function neutralLearnerSourceBlock(transcript: string) {
+/** Maximal learner blocks separated by substantive tutor speech. A later probe
+ * must not erase earlier candidates. No block bridges help, feedback or visits. */
+export function learnerSourceBlocks(transcript: string) {
   const messages = transcriptMessages(transcript);
-  if (!messages) return null;
-  const candidates = messages.flatMap((message, index) =>
-    message.speaker === "Child" && substantiveLearnerText(message.text, true) ? [index] : [],
-  );
-  if (candidates.length < 2) return null;
-  const start = candidates[0];
-  const end = candidates.at(-1)!;
-  const selected = messages.slice(start, end + 1);
-  if (selected.some(message => message.speaker === "Tutor" && !mae386NeutralBackchannel(message.text))) return null;
-  return {
-    id: `span_${start}_${end}`,
-    start,
-    end,
-    messages: selected.map((message, offset) => ({ messageIndex: start + offset, ...message })),
+  if (!messages) return [];
+  const blocks: {
+    id: string;
+    start: number;
+    end: number;
+    messages: { messageIndex: number; speaker: "Child" | "Tutor"; text: string }[];
+  }[] = [];
+  let start: number | null = null;
+  let end: number | null = null;
+  const flush = () => {
+    if (start !== null && end !== null)
+      blocks.push({
+        id: `span_${start}_${end}`,
+        start,
+        end,
+        messages: messages
+          .slice(start, end + 1)
+          .map((message, offset) => ({ messageIndex: start! + offset, ...message })),
+      });
+    start = end = null;
   };
+  for (const [index, message] of messages.entries()) {
+    if (message.speaker === "Tutor" && !mae386NeutralBackchannel(message.text)) flush();
+    else if (message.speaker === "Child" && substantiveLearnerText(message.text, true)) {
+      start ??= index;
+      end = index;
+    }
+  }
+  flush();
+  // Keep the existing single-message path when there is no fragmented block.
+  return blocks.some(block => block.end > block.start) ? blocks : [];
+}
+
+/** Compatibility helper for callers expecting exactly one neutral block. */
+export function neutralLearnerSourceBlock(transcript: string) {
+  const blocks = learnerSourceBlocks(transcript);
+  return blocks.length === 1 ? blocks[0] : null;
 }

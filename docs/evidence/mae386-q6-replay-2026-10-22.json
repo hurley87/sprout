@@ -1,0 +1,314 @@
+{
+  "note": "Actual Jev text replay of recorded transcript. No new microphone acceptance; working tree includes Q6 fixes.",
+  "sourceSha256": "36aae91d50d938b10cb962890c2981c45990884a61a4d0b0e06babb9aef33c8e",
+  "reports": [
+    {
+      "name": "followup-open",
+      "status": "accepted",
+      "outcome": "hold_scene",
+      "outputs": {
+        "discussionClosure": {
+          "choice": "open",
+          "confidence": 1,
+          "probabilities": {
+            "closed": 0,
+            "open": 1
+          }
+        },
+        "objectiveState": {
+          "choice": "completed",
+          "confidence": 0.96,
+          "probabilities": {
+            "completed": 0.97,
+            "incorrect": 0,
+            "unclear_or_incomplete": 0.03,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "asking",
+          "confidence": 0.42,
+          "probabilities": {
+            "confirmed_completion": 0.02,
+            "clarifying": 0.22,
+            "helping": 0.2,
+            "asking": 0.54,
+            "other": 0.02
+          }
+        },
+        "concepts": {
+          "concept_system1-description": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.99,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.01,
+              "demonstrated_independent": 0.99,
+              "demonstrated_prompted": 0
+            }
+          },
+          "concept_system1-example": {
+            "choice": "demonstrated_independent",
+            "confidence": 1,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0,
+              "demonstrated_independent": 1,
+              "demonstrated_prompted": 0
+            }
+          },
+          "concept_system2-description": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.97,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.02,
+              "demonstrated_independent": 0.98,
+              "demonstrated_prompted": 0
+            }
+          },
+          "concept_system2-example": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.97,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.02,
+              "demonstrated_independent": 0.98,
+              "demonstrated_prompted": 0
+            }
+          }
+        },
+        "sources": {
+          "sourceSpan_system1-description": {
+            "choice": "span_1_9",
+            "confidence": 0.98,
+            "probabilities": {
+              "none": 0.01,
+              "span_1_9": 0.99
+            }
+          },
+          "sourceSpan_system1-example": {
+            "choice": "span_1_9",
+            "confidence": 0.98,
+            "probabilities": {
+              "none": 0.01,
+              "span_1_9": 0.99
+            }
+          },
+          "sourceSpan_system2-description": {
+            "choice": "span_1_9",
+            "confidence": 0.96,
+            "probabilities": {
+              "none": 0.02,
+              "span_1_9": 0.98
+            }
+          },
+          "sourceSpan_system2-example": {
+            "choice": "span_1_9",
+            "confidence": 0.98,
+            "probabilities": {
+              "none": 0.01,
+              "span_1_9": 0.99
+            }
+          }
+        }
+      },
+      "labelCompletionEligible": false,
+      "proposal": {
+        "nodeId": "q6",
+        "transcriptRevision": 331,
+        "childActivity": "unknown",
+        "answerOutcome": "correct",
+        "supportState": "none",
+        "tutorState": "unknown",
+        "conceptObservations": [
+          {
+            "criterionId": "system1-description",
+            "observation": "demonstrated_independent",
+            "childMessageIndex": 1,
+            "childMessageEndIndex": 9
+          },
+          {
+            "criterionId": "system1-example",
+            "observation": "demonstrated_independent",
+            "childMessageIndex": 1,
+            "childMessageEndIndex": 9
+          },
+          {
+            "criterionId": "system2-description",
+            "observation": "demonstrated_independent",
+            "childMessageIndex": 1,
+            "childMessageEndIndex": 9
+          },
+          {
+            "criterionId": "system2-example",
+            "observation": "demonstrated_independent",
+            "childMessageIndex": 1,
+            "childMessageEndIndex": 9
+          }
+        ]
+      }
+    },
+    {
+      "name": "final-closed",
+      "status": "accepted",
+      "outcome": "allow_semantic_completion_evidence",
+      "outputs": {
+        "discussionClosure": {
+          "choice": "closed",
+          "confidence": 0.88,
+          "probabilities": {
+            "closed": 0.94,
+            "open": 0.06
+          }
+        },
+        "objectiveState": {
+          "choice": "completed",
+          "confidence": 0.97,
+          "probabilities": {
+            "completed": 0.98,
+            "incorrect": 0,
+            "unclear_or_incomplete": 0.02,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "confirmed_completion",
+          "confidence": 0.86,
+          "probabilities": {
+            "confirmed_completion": 0.89,
+            "clarifying": 0.02,
+            "helping": 0.04,
+            "asking": 0.04,
+            "other": 0.01
+          }
+        },
+        "concepts": {
+          "concept_system1-description": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.99,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.01,
+              "demonstrated_independent": 0.99,
+              "demonstrated_prompted": 0
+            }
+          },
+          "concept_system1-example": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.99,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.01,
+              "demonstrated_independent": 0.99,
+              "demonstrated_prompted": 0
+            }
+          },
+          "concept_system2-description": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.95,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.03,
+              "demonstrated_independent": 0.96,
+              "demonstrated_prompted": 0.01
+            }
+          },
+          "concept_system2-example": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.97,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.01,
+              "demonstrated_independent": 0.98,
+              "demonstrated_prompted": 0.01
+            }
+          }
+        },
+        "sources": {
+          "sourceSpan_system1-description": {
+            "choice": "span_1_9",
+            "confidence": 0.97,
+            "probabilities": {
+              "none": 0,
+              "span_1_9": 0.98,
+              "span_11_11": 0.02
+            }
+          },
+          "sourceSpan_system1-example": {
+            "choice": "span_1_9",
+            "confidence": 1,
+            "probabilities": {
+              "none": 0,
+              "span_1_9": 1,
+              "span_11_11": 0
+            }
+          },
+          "sourceSpan_system2-description": {
+            "choice": "span_1_9",
+            "confidence": 0.92,
+            "probabilities": {
+              "none": 0,
+              "span_1_9": 0.95,
+              "span_11_11": 0.05
+            }
+          },
+          "sourceSpan_system2-example": {
+            "choice": "span_1_9",
+            "confidence": 0.91,
+            "probabilities": {
+              "none": 0,
+              "span_1_9": 0.9400000000000001,
+              "span_11_11": 0.06
+            }
+          }
+        }
+      },
+      "labelCompletionEligible": true,
+      "proposal": {
+        "nodeId": "q6",
+        "transcriptRevision": 331,
+        "childActivity": "unknown",
+        "answerOutcome": "correct",
+        "supportState": "none",
+        "tutorState": "acknowledging",
+        "conceptObservations": [
+          {
+            "criterionId": "system1-description",
+            "observation": "demonstrated_independent",
+            "childMessageIndex": 1,
+            "childMessageEndIndex": 9
+          },
+          {
+            "criterionId": "system1-example",
+            "observation": "demonstrated_independent",
+            "childMessageIndex": 1,
+            "childMessageEndIndex": 9
+          },
+          {
+            "criterionId": "system2-description",
+            "observation": "demonstrated_independent",
+            "childMessageIndex": 1,
+            "childMessageEndIndex": 9
+          },
+          {
+            "criterionId": "system2-example",
+            "observation": "demonstrated_independent",
+            "childMessageIndex": 1,
+            "childMessageEndIndex": 9
+          }
+        ]
+      }
+    }
+  ],
+  "baseCommit": "c75cff1ecfea2bd710ecfb62c6dc9771e5585d59",
+  "date": "2026-10-22",
+  "implementationSha256": {
+    "lib/lesson-runtime/mae386/source-block.ts": "6e4acbf668df52cbab2315a811a9837b71ae0ae8229c92a3a7cd310f5eb8dfcd",
+    "lib/lesson-runtime/conversation-observer-contract.ts": "b0ad5bb362138e1b8eeb4ccb9a17396ab338ee6f86ee3eaac0bad911e2d873bd",
+    "lib/lesson-runtime/jev-conversation-state-classifier.ts": "e199c86d1583a1cc7bd391f6378f83f8c781b5942e62ce13acb3dffe8f0b329d",
+    "lib/lesson-runtime/live-classification-diagnostic.ts": "514eb53f3bffb69ae553afaaf28c471b5ece1604ce48633bcacf066924a1e882"
+  }
+}
