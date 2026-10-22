@@ -186,3 +186,22 @@ it("cancels between selection and assessment", async () => {
   expect(result.reason).toBe("cancelled");
   expect(t.fetcher).toHaveBeenCalledTimes(1);
 });
+
+it("uses canonical disfluent boundaries without deleting learner words or relaxing the rewrite assessment", async () => {
+  const text = "They, yeah, they collaborated on the project";
+  const transcript = `Tutor: The two of them collaborated together on the project.\nChild: ${text}`;
+  const t = setup("q10-2", transcript, text);
+  const questions = conversationStateQuestions(lesson, "q10-2", transcript);
+  expect(questions.rewrite_start.instructions).toContain("choose the FIRST They");
+  expect(questions.rewrite_start.instructions).toContain("never include an abandoned proposal");
+  for (const id of gradeIds) t.secondAnswers[id] = choice(Object.keys(questions[id].criteria), "demonstrated");
+  const result = await classifyConversationStateWithDiagnostics(t.input, new AbortController().signal);
+  expect(t.requests).toHaveLength(2);
+  expect(t.requests[1].state.proposedRewrite).toBe(text);
+  expect(result.proposal?.currentRewrite).toMatchObject({
+    start: "word_1_0",
+    end: "word_1_6",
+    assistance: "independent",
+    criteria: { meaning: "demonstrated", concise: "demonstrated", grammatical: "demonstrated" },
+  });
+});

@@ -5,6 +5,7 @@ import {
   type QuestionOutcomeSnapshot,
 } from "./mae386/question-outcomes";
 import { projectRewrite, type RewriteProjection, type RewriteTranscript } from "./mae386/rewrite-proposal";
+import { mae386NeutralBackchannel } from "./mae386/source-block";
 import type { OutputActivityEvent } from "../events";
 import { parseConversationStateProposal } from "./conversation-state-classifier";
 import { currentNodeContext, isLessonNodeId, type LessonDefinition } from "./lesson-definition";
@@ -971,6 +972,7 @@ export function reduceLessonRuntime(
             event.source,
             observations,
             event.transcriptSnapshot,
+            lesson.id === "mae386" && !currentNode.currentRewrite ? mae386NeutralBackchannel : undefined,
           )
         : { conceptEvidence: next.conceptEvidence, effects: [] };
       if (conceptResult.conceptEvidence !== next.conceptEvidence)

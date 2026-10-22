@@ -118,13 +118,15 @@ export function parseLiveClassificationDiagnostic(
       { answers },
       lesson,
       lesson ? (value.nodeId as string) : undefined,
-      lesson?.nodes[value.nodeId]?.currentRewrite ? transcript : undefined,
+      lesson?.nodes[value.nodeId]?.currentRewrite || Object.keys(answers).some(id => id.startsWith("sourceSpan_"))
+        ? transcript
+        : undefined,
     );
   } else if (value.outputs !== null) return null;
   if (value.outputs !== null && !outputs) return null;
   if (value.decision === "accepted" && (!outputs || value.outcome === "unresolved")) return null;
   if (value.decision === "abstained" && value.outcome !== "unresolved") return null;
-  const interpretation = outputs ? interpretConversationOutputs(outputs, lesson, value.nodeId) : null;
+  const interpretation = outputs ? interpretConversationOutputs(outputs, lesson, value.nodeId, transcript) : null;
   const labelCompletionEligible = interpretation?.labelCompletionEligible ?? false;
   const completionEligible = interpretation?.completionEligible ?? false;
   const genericConfident = interpretation?.genericConfident ?? false;

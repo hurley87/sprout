@@ -77,7 +77,7 @@ export function rewriteQuestions(
       unresolved: "Selection is ambiguous, unfinished with no prior complete proposal, or uncertain transcription.",
     }),
     rewrite_start: question(
-      "Choose the FIRST word of the selected complete proposal (or explicit withdrawal). If none/unresolved choose none. For corrections within one message choose the replacement, not the abandoned wording.",
+      "Choose the FIRST word of the selected complete proposal (or explicit withdrawal). If none/unresolved choose none. For corrections within one message choose the replacement, not the abandoned wording. Canonical boundary: include harmless repeated lead-in words and fillers in the same current proposal, rather than splitting probability between equivalent starts. For example, in They, yeah, they collaborated on the project, choose the FIRST They. This is a location convention only: never include an abandoned proposal, source quotation, negation, actual self-correction or withdrawal as a harmless filler.",
       boundaries,
     ),
     rewrite_end: question(

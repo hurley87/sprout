@@ -1,4 +1,5 @@
 import { rewriteQuestions, interpretRewrite, type RewriteOutputs } from "./mae386/rewrite-proposal";
+import { neutralLearnerSourceBlock } from "./mae386/source-block";
 /** Canonical current-node Choice contract, validation, and fail-closed mapping. */
 export const CONVERSATION_CLASSIFICATION_THRESHOLDS = {
   HIGH: 0.9,
@@ -97,7 +98,19 @@ export function conversationStateQuestions(lesson: LessonDefinition, nodeId?: st
   if (transcript !== undefined) {
     const candidates = learnerSourceOptions(transcript);
     const singleSource = singleLearnerSourceIndex(transcript) !== null;
+    const block = lesson.id === "mae386" && !currentNode?.currentRewrite ? neutralLearnerSourceBlock(transcript) : null;
     for (const concept of currentNode?.concepts ?? []) {
+      if (block) {
+        questions[`sourceSpan_${concept.id}`] = {
+          type: "choice",
+          instructions: `${conceptScopeInstructions} Select the learner explanation block supporting this criterion: ${criterionText(concept)}. The block preserves original evidenceMessages indexes and neutral tutor backchannels; tutor entries are context only. Several criteria may occur in one explanation. Grouping proves neither coherence nor understanding: choose none if this block does not support the criterion or requires combining conflicting/separate attempts. Do not fill missing meaning from tutor words. Semantic sufficiency and independent/assisted attribution remain separate judgments.`,
+          criteria: {
+            none: "No supporting coherent learner explanation, or attribution is unresolved.",
+            [block.id]: `Learner explanation with original context: ${JSON.stringify(block.messages)}`,
+          },
+        };
+        continue;
+      }
       questions[`source_${concept.id}`] = {
         type: "choice",
         instructions: `${conceptScopeInstructions} ${sourceIdentityInstructions} Select the START of the earliest learner utterance or complete explanation supporting this criterion: ${criterionText(concept)}. ${singleSource ? "There is only one eligible learner message, so no separate END decision is needed." : "The sourceEnd question separately selects its inclusive END. If one message is sufficient, start and end must be that same message. If a thought spans learner messages, select the first necessary fragment here and include its completion in sourceEnd. A sentence started before a tutor acknowledgment and finished after it has its START before the acknowledgment, even if the completion also contains a standalone explanation."} Consider intervening tutor words for prompting attribution, but never count them as learner evidence. A span must express one coherent explanation; do not combine unrelated answers, supply missing meaning, or include unnecessary messages. If several complete explanations support it, prefer the earliest. The same explanation may support multiple criteria. If only partial evidence exists, locate that partial explanation without extending it with unrelated answers. If attribution is unresolved, select none. Indexes are application projections; never infer unseen content.`,
@@ -227,10 +240,19 @@ export function normalizeConversationOutputs(
   for (const [id, question] of Object.entries(rewriteExpected)) expected[id] = Object.keys(question.criteria);
   const hasSources = Object.keys(body.answers).some(key => key.startsWith("source_"));
   const hasSourceEnds = Object.keys(body.answers).some(key => key.startsWith("sourceEnd_"));
+  const hasSourceSpans = Object.keys(body.answers).some(key => key.startsWith("sourceSpan_"));
+  const block =
+    lesson?.id === "mae386" && !rewriteNode?.currentRewrite && transcript !== undefined
+      ? neutralLearnerSourceBlock(transcript)
+      : null;
+  if (hasSourceSpans && (!block || hasSources || hasSourceEnds)) return null;
+  if (hasSourceSpans && block)
+    for (const concept of concepts) expected[`sourceSpan_${concept.id}`] = ["none", block.id];
   const singleSource = transcript !== undefined && singleLearnerSourceIndex(transcript) !== null;
   if (
     transcript !== undefined &&
     concepts.length &&
+    !hasSourceSpans &&
     (!hasSources || (!hasSourceEnds && !allowLegacySources && !singleSource))
   )
     return null;
@@ -293,11 +315,13 @@ export function normalizeConversationOutputs(
       ? { rewrite: Object.fromEntries(Object.keys(rewriteExpected).map(id => [id, normalized[id]])) as RewriteOutputs }
       : {}),
     ...(concepts.length ? { concepts: conceptOutputs as ConversationStateOutputs["concepts"] } : {}),
-    ...(hasSources
+    ...(hasSources || hasSourceSpans
       ? {
           sources: Object.fromEntries(
             concepts.flatMap(concept => [
-              [`source_${concept.id}`, normalized[`source_${concept.id}`]],
+              ...(hasSourceSpans
+                ? [[`sourceSpan_${concept.id}`, normalized[`sourceSpan_${concept.id}`]]]
+                : [[`source_${concept.id}`, normalized[`source_${concept.id}`]]]),
               ...(hasSourceEnds ? [[`sourceEnd_${concept.id}`, normalized[`sourceEnd_${concept.id}`]]] : []),
             ]),
           ) as ConversationStateOutputs["sources"],
@@ -371,6 +395,20 @@ export function interpretConversationOutputs(
     const singleSource = transcript === undefined ? null : singleLearnerSourceIndex(transcript);
     for (let index = 0; index < conceptObservations.length; index++) {
       const observation = conceptObservations[index];
+      const span = outputs.sources[`sourceSpan_${observation.criterionId}`];
+      if (span) {
+        const block =
+          lesson?.id === "mae386" && !lesson.nodes[nodeId]?.currentRewrite && transcript !== undefined
+            ? neutralLearnerSourceBlock(transcript)
+            : null;
+        const located = block && confidentlyClassified(span) && span.choice === block.id;
+        conceptObservations[index] = {
+          ...observation,
+          childMessageIndex: located ? block.start : null,
+          ...(located ? { childMessageEndIndex: block.end } : {}),
+        };
+        continue;
+      }
       const locator = outputs.sources[`source_${observation.criterionId}`];
       const endLocator = outputs.sources[`sourceEnd_${observation.criterionId}`];
       const locatedIndex = (answer: ChoiceOutput<string> | undefined) =>

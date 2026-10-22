@@ -83,6 +83,19 @@ export async function executeConversationObserver(
     if (!body || typeof body !== "object" || !("model" in body) || body.model !== requestedModel)
       return abstain("provider_model_mismatch");
     if (!node?.currentRewrite) {
+      // Historical diagnostics retain their original locator schema. A fresh
+      // block request must receive exactly that schema, never a legacy answer.
+      if (Object.keys(locatingRequest.questions).some(id => id.startsWith("sourceSpan_"))) {
+        if (
+          !("answers" in body) ||
+          !body.answers ||
+          typeof body.answers !== "object" ||
+          Array.isArray(body.answers) ||
+          Object.keys(body.answers).length !== Object.keys(locatingRequest.questions).length ||
+          Object.keys(body.answers).some(id => !(id in locatingRequest.questions))
+        )
+          return abstain("provider_unreadable");
+      }
       const outputs = normalizeConversationOutputs(body, snapshot.lesson, snapshot.nodeId, snapshot.transcript);
       return outputs ? mapConversationObservation(snapshot, outputs) : abstain("provider_unreadable");
     }
