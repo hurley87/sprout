@@ -1,4 +1,4 @@
-import type { LessonDefinition } from "../../../lib/lesson-runtime/lesson-definition";
+import type { LessonDefinition } from "./lesson-definition";
 
 export const CHILD_ACTIVITIES = ["unknown", "waiting", "thinking", "answering"] as const;
 export type ChildActivity = (typeof CHILD_ACTIVITIES)[number];

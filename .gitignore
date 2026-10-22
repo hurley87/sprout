@@ -45,3 +45,9 @@ next-env.d.ts
 
 # Harness evidence retained outside Playwright cleanup; bounded admission, manual archive.
 /.sprout-evidence/
+
+# Full MAE386 live diagnostic exports; curate regression/replay fixtures separately.
+/docs/evidence/mae386-live-*.json
+/docs/evidence/mae386-*-live-*.json
+/sprout-mae386-*.json
+/docs/evidence/sprout-mae386-*.json

@@ -9,22 +9,39 @@ vi.mock("../../lib/lesson-runtime/lesson-runtime-reducer", async importOriginal 
     ...current,
     createLessonRuntime(...args: Parameters<typeof current.createLessonRuntime>) {
       const result = current.createLessonRuntime(...args);
-      expect(result, "baseline initial state").toEqual(baseline.createLessonRuntime(...args));
+      if (args[1]?.lesson?.id !== "mae386")
+        expect(result, "baseline initial state").toEqual(baseline.createLessonRuntime(...args));
       return result;
     },
     reduceLessonRuntime(...args: Parameters<typeof current.reduceLessonRuntime>) {
       const result = current.reduceLessonRuntime(...args);
+      // MAE386 and its new events have no pre-instrumentation counterpart.
+      if (args[2].id === "mae386" || args[1].type === "question.observation") return result;
       // The new authored counting policy intentionally differs from the historical
       // reducer. Compare legacy gates on the same inputs; policy outcomes are tested separately.
       const legacyArgs: typeof args = [args[0], args[1], { ...args[2], answerAcceptance: undefined }];
-      if (args[2].answerAcceptance && args[1].type === "proposal.received" &&
-          args[1].proposal && typeof args[1].proposal === "object" && !Array.isArray(args[1].proposal)) {
-        const proposal = { ...args[1].proposal as Record<string, unknown> };
+      if (
+        args[2].answerAcceptance &&
+        args[1].type === "proposal.received" &&
+        args[1].proposal &&
+        typeof args[1].proposal === "object" &&
+        !Array.isArray(args[1].proposal)
+      ) {
+        const proposal = { ...(args[1].proposal as Record<string, unknown>) };
         Reflect.deleteProperty(proposal, "answerCommitment");
         legacyArgs[1] = { ...args[1], proposal };
       }
       const comparable = args[2].answerAcceptance ? current.reduceLessonRuntime(...legacyArgs) : result;
-      const previous = baseline.reduceLessonRuntime(...legacyArgs);
+      const previous = baseline.reduceLessonRuntime(
+        legacyArgs[0],
+        {
+          ...args[1],
+          ...(legacyArgs[1].type === "proposal.received" && args[1].type === "proposal.received"
+            ? { proposal: legacyArgs[1].proposal }
+            : {}),
+        },
+        legacyArgs[2],
+      );
       expect(comparable.state, `baseline state after ${args[1].type}`).toEqual(previous.state);
       expect(comparable.effects, `baseline effects after ${args[1].type}`).toEqual(previous.effects);
       expect(comparable.state === args[0], `baseline ignored-event identity after ${args[1].type}`).toBe(

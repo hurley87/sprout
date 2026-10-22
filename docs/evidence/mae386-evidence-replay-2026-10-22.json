@@ -1,0 +1,769 @@
+{
+  "note": "Actual Jev text replay of the five captured visits, not microphone acceptance. Working-tree changes after 87e40db.",
+  "sourceSha256": "94d723e7ac55ff52a031aaf53e488d0d91b06ce288ddae9f9395b8b4a1a7c7c1",
+  "reports": [
+    {
+      "nodeId": "q1",
+      "status": "accepted",
+      "outcome": "allow_semantic_completion_evidence",
+      "outputs": {
+        "objectiveState": {
+          "choice": "completed",
+          "confidence": 0.96,
+          "probabilities": {
+            "completed": 0.97,
+            "incorrect": 0.01,
+            "unclear_or_incomplete": 0.02,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "confirmed_completion",
+          "confidence": 0.97,
+          "probabilities": {
+            "confirmed_completion": 0.98,
+            "clarifying": 0,
+            "helping": 0,
+            "asking": 0.02,
+            "other": 0
+          }
+        },
+        "concepts": {
+          "concept_reification": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.99,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.01,
+              "demonstrated_independent": 0.99,
+              "demonstrated_prompted": 0
+            }
+          },
+          "concept_memory-extension": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.95,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.04,
+              "demonstrated_independent": 0.96,
+              "demonstrated_prompted": 0
+            }
+          }
+        },
+        "sources": {
+          "sourceSpan_reification": {
+            "choice": "span_1_3",
+            "confidence": 0.92,
+            "probabilities": {
+              "none": 0.04,
+              "span_1_3": 0.96
+            }
+          },
+          "sourceSpan_memory-extension": {
+            "choice": "span_1_3",
+            "confidence": 0.96,
+            "probabilities": {
+              "none": 0.02,
+              "span_1_3": 0.98
+            }
+          }
+        }
+      },
+      "labelCompletionEligible": true,
+      "proposal": {
+        "nodeId": "q1",
+        "transcriptRevision": 100,
+        "childActivity": "unknown",
+        "answerOutcome": "correct",
+        "supportState": "none",
+        "tutorState": "acknowledging",
+        "conceptObservations": [
+          {
+            "criterionId": "reification",
+            "observation": "demonstrated_independent",
+            "childMessageIndex": 1,
+            "childMessageEndIndex": 3
+          },
+          {
+            "criterionId": "memory-extension",
+            "observation": "demonstrated_independent",
+            "childMessageIndex": 1,
+            "childMessageEndIndex": 3
+          }
+        ]
+      }
+    },
+    {
+      "nodeId": "q6",
+      "status": "accepted",
+      "outcome": "allow_semantic_completion_evidence",
+      "outputs": {
+        "discussionClosure": {
+          "choice": "closed",
+          "confidence": 1,
+          "probabilities": {
+            "closed": 1,
+            "open": 0
+          }
+        },
+        "objectiveState": {
+          "choice": "completed",
+          "confidence": 0.84,
+          "probabilities": {
+            "completed": 0.87,
+            "incorrect": 0.02,
+            "unclear_or_incomplete": 0.11,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "confirmed_completion",
+          "confidence": 1,
+          "probabilities": {
+            "confirmed_completion": 1,
+            "clarifying": 0,
+            "helping": 0,
+            "asking": 0,
+            "other": 0
+          }
+        },
+        "concepts": {
+          "concept_system1-description": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.99,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.01,
+              "demonstrated_independent": 0.99,
+              "demonstrated_prompted": 0
+            }
+          },
+          "concept_system1-example": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.99,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.01,
+              "demonstrated_independent": 0.99,
+              "demonstrated_prompted": 0
+            }
+          },
+          "concept_system2-description": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.95,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.04,
+              "demonstrated_independent": 0.96,
+              "demonstrated_prompted": 0
+            }
+          },
+          "concept_system2-example": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.95,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.04,
+              "demonstrated_independent": 0.96,
+              "demonstrated_prompted": 0
+            }
+          }
+        },
+        "sources": {
+          "sourceSpan_system1-description": {
+            "choice": "span_1_3",
+            "confidence": 0.98,
+            "probabilities": {
+              "none": 0.01,
+              "span_1_3": 0.99
+            }
+          },
+          "sourceSpan_system1-example": {
+            "choice": "span_1_3",
+            "confidence": 0.98,
+            "probabilities": {
+              "none": 0.01,
+              "span_1_3": 0.99
+            }
+          },
+          "sourceSpan_system2-description": {
+            "choice": "span_1_3",
+            "confidence": 0.98,
+            "probabilities": {
+              "none": 0.01,
+              "span_1_3": 0.99
+            }
+          },
+          "sourceSpan_system2-example": {
+            "choice": "span_1_3",
+            "confidence": 0.98,
+            "probabilities": {
+              "none": 0.01,
+              "span_1_3": 0.99
+            }
+          }
+        }
+      },
+      "labelCompletionEligible": true,
+      "proposal": {
+        "nodeId": "q6",
+        "transcriptRevision": 223,
+        "childActivity": "unknown",
+        "answerOutcome": "unclear",
+        "supportState": "none",
+        "tutorState": "acknowledging",
+        "conceptObservations": [
+          {
+            "criterionId": "system1-description",
+            "observation": "demonstrated_independent",
+            "childMessageIndex": 1,
+            "childMessageEndIndex": 3
+          },
+          {
+            "criterionId": "system1-example",
+            "observation": "demonstrated_independent",
+            "childMessageIndex": 1,
+            "childMessageEndIndex": 3
+          },
+          {
+            "criterionId": "system2-description",
+            "observation": "demonstrated_independent",
+            "childMessageIndex": 1,
+            "childMessageEndIndex": 3
+          },
+          {
+            "criterionId": "system2-example",
+            "observation": "demonstrated_independent",
+            "childMessageIndex": 1,
+            "childMessageEndIndex": 3
+          }
+        ]
+      }
+    },
+    {
+      "nodeId": "q8",
+      "status": "accepted",
+      "outcome": "allow_semantic_completion_evidence",
+      "outputs": {
+        "objectiveState": {
+          "choice": "completed",
+          "confidence": 0.81,
+          "probabilities": {
+            "completed": 0.85,
+            "incorrect": 0.02,
+            "unclear_or_incomplete": 0.13,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "confirmed_completion",
+          "confidence": 0.96,
+          "probabilities": {
+            "confirmed_completion": 0.97,
+            "clarifying": 0.01,
+            "helping": 0.02,
+            "asking": 0,
+            "other": 0
+          }
+        },
+        "concepts": {
+          "concept_sound-vs-picture": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.95,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.03,
+              "demonstrated_independent": 0.96,
+              "demonstrated_prompted": 0.01
+            }
+          },
+          "concept_sound-decoding": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.97,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.01,
+              "demonstrated_independent": 0.98,
+              "demonstrated_prompted": 0.01
+            }
+          }
+        },
+        "sources": {
+          "sourceSpan_sound-vs-picture": {
+            "choice": "span_1_1",
+            "confidence": 0.95,
+            "probabilities": {
+              "none": 0,
+              "span_1_1": 0.97,
+              "span_3_3": 0.03
+            }
+          },
+          "sourceSpan_sound-decoding": {
+            "choice": "span_3_3",
+            "confidence": 1,
+            "probabilities": {
+              "none": 0,
+              "span_1_1": 0,
+              "span_3_3": 1
+            }
+          }
+        }
+      },
+      "labelCompletionEligible": true,
+      "proposal": {
+        "nodeId": "q8",
+        "transcriptRevision": 373,
+        "childActivity": "unknown",
+        "answerOutcome": "unclear",
+        "supportState": "none",
+        "tutorState": "acknowledging",
+        "conceptObservations": [
+          {
+            "criterionId": "sound-vs-picture",
+            "observation": "demonstrated_independent",
+            "childMessageIndex": 1
+          },
+          {
+            "criterionId": "sound-decoding",
+            "observation": "demonstrated_independent",
+            "childMessageIndex": 3
+          }
+        ]
+      }
+    },
+    {
+      "nodeId": "q10-1",
+      "status": "accepted",
+      "outcome": "allow_semantic_completion_evidence",
+      "outputs": {
+        "objectiveState": {
+          "choice": "completed",
+          "confidence": 0.99,
+          "probabilities": {
+            "completed": 0.99,
+            "incorrect": 0,
+            "unclear_or_incomplete": 0.01,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "confirmed_completion",
+          "confidence": 0.97,
+          "probabilities": {
+            "confirmed_completion": 0.98,
+            "clarifying": 0,
+            "helping": 0,
+            "asking": 0.02,
+            "other": 0
+          }
+        },
+        "rewrite": {
+          "rewrite_state": {
+            "choice": "complete",
+            "confidence": 0.97,
+            "probabilities": {
+              "complete": 0.98,
+              "withdrawn": 0,
+              "none": 0,
+              "unresolved": 0.02
+            }
+          },
+          "rewrite_start": {
+            "choice": "word_1_0",
+            "confidence": 0.97,
+            "probabilities": {
+              "none": 0,
+              "word_1_0": 0.97,
+              "word_1_1": 0,
+              "word_1_2": 0,
+              "word_1_3": 0.01,
+              "word_1_4": 0.01,
+              "word_1_5": 0,
+              "word_1_6": 0,
+              "word_1_7": 0.01
+            }
+          },
+          "rewrite_end": {
+            "choice": "word_1_7",
+            "confidence": 1,
+            "probabilities": {
+              "none": 0,
+              "word_1_0": 0,
+              "word_1_1": 0,
+              "word_1_2": 0,
+              "word_1_3": 0,
+              "word_1_4": 0,
+              "word_1_5": 0,
+              "word_1_6": 0,
+              "word_1_7": 1
+            }
+          },
+          "rewrite_assistance": {
+            "choice": "independent",
+            "confidence": 0.99,
+            "probabilities": {
+              "independent": 0.99,
+              "assisted": 0,
+              "echo": 0,
+              "unknown": 0.01
+            }
+          },
+          "rewrite_meaning": {
+            "choice": "demonstrated",
+            "confidence": 0.97,
+            "probabilities": {
+              "demonstrated": 0.98,
+              "partial": 0.01,
+              "incorrect": 0.01,
+              "unresolved": 0
+            }
+          },
+          "rewrite_concise": {
+            "choice": "demonstrated",
+            "confidence": 0.99,
+            "probabilities": {
+              "demonstrated": 0.99,
+              "partial": 0.01,
+              "incorrect": 0,
+              "unresolved": 0
+            }
+          },
+          "rewrite_grammatical": {
+            "choice": "demonstrated",
+            "confidence": 0.97,
+            "probabilities": {
+              "demonstrated": 0.98,
+              "partial": 0.01,
+              "incorrect": 0.01,
+              "unresolved": 0
+            }
+          }
+        },
+        "concepts": {
+          "concept_meaning": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.55,
+            "probabilities": {
+              "not_yet": 0.25,
+              "partial": 0.07,
+              "demonstrated_independent": 0.66,
+              "demonstrated_prompted": 0.02
+            }
+          },
+          "concept_concise": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.79,
+            "probabilities": {
+              "not_yet": 0.03,
+              "partial": 0.1,
+              "demonstrated_independent": 0.84,
+              "demonstrated_prompted": 0.03
+            }
+          },
+          "concept_grammatical": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.47,
+            "probabilities": {
+              "not_yet": 0.23,
+              "partial": 0.15,
+              "demonstrated_independent": 0.6,
+              "demonstrated_prompted": 0.02
+            }
+          }
+        },
+        "sources": {
+          "source_meaning": {
+            "choice": "message_1",
+            "confidence": 0.9,
+            "probabilities": {
+              "none": 0.05,
+              "message_1": 0.95
+            }
+          },
+          "source_concise": {
+            "choice": "message_1",
+            "confidence": 0.96,
+            "probabilities": {
+              "none": 0.02,
+              "message_1": 0.98
+            }
+          },
+          "source_grammatical": {
+            "choice": "message_1",
+            "confidence": 0.9,
+            "probabilities": {
+              "none": 0.05,
+              "message_1": 0.95
+            }
+          }
+        }
+      },
+      "labelCompletionEligible": true,
+      "proposal": {
+        "currentRewrite": {
+          "state": "complete",
+          "start": "word_1_0",
+          "end": "word_1_7",
+          "assistance": "independent",
+          "criteria": {
+            "meaning": "demonstrated",
+            "concise": "demonstrated",
+            "grammatical": "demonstrated"
+          }
+        },
+        "nodeId": "q10-1",
+        "transcriptRevision": 421,
+        "childActivity": "unknown",
+        "answerOutcome": "correct",
+        "supportState": "none",
+        "tutorState": "acknowledging",
+        "conceptObservations": []
+      },
+      "rewriteAssessment": "complete"
+    },
+    {
+      "nodeId": "q10-2",
+      "status": "accepted",
+      "outcome": "allow_semantic_completion_evidence",
+      "outputs": {
+        "objectiveState": {
+          "choice": "completed",
+          "confidence": 0.96,
+          "probabilities": {
+            "completed": 0.97,
+            "incorrect": 0.01,
+            "unclear_or_incomplete": 0.02,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "confirmed_completion",
+          "confidence": 0.91,
+          "probabilities": {
+            "confirmed_completion": 0.93,
+            "clarifying": 0.02,
+            "helping": 0.04,
+            "asking": 0.01,
+            "other": 0
+          }
+        },
+        "rewrite": {
+          "rewrite_state": {
+            "choice": "complete",
+            "confidence": 1,
+            "probabilities": {
+              "complete": 1,
+              "withdrawn": 0,
+              "none": 0,
+              "unresolved": 0
+            }
+          },
+          "rewrite_start": {
+            "choice": "word_3_0",
+            "confidence": 0.99,
+            "probabilities": {
+              "none": 0,
+              "word_1_0": 0,
+              "word_1_1": 0,
+              "word_1_2": 0,
+              "word_1_3": 0,
+              "word_1_4": 0,
+              "word_1_5": 0,
+              "word_3_0": 0.99,
+              "word_3_1": 0.01,
+              "word_3_2": 0,
+              "word_3_3": 0,
+              "word_3_4": 0
+            }
+          },
+          "rewrite_end": {
+            "choice": "word_3_4",
+            "confidence": 0.99,
+            "probabilities": {
+              "none": 0,
+              "word_1_0": 0,
+              "word_1_1": 0,
+              "word_1_2": 0,
+              "word_1_3": 0,
+              "word_1_4": 0,
+              "word_1_5": 0.01,
+              "word_3_0": 0,
+              "word_3_1": 0,
+              "word_3_2": 0,
+              "word_3_3": 0,
+              "word_3_4": 0.99
+            }
+          },
+          "rewrite_assistance": {
+            "choice": "independent",
+            "confidence": 0.96,
+            "probabilities": {
+              "independent": 0.97,
+              "assisted": 0.02,
+              "echo": 0,
+              "unknown": 0.01
+            }
+          },
+          "rewrite_meaning": {
+            "choice": "demonstrated",
+            "confidence": 0.99,
+            "probabilities": {
+              "demonstrated": 0.99,
+              "partial": 0.01,
+              "incorrect": 0,
+              "unresolved": 0
+            }
+          },
+          "rewrite_concise": {
+            "choice": "demonstrated",
+            "confidence": 0.99,
+            "probabilities": {
+              "demonstrated": 0.99,
+              "partial": 0.01,
+              "incorrect": 0,
+              "unresolved": 0
+            }
+          },
+          "rewrite_grammatical": {
+            "choice": "demonstrated",
+            "confidence": 0.97,
+            "probabilities": {
+              "demonstrated": 0.98,
+              "partial": 0.02,
+              "incorrect": 0,
+              "unresolved": 0
+            }
+          }
+        },
+        "concepts": {
+          "concept_meaning": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.55,
+            "probabilities": {
+              "not_yet": 0.18,
+              "partial": 0.11,
+              "demonstrated_independent": 0.66,
+              "demonstrated_prompted": 0.05
+            }
+          },
+          "concept_concise": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.67,
+            "probabilities": {
+              "not_yet": 0.02,
+              "partial": 0.11,
+              "demonstrated_independent": 0.75,
+              "demonstrated_prompted": 0.12
+            }
+          },
+          "concept_grammatical": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.17,
+            "probabilities": {
+              "not_yet": 0.2,
+              "partial": 0.31,
+              "demonstrated_independent": 0.38,
+              "demonstrated_prompted": 0.11
+            }
+          }
+        },
+        "sources": {
+          "source_meaning": {
+            "choice": "message_3",
+            "confidence": 0.94,
+            "probabilities": {
+              "none": 0.03,
+              "message_1": 0.01,
+              "message_3": 0.96
+            }
+          },
+          "sourceEnd_meaning": {
+            "choice": "message_3",
+            "confidence": 0.94,
+            "probabilities": {
+              "none": 0.03,
+              "message_1": 0.01,
+              "message_3": 0.96
+            }
+          },
+          "source_concise": {
+            "choice": "message_3",
+            "confidence": 0.97,
+            "probabilities": {
+              "none": 0.01,
+              "message_1": 0.01,
+              "message_3": 0.98
+            }
+          },
+          "sourceEnd_concise": {
+            "choice": "message_3",
+            "confidence": 0.95,
+            "probabilities": {
+              "none": 0.02,
+              "message_1": 0.01,
+              "message_3": 0.97
+            }
+          },
+          "source_grammatical": {
+            "choice": "message_3",
+            "confidence": 0.95,
+            "probabilities": {
+              "none": 0.01,
+              "message_1": 0.02,
+              "message_3": 0.97
+            }
+          },
+          "sourceEnd_grammatical": {
+            "choice": "message_3",
+            "confidence": 0.91,
+            "probabilities": {
+              "none": 0.04,
+              "message_1": 0.02,
+              "message_3": 0.94
+            }
+          }
+        }
+      },
+      "labelCompletionEligible": true,
+      "proposal": {
+        "currentRewrite": {
+          "state": "complete",
+          "start": "word_3_0",
+          "end": "word_3_4",
+          "assistance": "independent",
+          "criteria": {
+            "meaning": "demonstrated",
+            "concise": "demonstrated",
+            "grammatical": "demonstrated"
+          }
+        },
+        "nodeId": "q10-2",
+        "transcriptRevision": 481,
+        "childActivity": "unknown",
+        "answerOutcome": "correct",
+        "supportState": "none",
+        "tutorState": "acknowledging",
+        "conceptObservations": []
+      },
+      "rewriteAssessment": "complete"
+    }
+  ],
+  "baseCommit": "87e40db0b166a575e61b3ea2664db5e1d955f11f",
+  "date": "2026-10-22",
+  "iterations": "An earlier prompt iteration still left Q8 attribution and Q10-2 assistance unresolved. These are results after clarifying task probes versus substantive answer-giving; no score thresholds were changed.",
+  "implementationSha256": {
+    "lib/lesson-runtime/concept-evidence.ts": "5aa885ff5f40e807e46bb6bd97566df88afc08aef133e66665e38f7b63715fa5",
+    "lib/lesson-runtime/lesson-runtime-reducer.ts": "1c13a050699682d6c27d5cbd5d18a1c968df3da131276a4e47e0f8963d4a5c3f",
+    "lib/lesson-runtime/lesson-runtime.ts": "6e3e22c26cd8561f54336cfe6cdd54fe06d24263e8671c964ba6a82d3c0b5a50",
+    "lib/lesson-runtime/conversation-observer-contract.ts": "9842310ffdbe52cfdb20fc580274604a83d49c4e725f13af5ce8b60c0c9ef758",
+    "lib/lesson-runtime/jev-conversation-state-classifier.ts": "925b50ea4c22086ee1b5853340b845496adb7f3f6fcbea3d5b23b3087cc2a6e5",
+    "lib/lesson-runtime/mae386/source-block.ts": "8933b98bca040cdf2c71da0349e625a36f380215e21a0761f48606c77ebfa800",
+    "lib/lesson-runtime/mae386/rewrite-proposal.ts": "051637dc8b5c44bec370a0d914e0b67764d6624a405476d0ffe1dc82a9f7fdaf",
+    "lib/lesson-runtime/mae386/live-instructions.ts": "7c2ced50dc42ae4ff3838c42af4f17f4bd2418ce7d62355e9846d9c85b0f40e5"
+  }
+}

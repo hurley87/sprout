@@ -1,3 +1,6 @@
+import { questionRecap, type QuestionOutcomeSnapshot } from "./mae386/question-outcomes";
+import type { RewriteTranscript } from "./mae386/rewrite-proposal";
+import { learnerNavigationIntent, parseLearnerNavigationText, isLearnerStopText } from "./conversation-progression";
 import { currentEvidenceEligibility, trackingOrigin, type TrackingOrigin } from "./evidence-tracking";
 import { terminalRecapComplete } from "./terminal-recap";
 import { evidenceRecap } from "./evidence-recap";
@@ -7,7 +10,14 @@ import type { ProviderEvent, TranscriptEvent } from "../events";
 import { MICROPHONE_ONSET_MS, MICROPHONE_ONSET_QUIET_MS, MICROPHONE_QUIET_MS } from "../microphone-turn";
 import { parseConversationStateProposal } from "./conversation-state-classifier";
 import { currentNodeContext, type LessonDefinition } from "./lesson-definition";
-import { answerRecoveryInstruction, initialTeachingContext, teachingInstruction } from "./live-context";
+import {
+  answerRecoveryInstruction,
+  initialTeachingContext,
+  teachingInstruction,
+  learnerSupportInstruction,
+  missingAnswerCheckInstruction,
+  supersedeAnswerCheckInstruction,
+} from "./live-context";
 import { SupportClarification } from "./support-clarification";
 import { AnswerRecovery } from "./answer-recovery";
 import { TutorStabilizationGate } from "./tutor-stabilization";
@@ -17,7 +27,6 @@ export type { LessonDiagnostic, LessonEventCursor } from "./diagnostic-journal";
 import { parseLiveClassificationDiagnostic } from "./live-classification-diagnostic";
 import {
   classificationSource,
-  learnerRequestedNext,
   hasCurrentCompletionEvidence,
   meetsAuthoredCompletionPolicy,
   createLessonRuntime,
@@ -63,6 +72,8 @@ export type LessonSnapshot = {
   display: RenderIdentity;
   transcript: string;
   recapText?: string;
+  questionOutcomes?: QuestionOutcomeSnapshot;
+  questionRecap?: ReturnType<typeof questionRecap>;
   error: string | null;
   awaitingSteering: boolean;
   diagnostics: readonly LessonDiagnostic[];
@@ -113,12 +124,15 @@ export class LessonRuntime {
   private clockTimer?: ReturnType<typeof setTimeout>;
   private terminalTimer?: ReturnType<typeof setTimeout>;
   private terminalText?: string;
+  private supportRequestedAt?: { visitId: number; revision: number };
+  private missingAnswerCheck?: { eventId: string; source: ClassificationSource };
   private startupTimer?: ReturnType<typeof setTimeout>;
   private steering?: {
     eventId: string;
     source: RuntimeSource;
     timer: ReturnType<typeof setTimeout>;
     queued: Fragment[];
+    support: boolean;
   };
 
   constructor(
@@ -284,6 +298,10 @@ export class LessonRuntime {
       display: this.display,
       transcript: this.transcript,
       recapText: this.terminalText,
+      questionOutcomes: this.state?.questionOutcomes,
+      questionRecap: this.state?.questionOutcomes
+        ? questionRecap(this.state.questionOutcomes, this.state.phase === "stopped")
+        : undefined,
       error: this.error,
       awaitingSteering: Boolean(this.steering),
       diagnostics: this.journal.recent(),
@@ -340,6 +358,15 @@ export class LessonRuntime {
     const before = this.state;
     const result = reduceLessonRuntime(before, event, this.lessonDefinition);
     this.state = result.state;
+    // Provisional energy alone is not learner speech. Only an accepted turn or
+    // authenticated learner text can supersede a check already sent to Live.
+    if (
+      before !== this.state &&
+      (event.type === "child.turn.started" ||
+        event.type === "child.turn.confirmed" ||
+        (event.type === "transcript.updated" && event.speaker === "child"))
+    )
+      this.supersedeMissingAnswerCheck();
     this.journal.trackReduction({
       before,
       event,
@@ -369,6 +396,7 @@ export class LessonRuntime {
       this.log(effect.type, effect);
       switch (effect.type) {
         case "render.requested":
+          this.supersedeMissingAnswerCheck();
           this.cancelClassification("node_visit_changed");
           // Install the visit boundary synchronously, before React's render/confirmation.
           this.providerFloorMs = Math.max(
@@ -378,7 +406,11 @@ export class LessonRuntime {
           this.fragments = [];
           this.transcript = "";
           this.log("transcript.reset", { reason: "node_visit_committed", providerFloorMs: this.providerFloorMs });
-          if (effect.identity.nodeId && this.lessonDefinition.nodes[effect.identity.nodeId].completeAfterTutorOutput)
+          if (
+            this.lessonDefinition.id !== "mae386" &&
+            effect.identity.nodeId &&
+            this.lessonDefinition.nodes[effect.identity.nodeId].completeAfterTutorOutput
+          )
             // Freeze before React can render or asynchronous assessment can settle.
             this.terminalText ??= evidenceRecap(this.lessonDefinition, this.state);
           this.display = effect.identity;
@@ -511,7 +543,7 @@ export class LessonRuntime {
               this.state.terminalLearnerPending
             )
               this.terminalTranscriptRecovery.arm(this.state, !this.steering);
-            else if (!this.lessonDefinition.conversationFirst || !learnerRequestedNext(this.transcript))
+            else if (!this.lessonDefinition.conversationFirst || !this.requestedNavigation())
               this.answerRecovery.arm(this.state, !this.steering);
           }
           this.scheduleClassification(event.type);
@@ -545,8 +577,9 @@ export class LessonRuntime {
         return;
       case "transcript": {
         const fragment = { event, source, order: ++this.order };
-        if (this.steering && this.state.phase === "active") {
-          // Wait for the matching append's provider-timeline boundary, not packet arrival time.
+        if (this.steering && this.state.phase === "active" && !(this.steering.support && event.speaker === "child")) {
+          // New-scene transcripts wait for their timeline boundary. Same-node
+          // support never blocks authenticated learner speech (especially Stop).
           this.steering.queued.push(fragment);
           if (this.steering.queued.length > 256)
             this.fail("Too many transcript fragments pending steering confirmation.");
@@ -585,10 +618,14 @@ export class LessonRuntime {
           return;
         }
         clearTimeout(steering.timer);
-        this.providerFloorMs = Math.max(this.providerFloorMs, event.startMs);
+        // Support changes no visit or source identity. Advancing the visit floor
+        // here would discard valid learner speech begun before its acknowledgment.
+        if (!steering.support) this.providerFloorMs = Math.max(this.providerFloorMs, event.startMs);
         const queued = steering.queued;
         this.steering = undefined;
-        this.log("transcript.visit_boundary", { providerFloorMs: this.providerFloorMs });
+        this.log(steering.support ? "gpt_live.support_acknowledged" : "transcript.visit_boundary", {
+          providerFloorMs: this.providerFloorMs,
+        });
         for (const fragment of queued) this.observeTranscript(fragment);
         this.scheduleClassification("steering_acknowledged");
         this.publish();
@@ -693,12 +730,43 @@ export class LessonRuntime {
       source,
       speaker,
     );
+    const rewriteTurns: RewriteTranscript["turns"][number][] = [];
+    if (this.lessonDefinition.id === "mae386" || this.lessonDefinition.nodes[this.state!.nodeId]?.currentRewrite) {
+      let messageIndex = -1;
+      let previousSpeaker = "";
+      let length = 0;
+      for (const message of messages.filter(message => message.text.trim())) {
+        const trimmed = message.text.trim();
+        if (previousSpeaker === message.speaker) length += 1;
+        else {
+          messageIndex++;
+          length = 0;
+          previousSpeaker = message.speaker;
+        }
+        if (message.speaker === "Child")
+          rewriteTurns.push({ messageIndex, start: length, end: length + trimmed.length, childTurnId: message.turn });
+        length += trimmed.length;
+      }
+    }
     this.dispatch({
       type: "transcript.updated",
       source,
       revision: this.revision,
+      ...(this.lessonDefinition.nodes[this.state!.nodeId]?.currentRewrite
+        ? { rewriteTranscript: { text, turns: rewriteTurns } }
+        : this.lessonDefinition.id === "mae386"
+          ? { learnerTranscript: { text, turns: rewriteTurns } }
+          : {}),
       speaker,
       transcriptSnapshot: text,
+      ...(speaker === "child" && this.lessonDefinition.questionGroups
+        ? {
+            learnerTurnText: this.fragments
+              .filter(item => item.event.speaker === "child" && item.source.childTurnId === source.childTurnId)
+              .map(item => item.event.delta)
+              .join(""),
+          }
+        : {}),
       atMs: this.now(),
     });
     if (
@@ -717,8 +785,35 @@ export class LessonRuntime {
     this.scheduleClassification(`${speaker}_transcript_stabilized`);
   }
 
+  private requestedNavigation() {
+    return this.lessonDefinition.questionGroups
+      ? parseLearnerNavigationText(this.state?.learnerUtterance?.text ?? "")
+      : learnerNavigationIntent(this.transcript);
+  }
+
   private scheduleClassification(trigger: string) {
     clearTimeout(this.stabilizationTimer);
+    // Stop needs authenticated ended learner speech, but never waits for playback drain or Jev.
+    if (
+      this.lessonDefinition.questionGroups &&
+      this.state?.hasChildTranscript &&
+      this.state.phase === "active" &&
+      !this.state.childSpeaking &&
+      (!this.steering || this.steering.support) &&
+      this.state.learnerUtterance?.source.childTurnId === this.state.childTurnId &&
+      isLearnerStopText(this.state.learnerUtterance.text)
+    ) {
+      this.stop("learner_stop");
+      return;
+    }
+    // A UI support request supplies no learner transcript revision. Hold old
+    // closure observations until actual new conversation arrives instead.
+    if (
+      this.state &&
+      this.supportRequestedAt?.visitId === this.state.visitId &&
+      this.supportRequestedAt.revision === this.state.transcriptRevision
+    )
+      return;
     if (this.state && this.lessonDefinition.nodes[this.state.nodeId].completeAfterTutorOutput) return;
     if (this.lessonDefinition.conversationFirst && this.state && !this.steering) {
       const source =
@@ -729,7 +824,8 @@ export class LessonRuntime {
               transcriptRevision: this.state.transcriptRevision,
             }
           : null;
-      if (source && learnerRequestedNext(this.transcript)) {
+      const intent = this.requestedNavigation();
+      if (source && intent) {
         // Debounce navigation too: an immediately following microphone segment
         // must get a chance to revoke it before any quiet-drain transition.
         this.stabilizationTimer = setTimeout(() => {
@@ -745,6 +841,7 @@ export class LessonRuntime {
             return;
           this.dispatch({
             type: "conversation.advance.requested",
+            intent,
             source,
             transcriptSnapshot: this.transcript,
             atMs: this.now(),
@@ -784,7 +881,14 @@ export class LessonRuntime {
   }
 
   private async classify(trigger: string) {
-    if (!this.state || this.status !== "live" || this.steering) return;
+    if (
+      !this.state ||
+      this.status !== "live" ||
+      this.steering ||
+      (this.supportRequestedAt?.visitId === this.state.visitId &&
+        this.supportRequestedAt.revision === this.state.transcriptRevision)
+    )
+      return;
     // These two values are captured together, once, before any async work.
     const source = classificationSource(this.state);
     const transcript = this.transcript;
@@ -796,6 +900,9 @@ export class LessonRuntime {
     this.lastClassifiedKey = key;
     const abort = new AbortController();
     this.classification = { abort, source, speaker };
+    if (this.state.questionObservations)
+      this.dispatch({ type: "question.observation", source, status: "pending", atMs: this.now() });
+    let observationSettled = false;
     this.log("classifier.started", { trigger, transcript }, source, speaker);
     this.publish();
     const startedAtMs = this.now();
@@ -838,6 +945,7 @@ export class LessonRuntime {
         "diagnostic" in body ? body.diagnostic : undefined,
         this.lessonDefinition,
         source.nodeId,
+        transcript,
       );
       this.log(
         diagnostic ? "classifier.mapping" : "classifier.mapping_unavailable",
@@ -868,6 +976,7 @@ export class LessonRuntime {
           origin,
         );
       }
+      observationSettled = proposal !== null;
       this.journal.trackClassification(
         { origin, transcript, proposal, mapping: diagnostic, lesson: this.lessonDefinition },
         this.state,
@@ -921,6 +1030,13 @@ export class LessonRuntime {
         );
     } finally {
       if (this.classification?.abort === abort) this.classification = undefined;
+      if (!abort.signal.aborted && this.status === "live" && this.state?.questionObservations)
+        this.dispatch({
+          type: "question.observation",
+          source,
+          status: observationSettled ? "settled" : "unavailable",
+          atMs: this.now(),
+        });
       // A failed/held recheck must still recover conversationally. Cancelled or
       // superseded responses may neither advance nor issue a stale recovery prompt.
       if (
@@ -938,9 +1054,12 @@ export class LessonRuntime {
 
   private sendAnswerRecovery(source: ClassificationSource) {
     const eventId = `${this.runtimeId}:answer-recovery:${source.visitId}:${source.childTurnId}:${source.transcriptRevision}`;
-    const content = this.state
-      ? answerRecoveryInstruction(this.lessonDefinition, this.state)
-      : this.lessonDefinition.recovery.answerRecoveryInstruction;
+    const missingAnswerCheck = this.lessonDefinition.id === "mae386" && this.state && !this.state.hasChildTranscript;
+    const content = missingAnswerCheck
+      ? missingAnswerCheckInstruction(eventId)
+      : this.state
+        ? answerRecoveryInstruction(this.lessonDefinition, this.state)
+        : this.lessonDefinition.recovery.answerRecoveryInstruction;
     try {
       this.transport.send({
         type: "session.instructions.append",
@@ -949,10 +1068,30 @@ export class LessonRuntime {
         content,
       });
       this.log("gpt_live.answer_recovery_append", { eventId, content }, source);
+      if (missingAnswerCheck) this.missingAnswerCheck = { eventId, source };
     } catch {
       this.log("answer_recovery.send_failed", { message: "Scene held; request budget spent." }, source);
     }
     this.publish();
+  }
+
+  private supersedeMissingAnswerCheck() {
+    const check = this.missingAnswerCheck;
+    if (!check || this.status !== "live") return;
+    // Spend before sending: failures cannot produce an append storm on deltas.
+    this.missingAnswerCheck = undefined;
+    const eventId = `${check.eventId}:expired`;
+    const content = supersedeAnswerCheckInstruction(check.eventId);
+    try {
+      this.transport.send({ type: "session.instructions.append", event_id: eventId, delegation_id: null, content });
+      this.log(
+        "gpt_live.answer_recovery_superseded",
+        { eventId, supersededEventId: check.eventId, content },
+        check.source,
+      );
+    } catch {
+      this.log("answer_recovery.supersede_failed", { eventId, supersededEventId: check.eventId }, check.source);
+    }
   }
 
   private cancelClassification(reason: string) {
@@ -965,12 +1104,21 @@ export class LessonRuntime {
     this.classification = undefined;
   }
 
-  private appendSteering(context: CurrentNodeSteeringContext, renderToken: string, startLesson = false) {
+  private appendSteering(
+    context: CurrentNodeSteeringContext,
+    renderToken: string,
+    startLesson = false,
+    request?: "help" | "repeat",
+  ) {
     if (!this.state || this.status !== "live") return false;
-    const eventId = `${this.runtimeId}:steer:${this.state.visitId}`;
+    const eventId = request
+      ? `${this.runtimeId}:support:${crypto.randomUUID()}`
+      : `${this.runtimeId}:steer:${this.state.visitId}`;
     const terminal = this.lessonDefinition.nodes[context.nodeId].completeAfterTutorOutput;
     if (terminal) {
-      this.terminalText ??= evidenceRecap(this.lessonDefinition, this.state);
+      this.terminalText ??= this.state.questionOutcomes
+        ? questionRecap(this.state.questionOutcomes).spoken
+        : evidenceRecap(this.lessonDefinition, this.state);
       this.terminalTimer = setTimeout(
         () =>
           this.fail(
@@ -979,9 +1127,12 @@ export class LessonRuntime {
         60_000,
       );
     }
-    const content = teachingInstruction(context, this.lessonDefinition, startLesson, this.terminalText);
+    const content = request
+      ? learnerSupportInstruction(context, request, this.lessonDefinition)
+      : teachingInstruction(context, this.lessonDefinition, startLesson, this.terminalText);
     const source = runtimeSource(this.state);
     this.steering = {
+      support: request !== undefined,
       eventId,
       source,
       queued: [],
@@ -1007,8 +1158,39 @@ export class LessonRuntime {
     this.stop("failure", true);
   }
 
+  /** UI support is app context, never fabricated learner transcript or assessment evidence. */
+  requestSupport(request: "help" | "repeat") {
+    if (
+      !this.state ||
+      !this.lessonDefinition.questionGroups ||
+      this.state.conversationAdvanceRequested ||
+      this.status !== "live" ||
+      this.state.phase !== "active" ||
+      this.lessonDefinition.nodes[this.state.nodeId].completeAfterTutorOutput ||
+      this.state.childSpeaking ||
+      this.state.childCandidate ||
+      this.steering ||
+      this.state.outputActivity !== "quiet" ||
+      this.state.quietSinceMs === null ||
+      this.now() - this.state.quietSinceMs < this.state.quietDrainMs
+    )
+      return;
+    this.supportRequestedAt = { visitId: this.state.visitId, revision: this.state.transcriptRevision };
+    this.supersedeMissingAnswerCheck();
+    this.cancelClassification("learner_support_requested");
+    this.answerRecovery.cancel("learner_support_requested");
+    this.log("learner.support_requested", { request });
+    this.appendSteering(
+      currentNodeContext(this.lessonDefinition, this.state.nodeId),
+      this.display.token,
+      false,
+      request,
+    );
+    this.publish();
+  }
+
   /** Advance along the authored edge without turning a skip into understanding evidence. */
-  skipScene() {
+  skipScene(scope: "subpart" | "question" = "subpart") {
     if (
       !this.state ||
       this.status !== "live" ||
@@ -1029,9 +1211,16 @@ export class LessonRuntime {
     )
       return;
     const source = runtimeSource(this.state);
-    this.cancelClassification("scene_skipped");
+    const edge = this.lessonDefinition.nodes[this.state.nodeId].onSuccess;
+    const drainFinalObservation =
+      this.state.questionObservations &&
+      this.classification &&
+      JSON.stringify(this.classification.source) === JSON.stringify(classificationSource(this.state)) &&
+      edge.kind === "node" &&
+      this.lessonDefinition.nodes[edge.nodeId].completeAfterTutorOutput;
+    if (!drainFinalObservation) this.cancelClassification("scene_skipped");
     this.answerRecovery.cancel("scene_skipped");
-    this.dispatch({ type: "scene.skipped", source, atMs: this.now() });
+    this.dispatch({ type: "scene.skipped", source, scope, atMs: this.now() });
   }
 
   /** Continue after an accepted reveal has been committed to the application presentation. */
@@ -1094,6 +1283,7 @@ export class LessonRuntime {
 
   stop(reason = "parent_stop", disconnected = false) {
     if (this.status === "ended") return;
+    this.missingAnswerCheck = undefined;
     this.cancelClassification(reason);
     this.answerRecovery.cancel(reason);
     this.terminalTranscriptRecovery.cancel(reason);
@@ -1129,7 +1319,6 @@ export class LessonRuntime {
       };
     }
     this.status = "ended";
-    void this.assessConversation();
     this.log("lesson.ended", { reason, runtime: this.state });
     // Request provider close when possible, then release all local resources immediately.
     try {
@@ -1138,6 +1327,7 @@ export class LessonRuntime {
       /* Already disconnected. */
     }
     this.transport.close();
+    void this.assessConversation();
     this.publish();
   }
 

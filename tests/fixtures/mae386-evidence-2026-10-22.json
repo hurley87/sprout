@@ -1,0 +1,662 @@
+{
+  "sourceFile": "sprout-mae386-c4a80de1-3047-493a-a362-d2e4df43e9d1.json",
+  "sourceSha256": "94d723e7ac55ff52a031aaf53e488d0d91b06ce288ddae9f9395b8b4a1a7c7c1",
+  "note": "Curated transcripts and final historical outputs; new mocked outputs are not live acceptance.",
+  "visits": [
+    {
+      "nodeId": "q1",
+      "visitId": 1,
+      "transcript": "Tutor: Okay. What are the two values of exographics discussed in the book? And what does each of them let us do?\nChild: So let's says, visualize abstract ideas and that makes us makes it easier to\nChild: to work with them, combine them\nChild: ... and create new ideas\nTutor: Mm-hmm.\nChild: Um\nChild: it also\nChild: ... Exographics also extends our short-term memory. We can\nChild: store ideas externally\nChild: . That allows us to work with more information at at any given time\nChild: , allowing us to work on bigger problems, um, and just work with more information at once\nTutor: Yeah, great. I think that captures the two values well. Thanks for walking me through it.",
+      "sourceEventIndex": 958,
+      "transcriptRevision": 100,
+      "recordedOutputs": {
+        "objectiveState": {
+          "choice": "completed",
+          "confidence": 0.97,
+          "probabilities": {
+            "completed": 0.98,
+            "incorrect": 0.01,
+            "unclear_or_incomplete": 0.01,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "confirmed_completion",
+          "confidence": 0.96,
+          "probabilities": {
+            "confirmed_completion": 0.97,
+            "clarifying": 0,
+            "helping": 0,
+            "asking": 0.03,
+            "other": 0
+          }
+        },
+        "concepts": {
+          "concept_reification": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.99,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.01,
+              "demonstrated_independent": 0.99,
+              "demonstrated_prompted": 0
+            }
+          },
+          "concept_memory-extension": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.67,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.25,
+              "demonstrated_independent": 0.75,
+              "demonstrated_prompted": 0
+            }
+          }
+        },
+        "sources": {
+          "sourceSpan_reification": {
+            "choice": "span_1_3",
+            "confidence": 0.94,
+            "probabilities": {
+              "none": 0.03,
+              "span_1_3": 0.97
+            }
+          },
+          "sourceSpan_memory-extension": {
+            "choice": "span_1_3",
+            "confidence": 0.88,
+            "probabilities": {
+              "none": 0.06,
+              "span_1_3": 0.94
+            }
+          }
+        }
+      }
+    },
+    {
+      "nodeId": "q6",
+      "visitId": 2,
+      "transcript": "Tutor: Okay, so explain Kahneman's System 1 and System 2 thinking, and give me a convincing example of each.\nChild: System one thinking's all about that intuitive, fast, reactionary response to any sort of external stimulus\nTutor: Mm-hmm.\nChild: um, think about getting cut off while you're driving. You might react right away in a negative way\nChild: . System two thinking is all about a deliberate, thoughtful\nChild: ... um you you come up with a bunch of different ways to react to a given situation\nChild: . And then you optimize and pick the best one\nChild: . Um, and then ultimately decide what to do\nTutor: Mm-hmm.\nTutor: Yeah, that contrast makes sense. Your driving case is a clear fast reaction.\nTutor: And the deliberate, step by step choosing process you described fits System 2 well. That gives me a good handle on how you're thinking about both.",
+      "sourceEventIndex": 2080,
+      "transcriptRevision": 223,
+      "recordedOutputs": {
+        "discussionClosure": {
+          "choice": "closed",
+          "confidence": 1,
+          "probabilities": {
+            "closed": 1,
+            "open": 0
+          }
+        },
+        "objectiveState": {
+          "choice": "completed",
+          "confidence": 0.9,
+          "probabilities": {
+            "completed": 0.92,
+            "incorrect": 0.01,
+            "unclear_or_incomplete": 0.07,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "confirmed_completion",
+          "confidence": 1,
+          "probabilities": {
+            "confirmed_completion": 1,
+            "clarifying": 0,
+            "helping": 0,
+            "asking": 0,
+            "other": 0
+          }
+        },
+        "concepts": {
+          "concept_system1-description": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.99,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.01,
+              "demonstrated_independent": 0.99,
+              "demonstrated_prompted": 0
+            }
+          },
+          "concept_system1-example": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.99,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.01,
+              "demonstrated_independent": 0.99,
+              "demonstrated_prompted": 0
+            }
+          },
+          "concept_system2-description": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.88,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.09,
+              "demonstrated_independent": 0.91,
+              "demonstrated_prompted": 0
+            }
+          },
+          "concept_system2-example": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.48,
+            "probabilities": {
+              "not_yet": 0.05,
+              "partial": 0.34,
+              "demonstrated_independent": 0.61,
+              "demonstrated_prompted": 0
+            }
+          }
+        },
+        "sources": {
+          "sourceSpan_system1-description": {
+            "choice": "span_1_3",
+            "confidence": 0.98,
+            "probabilities": {
+              "none": 0.01,
+              "span_1_3": 0.99
+            }
+          },
+          "sourceSpan_system1-example": {
+            "choice": "span_1_3",
+            "confidence": 0.98,
+            "probabilities": {
+              "none": 0.01,
+              "span_1_3": 0.99
+            }
+          },
+          "sourceSpan_system2-description": {
+            "choice": "span_1_3",
+            "confidence": 0.94,
+            "probabilities": {
+              "none": 0.03,
+              "span_1_3": 0.97
+            }
+          },
+          "sourceSpan_system2-example": {
+            "choice": "span_1_3",
+            "confidence": 0.82,
+            "probabilities": {
+              "none": 0.09,
+              "span_1_3": 0.91
+            }
+          }
+        }
+      }
+    },
+    {
+      "nodeId": "q8",
+      "visitId": 3,
+      "transcript": "Tutor: Mm-h Okay, so, what does a phonetic writing system represent? And what's the main advantage it offers over a pictographic one? Can you tell me that?\nChild: So, phonetic system, it allows us to\nChild: sound out and use words. Words make up systems\nChild: . It's just an easier way to\nChild: express and understand ideas\nChild: . Uh, pictures or pictographic writing, uh, they're harder to create, harder to share\nChild: . Um, and just a lot less efficient\nChild: . A lot more inefficient, sorry, than, um, photonic system\nTutor: Mm-hmm. I hear you contrasting\nTutor: building with sounds versus using pictures. Could you say a bit more about how the phonetic approach helps someone deal with a word\nTutor: they haven't seen before?\nChild: Well, you can sound out the different sounds\nChild: in that word and match it to words you already understand... through\nChild: speaking\nTutor: Right, exactly. That gets at how representing speech sounds lets you connect\nTutor: the written form to a word that you already know by sound. That's clear. Thank you.",
+      "sourceEventIndex": 3579,
+      "transcriptRevision": 373,
+      "recordedOutputs": {
+        "objectiveState": {
+          "choice": "completed",
+          "confidence": 0.85,
+          "probabilities": {
+            "completed": 0.88,
+            "incorrect": 0.02,
+            "unclear_or_incomplete": 0.1,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "confirmed_completion",
+          "confidence": 0.99,
+          "probabilities": {
+            "confirmed_completion": 0.99,
+            "clarifying": 0,
+            "helping": 0.01,
+            "asking": 0,
+            "other": 0
+          }
+        },
+        "concepts": {
+          "concept_sound-vs-picture": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.87,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.06,
+              "demonstrated_independent": 0.9,
+              "demonstrated_prompted": 0.04
+            }
+          },
+          "concept_sound-decoding": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.75,
+            "probabilities": {
+              "not_yet": 0,
+              "partial": 0.08,
+              "demonstrated_independent": 0.81,
+              "demonstrated_prompted": 0.11
+            }
+          }
+        },
+        "sources": {
+          "source_sound-vs-picture": {
+            "choice": "message_1",
+            "confidence": 0.67,
+            "probabilities": {
+              "none": 0.01,
+              "message_1": 0.78,
+              "message_3": 0.21
+            }
+          },
+          "sourceEnd_sound-vs-picture": {
+            "choice": "message_3",
+            "confidence": 0.37,
+            "probabilities": {
+              "none": 0.01,
+              "message_1": 0.41,
+              "message_3": 0.58
+            }
+          },
+          "source_sound-decoding": {
+            "choice": "message_3",
+            "confidence": 0.98,
+            "probabilities": {
+              "none": 0,
+              "message_1": 0.01,
+              "message_3": 0.99
+            }
+          },
+          "sourceEnd_sound-decoding": {
+            "choice": "message_3",
+            "confidence": 0.94,
+            "probabilities": {
+              "none": 0.03,
+              "message_1": 0.01,
+              "message_3": 0.96
+            }
+          }
+        }
+      }
+    },
+    {
+      "nodeId": "q10-1",
+      "visitId": 4,
+      "transcript": "Tutor: All right Alright, the sentence is: \"The reason why he was late is that he overslept.\" How would\nTutor: you say this more concisely while keeping its meaning?\nChild: He was late because he overs he overslept\nTutor: Nice. That keeps the core idea and says it cleanly and clearly. Thanks.",
+      "sourceEventIndex": 4137,
+      "transcriptRevision": 421,
+      "recordedOutputs": {
+        "objectiveState": {
+          "choice": "completed",
+          "confidence": 0.97,
+          "probabilities": {
+            "completed": 0.98,
+            "incorrect": 0.01,
+            "unclear_or_incomplete": 0.01,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "confirmed_completion",
+          "confidence": 0.96,
+          "probabilities": {
+            "confirmed_completion": 0.97,
+            "clarifying": 0,
+            "helping": 0,
+            "asking": 0.03,
+            "other": 0
+          }
+        },
+        "rewrite": {
+          "rewrite_state": {
+            "choice": "complete",
+            "confidence": 0.99,
+            "probabilities": {
+              "complete": 0.99,
+              "withdrawn": 0,
+              "none": 0,
+              "unresolved": 0.01
+            }
+          },
+          "rewrite_start": {
+            "choice": "word_1_0",
+            "confidence": 0.98,
+            "probabilities": {
+              "none": 0,
+              "word_1_0": 0.98,
+              "word_1_1": 0,
+              "word_1_2": 0,
+              "word_1_3": 0,
+              "word_1_4": 0.01,
+              "word_1_5": 0,
+              "word_1_6": 0,
+              "word_1_7": 0.01
+            }
+          },
+          "rewrite_end": {
+            "choice": "word_1_7",
+            "confidence": 1,
+            "probabilities": {
+              "none": 0,
+              "word_1_0": 0,
+              "word_1_1": 0,
+              "word_1_2": 0,
+              "word_1_3": 0,
+              "word_1_4": 0,
+              "word_1_5": 0,
+              "word_1_6": 0,
+              "word_1_7": 1
+            }
+          },
+          "rewrite_assistance": {
+            "choice": "independent",
+            "confidence": 0.95,
+            "probabilities": {
+              "independent": 0.96,
+              "assisted": 0.01,
+              "echo": 0.01,
+              "unknown": 0.02
+            }
+          },
+          "rewrite_meaning": {
+            "choice": "demonstrated",
+            "confidence": 0.84,
+            "probabilities": {
+              "demonstrated": 0.88,
+              "partial": 0.06,
+              "incorrect": 0.05,
+              "unresolved": 0.01
+            }
+          },
+          "rewrite_concise": {
+            "choice": "demonstrated",
+            "confidence": 0.75,
+            "probabilities": {
+              "demonstrated": 0.81,
+              "partial": 0.07,
+              "incorrect": 0.11,
+              "unresolved": 0.01
+            }
+          },
+          "rewrite_grammatical": {
+            "choice": "demonstrated",
+            "confidence": 0.87,
+            "probabilities": {
+              "demonstrated": 0.9,
+              "partial": 0.03,
+              "incorrect": 0.06,
+              "unresolved": 0.01
+            }
+          }
+        },
+        "concepts": {
+          "concept_meaning": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.6,
+            "probabilities": {
+              "not_yet": 0.21,
+              "partial": 0.06,
+              "demonstrated_independent": 0.7,
+              "demonstrated_prompted": 0.03
+            }
+          },
+          "concept_concise": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.85,
+            "probabilities": {
+              "not_yet": 0.02,
+              "partial": 0.07,
+              "demonstrated_independent": 0.89,
+              "demonstrated_prompted": 0.02
+            }
+          },
+          "concept_grammatical": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.45,
+            "probabilities": {
+              "not_yet": 0.24,
+              "partial": 0.14,
+              "demonstrated_independent": 0.59,
+              "demonstrated_prompted": 0.03
+            }
+          }
+        },
+        "sources": {
+          "source_meaning": {
+            "choice": "message_1",
+            "confidence": 0.86,
+            "probabilities": {
+              "none": 0.07,
+              "message_1": 0.93
+            }
+          },
+          "source_concise": {
+            "choice": "message_1",
+            "confidence": 0.98,
+            "probabilities": {
+              "none": 0.01,
+              "message_1": 0.99
+            }
+          },
+          "source_grammatical": {
+            "choice": "message_1",
+            "confidence": 0.9,
+            "probabilities": {
+              "none": 0.05,
+              "message_1": 0.95
+            }
+          }
+        }
+      }
+    },
+    {
+      "nodeId": "q10-2",
+      "visitId": 5,
+      "transcript": "Tutor: Okay, here's the next one. The two of them collaborated together on the project. How would you say that more concisely?\nChild: They work together on the project\nTutor: Mm. I see the direction, but something still feels a little redundant. What words would you keep in your final version?\nChild: They collaborated on the project\nTutor: Yeah,\nTutor: that keeps the meaning, and it says it more cleanly.",
+      "sourceEventIndex": 4982,
+      "transcriptRevision": 481,
+      "recordedOutputs": {
+        "objectiveState": {
+          "choice": "completed",
+          "confidence": 0.95,
+          "probabilities": {
+            "completed": 0.96,
+            "incorrect": 0.01,
+            "unclear_or_incomplete": 0.03,
+            "unresolved_help": 0,
+            "no_attempt": 0
+          }
+        },
+        "tutorState": {
+          "choice": "confirmed_completion",
+          "confidence": 0.91,
+          "probabilities": {
+            "confirmed_completion": 0.93,
+            "clarifying": 0.02,
+            "helping": 0.04,
+            "asking": 0.01,
+            "other": 0
+          }
+        },
+        "rewrite": {
+          "rewrite_state": {
+            "choice": "complete",
+            "confidence": 1,
+            "probabilities": {
+              "complete": 1,
+              "withdrawn": 0,
+              "none": 0,
+              "unresolved": 0
+            }
+          },
+          "rewrite_start": {
+            "choice": "word_3_0",
+            "confidence": 0.99,
+            "probabilities": {
+              "none": 0,
+              "word_1_0": 0,
+              "word_1_1": 0,
+              "word_1_2": 0,
+              "word_1_3": 0,
+              "word_1_4": 0,
+              "word_1_5": 0,
+              "word_3_0": 0.99,
+              "word_3_1": 0.01,
+              "word_3_2": 0,
+              "word_3_3": 0,
+              "word_3_4": 0
+            }
+          },
+          "rewrite_end": {
+            "choice": "word_3_4",
+            "confidence": 0.98,
+            "probabilities": {
+              "none": 0,
+              "word_1_0": 0,
+              "word_1_1": 0,
+              "word_1_2": 0,
+              "word_1_3": 0,
+              "word_1_4": 0,
+              "word_1_5": 0.02,
+              "word_3_0": 0,
+              "word_3_1": 0,
+              "word_3_2": 0,
+              "word_3_3": 0,
+              "word_3_4": 0.98
+            }
+          },
+          "rewrite_assistance": {
+            "choice": "assisted",
+            "confidence": 0.33,
+            "probabilities": {
+              "independent": 0.48,
+              "assisted": 0.5,
+              "echo": 0.01,
+              "unknown": 0.01
+            }
+          },
+          "rewrite_meaning": {
+            "choice": "demonstrated",
+            "confidence": 0.99,
+            "probabilities": {
+              "demonstrated": 0.99,
+              "partial": 0.01,
+              "incorrect": 0,
+              "unresolved": 0
+            }
+          },
+          "rewrite_concise": {
+            "choice": "demonstrated",
+            "confidence": 0.97,
+            "probabilities": {
+              "demonstrated": 0.98,
+              "partial": 0.01,
+              "incorrect": 0.01,
+              "unresolved": 0
+            }
+          },
+          "rewrite_grammatical": {
+            "choice": "demonstrated",
+            "confidence": 0.96,
+            "probabilities": {
+              "demonstrated": 0.97,
+              "partial": 0.03,
+              "incorrect": 0,
+              "unresolved": 0
+            }
+          }
+        },
+        "concepts": {
+          "concept_meaning": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.52,
+            "probabilities": {
+              "not_yet": 0.2,
+              "partial": 0.1,
+              "demonstrated_independent": 0.64,
+              "demonstrated_prompted": 0.06
+            }
+          },
+          "concept_concise": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.48,
+            "probabilities": {
+              "not_yet": 0.02,
+              "partial": 0.17,
+              "demonstrated_independent": 0.61,
+              "demonstrated_prompted": 0.2
+            }
+          },
+          "concept_grammatical": {
+            "choice": "demonstrated_independent",
+            "confidence": 0.23,
+            "probabilities": {
+              "not_yet": 0.2,
+              "partial": 0.28,
+              "demonstrated_independent": 0.42,
+              "demonstrated_prompted": 0.1
+            }
+          }
+        },
+        "sources": {
+          "source_meaning": {
+            "choice": "message_3",
+            "confidence": 0.89,
+            "probabilities": {
+              "none": 0.06,
+              "message_1": 0.01,
+              "message_3": 0.93
+            }
+          },
+          "sourceEnd_meaning": {
+            "choice": "message_3",
+            "confidence": 0.94,
+            "probabilities": {
+              "none": 0.03,
+              "message_1": 0.01,
+              "message_3": 0.96
+            }
+          },
+          "source_concise": {
+            "choice": "message_3",
+            "confidence": 0.97,
+            "probabilities": {
+              "none": 0.01,
+              "message_1": 0.01,
+              "message_3": 0.98
+            }
+          },
+          "sourceEnd_concise": {
+            "choice": "message_3",
+            "confidence": 0.95,
+            "probabilities": {
+              "none": 0.02,
+              "message_1": 0.01,
+              "message_3": 0.97
+            }
+          },
+          "source_grammatical": {
+            "choice": "message_3",
+            "confidence": 0.95,
+            "probabilities": {
+              "none": 0.02,
+              "message_1": 0.01,
+              "message_3": 0.97
+            }
+          },
+          "sourceEnd_grammatical": {
+            "choice": "message_3",
+            "confidence": 0.89,
+            "probabilities": {
+              "none": 0.05,
+              "message_1": 0.02,
+              "message_3": 0.93
+            }
+          }
+        }
+      }
+    }
+  ]
+}

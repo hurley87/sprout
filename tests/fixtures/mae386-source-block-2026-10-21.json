@@ -1,0 +1,161 @@
+{
+  "provenance": {
+    "sourceFile": "mae386-live-2026-10-21-c7d94b28.json",
+    "sourceSha256": "bf261c610b79a0e3a861beb3821dfa32539c49553e39262e3a71c31d65dc517f",
+    "originalExport": "/Users/davidhurley/Downloads/sprout-mae386-c7d94b28-b76b-4ed1-9493-d008cb58d2d9.json",
+    "originalExportSha256": "0087844c0cde63217c2d4900ed337eb6e752b4f5d0daae902539a96edf6eb227",
+    "testedCodeSha": "918fccbc5ffbc1df2b3146bf6ddab06023048f20",
+    "sourceEventIndex": 2118,
+    "transcriptRevision": 207,
+    "note": "Exact Q6 visit transcript and recorded outputs from the October 21, 2026 human microphone extract. Tests mock new locator responses; this fixture is not fresh live acceptance."
+  },
+  "transcript": "Tutor: Explain Kahneman's system one and system two thinking, and give a convincing example of each.I didn't catch your answer.\nTutor: Are you still\nChild: Sure\nTutor: there?\nChild: Yeah. Yep. So system one thinking is it's quick, it's reactionary\nTutor: Yes.\nChild: thinking\nChild: Um, say someone cuts you off in the highway, you might get upset\nTutor: Hmm.\nChild: right away and want to retaliate\nChild: . System two thinking is all about, Um\nChild: ... You know, uh, thinking through the reaction... taking time to weigh pros and cons, and... So for that example I gave, you may... Not react right away, and\nChild: ... and reason through why it's it's... it's best just to ignore it\nTutor: That's a clear way of expressing both of those. So, quick reaction versus deliberate step-by-step thought. And your own example makes the difference really easy to see. Thanks!",
+  "recordedOutputs": {
+    "objectiveState": {
+      "choice": "completed",
+      "confidence": 0.99,
+      "probabilities": {
+        "completed": 0.99,
+        "incorrect": 0,
+        "unclear_or_incomplete": 0.01,
+        "unresolved_help": 0,
+        "no_attempt": 0
+      }
+    },
+    "tutorState": {
+      "choice": "confirmed_completion",
+      "confidence": 1,
+      "probabilities": {
+        "confirmed_completion": 1,
+        "clarifying": 0,
+        "helping": 0,
+        "asking": 0,
+        "other": 0
+      }
+    },
+    "concepts": {
+      "concept_system1-description": {
+        "choice": "demonstrated_independent",
+        "confidence": 0.95,
+        "probabilities": {
+          "not_yet": 0,
+          "partial": 0.04,
+          "demonstrated_independent": 0.96,
+          "demonstrated_prompted": 0
+        }
+      },
+      "concept_system1-example": {
+        "choice": "demonstrated_independent",
+        "confidence": 1,
+        "probabilities": {
+          "not_yet": 0,
+          "partial": 0,
+          "demonstrated_independent": 1,
+          "demonstrated_prompted": 0
+        }
+      },
+      "concept_system2-description": {
+        "choice": "demonstrated_independent",
+        "confidence": 0.99,
+        "probabilities": {
+          "not_yet": 0,
+          "partial": 0.01,
+          "demonstrated_independent": 0.99,
+          "demonstrated_prompted": 0
+        }
+      },
+      "concept_system2-example": {
+        "choice": "demonstrated_independent",
+        "confidence": 0.97,
+        "probabilities": {
+          "not_yet": 0,
+          "partial": 0.02,
+          "demonstrated_independent": 0.98,
+          "demonstrated_prompted": 0
+        }
+      }
+    },
+    "sources": {
+      "source_system1-description": {
+        "choice": "message_3",
+        "confidence": 0.71,
+        "probabilities": {
+          "none": 0,
+          "message_3": 0.78,
+          "message_5": 0.02,
+          "message_7": 0.2
+        }
+      },
+      "sourceEnd_system1-description": {
+        "choice": "message_3",
+        "confidence": 0.59,
+        "probabilities": {
+          "none": 0.01,
+          "message_3": 0.69,
+          "message_5": 0.14,
+          "message_7": 0.16
+        }
+      },
+      "source_system1-example": {
+        "choice": "message_5",
+        "confidence": 0.83,
+        "probabilities": {
+          "none": 0,
+          "message_3": 0.02,
+          "message_5": 0.87,
+          "message_7": 0.11
+        }
+      },
+      "sourceEnd_system1-example": {
+        "choice": "message_7",
+        "confidence": 0.35,
+        "probabilities": {
+          "none": 0.01,
+          "message_3": 0.01,
+          "message_5": 0.47,
+          "message_7": 0.51
+        }
+      },
+      "source_system2-description": {
+        "choice": "message_7",
+        "confidence": 1,
+        "probabilities": {
+          "none": 0,
+          "message_3": 0,
+          "message_5": 0,
+          "message_7": 1
+        }
+      },
+      "sourceEnd_system2-description": {
+        "choice": "message_7",
+        "confidence": 1,
+        "probabilities": {
+          "none": 0,
+          "message_3": 0,
+          "message_5": 0,
+          "message_7": 1
+        }
+      },
+      "source_system2-example": {
+        "choice": "message_7",
+        "confidence": 1,
+        "probabilities": {
+          "none": 0,
+          "message_3": 0,
+          "message_5": 0,
+          "message_7": 1
+        }
+      },
+      "sourceEnd_system2-example": {
+        "choice": "message_7",
+        "confidence": 1,
+        "probabilities": {
+          "none": 0,
+          "message_3": 0,
+          "message_5": 0,
+          "message_7": 1
+        }
+      }
+    }
+  }
+}

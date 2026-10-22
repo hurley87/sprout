@@ -1,3 +1,4 @@
+import { mae386TeachingInstruction, mae386HelpInstruction } from "./mae386/live-instructions";
 import { currentNodeContext, type LessonDefinition } from "./lesson-definition";
 import type { CurrentNodeSteeringContext, LessonRuntimeState } from "./lesson-runtime-reducer";
 
@@ -9,6 +10,15 @@ const completionGuidance =
   "Only an Application assessment saying the required concept evidence is recorded authorizes scene-completion language. Until then, acknowledge specific ideas without saying the question is complete or every requirement is met. If the explanation appears sufficient, briefly acknowledge it and pause without a question; do not request evaluation. After authorization, confirm once and end without a question. Never append a quick follow-up to completion.";
 
 const targetText = (description: string) => description.replace(/^(?:Source-backed|Transfer rubric)[^:]*:\s*/, "");
+
+/** A check-in is transient, unlike the durable teaching context. */
+export function missingAnswerCheckInstruction(eventId: string) {
+  return `Application connection check ${JSON.stringify(eventId)}: learner speech ended without a matching transcript. This request applies only to the identified visit and turn, once. Only if no later learner speech, answer text or screen change has occurred, gently ask whether they are still there, then listen. If they resume speaking or answer text arrives before you respond, this request expires: listen to their answer instead. Never ask them to repeat an answer already received. Do not supply an answer or infer misunderstanding, mastery or permission to advance. Honor stop immediately.`;
+}
+
+export function supersedeAnswerCheckInstruction(eventId: string) {
+  return `Application connection check ${JSON.stringify(eventId)} has expired because learner activity or the current task changed. This supersedes that check and its repeat-answer instruction. Do not deliver a queued check-in or ask for an answer again. Listen to current learner speech and use the current question's accumulated answer. This update requests no spoken reply, grants no assessment or navigation authority, and must not interrupt the learner. Honor stop immediately.`;
+}
 
 export function answerRecoveryInstruction(lesson: LessonDefinition, state: LessonRuntimeState) {
   const node = lesson.nodes[state.nodeId];
@@ -65,6 +75,7 @@ export function teachingInstruction(
 ) {
   if (lesson.nodes[context.nodeId].completeAfterTutorOutput)
     return `Application screen confirmation: ${context.nodeId} is now rendered. This is the terminal recap, not a question. Read the following application-authored close verbatim once, then stop speaking; the application ends the session after audio drains. No additions, questions, exercises or further responses. This text is the sole authority for claims about the learner, never infer from conversation memory. Close: ${JSON.stringify(recapText ?? "Thanks for the discussion.")}`;
+  if (lesson.id === "mae386") return mae386TeachingInstruction(context);
   if (Object.values(lesson.nodes).some(node => node.concepts?.length)) {
     const targets =
       context.completionCriteria?.map(concept => `${concept.id}: ${targetText(concept.description)}`).join("\n") ??
@@ -95,4 +106,18 @@ export function createLiveSessionConfig(lesson: LessonDefinition) {
       },
     ],
   } as const;
+}
+
+/** Same-node learner controls carry no answer evidence or scene-transition authority. */
+export function learnerSupportInstruction(
+  context: CurrentNodeSteeringContext,
+  request: "help" | "repeat",
+  lesson?: LessonDefinition,
+) {
+  if (lesson?.id === "mae386" && request === "help") return mae386HelpInstruction(context);
+  return `Application learner control for the current rendered node ${context.nodeId}: ${
+    request === "repeat"
+      ? `Repeat only the current prompt and exact original source, without an answer or hint. Prompt: ${JSON.stringify(context.scene.prompt)}. Source: ${JSON.stringify(context.scene.sourceText ?? "")}.`
+      : "The learner explicitly requested help. Give one short targeted hint under the current tutor brief, then invite their own explanation. Never read private criteria or reference answers as a checklist."
+  } Stay on this subpart and listen. This control is not an answer or evidence of understanding.`;
 }

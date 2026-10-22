@@ -39,7 +39,7 @@ export type ConceptEvidenceRecord = {
 type ConceptObservationSource = Pick<
   ConceptEvidenceReference,
   "runtimeId" | "nodeId" | "visitId" | "transcriptRevision"
-> & { readonly childTurnId: number };
+> & { readonly childTurnId: number | null };
 
 export type ConceptRevealEffect = {
   readonly type: "concept.revealed";
@@ -77,6 +77,7 @@ export function applyConceptObservations(
   source: ConceptObservationSource,
   observations: readonly ProposedConceptObservation[] | undefined,
   transcriptSnapshot: string | undefined,
+  isNeutralTutor: (text: string) => boolean = neutralTutorAcknowledgment,
 ): { conceptEvidence: Readonly<Record<string, ConceptEvidenceRecord>>; effects: ConceptRevealEffect[] } {
   if (!node.concepts?.length || !observations?.length || !transcriptSnapshot) return { conceptEvidence, effects: [] };
   const messages = transcriptMessages(transcriptSnapshot);
@@ -137,7 +138,7 @@ export function applyConceptObservations(
       );
     const interveningHelpUnresolved =
       spanning &&
-      selectedMessages.some(message => message.speaker === "Tutor" && !neutralTutorAcknowledgment(message.text)) &&
+      selectedMessages.some(message => message.speaker === "Tutor" && !isNeutralTutor(message.text)) &&
       observation.observation === "demonstrated_independent";
     const tentative = observation.observation === "partial_uncertain";
     let status: ConceptEvidenceRecord["status"] =

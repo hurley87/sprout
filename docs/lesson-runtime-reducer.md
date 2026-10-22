@@ -364,3 +364,172 @@ quiet and use that existing budget to request conversational recovery.
 recorded provider-event timing through the first recovery boundary. Its classifier
 responses are deterministic doubles; it does not validate live model accuracy or
 establish whether microphone activity was treadmill noise.
+
+### Opt-in authored question/subpart navigation
+
+MAE386 uses `LessonDefinition.questionGroups`: an ordered partition of authored
+conversation nodes, validated against their existing success edges. Q10's three
+sentences and Q5's three cases each share one parent question. The
+`authoredQuestionProgress` projection reports eight parent questions and separate
+subpart positions; recap has no counted position. No additional progression
+cursor or model-selected destination is introduced.
+
+For grouped lessons, a bounded authenticated learner request becomes a typed
+`NavigationIntent` (`action: next | skip`, `scope: subpart | question`). “Next”,
+“move on”, and “skip this one” follow one node edge. “Next question” and “skip this
+question” follow the final sibling's authored edge, recording remaining siblings
+as skipped. Tutor closure always follows one node edge. “I don't know” alone,
+quoted/reported commands, contradictory scopes and substantive additions are not
+navigation. Grouped lessons capture `learnerUtterance` from authenticated provider
+fragments sharing an actual learner turn ID. Separate consecutive learner turns
+are not merged for command recognition; fragments within one turn stay together.
+A textless microphone segment may revalidate the latest authenticated navigation
+request in the same visit, retaining its original source identity. New learner
+text replaces that request; no command is inferred from unconfirmed text. The
+same request parser controls navigation and missing-transcript recovery, avoiding
+a state where both are suppressed. Assessment still requires its existing
+current-turn evidence. Legacy lessons retain their existing transcript grammar.
+All advance/skip paths retain speech-end, quiet drain, exact render and steering
+gates. UI `skipScene()` defaults to one subpart; `skipScene("question")` skips the
+remaining siblings only when groups are authored.
+
+The existing reducer carries an optional `navigationHistory` for grouped lessons.
+Each departure records its source runtime/node/visit/turn/revision, parent ID,
+intent, transcript presence, skipped sibling node IDs and local transition time.
+The original navigation source survives later tutor revisions. History commits
+only with the exact render confirmation; Stop during an unconfirmed transition
+cancels the pending departure. Repeated confirmations cannot duplicate history.
+The existing conversation-visit transcripts retain actual learner words:
+`hasChildTranscript` does **not** mean a substantive answer was attempted, and
+neither navigation nor closure grants mastery. MAE386 question outcomes combine
+these departure facts with accepted learner evidence and observation identity.
+
+An authenticated direct spoken “Stop” in grouped lessons calls the existing
+teardown immediately after speech-end, regardless of tutor playback or pending
+assessment. Quoted, reported, negated or unbound text cannot authorize it. UI Stop
+continues to release media immediately in every lesson. The MAE386 route renders
+the frozen recap contract described below.
+Deterministic tests use reducer events and local transport doubles; they do not
+establish live GPT-Live/Jev semantic reliability.
+
+
+### MAE386 current spoken-rewrite projection
+
+Only Q10 nodes opt into `currentRewrite`. The existing concept questions and
+strongest-evidence ledger remain cumulative; `rewriteProposals[nodeId]` is a
+separate current-answer projection inside the same reducer, never a mastery or
+navigation authority.
+
+The existing Jev observer first locates one latest complete, non-withdrawn proposal
+and its assistance, using word-boundary Choice options from the exact revision.
+This distinguishes a replacement from quotation, tutor echo, aside, withdrawal
+or unfinished speech. Then, only for a located complete proposal, one additional
+Jev request assesses meaning, concision and spoken grammar against the authored
+criteria. All three receive the **same selected words and original sentence**;
+earlier learner answers and tutor suggestions are absent from that request.
+Other lessons still make one request. Both steps share the existing request's
+abort/deadline; neither retries nor falls back to an earlier proposal. A failed
+second step keeps the located proposal unresolved and exports
+`rewriteAssessment: unavailable`; accepted tutor closure and cumulative evidence
+from the first step remain available. Cancellation discards the whole result.
+Non-complete/withdrawn selections need no second request.
+
+The reducer accepts the closed selection only with the exact app-owned
+runtime/visit/turn/node/revision and literal snapshot. Selected words carry
+message/character boundaries and actual authenticated learner turn IDs projected
+from runtime fragments. Consecutive role-labelled lines may merge, but their
+actual turn IDs stay distinct. Missing word attribution leaves the claim
+unresolved. Full ordered snapshot context preserves original/tutor quotations,
+prior attempts, help and asides separately from `words`/`text`, which contain only
+the selected learner proposal. Exact source/tutor echoes cannot become successful
+proposals even from overconfident scores; lexical checks reject copying only,
+never determine semantic correctness.
+
+A later incorrect complete replacement becomes current even after an independent
+correct attempt. Withdrawal without replacement is unresolved. An aside or
+unfinished non-withdrawing edit does not replace the last complete proposal;
+Jev must locate that same prior proposal. Relevant tutor help applies to the
+selected proposal; later tutor speech cannot retroactively prompt it. Independent
+spans crossing substantive tutor content remain unresolved in attribution.
+
+New learner words clear `current` while awaiting assessment, preventing stale
+success claims during a replacement or withdrawal. A confirmed learner turn
+captures only the current proposal from the same runtime/node/visit as a dormant
+pre-turn candidate. At speech-end, the complete authenticated turn must match the
+existing Stop or next/skip grammar before that exact candidate can become current
+again. Fragment prefixes do not authorize preservation. Late fragments revalidate
+the full text of that same ended turn; a substantive suffix revokes preservation.
+Tutor-only updates preserve current without supplying learner evidence. The
+candidate expires at the next confirmed turn, visit change or teardown and is
+never recovered from history. Thus Stop releases media immediately with the
+original proposal/provenance intact, and an earlier correct answer cannot return
+when a later replacement/withdrawal was assessed or is still pending. UI Stop
+also preserves the current projection. Navigation never waits for mastery. A
+pending assessment has no current result, and an unavailable assessment is
+unresolved; earlier accepted snapshots remain in `history` for diagnostics and
+must not supply fallback credit. History
+is a sequence of accepted snapshot assessments, not an invented count of student
+attempts; even attempts first seen together remain in full snapshot context.
+
+Tests use authored rubric examples and injected semantic scores/locators. They
+verify selection plumbing, exact provenance, replacement/withdrawal/assistance,
+stale-source rejection, isolated assessment inputs and legacy regressions. They
+do not establish live Jev selection/grading reliability. Two-stage latency and
+live semantic behavior still require the planned microphone acceptance work.
+
+## MAE386 frozen question outcomes
+
+`LessonRuntimeState.questionOutcomes` is the MAE386-only immutable authority for
+all eight question claims. `LessonSnapshot.questionRecap` exposes readable labels,
+component detail and the application-authored spoken text from that same snapshot.
+No original exam marks, numeric scores or pass/fail are produced. The
+`/demos/mae386` route renders `LessonSnapshot.questionRecap` directly; secondary
+assessment is shown separately under `?debug=1` and cannot change these claims.
+
+Each question retains all authored parts, reached/skipped facts, required criterion
+provenance, assistance and objective-attempt history. Optional dimensions retain
+their authored basis/source references and are explicitly unassessed; they never
+become missing requirements. Mixed independent/assisted components aggregate to
+assisted with component detail; mixed demonstrated/missing/incorrect components
+aggregate conservatively to partial, while unresolved components preserve
+uncertainty. An accepted incorrect objective observation is distinct from missing
+classification. Control-only speech, source text, assent, tutor echoes and praise
+cannot create attempted-answer records. Authenticated words awaiting review can
+only establish **unresolved** assessment, including Stop before debounce; this does
+not assert that those words constituted an attempted answer.
+
+Q10 components use only the current proposal (including its criterion results and
+word-level attribution). Their criterion detail excludes cumulative concept
+mastery. History and cumulative demonstrations remain available in diagnostics,
+but cannot restore withdrawn, superseded or pending current credit. A valid
+control-only Stop/skip can retain the exact pre-turn proposal under the existing
+bounded restoration rules; it never searches history.
+
+On natural progression the reducer freezes at **exact render confirmation of
+recap entry**, after committing the final departure record and before recap
+steering. A pending render does not yet freeze natural completion or commit skips.
+An exact current in-flight live request can delay the final transition only until
+its existing 10-second classifier timeout; accepted evidence is applied before the
+request settles, and failure/abstention records unavailable assessment. This does
+not require mastery, wait for `/api/assess`, or change earlier question navigation.
+A new turn/revision invalidates the old request's identity rather than granting it
+late authority. UI Skip at the final node retains this bounded request; other
+skips keep the existing cancellation behavior.
+
+Stop/disconnect cancels live work and synchronously freezes accepted evidence
+without promoting `pendingRender.navigation` to a departure or reached destination.
+Media closes immediately, before starting diagnostic secondary assessment. The
+on-screen data is labelled **Session ended early**; no recap speech is sent after
+Stop. If Stop occurs after committed recap entry, the already frozen question
+claims are reused with that early-ending label (including an interrupted recap).
+The label describes session termination, not a rewrite of evidence. Completed
+natural recap remains labelled Practice recap. Snapshot data is cloned and deeply
+frozen without freezing the mutable live ledger. Duplicate confirmations,
+completion callbacks, late live results and late/failed/absent `/api/assess` cannot
+change those claims. Secondary review remains in the exported assessment field;
+the frozen outcomes are exported inside `runtime.questionOutcomes`.
+
+Counting and Catching Unicorns do not opt into this projection. Their existing
+progression, accepted evidence ledger and demonstrated-topic recital are unchanged.
+These are deterministic fixture/runtime guarantees, not live Jev reliability
+measurements; microphone acceptance follows the route implementation.

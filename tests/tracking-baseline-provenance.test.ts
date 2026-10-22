@@ -17,14 +17,16 @@ it("pins the exact pre-instrumentation reducer bytes after reversing only import
 
 it("pins the historical parser and remaining baseline runtime dependencies", () => {
   for (const [path, digest] of Object.entries(dependencies)) {
-    const current = path === "lib/lesson-runtime/conversation-state-classifier.ts"
-      ? readFileSync(new URL("./fixtures/issue-77-baseline/proposal-parser.ts", import.meta.url), "utf8")
-        .replace('"../../../lib/lesson-runtime/lesson-definition"', '"./lesson-definition"')
-      : readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
-    // A type-only authored policy option does not change the baseline's runtime dependencies.
-    const bytes = path === "lib/lesson-runtime/lesson-definition.ts"
-      ? current.replace('  /** Counting may accept learner answers independently of tutor confirmation. */\n  readonly answerAcceptance?: "learner_evidence";\n', "")
-      : current;
-    expect(createHash("sha256").update(bytes).digest("hex"), path).toBe(digest);
+    const historical =
+      path === "lib/events.ts"
+        ? readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
+        : readFileSync(
+            new URL(
+              `./fixtures/issue-77-baseline/${path.endsWith("conversation-state-classifier.ts") ? "proposal-parser.ts" : path.split("/").at(-1)}`,
+              import.meta.url,
+            ),
+            "utf8",
+          ).replaceAll('"./proposal-parser"', '"./conversation-state-classifier"');
+    expect(createHash("sha256").update(historical).digest("hex"), path).toBe(digest);
   }
 });

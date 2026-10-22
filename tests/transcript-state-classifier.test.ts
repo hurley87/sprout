@@ -35,7 +35,15 @@ describe("ConversationStateClassifier ephemeral runtime contract", () => {
 
   it("types exactly the descriptive fields and restricts node identity to authored IDs", () => {
     expectTypeOf<keyof ConversationStateProposal>().toEqualTypeOf<
-      "nodeId" | "transcriptRevision" | "childActivity" | "answerOutcome" | "answerCommitment" | "supportState" | "tutorState" | "conceptObservations"
+      | "nodeId"
+      | "transcriptRevision"
+      | "childActivity"
+      | "answerOutcome"
+      | "supportState"
+      | "tutorState"
+      | "conceptObservations"
+      | "currentRewrite"
+      | "answerCommitment"
     >();
     expectTypeOf<ConversationStateProposal["nodeId"]>().toEqualTypeOf<string>();
     expectTypeOf<ConversationStateProposal["childActivity"]>().toEqualTypeOf<

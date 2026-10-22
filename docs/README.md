@@ -16,10 +16,13 @@ The production prototype is the realtime counting lesson at `/`, backed by
 | [Browser test suites](browser-tests.md) | Provider-free versus live selection, configuration and costs |
 | [Catching Unicorns demo validation](catching-unicorns-demo-validation.md) | Demo coverage, source limits, live acceptance status and removal rehearsal |
 | [Issue #42 benchmark readiness](issue-42-benchmark-readiness.md) | Evidence gaps, measurement status and a bounded next-test proposal; empirical comparison remains incomplete |
+| [Issue #76 rubric review bundle](issue-76-rubric-review.md) | Instructor-facing MAE386 reference answers, source citations, atomic criteria and labeled synthetic examples |
 
-The standalone adult-learning demonstration is available at
-`/demos/catching-unicorns`. It is registered as an application lesson alongside
-the production counting lesson; it does not replace the root route.
+The standalone adult-learning demonstrations are available at
+`/demos/catching-unicorns` and `/demos/mae386`. Both are registered application
+lessons alongside the production counting lesson. See the
+[MAE386 route validation](mae386-demo-validation.md) for bounded UI coverage and
+remaining live acceptance work.
 
 Sprout separates pedagogical intent from conversational realization: the authored
 lesson specifies the objective and success edge; GPT-Live realizes the conversation

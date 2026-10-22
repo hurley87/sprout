@@ -1,24 +1,24 @@
 // Pinned pre-instrumentation reducer; see README.md. Only relative import paths changed.
 import type { OutputActivityEvent } from "../../../lib/events";
 import { parseConversationStateProposal } from "./proposal-parser";
-import { currentNodeContext, isLessonNodeId, type LessonDefinition } from "../../../lib/lesson-runtime/lesson-definition";
-import { transcriptMessages } from "../../../lib/lesson-runtime/tutor-observation";
+import { currentNodeContext, isLessonNodeId, type LessonDefinition } from "./lesson-definition";
+import { transcriptMessages } from "./tutor-observation";
 import {
   learnerRequestedNext,
   closingTutorExchange,
   matchesTutorClosure,
   tutorAcknowledgedClosure,
   hasConversationCompletionEvidence,
-} from "../../../lib/lesson-runtime/conversation-progression";
+} from "./conversation-progression";
 import {
   applyConceptObservations,
   conceptKey,
   type ConceptEvidenceRecord,
   type ConceptRevealEffect,
-} from "../../../lib/lesson-runtime/concept-evidence";
+} from "./concept-evidence";
 
-export { learnerRequestedNext } from "../../../lib/lesson-runtime/conversation-progression";
-export type { ConceptEvidenceReference, ConceptEvidenceRecord } from "../../../lib/lesson-runtime/concept-evidence";
+export { learnerRequestedNext } from "./conversation-progression";
+export type { ConceptEvidenceReference, ConceptEvidenceRecord } from "./concept-evidence";
 
 /** App-owned identities, captured at the source/request boundary, never supplied by the classifier. */
 export type RuntimeSource = {

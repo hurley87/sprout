@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { transcriptMessages, substantiveLearnerText } from "../../lib/lesson-runtime/tutor-observation";
 import { readFile } from "node:fs/promises";
 import { installSyntheticMicrophone } from "../helpers/synthetic-microphone";
@@ -6,117 +6,7 @@ import type { LessonObservationWindow } from "../../lib/lesson-runtime/browser-o
 import { evidenceRecap } from "../../lib/lesson-runtime/evidence-recap";
 import { CATCHING_UNICORNS_LESSON } from "../../lib/lesson-runtime/catching-unicorns-lesson";
 
-type LocalPeer = {
-  peer: RTCPeerConnection;
-  tone: OscillatorNode;
-  level: GainNode;
-  destination: MediaStreamAudioDestinationNode;
-  channel?: RTCDataChannel;
-};
-type LocalSessionWindow = LessonObservationWindow & {
-  peers: LocalPeer[];
-  peerContext: AudioContext;
-  currentPeer: LocalPeer;
-  appPeerCloseCount: number;
-  steeringContents: string[];
-  acceptOffer(sdp: string): Promise<string>;
-  sendTranscript(type: "session.input_transcript.delta" | "session.output_transcript.delta", delta: string): void;
-};
-
-async function installLocalSession(page: Page) {
-  await page.addInitScript(() => {
-    const host = window as LessonObservationWindow;
-    host.__SPROUT_OBSERVE_LESSON__ = true;
-    const browser = window as unknown as LocalSessionWindow;
-    browser.peers = [];
-    browser.peerContext = new AudioContext();
-    browser.appPeerCloseCount = 0;
-    browser.steeringContents = [];
-    let transcriptTime = 10;
-    const serverPeers = new WeakSet<RTCPeerConnection>();
-    const nativeClose = RTCPeerConnection.prototype.close;
-    RTCPeerConnection.prototype.close = function (this: RTCPeerConnection) {
-      if (!serverPeers.has(this)) browser.appPeerCloseCount++;
-      return nativeClose.call(this);
-    };
-    document.addEventListener(
-      "click",
-      () => {
-        void browser.peerContext.resume();
-      },
-      true,
-    );
-    browser.acceptOffer = async (sdp: string) => {
-      const context: AudioContext = browser.peerContext;
-      await context.resume();
-      const peer = new RTCPeerConnection();
-      serverPeers.add(peer);
-      const tone = context.createOscillator();
-      const level = context.createGain();
-      level.gain.value = 0;
-      const destination = context.createMediaStreamDestination();
-      tone.connect(level);
-      level.connect(destination);
-      tone.start();
-      const source = { peer, tone, level, destination, channel: undefined as RTCDataChannel | undefined };
-      browser.peers.push(source);
-      browser.currentPeer = source;
-      peer.addTrack(destination.stream.getAudioTracks()[0], destination.stream);
-      peer.ondatachannel = event => {
-        source.channel = event.channel;
-        source.channel.onopen = () => source.channel!.send(JSON.stringify({ type: "session.started" }));
-        source.channel.onmessage = message => {
-          const command = JSON.parse(message.data);
-          if (command.type === "session.instructions.append") {
-            browser.steeringContents.push(command.content);
-            // Catch scene-context expansion before a live provider rejects it.
-            if (new TextEncoder().encode(command.content).length > 2000) {
-              source.channel!.send(
-                JSON.stringify({ type: "error", error: { code: "invalid_value", client_event_id: command.event_id } }),
-              );
-              return;
-            }
-            source.channel!.send(
-              JSON.stringify({
-                type: "session.instructions.appended",
-                client_event_id: command.event_id,
-                start_ms: 0,
-                end_ms: 0,
-              }),
-            );
-          }
-        };
-      };
-      await peer.setRemoteDescription({ type: "offer", sdp });
-      await peer.setLocalDescription(await peer.createAnswer());
-      if (peer.iceGatheringState !== "complete")
-        await new Promise<void>(resolve => {
-          peer.addEventListener("icegatheringstatechange", () => {
-            if (peer.iceGatheringState === "complete") resolve();
-          });
-        });
-      return peer.localDescription!.sdp!;
-    };
-    browser.sendTranscript = (type, delta) => {
-      const channel = browser.currentPeer.channel;
-      if (!channel || channel.readyState !== "open") throw new Error("Local provider channel is not open");
-      const start = transcriptTime;
-      transcriptTime += 250;
-      channel.send(JSON.stringify({ type, delta, start_ms: start, end_ms: transcriptTime }));
-    };
-  });
-  await page.route("**/api/live", async route => {
-    const sdp = await page.evaluate(
-      value => (window as unknown as { acceptOffer(sdp: string): Promise<string> }).acceptOffer(value),
-      route.request().postDataJSON().sdp,
-    );
-    await route.fulfill({ json: { transport: { sdp } } });
-  });
-  await page.route("**/api/classify", route => route.fulfill({ json: { proposal: null } }));
-  await page.route("**/api/assess", route =>
-    route.fulfill({ status: 503, json: { error: "Fixture assessment unavailable" } }),
-  );
-}
+import { installLocalSession, type LocalSessionWindow } from "../helpers/local-voice-session";
 
 test.afterEach(async ({ page }) => {
   if (page.isClosed()) return;
@@ -251,6 +141,108 @@ test("shared runtime starts, holds unresolved scenes, stops, restarts, and clean
     .toBeGreaterThan(closesBeforePagehide);
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Sprout", exact: true })).toBeVisible();
+});
+
+// Hold only the app's frame callbacks; dispatchEvent avoids Playwright's actionability frames.
+for (const field of ["renderToken", "nodeId", "sceneId"] as const) {
+  test(`shared voice shell requires the exact rendered ${field} before opening media`, async ({ page }) => {
+    const microphone = await installSyntheticMicrophone(page);
+    await installLocalSession(page);
+    await page.goto("/demos/catching-unicorns");
+    // Wait for mount effects (including Strict Mode's cleanup/remount) before bypassing actionability.
+    await expect
+      .poll(() => page.evaluate(() => Boolean((window as LessonObservationWindow).sproutLessonObservation)))
+      .toBe(true);
+    await page.evaluate(() => {
+      const host = window as typeof window & { flushVoiceFrame?: () => number; restoreVoiceFrames?: () => void };
+      const request = window.requestAnimationFrame;
+      const cancel = window.cancelAnimationFrame;
+      let nextId = 0;
+      const pending = new Map<number, FrameRequestCallback>();
+      window.requestAnimationFrame = callback => {
+        pending.set(++nextId, callback);
+        return nextId;
+      };
+      window.cancelAnimationFrame = id => {
+        pending.delete(id);
+      };
+      host.flushVoiceFrame = () => {
+        const callbacks = [...pending.values()];
+        pending.clear();
+        callbacks.forEach(callback => callback(performance.now()));
+        return callbacks.length;
+      };
+      host.restoreVoiceFrames = () => {
+        window.requestAnimationFrame = request;
+        window.cancelAnimationFrame = cancel;
+        pending.clear();
+      };
+    });
+    await page.getByRole("button", { name: "Start discussion" }).dispatchEvent("click");
+    await expect(page.getByRole("status")).toHaveText("prepared");
+    const firstFrame = await page.evaluate(() =>
+      (window as typeof window & { flushVoiceFrame: () => number }).flushVoiceFrame(),
+    );
+    expect(firstFrame).toBe(1);
+    // The first frame cannot open media or confirm a render.
+    expect((await microphone.state()).requests).toBe(0);
+    const original = await page.locator("[data-render-token]").evaluate((element, field) => {
+      const data = (element as HTMLElement).dataset;
+      const original = data[field]!;
+      data[field] = "stale-render";
+      return original;
+    }, field);
+    const secondFrame = await page.evaluate(() =>
+      (window as typeof window & { flushVoiceFrame: () => number }).flushVoiceFrame(),
+    );
+    expect(secondFrame).toBe(1);
+    const held = await page.evaluate(() => (window as LessonObservationWindow).sproutLessonObservation?.read());
+    expect(held?.snapshot.status).toBe("prepared");
+    expect(held?.events.some(event => event.type === "render.confirmed")).toBe(false);
+    expect((await microphone.state()).requests).toBe(0);
+
+    // Restore the externally mutated DOM; unchanged node/scene props are not rewritten by React.
+    await page.locator("[data-render-token]").evaluate(
+      (element, { field, original }) => {
+        (element as HTMLElement).dataset[field] = original;
+      },
+      { field, original },
+    );
+    await page.getByRole("button", { name: "Stop", exact: true }).dispatchEvent("click");
+    await expect(page.getByRole("status")).toHaveText("ended");
+    await page.evaluate(() => (window as typeof window & { restoreVoiceFrames: () => void }).restoreVoiceFrames());
+    await page.getByRole("button", { name: "Start discussion" }).click();
+    await expect(page.getByRole("status")).toHaveText("live");
+    const confirmed = await page.evaluate(() => (window as LessonObservationWindow).sproutLessonObservation?.read());
+    expect(confirmed?.events.some(event => event.type === "render.confirmed")).toBe(true);
+    await page.getByRole("button", { name: "Stop", exact: true }).click();
+  });
+}
+
+test("shared voice shell releases media when the page becomes hidden", async ({ page }) => {
+  const microphone = await installSyntheticMicrophone(page);
+  await installLocalSession(page);
+  await page.goto("/demos/catching-unicorns");
+  await page.getByRole("button", { name: "Start discussion" }).click();
+  await expect(page.getByRole("status")).toHaveText("live");
+  const closes = await page.evaluate(() => (window as unknown as LocalSessionWindow).appPeerCloseCount);
+  await page.evaluate(() => {
+    Object.defineProperty(document, "hidden", { configurable: true, value: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await expect(page.getByRole("status")).toHaveText("ended");
+  const ended = await page.evaluate(() =>
+    (window as LessonObservationWindow).sproutLessonObservation
+      ?.report()
+      ?.events.find(event => event.type === "lesson.ended"),
+  );
+  expect(ended?.detail).toMatchObject({ reason: "page_hidden" });
+  await expect
+    .poll(async () => (await microphone.state()).trackStates.filter(state => state === "live").length)
+    .toBe(1);
+  expect(await page.evaluate(() => (window as unknown as LocalSessionWindow).appPeerCloseCount)).toBeGreaterThan(
+    closes,
+  );
 });
 
 test("session startup failure ends and releases the microphone so a fresh attempt is possible", async ({ page }) => {
