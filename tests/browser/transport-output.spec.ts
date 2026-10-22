@@ -65,6 +65,8 @@ async function fixture(page: Page, observeWire = false) {
     document.querySelector('button').onclick = async () => {
       await window.context.resume();
       window.transport = new window.Transport(document.querySelector('audio'), true);
+      window.playbackDiagnostics = [];
+      window.transport.setPlaybackDiagnosticSink(event => window.playbackDiagnostics.push(event));
       window.measurements = [];
       window.transport.setMicrophoneDiagnosticSink(event => window.measurements.push(event));
       await window.transport.start(event => window.events.push(event), error => window.failures.push(error));
@@ -77,6 +79,16 @@ async function fixture(page: Page, observeWire = false) {
     )
     .toBe(true);
   await expect.poll(() => page.evaluate("!document.querySelector('audio').paused")).toBe(true);
+  await expect
+    .poll(() => page.evaluate("window.playbackDiagnostics.some(event => event.playbackFact === 'play_resolved')"))
+    .toBe(true);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        "window.playbackDiagnostics.some(event => event.playbackFact === 'playing' && event.sourceId === 1 && event.attachmentGeneration === 1)",
+      ),
+    )
+    .toBe(true);
   await expect.poll(async () => (await microphone.state()).contextState).toBe("running");
   return microphone;
 }

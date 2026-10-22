@@ -37,6 +37,8 @@ export type LessonDefinition = {
   readonly conversationFirst?: boolean;
   /** Opt in to ordered subpart/parent navigation and counted question progress. */
   readonly questionGroups?: readonly QuestionGroupDefinition[];
+  /** Counting may accept learner answers independently of tutor confirmation. */
+  readonly answerAcceptance?: "learner_evidence";
   /** Concise topic labels for an accepted-evidence terminal close. No answer text. */
   readonly recapTopics?: Readonly<Record<string, string>>;
   readonly nodes: Readonly<Record<string, LessonNodeDefinition>>;

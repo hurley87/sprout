@@ -2,7 +2,7 @@
 import { JEV_MODEL } from "../../jev";
 import type { ConversationStateClassifierInput } from "../../lesson-runtime/conversation-state-classifier";
 import { SIMPLIFIED_QUESTIONS, simplifiedObserverState, type SimplifiedDecision } from "./simplified-observer-contract";
-import { COUNTING_LESSON } from "../../lesson-runtime/counting-lesson";
+import { HISTORICAL_COUNTING_LESSON as COUNTING_LESSON } from "./counting-classifier-contract";
 
 export type ProjectionArm = "A" | "B";
 

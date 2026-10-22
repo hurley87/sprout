@@ -1,3 +1,4 @@
+import { trackReduction, trackClassification, trackDelivery, type TrackingDetail } from "./evidence-tracking";
 import { CLASSIFIER_VERSION } from "./conversation-observer-contract";
 import type { ConversationAssessment, ConversationVisit } from "./conversation-assessment";
 import type { ClassificationSource, LessonRuntimeState, RuntimeSource } from "./lesson-runtime-reducer";
@@ -58,8 +59,37 @@ export class DiagnosticJournal {
     });
   }
 
+  trackReduction(input: Omit<Parameters<typeof trackReduction>[0], "history">) {
+    this.appendTracking(trackReduction({ ...input, history: this.events }), input.result.state);
+  }
+
+  trackClassification(
+    input: Omit<Parameters<typeof trackClassification>[0], "history" | "journalRuntimeId">,
+    state: LessonRuntimeState | null,
+  ) {
+    this.appendTracking(
+      trackClassification({ ...input, history: this.events, journalRuntimeId: this.runtimeId }),
+      state,
+    );
+  }
+
+  trackDelivery(input: Parameters<typeof trackDelivery>[0], state: LessonRuntimeState | null) {
+    this.appendTracking([trackDelivery(input, this.events)], state);
+  }
+
+  private appendTracking(details: TrackingDetail[], state: LessonRuntimeState | null) {
+    // Capture each observation without retaining live evidence or authored criteria.
+    for (const detail of details)
+      this.append(`tracking.${detail.kind}`, structuredClone(detail), {
+        state,
+        revision: detail.origin.source.transcriptRevision,
+        source: detail.origin.source,
+      });
+  }
+
   recent() {
-    return this.events.slice(-100);
+    // Snapshot consumers must not mutate journal history or its referenced runtime data.
+    return structuredClone(this.events.slice(-100));
   }
 
   /** Read the complete journal independently of React publication; never return runtime references. */

@@ -1,5 +1,6 @@
 import { parseRewriteProposal, type RewriteProposal } from "./mae386/rewrite-proposal";
 import type { LessonDefinition } from "./lesson-definition";
+import { ANSWER_COMMITMENTS, type AnswerCommitment } from "./counting-answer-policy";
 
 export const CHILD_ACTIVITIES = ["unknown", "waiting", "thinking", "answering"] as const;
 export type ChildActivity = (typeof CHILD_ACTIVITIES)[number];
@@ -52,8 +53,10 @@ export type ConversationStateProposal = {
   readonly transcriptRevision: number;
   /** Requires runtime turn/audio signals; a transcript-only classifier emits "unknown". */
   readonly childActivity: ChildActivity;
-  /** Outcome of the latest answer for this node; "none" when no answer has been given. */
+  /** Correctness of the latest answer candidate; counting commitment is separate. */
   readonly answerOutcome: AnswerOutcome;
+  /** Counting's separate learner-endorsement judgment; absent in other lesson contracts. */
+  readonly answerCommitment?: AnswerCommitment;
   /** Current inferred need for help; "none" when no need is inferred. */
   readonly supportState: SupportState;
   /** Transcript classification describes the latest tutor message, not live speech activity. */
@@ -91,6 +94,7 @@ const PROPOSAL_KEYS = [
   "tutorState",
   "conceptObservations",
   "currentRewrite",
+  "answerCommitment",
 ] as const;
 
 /** Closed runtime payload: reject commands, future-node context, and evidence/review metadata. */
@@ -103,7 +107,8 @@ export function parseConversationStateProposal(value: unknown): ConversationStat
     ["nodeId", "transcriptRevision", "childActivity", "answerOutcome", "supportState", "tutorState"].some(
       key => !Object.hasOwn(proposal, key),
     ) ||
-    ("currentRewrite" in proposal && !parseRewriteProposal(proposal.currentRewrite))
+    ("currentRewrite" in proposal && !parseRewriteProposal(proposal.currentRewrite)) ||
+    ("answerCommitment" in proposal && !ANSWER_COMMITMENTS.includes(proposal.answerCommitment as AnswerCommitment))
   )
     return null;
 
@@ -163,6 +168,7 @@ export function parseConversationStateProposal(value: unknown): ConversationStat
     transcriptRevision: proposal.transcriptRevision,
     childActivity: proposal.childActivity as ChildActivity,
     answerOutcome: proposal.answerOutcome as AnswerOutcome,
+    ...("answerCommitment" in proposal ? { answerCommitment: proposal.answerCommitment as AnswerCommitment } : {}),
     supportState: proposal.supportState as SupportState,
     tutorState: proposal.tutorState as TutorState,
     ...("currentRewrite" in proposal ? { currentRewrite: parseRewriteProposal(proposal.currentRewrite)! } : {}),

@@ -6,3 +6,5 @@ out/
 test-results/
 playwright-report/
 next-env.d.ts
+# Preserve the pinned historical source bytes for the replay provenance check.
+tests/fixtures/issue-77-baseline/*.ts

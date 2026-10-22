@@ -3,7 +3,7 @@ import {
   conversationObserverState,
 } from "../../lesson-runtime/conversation-observer-contract";
 import { CONVERSATION_STATE_QUESTIONS } from "./counting-classifier-contract";
-import { COUNTING_LESSON } from "../../lesson-runtime/counting-lesson";
+import { HISTORICAL_COUNTING_LESSON as COUNTING_LESSON } from "./counting-classifier-contract";
 import { tutorObservation } from "../../lesson-runtime/tutor-observation";
 import { supportEvidence } from "../../lesson-runtime/support-evidence";
 import { mapConversationObservation } from "../../lesson-runtime/conversation-observer-contract";

@@ -7,6 +7,7 @@ import {
 import { projectRewrite, type RewriteProjection, type RewriteTranscript } from "./mae386/rewrite-proposal";
 import { mae386NeutralBackchannel } from "./mae386/source-block";
 import type { OutputActivityEvent } from "../events";
+import { acceptsLearnerAnswerIndependently } from "./counting-answer-policy";
 import { parseConversationStateProposal } from "./conversation-state-classifier";
 import { currentNodeContext, isLessonNodeId, type LessonDefinition } from "./lesson-definition";
 import { substantiveLearnerText, transcriptMessages } from "./tutor-observation";
@@ -193,9 +194,19 @@ export type LessonRuntimeEffect =
     }
   | { readonly type: "lesson.completed"; readonly renderToken: string }
   | ConceptRevealEffect;
+/** Observation only: captured before finish can clear accepted flags on transition. */
+export type ProposalConsumption = {
+  readonly consumption: "consumed" | "ignored";
+  readonly reason: string | null;
+  readonly accepted: Pick<
+    LessonRuntimeState,
+    "answerAccepted" | "acceptedAnswerRevision" | "acknowledgmentObserved" | "conceptEvidence"
+  > | null;
+};
 export type LessonRuntimeResult = {
   readonly state: LessonRuntimeState;
   readonly effects: readonly LessonRuntimeEffect[];
+  readonly proposalConsumption?: ProposalConsumption;
 };
 
 const clearedEvidence = {
@@ -330,13 +341,15 @@ export function hasCurrentCompletionEvidence(state: LessonRuntimeState, lesson: 
   if (lesson.nodes[state.nodeId].completeAfterTutorOutput)
     return state.tutorOutputObserved && state.terminalTranscriptComplete === true && !state.terminalLearnerPending;
   if (lesson.conversationFirst) return hasConversationCompletionEvidence(state);
+  const learnerAnswerOnly = acceptsLearnerAnswerIndependently(lesson);
   return (
     state.hasChildTranscript &&
-    state.transcriptSource === "tutor" &&
-    state.consumedRevision === state.transcriptRevision &&
+    (learnerAnswerOnly ||
+      (state.transcriptSource === "tutor" &&
+        state.consumedRevision === state.transcriptRevision &&
+        state.acknowledgmentObserved)) &&
     state.acceptedAnswerRevision !== null &&
     state.answerAccepted &&
-    state.acknowledgmentObserved &&
     meetsAuthoredCompletionPolicy(state, lesson)
   );
 }
@@ -475,7 +488,16 @@ export function reduceLessonRuntime(
   event: LessonRuntimeEvent,
   lesson: LessonDefinition,
 ): LessonRuntimeResult {
-  const ignored = { state, effects: [] };
+  const ignore = (reason: string): LessonRuntimeResult => ({
+    state,
+    effects: [],
+    ...(event.type === "proposal.received"
+      ? ({
+          proposalConsumption: { consumption: "ignored", reason, accepted: null },
+        } as const)
+      : {}),
+  });
+  const ignored = ignore("runtime_event_ineligible");
   if (state.lessonId && state.lessonId !== lesson.id) return ignored;
   if (state.phase === "stopped" || state.phase === "complete" || !validTime(event.atMs) || event.atMs < state.nowMs)
     return ignored;
@@ -646,10 +668,11 @@ export function reduceLessonRuntime(
       return ignored;
     return { state: stopped({ ...state, nowMs: event.atMs }, lesson), effects: [] };
   }
-  if (state.phase !== "active" || !sameSource(state, event.source)) return ignored;
+  if (state.phase !== "active" || !sameSource(state, event.source)) return ignore("inactive_or_source_mismatch");
 
   let next: LessonRuntimeState = { ...state, nowMs: event.atMs };
   let additionalEffects: LessonRuntimeEffect[] = [];
+  let proposalReason: string | null = null;
   switch (event.type) {
     case "child.candidate.started":
     case "child.turn.started":
@@ -843,8 +866,9 @@ export function reduceLessonRuntime(
             : closure && exchange?.complete
               ? "tutor"
               : false,
-        // Answer acceptance remains revision-bound, independently of conversational closure.
-        answerAccepted: false,
+        // Tutor wording does not retract counting evidence. New learner speech
+        // always clears acceptance until its exact current source is evaluated.
+        answerAccepted: acceptsLearnerAnswerIndependently(lesson) && event.speaker === "tutor" && state.answerAccepted,
         acknowledgmentObserved: false,
         ...(lesson.nodes[state.nodeId].completeAfterTutorOutput ? { terminalTranscriptComplete: false } : {}),
         ...(lesson.nodes[state.nodeId].completeAfterTutorOutput && event.speaker === "child"
@@ -917,9 +941,12 @@ export function reduceLessonRuntime(
         (state.childSpeaking && !state.childCandidate?.deferredTurn) ||
         (!state.hasChildTranscript && !(lesson.conversationFirst && state.interruptedExchange?.ready)) ||
         !proposal ||
-        !isLessonNodeId(lesson, proposal.nodeId) ||
-        event.source.nodeId !== state.nodeId ||
-        event.source.transcriptRevision !== state.transcriptRevision ||
+        !isLessonNodeId(lesson, proposal.nodeId)
+      )
+        return ignore("proposal_guard_rejected");
+      if (event.source.nodeId !== state.nodeId || event.source.transcriptRevision !== state.transcriptRevision)
+        return ignore("classification_source_mismatch");
+      if (
         proposal.nodeId !== state.nodeId ||
         (currentNode.currentRewrite &&
           proposal.currentRewrite &&
@@ -933,10 +960,10 @@ export function reduceLessonRuntime(
             !transcriptMessages(event.transcriptSnapshot)?.some(
               message => message.speaker === "Child" && message.text.trim(),
             ))) ||
-        proposal.transcriptRevision !== state.transcriptRevision ||
-        state.consumedRevision === state.transcriptRevision
+        proposal.transcriptRevision !== state.transcriptRevision
       )
-        return ignored;
+        return ignore("proposal_guard_rejected");
+      if (state.consumedRevision === state.transcriptRevision) return ignore("revision_already_consumed");
       next = { ...next, consumedRevision: state.transcriptRevision };
       // A missing-turn recheck can establish conversational closure only. Do not
       // attribute historical child words or new mastery to the microphone-only turn.
@@ -1056,10 +1083,15 @@ export function reduceLessonRuntime(
       }
       if (
         proposal.answerOutcome !== "correct" ||
+        (acceptsLearnerAnswerIndependently(lesson) && proposal.answerCommitment !== "committed") ||
         proposal.supportState !== "none" ||
         proposal.childActivity === "answering"
       ) {
         next = { ...next, ...clearedEvidence, ...clearedNavigation(state) };
+        proposalReason =
+          acceptsLearnerAnswerIndependently(lesson) && proposal.answerCommitment !== "committed"
+            ? "uncommitted_answer_judgment"
+            : "nonqualifying_answer_judgment";
         break;
       }
       next = {
@@ -1185,5 +1217,22 @@ export function reduceLessonRuntime(
     }
   }
   const result = finish(next, lesson);
-  return { ...result, effects: [...additionalEffects, ...result.effects] };
+  return {
+    ...result,
+    effects: [...additionalEffects, ...result.effects],
+    ...(event.type === "proposal.received"
+      ? ({
+          proposalConsumption: {
+            consumption: "consumed",
+            reason: proposalReason,
+            accepted: {
+              answerAccepted: next.answerAccepted,
+              acceptedAnswerRevision: next.acceptedAnswerRevision,
+              acknowledgmentObserved: next.acknowledgmentObserved,
+              conceptEvidence: next.conceptEvidence,
+            },
+          },
+        } as const)
+      : {}),
+  };
 }

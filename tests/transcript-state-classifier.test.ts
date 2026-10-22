@@ -43,6 +43,7 @@ describe("ConversationStateClassifier ephemeral runtime contract", () => {
       | "tutorState"
       | "conceptObservations"
       | "currentRewrite"
+      | "answerCommitment"
     >();
     expectTypeOf<ConversationStateProposal["nodeId"]>().toEqualTypeOf<string>();
     expectTypeOf<ConversationStateProposal["childActivity"]>().toEqualTypeOf<

@@ -34,6 +34,8 @@ const reasons = [
   "tutorState_no_winner",
   "objectiveState_competing_options",
   "tutorState_competing_options",
+  "answerCommitment_no_winner",
+  "answerCommitment_competing_options",
   "confirmation_without_completion",
   "no_confident_concept_observation",
 ];
@@ -84,7 +86,16 @@ export function parseLiveClassificationDiagnostic(
   if (record(value.outputs)) {
     if (
       Object.keys(value.outputs).some(
-        key => !["objectiveState", "tutorState", "discussionClosure", "concepts", "sources", "rewrite"].includes(key),
+        key =>
+          ![
+            "objectiveState",
+            "tutorState",
+            "discussionClosure",
+            "answerCommitment",
+            "concepts",
+            "sources",
+            "rewrite",
+          ].includes(key),
       ) ||
       (!lesson && value.outputs.concepts !== undefined)
     )
@@ -104,6 +115,10 @@ export function parseLiveClassificationDiagnostic(
     ]) {
       const output = value.outputs[id];
       answers[id] = record(output) ? { ...output, type: "choice" } : output;
+    }
+    if (value.outputs.answerCommitment !== undefined) {
+      const output = value.outputs.answerCommitment;
+      answers.answerCommitment = record(output) ? { ...output, type: "choice" } : output;
     }
     if (concepts)
       for (const [id, output] of Object.entries(concepts))
@@ -134,15 +149,20 @@ export function parseLiveClassificationDiagnostic(
   const labelCompletionEligible = interpretation?.labelCompletionEligible ?? false;
   const completionEligible = interpretation?.completionEligible ?? false;
   const genericConfident = interpretation?.genericConfident ?? false;
+  const learnerAnswerConfident =
+    interpretation?.learnerAnswerOnly && interpretation.objectiveConfident && interpretation.commitmentConfident;
   const hasConceptQuestions = interpretation?.hasConceptQuestions ?? false;
   const confidentConcepts = !!interpretation?.conceptObservations.length;
+  const unconfidentJudgment = interpretation?.learnerAnswerOnly
+    ? !learnerAnswerConfident
+    : hasConceptQuestions
+      ? !completionEligible && !confidentConcepts && !outputs?.rewrite
+      : !genericConfident && !completionEligible;
   if (
     value.labelCompletionEligible !== labelCompletionEligible ||
     (value.decision === "accepted" &&
       (!outputs ||
-        (hasConceptQuestions
-          ? !completionEligible && !confidentConcepts && !outputs.rewrite
-          : !genericConfident && !completionEligible) ||
+        unconfidentJudgment ||
         (value.outcome === "allow_semantic_completion_evidence") !== completionEligible ||
         (value.outcome === "hold_scene") !== !completionEligible)) ||
     (value.decision === "abstained" &&
