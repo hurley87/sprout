@@ -950,3 +950,115 @@ it("marks omitted long tutor context and retains its bounded recent suffix", asy
   expect(context).toMatch(/^\[Earlier tutor context omitted/);
   expect(context).toMatch(/latest help$/);
 });
+
+it.each([{ actions: [null] }, { actions: {} }, { actions: "invalid" }])(
+  "retains rejected malformed raw proposals without breaking export: %j",
+  async batch => {
+    start();
+    await learner("sine or sign x squared, I am unsure");
+    requests[0].resolve({ review: "required", batch });
+    await vi.advanceTimersByTimeAsync(0);
+    const report = runtime.report().mathDiagnostics!;
+    expect(report.requests[0].rawProposal).toEqual(batch);
+    expect(report.requests[0].proposal).toBeNull();
+    expect(report.requests[0].disposition).toBe("rejected");
+    expect(report.requests[0].actions).toEqual([]);
+    expect(runtime.snapshot().math!.current!.steps).toEqual([]);
+  },
+);
+
+it.each(["stop", "speech", "next"])("exports malformed late interpretation after %s safely", async race => {
+  start();
+  await learner("x to the power, or perhaps sine x");
+  if (race === "stop") runtime.stop();
+  if (race === "speech") emit({ type: "microphone.activity_started" });
+  if (race === "next") {
+    await learner("next");
+    await vi.advanceTimersByTimeAsync(2000);
+  }
+  requests[0].resolve({ review: "required", batch: { actions: [null] } });
+  await vi.advanceTimersByTimeAsync(0);
+  const request = runtime.report().mathDiagnostics!.requests[0];
+  expect(request.disposition).toBe("stale");
+  expect(request.actions).toEqual([]);
+  expect(runtime.snapshot().math!.current!.steps).toEqual([]);
+});
+
+it.each(["sine or sign x", "x squared or x to an unknown power"])(
+  "records ambiguous dictation without inventing math: %s",
+  async text => {
+    start();
+    await learner(text);
+    await respond([action("clarify", { reason: "ambiguous" })]);
+    confirm("unassessed");
+    const request = runtime.report().mathDiagnostics!.requests[0];
+    expect(request.rawLearnerTurns![0].text).toBe(text);
+    expect(request.after!.steps).toEqual([]);
+    expect(request.after!.history[0].evidence.demonstratedIndependent).toBe(false);
+  },
+);
+
+it("deduplicates event/transcript/result delivery and UI confirmations without inventing spoken turns", async () => {
+  start();
+  emit({ type: "microphone.activity_started" });
+  const transcript = {
+    type: "transcript" as const,
+    speaker: "child" as const,
+    delta: "three x squared minus four",
+    startMs: 100,
+    endMs: 200,
+    eventId: "same-transcript",
+  };
+  emit(transcript);
+  emit(transcript);
+  emit({ type: "microphone.speech_stopped", quietMs: 900 });
+  await vi.advanceTimersByTimeAsync(301);
+  await respond([action("append", { expression: correct })]);
+  const pending = runtime.snapshot().math!.pending!;
+  const body = parseMathInterpretationOutput(
+    { actions: [action("append", { expression: correct })] },
+    requests[0].input,
+  );
+  requests[0].resolve(body);
+  confirm();
+  expect(runtime.confirmMathProposal(pending.id, pending.boardRevision, ["differentiate"])).toBe(false);
+  const report = runtime.report();
+  expect(report.math!.current!.history).toHaveLength(1);
+  expect(report.mathDiagnostics!.requests[0].rawLearnerTurns![0].text).toBe(transcript.delta);
+  expect(
+    report.mathDiagnostics!.requests[0].confirmations.filter(e => (e.detail as { accepted: boolean }).accepted),
+  ).toHaveLength(1);
+  expect(report.mathConfirmations).toEqual([]);
+  expect(report.math!.current!.history[0].evidence.demonstratedIndependent).toBe(false);
+});
+
+it("exports a valid equivalent expression outside supported trig identities as unresolved", async () => {
+  start();
+  await learner(
+    "my derivative is open parenthesis three x squared minus four close parenthesis times open parenthesis sine squared x plus cosine squared x close parenthesis",
+  );
+  const x: MathExpression = { op: "variable", name: "x" };
+  const expression: MathExpression = {
+    op: "multiply",
+    args: [
+      correct,
+      {
+        op: "add",
+        args: [
+          { op: "power", base: { op: "sin", argument: x }, exponent: 2 },
+          { op: "power", base: { op: "cos", argument: x }, exponent: 2 },
+        ],
+      },
+    ],
+  };
+  await respond([action("append", { expression })]);
+  confirm();
+  const request = runtime.report().mathDiagnostics!.requests[0];
+  expect(request.after!.history[0].evidence.assessment).toMatchObject({
+    correctness: "unsupported",
+    disposition: "unresolved",
+    reasoning: "unassessed",
+  });
+  expect(request.after!.steps[0].versions[0].expression).toEqual(expression);
+  expect(request.after!.history[0].evidence.demonstratedIndependent).toBe(false);
+});

@@ -59,6 +59,7 @@ export class MathController {
   constructor(
     private readonly runtimeId: string,
     private readonly changed: () => void,
+    private readonly observe: (type: string, detail: unknown) => void = () => {},
   ) {}
 
   snapshot(): MathControllerSnapshot {
@@ -90,6 +91,7 @@ export class MathController {
   }
 
   invalidate() {
+    if (this.pending) this.observe("math.proposal_revoked", { id: this.pending.id, batch: this.pending.batch });
     this.feedback = null;
     this.generation++;
     this.request?.abort();
@@ -152,6 +154,10 @@ export class MathController {
     if (!this.feedback || this.feedback.token !== token || this.current?.status !== "active") return null;
     if (this.feedback.target === "proposal" && !this.pending?.displayed) return null;
     const snapshot = this.snapshot();
+    this.observe("math.feedback_displayed", {
+      ...this.feedback,
+      deliveryId: this.current.history.at(-1)?.deliveryId ?? null,
+    });
     this.feedback = null;
     return snapshot;
   }
@@ -172,8 +178,11 @@ export class MathController {
     const abort = new AbortController();
     this.request = abort;
     const generation = this.generation;
+    const requestId = crypto.randomUUID();
+    this.observe("math.interpretation_started", { requestId, turns, before: state });
     this.disposition = "extracting";
     this.changed();
+    let failure: "unavailable" | "malformed" | "rejected" = "unavailable";
     try {
       const input = parseMathInterpretationInput({
         identity: state.identity,
@@ -193,9 +202,15 @@ export class MathController {
         signal,
       });
       if (!response.ok) throw new Error("Interpretation unavailable");
+      failure = "malformed";
       const body = await response.json();
-      if (generation !== this.generation || signal.aborted) return;
+      if (generation !== this.generation || signal.aborted) {
+        this.observe("math.interpretation_ended", { requestId, disposition: "stale", proposal: body?.batch ?? null });
+        return;
+      }
       if (!body?.batch || body.review !== "required") throw new Error("No reviewable proposal");
+      this.observe("math.interpretation_result", { requestId, proposal: body.batch });
+      failure = "rejected";
       const batch = parseMathActionBatch(body.batch, {
         identity: state.identity,
         turns,
@@ -220,11 +235,22 @@ export class MathController {
         boardRevision: state.identity.baseBoardRevision,
         displayed: false,
       };
+      this.observe("math.interpretation_ended", {
+        requestId,
+        disposition: "proposed",
+        proposal: batch,
+        id: this.pending.id,
+      });
       this.captured = { state: this.current!, turns, consumed: new Map(this.turns.map(t => [t.id, t.text.length])) };
       this.disposition = "pending-clarification";
       this.prepareFeedback("proposal");
     } catch {
-      if (generation !== this.generation || abort.signal.aborted) return;
+      const stale = generation !== this.generation || abort.signal.aborted;
+      this.observe("math.interpretation_ended", {
+        requestId,
+        disposition: stale ? "stale" : failure,
+      });
+      if (stale) return;
       this.disposition = "unavailable";
     } finally {
       if (generation === this.generation) {
@@ -250,6 +276,8 @@ export class MathController {
       this.captured?.state !== this.current
     )
       return false;
+    if (!this.pending.displayed)
+      this.observe("math.proposal_displayed", { id, boardRevision, token: this.feedback?.token ?? null });
     this.pending = { ...this.pending, displayed: true };
     this.changed();
     return true;
@@ -273,8 +301,10 @@ export class MathController {
       state?.status !== "active" ||
       operations.length !== pending.batch.actions.length ||
       operations.some(operation => !["differentiate", "rewrite", "unassessed"].includes(operation))
-    )
+    ) {
+      this.observe("math.confirmation_rejected", { id, boardRevision, operations });
       return false;
+    }
     // Stage contexts along with the ordered batch. A replacement transforms the
     // replaced attempt's INPUT, never the erroneous value it is correcting.
     // Undo restores the predecessor version and its retained role/base.
@@ -359,12 +389,22 @@ export class MathController {
       this.versionBases = bases;
       this.checks.push(...checks);
       this.consumed = captured.consumed;
+      this.observe("math.committed", {
+        id,
+        batch: pending.batch,
+        before: state,
+        after: this.current,
+        checks,
+        operations,
+      });
+      this.pending = null;
       this.invalidate();
       this.disposition = "committed";
       this.prepareFeedback("board");
       this.changed();
       return true;
     } catch {
+      this.observe("math.confirmation_rejected", { id, boardRevision, operations, reason: "application-rejected" });
       return false;
     }
   }

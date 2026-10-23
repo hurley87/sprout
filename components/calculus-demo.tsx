@@ -176,6 +176,11 @@ export default function CalculusDemo({ debug = false }: { debug?: boolean }) {
       {debug ? (
         <details>
           <summary>Session details</summary>
+          <p>
+            Export includes source words, proposal decisions, confirmation evidence and local timing. Missing
+            measurements remain null. Display callbacks approximate a paint opportunity; they do not prove physical
+            paint. Mathematical correctness and learner confirmation do not establish independent understanding.
+          </p>
           <button disabled={!snapshot} onClick={download}>
             Export session
           </button>

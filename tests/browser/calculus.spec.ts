@@ -9,6 +9,7 @@ import {
 } from "../../lib/calculus/math-interpretation-contract";
 import { getCalculusReviewKey } from "../../lib/calculus/problems";
 
+const productDictation = "my derivative is two x times sine x plus x squared times cosine x";
 const chainDictation =
   "my derivative is thirty x times open parenthesis three x squared plus one close parenthesis to the fourth power";
 const current = (page: Page) =>
@@ -36,7 +37,8 @@ async function setup(page: Page) {
     const expression = turn.text.includes("wrong derivative is seven")
       ? { op: "number", value: 7 }
       : (input.identity.problemId === "cubic-minus-linear" && turn.text.includes("three x squared minus four")) ||
-          (input.identity.problemId === "composite-fifth" && turn.text === chainDictation)
+          (input.identity.problemId === "composite-fifth" && turn.text === chainDictation) ||
+          (input.identity.problemId === "quadratic-sine" && turn.text === productDictation)
         ? getCalculusReviewKey(input.identity.problemId).finalForms[0]
         : null;
     const action = turn.text.includes("strategy")
@@ -276,4 +278,76 @@ test("debug export retains spoken confirmation identity, operation and transcrip
   await page.goto("/demos/calculus");
   await expect(page.getByText("Session details", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Export session" })).toHaveCount(0);
+});
+
+test("synthetic local WebRTC: fully dictated correct solutions export separate UI/spoken evidence and local timing", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const { say, pending } = await setup(page);
+  const dictations = ["my derivative is three x squared minus four", productDictation, chainDictation];
+  const problems = ["cubic-minus-linear", "quadratic-sine", "composite-fifth"];
+  for (let index = 0; index < dictations.length; index++) {
+    await say(dictations[index]);
+    await pending();
+    if (index === 1) await say("confirm differentiation");
+    else {
+      await page.getByRole("combobox").selectOption("differentiate");
+      await page.getByRole("button", { name: "Confirm displayed actions" }).click();
+    }
+    await expect.poll(async () => (await current(page))?.math?.current?.steps.length).toBe(1);
+    await expect.poll(async () => (await current(page))?.math?.feedback).toBeNull();
+    const evidence = (await current(page))!.math!.current!.history[0].evidence;
+    expect(evidence.assessment.correctness).toBe("valid");
+    expect(evidence.assessment.reasoning).toBe("unassessed");
+    expect(evidence.demonstratedIndependent).toBe(false);
+    if (index < 2) {
+      await ready(page, problems[index]);
+      await say("next");
+      await ready(page, problems[index + 1]);
+    }
+  }
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  await page.getByText("Session details", { exact: true }).click();
+  const downloading = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Export session", exact: true }).click();
+  const report = JSON.parse(await readFile((await (await downloading).path())!, "utf8"));
+  const diagnostics = report.mathDiagnostics;
+  expect(diagnostics.clock).toBe("browser.performance.now-relative-to-attempt");
+  expect(diagnostics.displayMeasurement).toContain("not physical paint");
+  expect(diagnostics.evaluation.falseCommitRate).toBeNull();
+  expect(diagnostics.requests).toHaveLength(3);
+  for (let index = 0; index < 3; index++) {
+    const request = diagnostics.requests[index];
+    expect(request.rawLearnerTurns.at(-1).text).toBe(dictations[index]);
+    expect(request.proposal.actions[0].sources[0].quote).toBe(dictations[index]);
+    expect(request.before.identity.baseBoardRevision).toBe(0);
+    expect(request.after.identity.baseBoardRevision).toBe(1);
+    expect(request.after.history).toHaveLength(1);
+    const timing = request.actions[0].timing;
+    expect(timing.sourceSpeechEndMs).toBeGreaterThan(0);
+    expect(timing.transcriptAvailableMs).toBeGreaterThan(0);
+    expect(timing.interpretationStartMs).toBeGreaterThanOrEqual(timing.sourceSpeechEndMs);
+    expect(timing.interpretationEndMs).toBeGreaterThanOrEqual(timing.interpretationStartMs);
+    expect(timing.proposalFirstDisplayedMs).toBeGreaterThanOrEqual(timing.interpretationEndMs);
+    expect(timing.authoritativeCommitMs).toBeGreaterThanOrEqual(timing.proposalFirstDisplayedMs);
+    expect(timing.committedBoardFirstDisplayedMs).toBeGreaterThanOrEqual(timing.authoritativeCommitMs);
+    expect(timing.tutorFeedbackAppendMs).toBeGreaterThanOrEqual(timing.committedBoardFirstDisplayedMs);
+    expect(timing.speechEndToProposalDisplayMs).toBe(timing.proposalFirstDisplayedMs - timing.sourceSpeechEndMs);
+    expect(timing.confirmationDelayMs).toBe(timing.authoritativeCommitMs - timing.proposalFirstDisplayedMs);
+    expect(timing.commitToBoardDisplayMs).toBe(timing.committedBoardFirstDisplayedMs - timing.authoritativeCommitMs);
+    expect(timing.tutorAudioCompletedMs).toBeNull();
+    expect(timing.tutorConversationCompletedMs).toBeNull();
+    const confirmation = request.confirmations.find((e: { detail: { accepted: boolean } }) => e.detail.accepted);
+    expect(confirmation.detail.method).toBe(index === 1 ? "spoken" : "ui");
+    expect(confirmation.detail.operations).toEqual(["differentiate"]);
+    expect(confirmation.detail.token).toMatch(/math-feedback/);
+    expect(confirmation.spokenEvidence === null).toBe(index !== 1);
+    if (index === 1) {
+      expect(confirmation.spokenEvidence.detail.text).toBe("confirm differentiation");
+      expect(confirmation.spokenEvidence.detail.localSpeechEndMs).toBeGreaterThan(timing.sourceSpeechEndMs);
+    }
+  }
+  expect(report.mathConfirmations).toHaveLength(1);
+  expect(JSON.stringify(report)).not.toMatch(/api_key|access_token|authorization|"sdp"/i);
 });
