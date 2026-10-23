@@ -164,3 +164,58 @@ it("adds durable calculus guidance while keeping noncalculus instruction branche
     expect(createLiveSessionConfig(lesson).instructions).not.toContain("executed mathematical step");
   }
 });
+
+it.each(["quadratic-sine", "composite-fifth"] as const)(
+  "fits the normal %s intermediate/final board and proposal into the transport budget",
+  id => {
+    const route = getCalculusReviewKey(id).routes[0];
+    let state = createMathState({
+      runtimeId: crypto.randomUUID(),
+      problemId: id,
+      visitId: "visit_3",
+      transcriptRevision: 4,
+      baseBoardRevision: 0,
+    });
+    for (const [index, step] of route.steps.entries()) {
+      const turn = { id: `turn_${index}`, speaker: "learner" as const, text: "my exact expression", order: index };
+      const batch = {
+        identity: state.identity,
+        actions: [
+          {
+            kind: "append",
+            expression: step.expression,
+            sources: [{ turnId: turn.id, start: 0, end: turn.text.length, quote: turn.text }],
+          },
+        ],
+      };
+      state = applyMathBatch(
+        state,
+        acceptMathBatch(state, `batch_${index}`, batch, {
+          turns: [turn],
+          reviews: [{ faithful: true, assessment, mathematicallyComplete: false, independenceEstablished: false }],
+        }),
+      );
+    }
+    expect(state.steps.length).toBeGreaterThanOrEqual(2);
+    const snapshot: MathControllerSnapshot = {
+      ...fixture(),
+      current: state,
+      feedback: { token: "feedback", target: "proposal", boardRevision: state.identity.baseBoardRevision },
+      pending: {
+        id: `${crypto.randomUUID()}_proposal_4`,
+        boardRevision: state.identity.baseBoardRevision,
+        displayed: true,
+        status: "awaiting-learner-confirmation",
+        batch: {
+          identity: state.identity,
+          actions: [{ kind: "append", expression: getCalculusReviewKey(id).finalForms[0], sources: [] }],
+        },
+      },
+    };
+    const instruction = calculusFeedbackInstruction(snapshot);
+    expect(instruction).not.toBeNull();
+    expect(new TextEncoder().encode(instruction!).length).toBeLessThanOrEqual(2000);
+    expect(instruction).toContain('"pending":');
+    expect(instruction).toContain('"derivative"');
+  },
+);

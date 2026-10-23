@@ -114,6 +114,20 @@ export class MathController {
     this.current = updateMathAuthority(this.current, { kind: "learner-revision", transcriptRevision: revision });
   }
 
+  /** Consumed confirmation text remains in the runtime transcript, never extraction.
+   * Advance authority only after acceptance; the accepted board gets fresh feedback. */
+  consumeTurns(turns: readonly MathLearnerTurn[]) {
+    this.consumed = new Map(turns.map(turn => [turn.id, turn.text.length]));
+  }
+
+  consumeConfirmation(revision: number, turns: readonly MathLearnerTurn[]) {
+    this.learnerRevision(revision, turns);
+    this.consumeTurns(turns);
+    this.disposition = "committed";
+    this.prepareFeedback("board");
+    this.changed();
+  }
+
   /** App-classified provenance only; never semantic evidence from tutor text.
    * Tutor-only events preserve learner authority, including in-flight extraction.
    */

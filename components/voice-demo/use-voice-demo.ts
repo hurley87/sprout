@@ -20,6 +20,19 @@ export function useVoiceDemo({
   const sceneRef = useRef<HTMLDivElement>(null);
   const runtime = useRef<LessonRuntime | null>(null);
   const [snapshot, setSnapshot] = useState<LessonSnapshot | null>(null);
+  const [readyQuietKey, setReadyQuietKey] = useState<string | null>(null);
+  const state = snapshot?.runtime;
+  const quietKey =
+    liveSnapshotReady(snapshot) && state?.quietSinceMs !== null
+      ? `${state?.runtimeId}:${state?.visitId}:${state?.quietSinceMs}`
+      : null;
+  const quietDrainMs = state?.quietDrainMs;
+  useEffect(() => {
+    if (!quietKey || quietDrainMs === undefined) return;
+    const timer = setTimeout(() => setReadyQuietKey(quietKey), quietDrainMs);
+    return () => clearTimeout(timer);
+  }, [quietKey, quietDrainMs]);
+  const supportReady = quietKey !== null && quietKey === readyQuietKey;
   const display = snapshot?.display;
   const live = snapshot !== null && snapshot.status !== "ended";
 
@@ -97,5 +110,35 @@ export function useVoiceDemo({
     runtime.current?.skipScene(scope);
   }
 
-  return { audio, sceneRef, snapshot, live, start, stop, download, support, skip };
+  return {
+    supportReady,
+    audio,
+    sceneRef,
+    snapshot,
+    live,
+    start,
+    stop,
+    download,
+    support,
+    skip,
+    proposalDisplayed: (id: string, revision: number) => runtime.current?.confirmMathProposalDisplayed(id, revision),
+    feedbackDisplayed: (token: string) => runtime.current?.confirmMathFeedbackDisplayed(token),
+    confirmProposal: (
+      id: string,
+      revision: number,
+      operations: readonly ("differentiate" | "rewrite" | "unassessed")[],
+    ) => runtime.current?.confirmMathProposal(id, revision, operations),
+  };
+}
+
+function liveSnapshotReady(snapshot: LessonSnapshot | null) {
+  const state = snapshot?.runtime;
+  return (
+    snapshot?.status === "live" &&
+    state?.phase === "active" &&
+    !snapshot.awaitingSteering &&
+    !state.childSpeaking &&
+    !state.childCandidate &&
+    state.outputActivity === "quiet"
+  );
 }

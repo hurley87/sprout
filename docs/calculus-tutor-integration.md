@@ -1,6 +1,6 @@
 # Calculus tutor display and confirmation contract
 
-Commit 7 extends the existing `session.instructions.append` path. It adds no
+Historical commit 7 contract: commit 7 extends the existing `session.instructions.append` path. It adds no
 transport, provider delegation, voice confirmation parser or public route.
 The conversation guidance follows [official GPT-Live prompting guidance](https://developers.openai.com/api/docs/guides/live-prompting)
 for focused clarification, interruptibility and application-owned confirmations.
@@ -86,3 +86,97 @@ Offline verification on base `2f43791ca98f1932faeac9f46f42030b6d2fde22`:
   Ignored historical artifacts in the working checkout were preserved; no project
   lint or TypeScript exclusions were changed to hide them.
 - `git diff --check` — pass. Browser/audio acceptance was not run for this commit.
+
+
+## Commit 9: public demo and bounded spoken confirmation
+
+`/demos/calculus` reuses the shared browser voice lifecycle and controls, with one
+current authored prompt, ordered read-only mathematical work and correction
+history. The initial scene display token is independent of proposal display and
+board feedback tokens. Only `?debug=1` shows session details and the transcript;
+a basic scrubbed JSON session export is available there, including after Stop. Confirmation
+is an explicit learner action, never a render callback or correctness judgment.
+
+Before local microphone onset is dispatched, the runtime reserves the exact
+already-displayed pending ID, board revision, visit and expected learner turn.
+Mutation stays disabled during microphone activity. Authenticated learner fragments
+must remain a prefix of the closed command grammar; other words revoke the
+reservation immediately and follow normal interpretation/navigation. At the local
+speech-end boundary the runtime checks the entire received learner turn, then
+accepts against the reserved identity **before** advancing mathematical learner
+revision. Discarded activity, textless turns, stale identity, Stop and visits revoke
+without inventing a revision. Tutor text never confirms. A fresh command cannot
+recover an undisplayed or already-revoked proposal.
+
+The grammar is case-insensitive, with an optional final period:
+
+- One action: `confirm differentiation`, `confirm rewrite`, or
+  `confirm without checking`.
+- Ordered batches: `action 1 confirm rewrite; action 2 confirm differentiation`
+  (one explicitly numbered command per action, separated by semicolons).
+- Bound: at most eight actions, 600 characters and eight seconds from microphone
+  onset through local speech end, including the local quiet window. Turns exceeding those
+  speech bounds or unreliable punctuation can use the per-action UI operation selectors and
+  **Confirm displayed actions** button.
+
+Generic yes, quotation marks, reported/negated/conditional commands, question
+marks, extra correction words and partial batches cannot accept. The UI rechecks
+the same current proposal/visit/revision authority and is disabled during speech
+or before the exact proposal has been displayed. Spoken confirmations retain their
+text, operations, fragment source/timing metadata, revision and reserved identity
+in the exported report. Consumed confirmations and accepted learner fragments are
+excluded from subsequent extraction, including after late tutor fragments change
+message grouping. Confirmation establishes intended notation/operation only;
+reasoning and independent understanding remain unassessed.
+
+Exact complete `help` and `repeat` learner turns use the existing support append
+path (with hint or neutral-probe provenance), waiting for observed quiet output.
+Direct `next`, `next problem`, and `skip this problem` use the authored navigation
+path, with its debounce/quiet gates. Quoted or negated navigation does not advance.
+Math-provider `next` proposals alone still cannot grant navigation authority.
+Wrong signs, replacements and undo originate in learner voice through
+`/api/math-action`; strategy-only and missing-operand actions add no equations.
+Natural completion says practice finished; early Stop retains the stopped board.
+
+Browser integration exposed that the prior verbose feedback exceeded the existing
+2,000-byte append ceiling. Feedback now uses lossless ordered expression tuples
+without importing the KaTeX renderer into the runtime, up to six current lines,
+the complete pending proposal and latest disposition. Initial session instructions
+already carry the full tutor guidance. Normal authored product-rule and chain-rule
+multi-line workflows have explicit budget regressions. Truly oversized context
+abstains without truncating a proposal or equation; correlated feedback rejection
+cannot undo work or terminate the voice session.
+
+The provider has no input-turn completion event. The adapter defines a complete
+bounded turn using existing local VAD speech end and requires its transcript to
+have arrived by that boundary. Late recognition cannot recover the reservation;
+post-boundary amendments are ordinary new evidence and cannot retroactively prove
+fidelity of an already accepted command. Real recognition fidelity, spoken tutor
+compliance and transcript latency remain unverified. No paid provider calls were
+made; the previously invalidated credential returned 401. All browser evidence
+uses labelled deterministic math responses, synthetic microphone audio and local
+WebRTC transport. Commit 10 diagnostics/regression work and real microphone
+acceptance remain separate.
+
+
+Streaming tutor deltas are coalesced into contiguous messages before extraction.
+Only the most recent sixteen nonempty tutor messages are included, each bounded
+to 2,000 characters; an explicit omission marker precedes a retained recent suffix
+when earlier context is omitted. This changes assistance context only, never exact
+learner sources. A regression covers 24 small tutor deltas followed by another
+learner step, and another covers an oversized tutor message.
+
+Commit 9 verification (base `6372c31abe7eafc0ce0c6eabacac6f69e750ae35`):
+
+- Focused calculus, math endpoint, scheduling, MAE386 navigation and browser
+  transport units: 371 passed; one explicit live-provider replay skipped, 14 files.
+- Calculus plus MAE386 browser suites: 12 passed with `--workers=1`.
+- Final calculus-only browser rerun, including dictated chain-rule fixture and
+  confirmation export provenance: seven passed with `--workers=1`.
+- Scoped ESLint and clean-source `npm run typecheck` / `npm run lint`: pass.
+  Clean-source checks use tracked source plus this change and installed
+  dependencies. Existing ignored historical TypeScript artifacts were preserved;
+  project exclusions were not changed to conceal them.
+- Route inspected in the app browser. Desktop and 390px-wide full-page proposal
+  screenshots retained locally under `.sprout-evidence/issue80-commit9/`.
+- `git diff --check`: pass. The full browser/build gate belongs to commit 10.

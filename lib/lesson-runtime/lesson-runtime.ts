@@ -1,3 +1,9 @@
+import { INTERPRETATION_LIMITS } from "../calculus/math-interpretation-contract";
+import {
+  isSpokenMathConfirmationPrefix,
+  parseSpokenMathConfirmation,
+  type MathOperation,
+} from "../calculus/spoken-confirmation";
 import { calculusFeedbackInstruction } from "../calculus/tutor-context";
 import type { MathSourceEvent } from "../calculus/math-evidence";
 import { MathController, type MathControllerSnapshot } from "../calculus/math-controller";
@@ -101,6 +107,26 @@ export class LessonRuntime {
   private readonly createdAt = performance.now();
   private readonly transport: BrowserTransport;
   private readonly math?: MathController;
+  private mathReservation?: {
+    id: string;
+    boardRevision: number;
+    visitId: number;
+    turnId: number;
+    startedAt: number;
+    fragmentFloor: number;
+  };
+  private mathConfirmations: {
+    id: string;
+    boardRevision: number;
+    visitId: number;
+    turnId: number;
+    text: string;
+    revision: number;
+    fragments: Fragment[];
+    operations: MathOperation[];
+  }[] = [];
+  private deferredMathTurns: Parameters<MathController["learnerRevision"]>[1] = [];
+  private consumedMathFragments = new Set<number>();
   private mathTimer?: ReturnType<typeof setTimeout>;
   private playbackOrigin?: { generation: number; origin: TrackingOrigin };
   private state: LessonRuntimeState | null = null;
@@ -412,6 +438,7 @@ export class LessonRuntime {
               event.type === "scene.skipped" || before.navigationIntent?.action === "skip" ? "skipped" : "completed";
             if (isCalculusProblemId(this.state.nodeId)) this.math.enter(this.state.nodeId, this.state.visitId, outcome);
             else this.math.finish(outcome);
+            this.mathReservation = undefined;
           }
           this.supersedeMissingAnswerCheck();
           this.cancelClassification("node_visit_changed");
@@ -501,7 +528,19 @@ export class LessonRuntime {
         if (this.status !== "live") return;
         this.log(event.type);
         clearTimeout(this.mathTimer);
-        this.math?.invalidate();
+        if (!this.state.childSpeaking && !this.mathReservation) {
+          const pending = this.math?.snapshot().pending;
+          if (pending?.displayed && !this.steering && this.state.phase === "active")
+            this.mathReservation = {
+              id: pending.id,
+              boardRevision: pending.boardRevision,
+              visitId: this.state.visitId,
+              turnId: this.state.childTurnId + 1,
+              startedAt: this.now(),
+              fragmentFloor: this.order,
+            };
+          else this.math?.invalidate();
+        }
         if (!this.state.childSpeaking) {
           if (
             event.type === "microphone.speech_started" ||
@@ -565,6 +604,7 @@ export class LessonRuntime {
             else if (!this.lessonDefinition.conversationFirst || !this.requestedNavigation())
               this.answerRecovery.arm(this.state, !this.steering);
           }
+          this.finishMathConfirmation(event.type === "microphone.speech_stopped");
           this.scheduleClassification(event.type);
         }
         return;
@@ -652,6 +692,10 @@ export class LessonRuntime {
       }
       case "provider.error":
         this.log("gpt_live.error", { code: event.code, clientEventId: event.clientEventId });
+        if (event.clientEventId?.startsWith(`${this.runtimeId}:math:`)) {
+          this.log("gpt_live.math_feedback_failed", { eventId: event.clientEventId });
+          return;
+        }
         this.fail("GPT-Live reported an error. Export diagnostics and start a fresh attempt.");
         return;
       case "session.closed":
@@ -754,6 +798,10 @@ export class LessonRuntime {
       const turns: { id: string; speaker: "learner"; text: string; order: number }[] = [];
       let previous: Fragment | undefined;
       for (const item of this.fragments) {
+        if (this.consumedMathFragments.has(item.order)) {
+          previous = undefined;
+          continue;
+        }
         if (item.event.speaker === "child") {
           if (previous?.event.speaker === "child" && previous.source.childTurnId === item.source.childTurnId) {
             turns[turns.length - 1].text += item.event.delta;
@@ -768,7 +816,16 @@ export class LessonRuntime {
         }
         previous = item;
       }
-      this.math.learnerRevision(this.revision, turns);
+      this.deferredMathTurns = turns;
+      if (
+        this.mathReservation &&
+        !isSpokenMathConfirmationPrefix(
+          this.currentMathLearnerText(),
+          this.math.snapshot().pending?.batch.actions.length ?? 0,
+        )
+      )
+        this.mathReservation = undefined;
+      if (!this.mathReservation) this.math.learnerRevision(this.revision, turns);
     }
     this.log(
       "transcript.snapshot",
@@ -838,6 +895,46 @@ export class LessonRuntime {
       : learnerNavigationIntent(this.transcript);
   }
 
+  private finishMathConfirmation(ended: boolean) {
+    const reserved = this.mathReservation;
+    if (!reserved || !this.math || !this.state) return;
+    this.mathReservation = undefined;
+    const pending = this.math.snapshot().pending;
+    const fragments = this.fragments.filter(
+      item =>
+        item.event.speaker === "child" &&
+        item.source.childTurnId === this.state!.childTurnId &&
+        item.order > reserved.fragmentFloor,
+    );
+    const text = fragments.map(item => item.event.delta).join("");
+    const operations = pending ? parseSpokenMathConfirmation(text, pending.batch.actions.length) : null;
+    if (
+      ended &&
+      this.now() - reserved.startedAt <= 8000 &&
+      this.state.visitId === reserved.visitId &&
+      this.state.childTurnId === reserved.turnId &&
+      fragments.length > 0 &&
+      operations &&
+      this.confirmMathProposal(reserved.id, reserved.boardRevision, operations)
+    ) {
+      this.mathConfirmations.push({
+        ...reserved,
+        text,
+        revision: this.revision,
+        fragments: structuredClone(fragments),
+        operations,
+      });
+      this.log("math.spoken_confirmation", { ...reserved, text, revision: this.revision });
+      this.math.consumeConfirmation(this.revision, this.deferredMathTurns);
+    } else {
+      const revision = this.math.snapshot().current?.identity.transcriptRevision;
+      if (revision !== undefined && this.revision > revision)
+        this.math.learnerRevision(this.revision, this.deferredMathTurns);
+      else this.math.invalidate();
+      this.publish();
+    }
+  }
+
   private currentMathLearnerText() {
     return this.fragments
       .filter(item => item.event.speaker === "child" && item.source.childTurnId === this.state?.childTurnId)
@@ -863,6 +960,24 @@ export class LessonRuntime {
         this.stop("learner_stop");
         return;
       }
+      const support = /^(help|repeat)[.!]?$/i.exec(text.trim())?.[1]?.toLowerCase() as "help" | "repeat" | undefined;
+      if (support) {
+        if (
+          this.supportRequestedAt?.visitId === this.state.visitId &&
+          this.supportRequestedAt.revision === this.state.transcriptRevision
+        )
+          return;
+        const source = { ...runtimeSource(this.state), transcriptRevision: this.state.transcriptRevision };
+        this.math.consumeTurns(this.deferredMathTurns);
+        this.consumeMathFragments();
+        this.performSupport(support, true);
+        if (!this.steering)
+          this.mathTimer = setTimeout(() => {
+            if (this.state?.visitId === source.visitId && this.state.transcriptRevision === source.transcriptRevision)
+              this.scheduleClassification("spoken_support_quiet");
+          }, LESSON_TIMING.childSnapshotDebounceMs);
+        return;
+      }
       if (this.requestedNavigation()) this.math.invalidate();
       else {
         const visitId = this.state.visitId;
@@ -876,9 +991,28 @@ export class LessonRuntime {
             this.state.childCandidate
           )
             return;
-          const tutorContext = this.fragments
-            .filter(item => item.event.speaker === "sprout")
-            .map(item => ({ id: `tutor_${item.order}`, text: item.event.delta }));
+          const messages: { id: string; text: string }[] = [];
+          let previousTutor = false;
+          for (const item of this.fragments) {
+            if (item.event.speaker === "sprout") {
+              if (previousTutor) messages[messages.length - 1].text += item.event.delta;
+              else messages.push({ id: `tutor_${item.order}`, text: item.event.delta });
+            }
+            previousTutor = item.event.speaker === "sprout";
+          }
+          // Tutor context is untrusted assistance, never learner source authority.
+          // Keep bounded recent messages rather than treating streaming deltas as turns.
+          const marker = "[Earlier tutor context omitted; recent suffix follows] ";
+          const tutorContext = messages
+            .filter(message => message.text.trim())
+            .slice(-INTERPRETATION_LIMITS.turns)
+            .map((message, index, recent) => ({
+              ...message,
+              text:
+                message.text.length > INTERPRETATION_LIMITS.text || (index === 0 && messages.length > recent.length)
+                  ? marker + message.text.slice(-(INTERPRETATION_LIMITS.text - marker.length))
+                  : message.text,
+            }));
           void this.math?.extract(tutorContext);
         }, LESSON_TIMING.childSnapshotDebounceMs);
         return;
@@ -1253,6 +1387,10 @@ export class LessonRuntime {
 
   /** UI support is app context, never fabricated learner transcript or assessment evidence. */
   requestSupport(request: "help" | "repeat") {
+    this.performSupport(request);
+  }
+
+  private performSupport(request: "help" | "repeat", spoken = false) {
     if (
       !this.state ||
       (!this.lessonDefinition.questionGroups && !this.math) ||
@@ -1264,8 +1402,7 @@ export class LessonRuntime {
       this.state.childCandidate ||
       this.steering ||
       this.state.outputActivity !== "quiet" ||
-      this.state.quietSinceMs === null ||
-      this.now() - this.state.quietSinceMs < this.state.quietDrainMs
+      (!spoken && (this.state.quietSinceMs === null || this.now() - this.state.quietSinceMs < this.state.quietDrainMs))
     )
       return;
     this.supportRequestedAt = { visitId: this.state.visitId, revision: this.state.transcriptRevision };
@@ -1273,6 +1410,7 @@ export class LessonRuntime {
     this.cancelClassification("learner_support_requested");
     this.answerRecovery.cancel("learner_support_requested");
     this.log("learner.support_requested", { request });
+    this.mathReservation = undefined;
     this.math?.invalidate();
     const sent = this.appendSteering(
       currentNodeContext(this.lessonDefinition, this.state.nodeId),
@@ -1309,6 +1447,7 @@ export class LessonRuntime {
       this.now() - this.state.quietSinceMs < this.state.quietDrainMs
     )
       return;
+    this.mathReservation = undefined;
     this.math?.invalidate();
     clearTimeout(this.mathTimer);
     const source = runtimeSource(this.state);
@@ -1421,6 +1560,7 @@ export class LessonRuntime {
         sceneId: currentNodeContext(this.lessonDefinition, this.state.nodeId).scene.id,
       };
     }
+    this.mathReservation = undefined;
     this.status = "ended";
     this.log("lesson.ended", { reason, runtime: this.state });
     // Request provider close when possible, then release all local resources immediately.
@@ -1487,20 +1627,12 @@ export class LessonRuntime {
     return this.math.recordSourceEvent({ id: `app_${order}`, order, kind, text });
   }
 
-  /** Explicit learner confirmation control; never invoke automatically from rendering.
-   * Voice confirmation is a later integration: it must capture the displayed token
-   * before speech and authenticate a bounded confirmation turn before superseding
-   * its learner revision. Ordinary speech currently revokes this token immediately.
-   * Integration sequence for commits 7/9: display pending.batch and its exact id +
-   * boardRevision; confirmMathProposalDisplayed after the provisional display commits;
-   * request an explicit learner confirmation, including each operation. A future
-   * spoken-confirmation adapter must reserve that displayed token BEFORE onset,
-   * suspend mutation while speaking, authenticate a bounded confirmation-only turn
-   * before learnerRevision(), then record that fresh confirmation and invoke this
-   * acceptance path. Any other words/correction must revoke the reservation. Merely
-   * calling this API after an ordinary "yes" turn cannot work (and must not bypass
-   * freshness). This commit exposes the direct confirmation-control path only.
-   */
+  private consumeMathFragments() {
+    for (const fragment of this.fragments)
+      if (fragment.event.speaker === "child") this.consumedMathFragments.add(fragment.order);
+  }
+
+  /** Explicit UI or authenticated bounded learner-turn confirmation only. */
   confirmMathProposal(
     id: string,
     boardRevision: number,
@@ -1511,15 +1643,18 @@ export class LessonRuntime {
       this.state?.phase !== "active" ||
       this.state.childSpeaking ||
       this.state.childCandidate ||
+      this.mathReservation ||
       this.steering
     )
       return false;
-    return this.math?.confirm(id, boardRevision, operations) === true;
+    const accepted = this.math?.confirm(id, boardRevision, operations) === true;
+    if (accepted) this.consumeMathFragments();
+    return accepted;
   }
 
   report() {
     const report = {
-      ...(this.math ? { math: this.math.snapshot() } : {}),
+      ...(this.math ? { math: this.math.snapshot(), mathConfirmations: this.mathConfirmations } : {}),
       ...this.journal.report({
         timing: LESSON_TIMING,
         runtime: this.state,

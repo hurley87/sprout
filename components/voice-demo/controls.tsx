@@ -11,7 +11,9 @@ export function VoiceDemoControls({
   startLabel,
   restartLabel,
   classNames,
+  showDownload = true,
 }: {
+  showDownload?: boolean;
   snapshot: LessonSnapshot | null;
   live: boolean;
   completed: boolean;
@@ -30,9 +32,11 @@ export function VoiceDemoControls({
         </button>
       )}
       {snapshot?.status === "ended" ? (
-        <button className={classNames.button} onClick={download}>
-          Download diagnostics
-        </button>
+        showDownload ? (
+          <button className={classNames.button} onClick={download}>
+            Download diagnostics
+          </button>
+        ) : null
       ) : (
         !completed && (
           <button className={classNames.button} disabled={!live} onClick={stop}>

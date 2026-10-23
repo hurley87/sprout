@@ -1,0 +1,92 @@
+.page {
+  max-width: 1200px;
+  margin: auto;
+  padding: clamp(16px, 4vw, 48px);
+  color: #172c33;
+}
+.page h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 8px 0;
+}
+.page h2 {
+  font-size: 1.35rem;
+  font-weight: 600;
+  margin: 12px 0;
+}
+.page p {
+  margin: 12px 0;
+  line-height: 1.6;
+}
+.layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr);
+  gap: 24px;
+  margin: 24px 0;
+  align-items: start;
+}
+.prompt,
+.confirmation {
+  background: #f1f7f4;
+  padding: 20px;
+  border: 1px solid #b8cec2;
+  border-radius: 12px;
+}
+.work {
+  min-width: 0;
+}
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 16px 0;
+}
+.page button,
+.page select {
+  border: 1px solid #557569;
+  border-radius: 6px;
+  padding: 10px 14px;
+  background: white;
+  color: #172c33;
+  min-height: 44px;
+}
+.page button:disabled,
+.page fieldset:disabled {
+  opacity: 0.55;
+}
+.page button:enabled {
+  cursor: pointer;
+}
+.page button:focus-visible,
+.page select:focus-visible {
+  outline: 3px solid #147154;
+  outline-offset: 3px;
+}
+.page .start {
+  background: #205c48;
+  color: white;
+}
+.confirmation {
+  margin-top: 16px;
+}
+.confirmation label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0;
+}
+.page pre {
+  max-height: 480px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 720px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .confirmation select {
+    max-width: 100%;
+  }
+}

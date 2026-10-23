@@ -1,3 +1,5 @@
+import type { MathExpression } from "../lib/calculus/math-expression";
+import { compactMathExpression } from "../lib/calculus/tutor-context";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ClientCommand, ProviderEvent } from "../lib/events";
 import { LessonRuntime, type LessonSnapshot } from "../lib/lesson-runtime/lesson-runtime";
@@ -27,7 +29,7 @@ const events = providerEvents(emit);
 let time = 100;
 let requests: { input: MathInterpretationInput; signal: AbortSignal; resolve: (body: unknown) => void }[];
 const correct = getCalculusReviewKey("cubic-minus-linear").finalForms[0];
-const wrong = {
+const wrong: MathExpression = {
   op: "add",
   args: [
     {
@@ -539,7 +541,7 @@ it("sends exact proposal context only after matching display, and board feedback
   expect(proposalFeedback).toMatchObject({ type: "session.instructions.append", delegation_id: null });
   if (proposalFeedback.type !== "session.instructions.append") throw new Error("Missing append");
   expect(proposalFeedback.content).toContain(proposal.id);
-  expect(proposalFeedback.content).toContain(JSON.stringify(wrong));
+  expect(proposalFeedback.content).toContain(JSON.stringify(compactMathExpression(wrong)));
   expect(proposalFeedback.content).toContain("EXACT displayed proposal");
   expect(feedbackCommands()).toHaveLength(1);
   expect(runtime.snapshot().math!.current!.steps).toHaveLength(1);
@@ -732,4 +734,219 @@ it("does not invent issued help when its support append fails", async () => {
   });
   runtime.requestSupport("help");
   expect(runtime.snapshot().math!.current!.sourceEvents).toEqual([]);
+});
+
+it("reserves the displayed proposal before onset, accepts only at turn end, and consumes confirmation words", async () => {
+  start();
+  await learner("three x squared minus four");
+  await respond([action("append", { expression: correct })]);
+  const pending = runtime.snapshot().math!.pending!;
+  runtime.confirmMathProposalDisplayed(pending.id, pending.boardRevision);
+  emit({ type: "microphone.activity_started" });
+  expect(runtime.confirmMathProposal(pending.id, pending.boardRevision, ["differentiate"])).toBe(false);
+  emit({ type: "transcript", speaker: "child", delta: "confirm differentiation", startMs: time, endMs: time + 100 });
+  expect(runtime.snapshot().math!.current!.steps).toHaveLength(0);
+  emit({ type: "microphone.speech_stopped", quietMs: 900 });
+  expect(runtime.snapshot().math!.current!.steps).toHaveLength(1);
+  expect(runtime.report().mathConfirmations?.[0]).toMatchObject({ id: pending.id, text: "confirm differentiation" });
+  time += 200;
+  await vi.advanceTimersByTimeAsync(400);
+  expect(requests).toHaveLength(1);
+  await learner("replace that with three x squared plus four");
+  expect(requests[1].input.learnerTurns.map(turn => turn.text)).toEqual([
+    "replace that with three x squared plus four",
+  ]);
+});
+
+it.each([
+  "yes",
+  "do not confirm differentiation",
+  "confirm differentiation but change four",
+  'She said "confirm differentiation"',
+  "if correct confirm differentiation",
+])("revokes reservation for ordinary or ineligible words: %s", async text => {
+  start();
+  await learner("three x squared minus four");
+  await respond([action("append", { expression: correct })]);
+  const pending = runtime.snapshot().math!.pending!;
+  runtime.confirmMathProposalDisplayed(pending.id, pending.boardRevision);
+  await learner(text);
+  expect(runtime.snapshot().math!.current!.steps).toHaveLength(0);
+  expect(runtime.confirmMathProposal(pending.id, pending.boardRevision, ["differentiate"])).toBe(false);
+  expect(requests).toHaveLength(2);
+});
+
+it("cannot confirm a stale, undelivered, overlong, or stopped proposal", async () => {
+  start();
+  await learner("three x squared minus four");
+  await respond([action("append", { expression: correct })]);
+  await learner("confirm differentiation");
+  expect(runtime.snapshot().math!.current!.steps).toHaveLength(0);
+  await respond([action("append", { expression: correct })]);
+  let pending = runtime.snapshot().math!.pending!;
+  runtime.confirmMathProposalDisplayed(pending.id, pending.boardRevision);
+  emit({ type: "microphone.activity_started" });
+  emit({ type: "transcript", speaker: "child", delta: "confirm differentiation", startMs: time, endMs: time + 100 });
+  await vi.advanceTimersByTimeAsync(8001);
+  emit({ type: "microphone.speech_stopped", quietMs: 900 });
+  expect(runtime.snapshot().math!.current!.steps).toHaveLength(0);
+  await vi.advanceTimersByTimeAsync(301);
+  await respond([action("append", { expression: correct })]);
+  pending = runtime.snapshot().math!.pending!;
+  runtime.confirmMathProposalDisplayed(pending.id, pending.boardRevision);
+  emit({ type: "microphone.activity_started" });
+  runtime.stop();
+  emit({
+    type: "transcript",
+    speaker: "child",
+    delta: "confirm differentiation",
+    startMs: time + 200,
+    endMs: time + 300,
+  });
+  emit({ type: "microphone.speech_stopped", quietMs: 900 });
+  expect(runtime.snapshot().math!.current!.steps).toHaveLength(0);
+});
+
+it.each(["help", "repeat"] as const)(
+  "routes exact spoken %s through app support once, with consumed words",
+  async request => {
+    start();
+    emit({ type: "output.activity", state: "active" });
+    emit({ type: "output.activity", state: "quiet" });
+    await vi.advanceTimersByTimeAsync(600);
+    const before = transport.send.mock.calls.length;
+    await learner(request);
+    expect(transport.send.mock.calls).toHaveLength(before + 1);
+    expect(transport.send.mock.calls.at(-1)![0].event_id).toContain(":support:");
+    const command = transport.send.mock.calls.at(-1)![0];
+    events.acknowledgeSteering(command.event_id, 0);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(transport.send.mock.calls).toHaveLength(before + 1);
+    expect(requests).toHaveLength(0);
+    expect(runtime.snapshot().math!.current!.sourceEvents.at(-1)?.kind).toBe(
+      request === "help" ? "hint" : "neutral-probe",
+    );
+    await learner("my next derivative");
+    expect(requests[0].input.learnerTurns.map(t => t.text)).toEqual(["my next derivative"]);
+  },
+);
+
+it("does not treat quoted or negated support/navigation as a command", async () => {
+  start();
+  for (const text of ['she said "repeat"', "do not help", 'she said "next"', "do not skip this problem"]) {
+    await learner(text);
+    expect(runtime.snapshot().runtime!.nodeId).toBe("cubic-minus-linear");
+  }
+  expect(transport.send.mock.calls).toHaveLength(1);
+  expect(requests).toHaveLength(4);
+});
+
+it("authenticates a whole ordered mixed batch and never a tutor confirmation", async () => {
+  start();
+  await learner("rewrite the function then differentiate it");
+  const expression = getCalculusReviewKey("cubic-minus-linear").routes[0].steps[0].expression;
+  const turn = requests.at(-1)!.input.learnerTurns.at(-1)!;
+  await respond([
+    { kind: "append", expression, sources: [{ turnId: turn.id, quote: "rewrite the function" }] },
+    { kind: "append", expression: correct, sources: [{ turnId: turn.id, quote: "differentiate it" }] },
+  ]);
+  const pending = runtime.snapshot().math!.pending!;
+  runtime.confirmMathProposalDisplayed(pending.id, pending.boardRevision);
+  events.tutorTurn("confirm differentiation", time);
+  time += 200;
+  expect(runtime.snapshot().math!.current!.steps).toHaveLength(0);
+  await learner("action 1 confirm rewrite; action 2 confirm differentiation");
+  expect(runtime.snapshot().math!.current!.steps).toHaveLength(2);
+  expect(runtime.snapshot().math!.checks.map(check => check.operation)).toEqual(["rewrite", "differentiate"]);
+});
+
+it.each(["microphone.activity_discarded", "microphone.speech_stopped"] as const)(
+  "revokes a displayed proposal on %s without new words or a fabricated revision",
+  async type => {
+    start();
+    await learner("three x squared minus four");
+    await respond([action("append", { expression: correct })]);
+    const pending = runtime.snapshot().math!.pending!;
+    runtime.confirmMathProposalDisplayed(pending.id, pending.boardRevision);
+    const revision = runtime.snapshot().math!.current!.identity.transcriptRevision;
+    emit({ type: "microphone.activity_started" });
+    expect(() => emit(type === "microphone.speech_stopped" ? { type, quietMs: 900 } : { type })).not.toThrow();
+    expect(runtime.snapshot().math!.current!.identity.transcriptRevision).toBe(revision);
+    expect(runtime.snapshot().math!.current!.steps).toHaveLength(0);
+    expect(runtime.snapshot().math!.pending).toBeNull();
+  },
+);
+
+it("revokes reservation immediately when a later fragment adds correction words", async () => {
+  start();
+  await learner("three x squared minus four");
+  await respond([action("append", { expression: correct })]);
+  const pending = runtime.snapshot().math!.pending!;
+  runtime.confirmMathProposalDisplayed(pending.id, pending.boardRevision);
+  emit({ type: "microphone.activity_started" });
+  emit({ type: "transcript", speaker: "child", delta: "confirm differentiation", startMs: time, endMs: time + 100 });
+  emit({ type: "transcript", speaker: "child", delta: " except change four", startMs: time + 100, endMs: time + 200 });
+  expect(runtime.snapshot().math!.pending).toBeNull();
+  emit({ type: "microphone.speech_stopped", quietMs: 900 });
+  expect(runtime.snapshot().math!.current!.steps).toHaveLength(0);
+});
+
+it("does not replay accepted fragments after a late tutor fragment changes turn grouping", async () => {
+  start();
+  emit({ type: "microphone.activity_started" });
+  emit({ type: "transcript", speaker: "child", delta: "three x squared ", startMs: 100, endMs: 150 });
+  emit({ type: "transcript", speaker: "child", delta: "minus four", startMs: 200, endMs: 250 });
+  emit({ type: "microphone.speech_stopped", quietMs: 900 });
+  await vi.advanceTimersByTimeAsync(301);
+  await respond([action("append", { expression: correct })]);
+  confirm();
+  events.tutorTurn("Tell me about that step", 175);
+  time = 500;
+  await learner("my correction");
+  expect(requests.at(-1)!.input.learnerTurns.map(turn => turn.text)).toEqual(["my correction"]);
+});
+
+it("a correlated provider feedback error cannot end the session or undo accepted work", async () => {
+  start();
+  await learner("three x squared minus four");
+  await respond([action("append", { expression: correct })]);
+  confirm();
+  confirmBoard();
+  emit({ type: "provider.error", code: "invalid_value", clientEventId: feedbackCommands().at(-1)!.event_id });
+  expect(runtime.snapshot().status).toBe("live");
+  expect(runtime.snapshot().math!.current!.steps).toHaveLength(1);
+});
+
+it("coalesces more than sixteen streaming tutor deltas before the next math extraction", async () => {
+  start();
+  await learner("three x squared minus four");
+  await respond([action("append", { expression: correct })]);
+  confirm();
+  for (let index = 0; index < 24; index++) {
+    emit({
+      type: "transcript",
+      speaker: "sprout",
+      delta: `tutor fragment ${index}. `,
+      startMs: time,
+      endMs: time + 100,
+    });
+    time += 110;
+  }
+  await learner("my next step");
+  expect(requests).toHaveLength(2);
+  expect(requests[1].input.tutorContext).toHaveLength(1);
+  expect(requests[1].input.tutorContext[0].text).toContain("tutor fragment 0.");
+  expect(requests[1].input.tutorContext[0].text).toContain("tutor fragment 23.");
+  expect(requests[1].input.learnerTurns.map(turn => turn.text)).toEqual(["my next step"]);
+});
+
+it("marks omitted long tutor context and retains its bounded recent suffix", async () => {
+  start();
+  events.tutorTurn("earlier ".repeat(300) + "latest help", time);
+  time += 200;
+  await learner("my next step");
+  const context = requests[0].input.tutorContext[0].text;
+  expect(context).toHaveLength(2000);
+  expect(context).toMatch(/^\[Earlier tutor context omitted/);
+  expect(context).toMatch(/latest help$/);
 });
