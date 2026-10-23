@@ -511,3 +511,225 @@ it("replacement checks its retained input and undo restores role and context for
   expect(runtime.snapshot().math!.checks[2].base).toEqual({ expression: wrong, role: "derivative" });
   expect(runtime.snapshot().math!.checks[2].result!.transformationCorrectness).toBe("incorrect");
 });
+
+function feedbackCommands() {
+  return transport.send.mock.calls
+    .map(([command]) => command)
+    .filter(command => command.type === "session.instructions.append" && command.event_id.includes(":math:"));
+}
+function confirmBoard() {
+  const feedback = runtime.snapshot().math!.feedback!;
+  expect(feedback.target).toBe("board");
+  expect(runtime.confirmMathFeedbackDisplayed(feedback.token)).toBe(true);
+  return feedback.token;
+}
+
+it("sends exact proposal context only after matching display, and board feedback only after its own display", async () => {
+  start();
+  await learner("three x squared plus four");
+  await respond([action("append", { expression: wrong })]);
+  const proposal = runtime.snapshot().math!.pending!;
+  const proposalToken = runtime.snapshot().math!.feedback!.token;
+  expect(feedbackCommands()).toEqual([]);
+  expect(runtime.confirmMathFeedbackDisplayed(proposalToken)).toBe(false);
+  expect(runtime.confirmMathProposalDisplayed(proposal.id, 99)).toBe(false);
+  expect(feedbackCommands()).toEqual([]);
+  confirm();
+  const proposalFeedback = feedbackCommands()[0];
+  expect(proposalFeedback).toMatchObject({ type: "session.instructions.append", delegation_id: null });
+  if (proposalFeedback.type !== "session.instructions.append") throw new Error("Missing append");
+  expect(proposalFeedback.content).toContain(proposal.id);
+  expect(proposalFeedback.content).toContain(JSON.stringify(wrong));
+  expect(proposalFeedback.content).toContain("EXACT displayed proposal");
+  expect(feedbackCommands()).toHaveLength(1);
+  expect(runtime.snapshot().math!.current!.steps).toHaveLength(1);
+  expect(runtime.snapshot().awaitingSteering).toBe(false);
+  emit({ type: "output.activity", state: "active" });
+  const boardToken = confirmBoard();
+  expect(feedbackCommands()).toHaveLength(2);
+  const boardFeedback = feedbackCommands()[1];
+  if (boardFeedback.type !== "session.instructions.append") throw new Error("Missing append");
+  expect(boardFeedback.content).toContain('"correctness":"incorrect"');
+  expect(boardFeedback.content).toContain("do not give its replacement");
+  expect(runtime.confirmMathFeedbackDisplayed(boardToken)).toBe(false);
+  expect(runtime.confirmMathFeedbackDisplayed(proposalToken)).toBe(false);
+  // No acknowledgment has arrived. A correction must still commit immediately.
+  await learner("Replace that with three x squared minus four");
+  await respond([action("replace", { targetStepId: "s1", expression: correct })]);
+  confirm();
+  expect(publications.at(-1)!.math!.current!.steps[0].currentVersionId).toBe("s1v2");
+  expect(publications.at(-1)!.runtime!.outputActivity).toBe("active");
+});
+
+it.each(["speech", "correction", "board", "visit", "stop"])(
+  "suppresses unshown feedback superseded by %s",
+  async race => {
+    start();
+    await learner("three x squared plus four");
+    await respond([action("append", { expression: wrong })]);
+    confirm();
+    const token = runtime.snapshot().math!.feedback!.token;
+    const before = feedbackCommands().length;
+    if (race === "speech") emit({ type: "microphone.speech_started" });
+    if (race === "correction" || race === "board") {
+      await learner("Replace that with three x squared minus four");
+      if (race === "board") {
+        await respond([action("replace", { targetStepId: "s1", expression: correct })]);
+        confirm();
+      }
+    }
+    if (race === "visit") {
+      emit({ type: "output.activity", state: "quiet" });
+      await vi.advanceTimersByTimeAsync(600);
+      runtime.skipScene();
+      runtime.confirmRendered(runtime.snapshot().display);
+      events.acknowledgeSteering(transport.send.mock.calls.at(-1)![0].event_id, 1000);
+    }
+    if (race === "stop") runtime.stop();
+    const after = feedbackCommands().length;
+    expect(after).toBe(before + (race === "board" ? 1 : 0));
+    expect(runtime.confirmMathFeedbackDisplayed(token)).toBe(false);
+    expect(feedbackCommands()).toHaveLength(after);
+  },
+);
+
+it.each(["hint", "unknown-help"] as const)(
+  "retains %s provenance across in-flight extraction and subsequent correction",
+  async kind => {
+    start();
+    expect(runtime.recordMathSourceEvent(kind, "App-retained help before the first learner turn")).toBe(true);
+    await learner("three x squared plus four");
+    // Tutor-only updates must not revoke extraction or establish learner evidence.
+    events.tutorTurn("Try checking that step. Great effort.", 350);
+    expect(requests[0].signal.aborted).toBe(false);
+    await respond([action("append", { expression: wrong })]);
+    confirm();
+    await learner("Replace it with three x squared minus four");
+    await respond([action("replace", { targetStepId: "s1", expression: correct })]);
+    confirm();
+    const state = runtime.snapshot().math!.current!;
+    expect(state.history.map(entry => entry.evidence.assessment.assistance)).toEqual(
+      kind === "hint" ? ["hinted", "hinted"] : ["unknown", "unknown"],
+    );
+    expect(
+      state.history.every(
+        entry => !entry.evidence.demonstratedIndependent && entry.evidence.assessment.reasoning === "unassessed",
+      ),
+    ).toBe(true);
+    expect(state.history[1].evidence.sourceEventIds).toContain(state.sourceEvents[0].id);
+    expect(state.sourceEvents.map(event => event.order)).toEqual(
+      [...state.sourceEvents.map(event => event.order)].sort((a, b) => a - b),
+    );
+    expect(new Set(state.sourceEvents.map(event => event.order)).size).toBe(state.sourceEvents.length);
+  },
+);
+
+it("records app help controls and unclassified tutor output without ever sourcing tutor praise or recitation", async () => {
+  start();
+  emit({ type: "output.activity", state: "quiet" });
+  await vi.advanceTimersByTimeAsync(600);
+  runtime.requestSupport("help");
+  expect(runtime.snapshot().math!.current!.sourceEvents.at(-1)?.kind).toBe("hint");
+  events.acknowledgeSteering(transport.send.mock.calls.at(-1)![0].event_id, 0);
+  events.tutorTurn("Three x squared minus four. Correct, you understand everything.", 50);
+  await vi.advanceTimersByTimeAsync(600);
+  expect(runtime.snapshot().math!.current!.history).toEqual([]);
+  expect(runtime.snapshot().math!.pending).toBeNull();
+  expect(requests).toEqual([]);
+  expect(runtime.snapshot().math!.current!.sourceEvents.at(-1)?.kind).toBe("unknown-help");
+  await learner("three x squared minus four");
+  await respond([action("append", { expression: correct })]);
+  confirm();
+  const evidence = runtime.snapshot().math!.current!.history[0].evidence;
+  expect(evidence.assessment.assistance).toBe("hinted");
+  expect(evidence.demonstratedIndependent).toBe(false);
+  expect(evidence.assessment.reasoning).toBe("unassessed");
+});
+
+it("keeps acceptance published when feedback append fails, and ignores late acknowledgments", async () => {
+  start();
+  await learner("three x squared minus four");
+  await respond([action("append", { expression: correct })]);
+  confirm();
+  transport.send.mockImplementationOnce(() => {
+    throw new Error("send failed");
+  });
+  confirmBoard();
+  expect(runtime.snapshot().status).toBe("live");
+  expect(runtime.snapshot().math!.current!.steps).toHaveLength(1);
+  const command = feedbackCommands().at(-1)!;
+  events.acknowledgeSteering(command.event_id, 9999);
+  expect(runtime.snapshot().awaitingSteering).toBe(false);
+  await learner("Undo that");
+  expect(requests).toHaveLength(2);
+});
+
+it("does not accept a proposal from tutor confirmation or an ordinary generic yes turn", async () => {
+  start();
+  await learner("three x squared minus four");
+  await respond([action("append", { expression: correct })]);
+  const pending = runtime.snapshot().math!.pending!;
+  runtime.confirmMathProposalDisplayed(pending.id, pending.boardRevision);
+  events.tutorTurn("Yes, that is correct; accepted.", 400);
+  expect(runtime.snapshot().math!.current!.history).toEqual([]);
+  expect(runtime.snapshot().math!.pending!.id).toBe(pending.id);
+  time = 600;
+  await learner("Yes.");
+  expect(runtime.confirmMathProposal(pending.id, pending.boardRevision, ["differentiate"])).toBe(false);
+  expect(runtime.snapshot().math!.current!.history).toEqual([]);
+});
+
+it("orders help between fragments before the completed learner action", async () => {
+  start();
+  emit({ type: "microphone.activity_started" });
+  emit({ type: "transcript", speaker: "child", delta: "three x ", startMs: 100, endMs: 150 });
+  runtime.recordMathSourceEvent("hint", "App hint while notation is incomplete");
+  emit({ type: "transcript", speaker: "child", delta: "squared minus four", startMs: 151, endMs: 200 });
+  emit({ type: "microphone.speech_stopped", quietMs: 900 });
+  await vi.advanceTimersByTimeAsync(301);
+  expect(requests[0].input.learnerTurns[0].text).toBe("three x squared minus four");
+  await respond([action("append", { expression: correct })]);
+  confirm();
+  expect(runtime.snapshot().math!.current!.history[0].evidence.assessment.assistance).toBe("hinted");
+});
+
+it("preserves pending authority on later help without retroactively changing earlier evidence", async () => {
+  start();
+  await learner("three x squared plus four");
+  await respond([action("append", { expression: wrong })]);
+  runtime.recordMathSourceEvent("hint", "Later app hint");
+  events.tutorTurn("Check your work.", 400);
+  confirm();
+  expect(runtime.snapshot().math!.current!.history[0].evidence.assessment.assistance).toBe("unknown");
+  time = 600;
+  await learner("Replace that with three x squared minus four");
+  await respond([action("replace", { targetStepId: "s1", expression: correct })]);
+  confirm();
+  expect(runtime.snapshot().math!.current!.history[1].evidence.assessment.assistance).toBe("hinted");
+});
+
+it("records a confirmed help action's issued hint for the learner's subsequent math", async () => {
+  start();
+  await learner("Can I have help?");
+  await respond([action("help")]);
+  confirm("unassessed");
+  confirmBoard();
+  expect(runtime.snapshot().math!.current!.sourceEvents.at(-1)?.kind).toBe("hint");
+  await learner("three x squared minus four");
+  await respond([action("append", { expression: correct })]);
+  confirm();
+  const evidence = runtime.snapshot().math!.current!.history[1].evidence;
+  expect(evidence.assessment.assistance).toBe("hinted");
+  expect(evidence.demonstratedIndependent).toBe(false);
+});
+
+it("does not invent issued help when its support append fails", async () => {
+  start();
+  emit({ type: "output.activity", state: "quiet" });
+  await vi.advanceTimersByTimeAsync(600);
+  transport.send.mockImplementationOnce(() => {
+    throw new Error("send failed");
+  });
+  runtime.requestSupport("help");
+  expect(runtime.snapshot().math!.current!.sourceEvents).toEqual([]);
+});

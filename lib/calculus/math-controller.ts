@@ -1,5 +1,5 @@
 import { parseMathActionBatch, type MathActionBatch } from "./math-action";
-import type { MathLearnerTurn, MathReview } from "./math-evidence";
+import type { MathLearnerTurn, MathReview, MathSourceEvent } from "./math-evidence";
 import { parseMathInterpretationInput, type MathInterpretationInput } from "./math-interpretation-contract";
 import { acceptMathBatch, applyMathBatch, createMathState, updateMathAuthority, type MathState } from "./math-state";
 import { validateMathExpression, type MathValidationContext, type MathValidationResult } from "./math-validator";
@@ -21,7 +21,13 @@ type MathVersionCheck = {
   readonly result: MathValidationResult | null;
   readonly role: WorkingContext["role"] | null;
 };
+export type MathFeedbackDisplay = {
+  readonly token: string;
+  readonly target: "proposal" | "board";
+  readonly boardRevision: number;
+};
 export type MathControllerSnapshot = {
+  readonly feedback: MathFeedbackDisplay | null;
   readonly checks: readonly MathVersionCheck[];
   readonly visits: readonly MathState[];
   readonly current: MathState | null;
@@ -34,6 +40,8 @@ export type MathControllerSnapshot = {
  * explicit learner confirmation of the exact displayed batch via confirm().
  */
 export class MathController {
+  private feedback: MathFeedbackDisplay | null = null;
+  private feedbackSequence = 0;
   private visits: MathState[] = [];
   private checks: MathVersionCheck[] = [];
   private versionContexts = new Map<string, WorkingContext | null>();
@@ -55,6 +63,7 @@ export class MathController {
 
   snapshot(): MathControllerSnapshot {
     return structuredClone({
+      feedback: this.feedback,
       checks: this.checks,
       visits: this.visits,
       current: this.current,
@@ -81,6 +90,7 @@ export class MathController {
   }
 
   invalidate() {
+    this.feedback = null;
     this.generation++;
     this.request?.abort();
     this.request = undefined;
@@ -102,6 +112,34 @@ export class MathController {
     this.invalidate();
     this.turns = structuredClone(turns);
     this.current = updateMathAuthority(this.current, { kind: "learner-revision", transcriptRevision: revision });
+  }
+
+  /** App-classified provenance only; never semantic evidence from tutor text.
+   * Tutor-only events preserve learner authority, including in-flight extraction.
+   */
+  recordSourceEvent(event: MathSourceEvent): boolean {
+    if (this.current?.status !== "active") return false;
+    this.current = updateMathAuthority(this.current, { kind: "source-event", event });
+    if (this.captured) this.captured = { ...this.captured, state: this.current };
+    this.changed();
+    return true;
+  }
+
+  private prepareFeedback(target: MathFeedbackDisplay["target"]) {
+    this.feedback = {
+      token: `${this.runtimeId}:math-feedback:${++this.feedbackSequence}`,
+      target,
+      boardRevision: this.current!.identity.baseBoardRevision,
+    };
+  }
+
+  /** Consume once after the exact view commits; no provider acknowledgment gate. */
+  takeFeedback(token: string): MathControllerSnapshot | null {
+    if (!this.feedback || this.feedback.token !== token || this.current?.status !== "active") return null;
+    if (this.feedback.target === "proposal" && !this.pending?.displayed) return null;
+    const snapshot = this.snapshot();
+    this.feedback = null;
+    return snapshot;
   }
 
   async extract(tutorContext: MathInterpretationInput["tutorContext"]) {
@@ -142,7 +180,7 @@ export class MathController {
       });
       if (!response.ok) throw new Error("Interpretation unavailable");
       const body = await response.json();
-      if (generation !== this.generation || signal.aborted || this.current !== state) return;
+      if (generation !== this.generation || signal.aborted) return;
       if (!body?.batch || body.review !== "required") throw new Error("No reviewable proposal");
       const batch = parseMathActionBatch(body.batch, {
         identity: state.identity,
@@ -168,8 +206,9 @@ export class MathController {
         boardRevision: state.identity.baseBoardRevision,
         displayed: false,
       };
-      this.captured = { state, turns, consumed: new Map(this.turns.map(t => [t.id, t.text.length])) };
+      this.captured = { state: this.current!, turns, consumed: new Map(this.turns.map(t => [t.id, t.text.length])) };
       this.disposition = "pending-clarification";
+      this.prepareFeedback("proposal");
     } catch {
       if (generation !== this.generation || abort.signal.aborted) return;
       this.disposition = "unavailable";
@@ -308,6 +347,7 @@ export class MathController {
       this.consumed = captured.consumed;
       this.invalidate();
       this.disposition = "committed";
+      this.prepareFeedback("board");
       this.changed();
       return true;
     } catch {

@@ -1,3 +1,5 @@
+import { calculusFeedbackInstruction } from "../calculus/tutor-context";
+import type { MathSourceEvent } from "../calculus/math-evidence";
 import { MathController, type MathControllerSnapshot } from "../calculus/math-controller";
 import { isCalculusProblemId } from "../calculus/problems";
 import { questionRecap, type QuestionOutcomeSnapshot } from "./mae386/question-outcomes";
@@ -712,6 +714,13 @@ export class LessonRuntime {
       source = runtimeSource(this.state);
       fragment = { ...fragment, source };
     }
+    if (speaker === "tutor" && this.math)
+      this.math.recordSourceEvent({
+        id: `tutor_${fragment.order}`,
+        order: ++this.order,
+        kind: "unknown-help",
+        text: event.delta,
+      });
     this.fragments.push(fragment);
     // Order by provider interval; late delivery must not put an earlier child answer after its acknowledgment.
     this.fragments.sort((a, b) => a.event.startMs - b.event.startMs || a.order - b.order);
@@ -746,14 +755,15 @@ export class LessonRuntime {
       let previous: Fragment | undefined;
       for (const item of this.fragments) {
         if (item.event.speaker === "child") {
-          if (previous?.event.speaker === "child" && previous.source.childTurnId === item.source.childTurnId)
+          if (previous?.event.speaker === "child" && previous.source.childTurnId === item.source.childTurnId) {
             turns[turns.length - 1].text += item.event.delta;
-          else
+            turns[turns.length - 1].order = Math.max(turns[turns.length - 1].order, item.order);
+          } else
             turns.push({
               id: `turn_${item.source.childTurnId}_${item.order}`,
               speaker: "learner",
               text: item.event.delta,
-              order: turns.length,
+              order: item.order,
             });
         }
         previous = item;
@@ -1245,7 +1255,7 @@ export class LessonRuntime {
   requestSupport(request: "help" | "repeat") {
     if (
       !this.state ||
-      !this.lessonDefinition.questionGroups ||
+      (!this.lessonDefinition.questionGroups && !this.math) ||
       this.state.conversationAdvanceRequested ||
       this.status !== "live" ||
       this.state.phase !== "active" ||
@@ -1263,12 +1273,18 @@ export class LessonRuntime {
     this.cancelClassification("learner_support_requested");
     this.answerRecovery.cancel("learner_support_requested");
     this.log("learner.support_requested", { request });
-    this.appendSteering(
+    this.math?.invalidate();
+    const sent = this.appendSteering(
       currentNodeContext(this.lessonDefinition, this.state.nodeId),
       this.display.token,
       false,
       request,
     );
+    if (sent && this.math)
+      this.recordMathSourceEvent(
+        request === "help" ? "hint" : "neutral-probe",
+        `Application-issued ${request} instruction`,
+      );
     this.publish();
   }
 
@@ -1420,7 +1436,55 @@ export class LessonRuntime {
 
   /** Actual provisional board commit callback, separate from scene confirmation. */
   confirmMathProposalDisplayed(id: string, boardRevision: number) {
-    return this.status === "live" && this.math?.confirmDisplayed(id, boardRevision) === true;
+    if (this.status !== "live" || !this.math?.confirmDisplayed(id, boardRevision)) return false;
+    const feedback = this.math.snapshot().feedback;
+    if (feedback?.target === "proposal") this.confirmMathFeedbackDisplayed(feedback.token);
+    return true;
+  }
+
+  /** Commit 8/9 must render the exact snapshot's board AND disposition, then
+   * report its feedback token after DOM commit (including non-equation actions).
+   * Scene render tokens cannot substitute. No acknowledgment or tutor-output gate.
+   */
+  confirmMathFeedbackDisplayed(token: string): boolean {
+    if (
+      this.status !== "live" ||
+      this.state?.phase !== "active" ||
+      this.state.childSpeaking ||
+      this.state.childCandidate ||
+      this.steering
+    )
+      return false;
+    const snapshot = this.math?.takeFeedback(token);
+    if (!snapshot) return false;
+    const content = calculusFeedbackInstruction(snapshot);
+    if (!content) {
+      this.publish();
+      return false;
+    }
+    const eventId = `${this.runtimeId}:math:${token}`;
+    try {
+      this.transport.send({ type: "session.instructions.append", event_id: eventId, delegation_id: null, content });
+      // A requested hint is recorded as app-issued assistance, not proof of audio
+      // delivery. All observed unclassified tutor speech remains unknown-help.
+      const help = !snapshot.pending && snapshot.current?.history.at(-1)?.action.kind === "help";
+      this.recordMathSourceEvent(help ? "hint" : "neutral-probe", content);
+      this.log("gpt_live.math_feedback_append", { eventId, token, content });
+    } catch {
+      this.log("gpt_live.math_feedback_failed", { eventId, token });
+    }
+    this.publish();
+    return true;
+  }
+
+  /** Trusted application help classification only. Never call from a provider's
+   * self-assessment; it grants no reasoning or independent credit. The shared
+   * observation clock orders help with learner fragments across the whole visit.
+   */
+  recordMathSourceEvent(kind: MathSourceEvent["kind"], text: string): boolean {
+    if (this.status !== "live" || this.state?.phase !== "active" || !this.math) return false;
+    const order = ++this.order;
+    return this.math.recordSourceEvent({ id: `app_${order}`, order, kind, text });
   }
 
   /** Explicit learner confirmation control; never invoke automatically from rendering.

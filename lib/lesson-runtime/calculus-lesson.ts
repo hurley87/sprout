@@ -1,3 +1,4 @@
+import { CALCULUS_TUTOR_GUIDANCE } from "../calculus/tutor-context";
 import { CALCULUS_PROBLEM_IDS, getCalculusPresentation } from "../calculus/problems";
 import { validateLessonDefinition, type LessonNodeDefinition } from "./lesson-definition";
 
@@ -53,7 +54,7 @@ export const CALCULUS_LESSON = validateLessonDefinition({
   },
   tutor: {
     persona: "You are a calculus practice partner.",
-    sessionGuidance: "The application owns the problem and mathematical board. Listen to the learner's own work.",
+    sessionGuidance: CALCULUS_TUTOR_GUIDANCE,
     startInstruction: "Ask the current problem and listen.",
     nodeInstruction: "Use only the current problem.",
   },
