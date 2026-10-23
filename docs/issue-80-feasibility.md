@@ -303,3 +303,62 @@ provenance; paint acknowledgment and speech-to-display timing; full screen-reade
 and actual mobile viewport testing; Bill's review. No issue-completion claim.
 The existing untracked implementation plan is preserved outside this commit.
 Stop after this commit for **Approve**, **Request changes**, or **Abort**.
+
+## Commit 5 adapter verification — October 23, 2026
+
+Starting SHA: `7aee3af8999b5e6a1233b50c5710dbeb074e7fd6`.
+The isolated `/api/math-action` endpoint now uses the commit-2 production AST
+and ordered action contract. The Responses request retains `gpt-6-luna`,
+`store: false`, strict `text.format`, and no retries. The current
+[official Structured Outputs guide](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=responses)
+was fetched for this implementation. Provider output contains actions and quoted
+learner locators only; application code attaches captured identity and derives
+unique exact UTF-16 source spans. Repeated ambiguous quotes, tutor sources,
+unknown targets, extra fields, and out-of-bounds structures fail closed.
+
+All returned action batches carry `review: "required"`. This is **not** the
+state reducer's acceptance capability or its `MathReview`. Quote membership
+does not establish semantic faithfulness, current runtime authority, correctness,
+reasoning, independence, or completion. Even a syntactically valid hallucinated
+expression quoting real learner text can pass these structural checks; later
+runtime integration must conservatively review semantics before acceptance.
+Strategy/help/clarify/next and unsupported results never propose a board edit;
+next remains navigation intent. No live lesson or UI calls this endpoint yet.
+
+Reproducible actual-adapter replay (explicit network opt-in):
+
+```sh
+SPROUT_MATH_REPLAY=1 npx vitest run tests/calculus-math-interpreter.test.ts
+```
+
+The opt-in test loads `.env.local` only if `OPENAI_API_KEY` is absent, converts
+commit-1 fixtures to the production contract, separates learner/tutor turns,
+and passes only the authored presentation and compact board to the adapter.
+It compares outputs with independently authored fixture expectations, including
+explicit undo targets under the production contract. Expected answers are not
+sent to the provider. It prints only these synthetic results and durations.
+
+**Actual provider calls:** all 17 synthetic cases were attempted once through
+the real adapter, with no retries. All returned non-mutating `provider-failure`
+(60–598 ms per case); no generated action was available for comparison. One
+additional diagnostic call confirmed HTTP 401, error code `token_invalidated`.
+Only status/code/parameter were inspected; credentials and provider error bodies
+were not retained. The configured credential was present in `.env.local`; there
+was no inherited credential. This is a credential blocker, **not** successful
+validation of the adapted strict schema or extraction accuracy. Commit-1's
+successful spike results above do not establish that the new schema was accepted.
+No microphone, GPT-Live session, lesson lifecycle, or UI acceptance was tested.
+
+**Offline verification:** 173 tests pass across all seven calculus/endpoint test
+files; the explicit network replay is skipped in ordinary runs. Mocked provider
+I/O covers structured request construction, malformed/refused/incomplete output,
+size/depth limits, forged sources/targets, injection treated as untrusted input,
+wrong-sign preservation, unknown problems, non-local requests, cancellation,
+and timeouts. A deliberately mismatched expression test demonstrates that parsing
+does not authenticate its meaning. Focused ESLint passes.
+
+Workspace `npm run typecheck` encounters pre-existing stale sources in ignored
+`test-results/commit3-review` and `test-results/ui-review`. Full project ESLint
+and `npm run typecheck` pass in a temporary clean copy of tracked source plus
+these new files, using the installed dependencies. Historical artifacts and
+project configuration remain untouched.
