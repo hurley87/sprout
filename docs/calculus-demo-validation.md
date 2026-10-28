@@ -3,9 +3,8 @@
 Status, October 23, 2026: implementation and automated regression checks are
 complete through source commit `fa18bb45343e79aa1714baec8b10328d2b33ba2f`
 (commit 10). Documentation is prepared; **live acceptance remains PENDING**.
-This is not issue #80 completion. See [findings and provenance](issue-80-findings.md),
-the [durable plan](issue-80-implementation-plan.md), and the
-[commit 10 evidence record](issue-80-commit10-evidence.md).
+This is not issue #80 completion. See [findings and provenance](issue-80-findings.md)
+for the renderer decision, feasibility conclusions and historical regression gate.
 
 ## Start locally
 

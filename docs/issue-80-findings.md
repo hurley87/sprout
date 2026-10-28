@@ -2,16 +2,10 @@
 
 October 23, 2026. Implementation is complete through commit 10,
 `fa18bb45343e79aa1714baec8b10328d2b33ba2f`, on `codex/80-feasibility`.
-The final documentation commit supplies the durable plan, route/setup guidance,
-acceptance matrix and evidence forms. **Actual microphone acceptance, current
+The [validation runbook](calculus-demo-validation.md) supplies route/setup guidance,
+the acceptance matrix and evidence forms. **Actual microphone acceptance, current
 provider-adapter success, spoken tutor compliance, and Bill's critique remain
 PENDING. Issue #80 is not accepted or closed.**
-
-The later user instruction to finish the remaining commits superseded the
-[plan's original per-commit human stop](issue-80-implementation-plan.md#commit-protocol).
-Sequential parent review/push remained in force. The documentation completes the
-implementation sequence; issue acceptance remains open. This procedural change
-does not waive the pending live acceptance requirements.
 
 ## What the implementation establishes
 
@@ -33,8 +27,8 @@ mutation cannot prove that the live tutor avoids every verbal answer leak.
 See the [walkthrough, domain boundary and acceptance matrix](calculus-demo-validation.md)
 and [tutor synchronization contract](calculus-tutor-integration.md).
 
-The **ordered equation list plus KaTeX** was chosen over tldraw after the
-[isolated comparison](issue-80-feasibility.md#visual-and-accessibility-observations).
+The **ordered equation list plus KaTeX** was chosen over tldraw in an isolated
+renderer comparison.
 It preserved glyph fidelity, logical reading order, native controls and readable
 horizontal overflow without camera zoom, culling, shape lifecycle or an additional
 canvas dependency/licensing requirement. No spatial/freehand requirement justified
@@ -42,6 +36,24 @@ tldraw for these three problems. Production generates LaTeX from validated AST,
 uses KaTeX with bounded/untrusted settings, accessible text and explicit render
 fallbacks. DOM/keyboard checks and narrow-layout browser checks are available;
 a real assistive-technology/screen-reader audit remains PENDING.
+
+## Feasibility conclusions
+
+The spike chose a separate server-side Responses adapter because the existing
+voice integration had no structured math proposal/delegation contract; Jev's
+closed-choice probability contract did not establish equation generation either.
+This was an integration boundary, not a platform-wide impossibility. The adapter
+uses `gpt-6-luna`, `store: false` and strict JSON Schema without retries or model
+fallbacks. The model alias can drift. Refusal, incomplete/malformed output,
+invalid sources, cancellation and provider errors must remain non-mutating;
+local cancellation does not guarantee provider computation or billing stops.
+
+The original 17-case synthetic-text sample preserved wrong signs and requested
+replacement scope, clarified incomplete/ambiguous/unsupported notation, and did
+not turn strategy-only speech or tutor answers into learner derivatives. A correct
+expression paired with a wrong rule name demonstrated why faithful extraction
+does not establish correct reasoning. These single-run findings used an earlier
+experimental schema, not the production contract or real microphone input.
 
 ## Evidence ledger: do not merge these populations
 
@@ -54,13 +66,14 @@ a real assistive-technology/screen-reader audit remains PENDING.
 | Parent independent commit 10 review                                     | Matched eight-file patch SHA-256 and reran 77 focused diagnostics/runtime tests successfully                         | Verification reported by parent; not rerun as documentation testing                                                        |
 | Human microphone, actual spoken tutor, Bill learner/instructor critique | PENDING                                                                                                              | No participant evidence, live rates or live latency distributions exist                                                    |
 
-The [feasibility record](issue-80-feasibility.md) retains historical experiments,
-including earlier constraints and failures. The [commit 10 evidence note](issue-80-commit10-evidence.md)
-is the source of the automated gate results above. These are historical checks,
-not new tests performed for this documentation commit. No provider retry was made.
-The old spike's HTTP-start-to-response-header median 2,739 ms (n=17) excludes body
-parse, validation and display; it is not current-adapter or speech-to-display
-latency. No numeric latency acceptance threshold has been agreed.
+The ledger retains the historical spike and commit 10 gate results; these are
+not new tests performed for this documentation update. No provider retry was made.
+The old spike's HTTP-start-to-response-header timing was 1,193–5,509 ms,
+median 2,739 ms and nearest-rank p95 5,509 ms (n=17). It excludes body parse,
+validation and display; it is not current-adapter or speech-to-display latency.
+Seconds of extraction latency remain a product concern; no numeric acceptance
+threshold has been agreed. Reported usage was 8,759 input and 2,608 output tokens;
+billed dollar cost was not measured.
 
 Live interpretation fidelity, false-commit count/rate, correction frequency,
 interpretation failures and speech-to-display distribution: **PENDING/null**.

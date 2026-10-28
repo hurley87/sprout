@@ -38,7 +38,7 @@ problems with dictated steps, full provisional review, explicit operation
 confirmation, correction/undo and retained history. Use
 [`?debug=1`](http://127.0.0.1:3000/demos/calculus?debug=1) for session JSON export.
 See the [calculus setup and acceptance runbook](docs/calculus-demo-validation.md)
-and [findings/diagnostic provenance](docs/issue-80-findings.md). Its voice and
+and [renderer decision, feasibility findings and evidence](docs/issue-80-findings.md). Its voice and
 `/api/math-action` interpretation use the server-only `OPENAI_API_KEY`; refresh
 credentials locally, never paste secrets into chat. Correct math and confirmation
 do not establish reasoning or independent understanding. Real microphone/tutor
