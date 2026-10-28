@@ -54,7 +54,6 @@ describe("bounded authored mathematics", () => {
         const result = validate(candidate, context(id));
         expect(result.correctness).toBe("valid");
         expect(result.completeDerivative).toBe(true);
-        expect(result.reasoning).toBe("missing");
         expect(result.expression).toEqual(candidate);
         expect(result.expression).not.toBe(candidate);
       }
@@ -215,9 +214,9 @@ describe("conservative domain and resource boundaries", () => {
   });
 });
 
-describe("reasoning and evidence stay separate", () => {
+describe("mathematical validation preserves execution and syntax", () => {
   const id = "quadratic-sine";
-  it("leaves a valid product-rule alternative for the cubic unassessed", () => {
+  it("validates a product-rule alternative for the cubic", () => {
     const problemId = "cubic-minus-linear";
     // x^3 - 4x = x(x^2 - 4); product rule gives (x^2 - 4) + x(2x).
     const current = { expression: mul(x, sub(pow(x, 2), n(4))), role: "function" } as const;
@@ -226,56 +225,17 @@ describe("reasoning and evidence stay separate", () => {
       problemId,
       operation: "differentiate",
       current,
-      reasoning: {
-        method: "product",
-        explanation: "One times x squared minus four, plus x times two x.",
-      },
     });
     expect(result).toMatchObject({
       correctness: "valid",
       expressionCorrectness: "valid",
       transformationCorrectness: "valid",
       completeDerivative: true,
-      reasoning: "unassessed",
-      assistance: "unassessed",
-      independence: "unassessed",
     });
-    expect(
-      validate(undefined, { problemId, operation: "differentiate", current, reasoning: { method: "product" } }),
-    ).toMatchObject({ correctness: "incomplete", reasoning: "strategy-only", completeDerivative: false });
-  });
-  it("does not turn absent or misleading reasoning into incorrect mathematics or mastery", () => {
-    expect(validate(final(id), context(id))).toMatchObject({
-      correctness: "valid",
-      reasoning: "missing",
-      independence: "unassessed",
-      assistance: "unassessed",
-      faithfulness: "unassessed",
-    });
-    expect(
-      validate(final(id), { ...context(id), reasoning: { method: "chain", explanation: "It is only chain rule" } }),
-    ).toMatchObject({ correctness: "valid", reasoning: "unassessed", independence: "unassessed" });
-    // Text, even when false, is not automatically adjudicated by the algebra checker.
-    expect(
-      validate(final(id), {
-        ...context(id),
-        reasoning: { method: "product", explanation: "The derivative of sine is negative cosine" },
-      }),
-    ).toMatchObject({ correctness: "valid", reasoning: "unassessed" });
-  });
-  it("treats a named strategy as no execution; explanation text grants no evidence", () => {
-    expect(validate(undefined, { ...context(id), reasoning: { method: "product" } })).toMatchObject({
+    expect(validate(undefined, { problemId, operation: "differentiate", current })).toMatchObject({
       correctness: "incomplete",
-      reasoning: "strategy-only",
       completeDerivative: false,
     });
-    expect(validate(final(id), { ...context(id), reasoning: { method: "product" } })).toMatchObject({
-      correctness: "valid",
-      reasoning: "strategy-only",
-    });
-    expect(
-      validate(final(id), { ...context(id), reasoning: { explanation: "u prime v plus u v prime" } }),
-    ).toMatchObject({ reasoning: "unassessed", independence: "unassessed" });
   });
   it("preserves exact proposed work and is deterministic without mutating any input", () => {
     const proposed = reorder(final(id));

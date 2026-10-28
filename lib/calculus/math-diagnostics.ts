@@ -3,39 +3,6 @@ import type { MathActionBatch } from "./math-action";
 import type { MathLearnerTurn } from "./math-evidence";
 import type { MathState } from "./math-state";
 
-/** Manual review is separate from learner confirmation and mathematical checking.
- * Counts require labelled ground truth for every item in the evaluated population.
- */
-export interface MathEvaluationAnnotation {
-  readonly caseId: string;
-  readonly groundTruth: string;
-  readonly evidence: "synthetic-fixture" | "manual-session-review";
-  readonly interpretationFaithful: boolean | null;
-  readonly falseCommit: boolean | null;
-  readonly correctionCount: number | null;
-}
-export function summarizeMathEvaluation(annotations: readonly MathEvaluationAnnotation[]) {
-  const complete =
-    annotations.length > 0 &&
-    annotations.every(
-      a =>
-        a.caseId.trim() &&
-        a.groundTruth.trim() &&
-        a.interpretationFaithful !== null &&
-        a.falseCommit !== null &&
-        a.correctionCount !== null &&
-        Number.isSafeInteger(a.correctionCount) &&
-        a.correctionCount >= 0,
-    );
-  return {
-    reviewedCases: annotations.length,
-    faithfulCount: complete ? annotations.filter(a => a.interpretationFaithful).length : null,
-    falseCommitCount: complete ? annotations.filter(a => a.falseCommit).length : null,
-    falseCommitRate: complete ? annotations.filter(a => a.falseCommit).length / annotations.length : null,
-    correctionCount: complete ? annotations.reduce((n, a) => n + a.correctionCount!, 0) : null,
-  };
-}
-
 type Detail = {
   requestId?: string;
   id?: string;
@@ -123,9 +90,6 @@ export function projectMathDiagnostics(events: readonly LessonDiagnostic[]) {
               authoritativeCommitMs: commit?.atMs ?? null,
               committedBoardFirstDisplayedMs: boardDisplay?.atMs ?? null,
               tutorFeedbackAppendMs: feedback?.atMs ?? null,
-              // No provider conversation-completed signal or per-feedback audio correlation.
-              tutorConversationCompletedMs: null,
-              tutorAudioCompletedMs: null,
               speechEndToProposalDisplayMs: interval(speechEnd, displayed?.atMs ?? null),
               confirmationDelayMs: interval(displayed?.atMs ?? null, commit?.atMs ?? null),
               commitToBoardDisplayMs: interval(commit?.atMs ?? null, boardDisplay?.atMs ?? null),
@@ -160,7 +124,6 @@ export function projectMathDiagnostics(events: readonly LessonDiagnostic[]) {
             spokenEvidence:
               detail(e).method === "spoken" ? (related.find(s => s.type === "math.spoken_confirmation") ?? null) : null,
           })),
-        evaluation: null as MathEvaluationAnnotation | null,
       };
     });
   return structuredClone({
@@ -168,11 +131,9 @@ export function projectMathDiagnostics(events: readonly LessonDiagnostic[]) {
     clock: "browser.performance.now-relative-to-attempt",
     displayMeasurement:
       "two-requestAnimationFrame DOM confirmation; paint opportunity approximation, not physical paint",
-    unavailable:
-      "null means missing observation, invalid ordering or unavailable correlation; no provider conversation completion signal or per-feedback audio completion correlation",
+    unavailable: "null means missing observation, invalid ordering or unavailable correlation",
     sourceAnchor: "latest local speech end among all cited learner turns; confirmation speech is separate",
     requests,
     observedAudioActivity: events.filter(e => e.type === "output.activity"),
-    evaluation: summarizeMathEvaluation([]),
   });
 }

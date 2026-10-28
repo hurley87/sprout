@@ -133,7 +133,7 @@ Historical spike evidence is described separately in [findings](issue-80-finding
 | Incomplete operand; ambiguous sine/sign and powers; request clarification                | Interpretation fixtures, action, runtime    | Missing operand; other ambiguity is a mocked clarification path                             | PENDING / PENDING |
 | Wrong signs/derivatives, missing product term or chain factor; retain error              | Validator, state, runtime                   | Wrong derivative seven remains visibly incorrect                                            | PENDING / PENDING |
 | Correction, replacement, undo and predecessor/history fidelity                           | State, evidence, runtime                    | Wrong step → replacement → undo                                                             | PENDING / PENDING |
-| Equivalent expanded/factored math, unsupported alternatives, absent/misleading reasoning | Validator, evidence, runtime                | Correct answers retain unassessed reasoning/independence; no equivalent-form browser matrix | PENDING / PENDING |
+| Equivalent expanded/factored math, unsupported alternatives, absent/misleading reasoning | Validator, evidence, runtime                | Math checking is separate from reasoning/independence review; no equivalent-form browser matrix | PENDING / PENDING |
 | Hint, echo, praise and supplied-answer provenance; no independent credit                 | Evidence, tutor-context, runtime            | Help event plus conservative evidence/export                                                | PENDING / PENDING |
 | Pauses, streaming fragments, duplicate transcript/result events, stale responses         | Runtime event deduplication and stale gates | Synthetic speech/quiet; delayed extraction after Stop; no live recognition claim            | PENDING / PENDING |
 | Rapid next/Stop, early exit, hide/unmount, media teardown                                | Runtime navigation/cancellation             | Spoken skip/next/recap, Stop, hide/unmount track cleanup                                    | PENDING / PENDING |
@@ -182,8 +182,8 @@ Reviewer / result / bounded follow-up:
 
 Keep manual annotations beside the export with `caseId`, `groundTruth`,
 `evidence: manual-session-review`, `interpretationFaithful`, `falseCommit`, and
-`correctionCount`, matching `MathEvaluationAnnotation`. The normal live export
-has no manual review by default. Report the evaluated population/denominator,
+`correctionCount`. Manual review is separate from the live export, which contains
+no evaluation fields. Report the evaluated population/denominator,
 faithful count, false commits, correction counts/frequency and interpretation
 failures only after all cases in that population have explicit labels; retain
 unknown values as `null` and report exclusions. Never turn pending into zero.
@@ -207,9 +207,7 @@ Transcript availability, interpretation start/end and feedback append are distin
 
 Two `requestAnimationFrame` callbacks give a DOM paint-opportunity approximation,
 not proof of physical paint. Missing/uncorrelated times remain `null`.
-`tutorAudioCompletedMs` and `tutorConversationCompletedMs` are `null`: there is no
-per-feedback audio completion correlation or provider conversation-completed
-signal. For actual human timing distributions retain count, missing count,
+For actual human timing distributions retain count, missing count,
 median/p95/range and clock definition separately for provisional and committed
 work. **Live sample count, distributions, false-commit rate and correction rate
 are PENDING/null**, not measured zero. Synthetic/browser timings and the old
