@@ -21,7 +21,7 @@ import {
   reduceLessonRuntime,
   runtimeSource,
 } from "../lib/lesson-runtime/lesson-runtime-reducer";
-import type { ConversationStateClassifierInput } from "../lib/lesson-runtime/conversation-state-classifier";
+import type { ConversationStateClassifierInput } from "../lib/experiments/issue-42/historical-v1/lib/lesson-runtime/conversation-state-classifier";
 
 const input: ConversationStateClassifierInput = {
   lesson: CATCHING_UNICORNS_LESSON,

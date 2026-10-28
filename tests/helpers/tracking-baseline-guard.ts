@@ -9,17 +9,21 @@ vi.mock("../../lib/lesson-runtime/lesson-runtime-reducer", async importOriginal 
     ...current,
     createLessonRuntime(...args: Parameters<typeof current.createLessonRuntime>) {
       const result = current.createLessonRuntime(...args);
-      if (args[1]?.lesson?.id !== "mae386")
-        expect(result, "baseline initial state").toEqual(baseline.createLessonRuntime(...args));
+      const options = args[1];
+      if (options && !options.lesson.calculus && options.lesson.id !== "mae386")
+        expect(result, "baseline initial state").toEqual(
+          baseline.createLessonRuntime(args[0], { ...options, lesson: options.lesson }),
+        );
       return result;
     },
     reduceLessonRuntime(...args: Parameters<typeof current.reduceLessonRuntime>) {
       const result = current.reduceLessonRuntime(...args);
       // MAE386 and its new events have no pre-instrumentation counterpart.
-      if (args[2].id === "mae386" || args[1].type === "question.observation") return result;
+      if (args[2].calculus || args[2].id === "mae386" || args[1].type === "question.observation") return result;
       // The new authored counting policy intentionally differs from the historical
       // reducer. Compare legacy gates on the same inputs; policy outcomes are tested separately.
-      const legacyArgs: typeof args = [args[0], args[1], { ...args[2], answerAcceptance: undefined }];
+      const legacyLesson = { ...args[2], answerAcceptance: undefined };
+      const legacyArgs: typeof args = [args[0], args[1], legacyLesson];
       if (
         args[2].answerAcceptance &&
         args[1].type === "proposal.received" &&
@@ -40,7 +44,7 @@ vi.mock("../../lib/lesson-runtime/lesson-runtime-reducer", async importOriginal 
             ? { proposal: legacyArgs[1].proposal }
             : {}),
         },
-        legacyArgs[2],
+        legacyLesson,
       );
       expect(comparable.state, `baseline state after ${args[1].type}`).toEqual(previous.state);
       expect(comparable.effects, `baseline effects after ${args[1].type}`).toEqual(previous.effects);

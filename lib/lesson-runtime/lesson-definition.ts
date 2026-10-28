@@ -31,8 +31,6 @@ export type QuestionGroupDefinition = {
 export type LessonDefinition = {
   readonly id: string;
   readonly initialNodeId: string;
-  /** Mathematical actions use a separate reviewed path; generic closure cannot advance. */
-  readonly calculus?: true;
   /** Hold accepted scene transitions until the application confirms the reveal was reviewed. */
   readonly requirePresentationConfirmation?: boolean;
   /** Conversational closure advances independently of assessment/mastery. */
@@ -54,12 +52,16 @@ export type LessonDefinition = {
     readonly startInstruction: string;
     readonly nodeInstruction: string;
   };
-  readonly classifier: {
-    readonly objectiveInstructions: string;
-    readonly objectiveCriteria: Readonly<Record<string, string>>;
-    readonly tutorInstructions: string;
-    readonly tutorCriteria: Readonly<Record<string, string>>;
-  };
+} & (
+  | { readonly calculus: true; readonly classifier?: LessonClassifierDefinition }
+  | { readonly calculus?: never; readonly classifier: LessonClassifierDefinition }
+);
+
+type LessonClassifierDefinition = {
+  readonly objectiveInstructions: string;
+  readonly objectiveCriteria: Readonly<Record<string, string>>;
+  readonly tutorInstructions: string;
+  readonly tutorCriteria: Readonly<Record<string, string>>;
 };
 
 export const OBJECTIVE_CRITERIA_IDS = [
@@ -71,6 +73,10 @@ export const OBJECTIVE_CRITERIA_IDS = [
 ] as const;
 export const TUTOR_CRITERIA_IDS = ["confirmed_completion", "clarifying", "helping", "asking", "other"] as const;
 
+export function validateLessonDefinition(
+  value: Extract<LessonDefinition, { calculus?: never }>,
+): Extract<LessonDefinition, { calculus?: never }>;
+export function validateLessonDefinition(value: LessonDefinition): LessonDefinition;
 export function validateLessonDefinition(value: LessonDefinition): LessonDefinition {
   if (!value.id || !Object.hasOwn(value.nodes, value.initialNodeId))
     throw new Error("Lesson needs an authored initial node");
@@ -134,6 +140,7 @@ export function validateLessonDefinition(value: LessonDefinition): LessonDefinit
         throw new Error("Question groups must follow the authored node edges to a terminal recap");
     }
   }
+  if (value.calculus) return value;
   if (!Object.keys(value.classifier.objectiveCriteria).length || !Object.keys(value.classifier.tutorCriteria).length)
     throw new Error("Lesson classifier criteria must be authored");
   if (

@@ -28,16 +28,11 @@ export async function POST(request: Request) {
   if (!process.env.OPENAI_API_KEY) return json({ disposition: "unavailable", batch: null }, 503);
   const result = await interpretMath(input, createResponsesMathProvider(process.env.OPENAI_API_KEY), { signal });
   const disposition = timeout.aborted ? "timeout" : result.disposition;
-  return json(
-    timeout.aborted ? { disposition, batch: null } : result,
-    disposition === "timeout"
-      ? 504
-      : disposition === "cancelled"
-        ? 499
-        : disposition === "provider-failure"
-          ? 502
-          : disposition === "malformed"
-            ? 502
-            : 200,
-  );
+  const statusByDisposition: Partial<Record<typeof disposition, number>> = {
+    timeout: 504,
+    cancelled: 499,
+    "provider-failure": 502,
+    malformed: 502,
+  };
+  return json(timeout.aborted ? { disposition, batch: null } : result, statusByDisposition[disposition] ?? 200);
 }

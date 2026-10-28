@@ -1,6 +1,6 @@
 // Synthetic mechanical controls only. No provider measurement, human labels, or calibration evidence.
 import type { DecisionsRequest } from "../../lib/experiments/issue-42/decisions-classifier";
-import type { ConversationStateClassifierInput } from "../../lib/lesson-runtime/conversation-state-classifier";
+import type { ConversationStateClassifierInput } from "../../lib/experiments/issue-42/historical-v1/lib/lesson-runtime/conversation-state-classifier";
 import { CATCHING_UNICORNS_LESSON } from "../../lib/lesson-runtime/catching-unicorns-lesson";
 export const input: ConversationStateClassifierInput = {
   lesson: CATCHING_UNICORNS_LESSON,

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { JEV_MODEL } from "../../jev";
-import type { LessonDefinition } from "../../lesson-runtime/lesson-definition";
+import type { LessonDefinition } from "./historical-v1/lib/lesson-runtime/lesson-definition";
 import {
   conversationObserverState,
   conversationStateQuestions,

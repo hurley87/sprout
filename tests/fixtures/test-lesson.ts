@@ -1,7 +1,7 @@
-import { validateLessonDefinition, type LessonDefinition } from "../../lib/lesson-runtime/lesson-definition";
+import { validateLessonDefinition } from "../../lib/lesson-runtime/lesson-definition";
 
 /** Test-only non-counting content; deliberately absent from the application registry. */
-export const TEST_PATTERN_LESSON: LessonDefinition = validateLessonDefinition({
+export const TEST_PATTERN_LESSON = validateLessonDefinition({
   id: "test-patterns",
   initialNodeId: "pattern-a",
   recovery: {

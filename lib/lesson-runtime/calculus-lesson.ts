@@ -33,25 +33,6 @@ export const CALCULUS_LESSON = validateLessonDefinition({
     supportClarificationInstruction: "Ask one non-leading clarification of the learner's intended mathematical step.",
     answerRecoveryInstruction: "Invite the learner to clarify their own intended notation.",
   },
-  // Required closed schema for lesson registration; calculus never invokes this classifier.
-  classifier: {
-    objectiveInstructions: "Mathematical actions use the separate application review path.",
-    objectiveCriteria: {
-      completed: "Unused",
-      incorrect: "Unused",
-      unclear_or_incomplete: "Unused",
-      unresolved_help: "Unused",
-      no_attempt: "Unused",
-    },
-    tutorInstructions: "Tutor words grant no mathematical or navigation authority.",
-    tutorCriteria: {
-      confirmed_completion: "Unused",
-      clarifying: "Unused",
-      helping: "Unused",
-      asking: "Unused",
-      other: "Unused",
-    },
-  },
   tutor: {
     persona: "You are a calculus practice partner.",
     sessionGuidance: CALCULUS_TUTOR_GUIDANCE,

@@ -63,7 +63,7 @@ const countingLesson = {
   },
 } as const satisfies LessonDefinition;
 
-export const COUNTING_LESSON: LessonDefinition = validateLessonDefinition(countingLesson);
+export const COUNTING_LESSON = validateLessonDefinition(countingLesson);
 export type CountingLessonNode = {
   readonly id: CountingNodeId;
   readonly sceneId: "hello-duck" | "duck-friends" | "butterfly-garden";
