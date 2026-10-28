@@ -18,7 +18,7 @@ Configure server-only `OPENAI_API_KEY` and `TYPESAFE_API_KEY` in your local envi
 Never expose these credentials through `NEXT_PUBLIC_*` variables. Provider routes
 accept loopback requests from the local page.
 
-The canonical lesson is served only at `/`. `/api/live` accepts `{ sdp }` and
+The canonical counting lesson is served at `/`. `/api/live` accepts `{ sdp, lessonId }` and
 uses the Sprout tutor configuration; `/api/classify` returns semantic proposals
 and normalized diagnostics. Both endpoints enforce local request boundaries.
 
@@ -26,6 +26,23 @@ Attempts and speaker-labelled transcripts stay in page memory. **Export diagnost
 downloads the current attempt as JSON; restarting or refreshing clears it. The app
 has no audio recording, durable sessions, post-session analysis, or review workflow.
 No backend database or deployment is required.
+
+## Adult-learning demos
+
+The existing demos at `/demos/catching-unicorns` and `/demos/mae386` remain
+available. [MAE386 validation](docs/mae386-demo-validation.md) records its bounded
+coverage and pending live work.
+
+[Calculus practice](http://127.0.0.1:3000/demos/calculus) adds three authored
+problems with dictated steps, full provisional review, explicit operation
+confirmation, correction/undo and retained history. Use
+[`?debug=1`](http://127.0.0.1:3000/demos/calculus?debug=1) for session JSON export.
+See the [calculus setup and acceptance runbook](docs/calculus-demo-validation.md)
+and [renderer decision, feasibility findings and evidence](docs/issue-80-findings.md). Its voice and
+`/api/math-action` interpretation use the server-only `OPENAI_API_KEY`; refresh
+credentials locally, never paste secrets into chat. Correct math and confirmation
+do not establish reasoning or independent understanding. Real microphone/tutor
+acceptance and Bill's critique remain **PENDING**.
 
 ## Check
 
@@ -39,8 +56,8 @@ git diff --check
 ```
 
 Unit tests use synthetic proposals, provider responses and clocks. Browser tests
-cover the root lesson, removed route boundaries and local WebRTC output without
-billed providers. Real conversational accuracy remains behavioral-evaluation work in
+cover the root lesson, adult demos, removed route boundaries and local WebRTC
+output without billed providers. Real conversational accuracy remains behavioral-evaluation work in
 [#57](https://github.com/hurley87/sprout/issues/57).
 
 Future provider-backed scenarios have a separate, deliberately selected live

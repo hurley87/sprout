@@ -44,9 +44,10 @@ export class DiagnosticJournal {
       speaker?: DiagnosticSpeaker;
     },
   ) {
+    const atMs = this.now();
     this.events.push({
       timestamp: new Date().toISOString(),
-      atMs: this.now(),
+      atMs,
       type,
       ...(type.startsWith("classifier.") ? { classifierVersion: CLASSIFIER_VERSION } : {}),
       runtimeId: source?.runtimeId ?? this.runtimeId,
@@ -55,8 +56,9 @@ export class DiagnosticJournal {
       nodeId: source && "nodeId" in source ? source.nodeId : (state?.nodeId ?? this.initialNodeId),
       transcriptRevision: source && "transcriptRevision" in source ? source.transcriptRevision : revision,
       transcriptSpeaker: speaker ?? state?.transcriptSource ?? "unknown",
-      detail,
+      detail: structuredClone(detail),
     });
+    return atMs;
   }
 
   trackReduction(input: Omit<Parameters<typeof trackReduction>[0], "history">) {

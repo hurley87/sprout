@@ -31,6 +31,8 @@ export type QuestionGroupDefinition = {
 export type LessonDefinition = {
   readonly id: string;
   readonly initialNodeId: string;
+  /** Mathematical actions use a separate reviewed path; generic closure cannot advance. */
+  readonly calculus?: true;
   /** Hold accepted scene transitions until the application confirms the reveal was reviewed. */
   readonly requirePresentationConfirmation?: boolean;
   /** Conversational closure advances independently of assessment/mastery. */

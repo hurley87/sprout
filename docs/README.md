@@ -5,6 +5,9 @@ The production prototype is the realtime counting lesson at `/`, backed by
 
 | Document | Purpose |
 | --- | --- |
+| [Calculus demo validation](calculus-demo-validation.md) | Route/setup, learner walkthrough, finite math domain, diagnostics and PENDING live acceptance matrix/forms |
+| [Issue #80 findings](issue-80-findings.md) | Renderer decision, feasibility conclusions, historical automated/provider evidence and remaining human acceptance |
+| [Calculus tutor integration](calculus-tutor-integration.md) | Display/confirmation authority, bounded context and conservative assistance evidence |
 | [Architecture](architecture.md) | Authority boundaries, current modules, lifecycle and failure behavior |
 | [Domain glossary](../CONTEXT.md) | Current lesson/runtime terms |
 | [Classifier contract](lesson-classifier.md) | Jev input projection, probabilities and deterministic mapping |
@@ -19,8 +22,8 @@ The production prototype is the realtime counting lesson at `/`, backed by
 | [Issue #76 rubric review bundle](issue-76-rubric-review.md) | Instructor-facing MAE386 reference answers, source citations, atomic criteria and labeled synthetic examples |
 
 The standalone adult-learning demonstrations are available at
-`/demos/catching-unicorns` and `/demos/mae386`. Both are registered application
-lessons alongside the production counting lesson. See the
+`/demos/catching-unicorns`, `/demos/mae386` and `/demos/calculus`. All are registered
+application lessons alongside the production counting lesson. See the
 [MAE386 route validation](mae386-demo-validation.md) for bounded UI coverage and
 remaining live acceptance work.
 

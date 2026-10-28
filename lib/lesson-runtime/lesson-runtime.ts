@@ -1,3 +1,7 @@
+import { projectMathDiagnostics } from "../calculus/math-diagnostics";
+import type { MathSourceEvent } from "../calculus/math-evidence";
+import type { MathControllerSnapshot } from "../calculus/math-controller";
+import { CalculusRuntime, type CalculusFragment } from "./calculus-runtime";
 import { questionRecap, type QuestionOutcomeSnapshot } from "./mae386/question-outcomes";
 import type { RewriteTranscript } from "./mae386/rewrite-proposal";
 import { learnerNavigationIntent, parseLearnerNavigationText, isLearnerStopText } from "./conversation-progression";
@@ -6,7 +10,7 @@ import { terminalRecapComplete } from "./terminal-recap";
 import { evidenceRecap } from "./evidence-recap";
 import { normalizeAssessment, type ConversationAssessment, type ConversationVisit } from "./conversation-assessment";
 import { BrowserTransport } from "../browser-transport";
-import type { ProviderEvent, TranscriptEvent } from "../events";
+import type { ProviderEvent } from "../events";
 import { MICROPHONE_ONSET_MS, MICROPHONE_ONSET_QUIET_MS, MICROPHONE_QUIET_MS } from "../microphone-turn";
 import { parseConversationStateProposal } from "./conversation-state-classifier";
 import { currentNodeContext, type LessonDefinition } from "./lesson-definition";
@@ -57,7 +61,7 @@ export const LESSON_TIMING = {
 } as const;
 
 type Speaker = "child" | "tutor" | "unknown";
-type Fragment = { event: TranscriptEvent; source: RuntimeSource; order: number };
+type Fragment = CalculusFragment;
 export type LessonObservation = {
   /** Sample of the report clock, taken in the same browser read as the journal. */
   nowMs: number;
@@ -67,6 +71,7 @@ export type LessonObservation = {
 };
 
 export type LessonSnapshot = {
+  math?: MathControllerSnapshot;
   status: "prepared" | "connecting" | "live" | "ended";
   runtime: LessonRuntimeState | null;
   display: RenderIdentity;
@@ -95,6 +100,7 @@ export class LessonRuntime {
   private readonly runtimeId = crypto.randomUUID();
   private readonly createdAt = performance.now();
   private readonly transport: BrowserTransport;
+  private readonly calculus?: CalculusRuntime;
   private playbackOrigin?: { generation: number; origin: TrackingOrigin };
   private state: LessonRuntimeState | null = null;
   private status: LessonSnapshot["status"] = "prepared";
@@ -140,6 +146,30 @@ export class LessonRuntime {
     private readonly changed: (snapshot: LessonSnapshot) => void,
     private readonly lessonDefinition: LessonDefinition,
   ) {
+    if (lessonDefinition.calculus)
+      this.calculus = new CalculusRuntime(
+        this.runtimeId,
+        () => ({
+          state: this.state,
+          fragments: this.fragments,
+          revision: this.revision,
+          order: this.order,
+          live: this.status === "live",
+          quiet: this.isQuietActive(),
+          steering: !!this.steering,
+          supportRequestedAt: this.supportRequestedAt,
+        }),
+        () => this.now(),
+        () => this.publish(),
+        (type, detail) => this.log(type, detail),
+        (eventId, content) =>
+          this.transport.send({ type: "session.instructions.append", event_id: eventId, delegation_id: null, content }),
+        () => ++this.order,
+        () => this.stop("learner_stop"),
+        request => this.performSupport(request, true),
+        () => this.scheduleClassification("spoken_support_quiet"),
+        LESSON_TIMING.childSnapshotDebounceMs,
+      );
     this.journal = new DiagnosticJournal(this.runtimeId, () => this.now(), this.lessonDefinition.initialNodeId);
     if (this.lessonDefinition.nodes[this.lessonDefinition.initialNodeId].completeAfterTutorOutput)
       this.terminalText = evidenceRecap(this.lessonDefinition, null);
@@ -284,7 +314,7 @@ export class LessonRuntime {
     return performance.now() - this.createdAt;
   }
   private log(type: string, detail: unknown = null, source?: ClassificationSource | RuntimeSource, speaker?: Speaker) {
-    this.journal.append(type, detail, { state: this.state, revision: this.revision, source, speaker });
+    return this.journal.append(type, detail, { state: this.state, revision: this.revision, source, speaker });
   }
 
   private publish() {
@@ -293,6 +323,7 @@ export class LessonRuntime {
 
   snapshot(): LessonSnapshot {
     return {
+      math: this.calculus?.controller.snapshot(),
       status: this.status,
       runtime: this.state,
       display: this.display,
@@ -334,6 +365,7 @@ export class LessonRuntime {
         atMs: this.now(),
         lesson: this.lessonDefinition,
       });
+      this.calculus?.onStart(this.state.nodeId, this.state.visitId);
       this.status = "connecting";
       this.log("render.confirmed", { identity, initial: true });
       this.log("runtime.created", this.state);
@@ -396,6 +428,11 @@ export class LessonRuntime {
       this.log(effect.type, effect);
       switch (effect.type) {
         case "render.requested":
+          if (this.calculus) {
+            const outcome =
+              event.type === "scene.skipped" || before.navigationIntent?.action === "skip" ? "skipped" : "completed";
+            this.calculus.onVisitChange(this.state.nodeId, this.state.visitId, outcome);
+          }
           this.supersedeMissingAnswerCheck();
           this.cancelClassification("node_visit_changed");
           // Install the visit boundary synchronously, before React's render/confirmation.
@@ -483,6 +520,7 @@ export class LessonRuntime {
       case "microphone.speech_started":
         if (this.status !== "live") return;
         this.log(event.type);
+        this.calculus?.onSpeechStarted();
         if (!this.state.childSpeaking) {
           if (
             event.type === "microphone.speech_started" ||
@@ -503,9 +541,12 @@ export class LessonRuntime {
         }
         return;
       case "microphone.activity_discarded":
-      case "microphone.speech_stopped":
+      case "microphone.speech_stopped": {
         if (this.status !== "live") return;
-        this.log(event.type, event.type === "microphone.speech_stopped" ? { quietMs: event.quietMs } : null);
+        const observedAtMs = this.log(
+          event.type,
+          event.type === "microphone.speech_stopped" ? { quietMs: event.quietMs } : null,
+        );
         if (this.state.childSpeaking) {
           if (event.type === "microphone.speech_stopped" && this.state.childCandidate) {
             this.cancelClassification("child_turn_confirmed");
@@ -546,9 +587,14 @@ export class LessonRuntime {
             else if (!this.lessonDefinition.conversationFirst || !this.requestedNavigation())
               this.answerRecovery.arm(this.state, !this.steering);
           }
+          this.calculus?.onSpeechStopped(
+            event.type === "microphone.speech_stopped",
+            event.type === "microphone.speech_stopped" ? observedAtMs : null,
+          );
           this.scheduleClassification(event.type);
         }
         return;
+      }
       case "output.activity":
         this.journal.trackDelivery(
           {
@@ -633,6 +679,10 @@ export class LessonRuntime {
       }
       case "provider.error":
         this.log("gpt_live.error", { code: event.code, clientEventId: event.clientEventId });
+        if (event.clientEventId?.startsWith(`${this.runtimeId}:math:`)) {
+          this.log("gpt_live.math_feedback_failed", { eventId: event.clientEventId });
+          return;
+        }
         this.fail("GPT-Live reported an error. Export diagnostics and start a fresh attempt.");
         return;
       case "session.closed":
@@ -695,6 +745,15 @@ export class LessonRuntime {
       source = runtimeSource(this.state);
       fragment = { ...fragment, source };
     }
+    if (speaker === "tutor" && this.calculus)
+      this.calculus.controller.recordSourceEvent({
+        id: `tutor_${fragment.order}`,
+        order: ++this.order,
+        kind: "unknown-help",
+        text: event.delta,
+      });
+    if (this.calculus)
+      this.log("math.transcript_available", { delta: event.delta, order: fragment.order, speaker }, source, speaker);
     this.fragments.push(fragment);
     // Order by provider interval; late delivery must not put an earlier child answer after its acknowledgment.
     this.fragments.sort((a, b) => a.event.startMs - b.event.startMs || a.order - b.order);
@@ -724,6 +783,7 @@ export class LessonRuntime {
         transcript: text,
       });
     this.revision++;
+    if (speaker === "child") this.calculus?.onTranscript();
     this.log(
       "transcript.snapshot",
       { speaker, transcript: text, startMs: event.startMs, endMs: event.endMs },
@@ -759,7 +819,7 @@ export class LessonRuntime {
           : {}),
       speaker,
       transcriptSnapshot: text,
-      ...(speaker === "child" && this.lessonDefinition.questionGroups
+      ...(speaker === "child" && (this.lessonDefinition.questionGroups || this.lessonDefinition.calculus)
         ? {
             learnerTurnText: this.fragments
               .filter(item => item.event.speaker === "child" && item.source.childTurnId === source.childTurnId)
@@ -786,13 +846,25 @@ export class LessonRuntime {
   }
 
   private requestedNavigation() {
+    if (this.calculus) return parseLearnerNavigationText(this.calculus.learnerText());
     return this.lessonDefinition.questionGroups
       ? parseLearnerNavigationText(this.state?.learnerUtterance?.text ?? "")
       : learnerNavigationIntent(this.transcript);
   }
 
+  private isQuietActive() {
+    return (
+      this.status === "live" &&
+      this.state?.phase === "active" &&
+      !this.state.childSpeaking &&
+      !this.state.childCandidate &&
+      !this.steering
+    );
+  }
+
   private scheduleClassification(trigger: string) {
     clearTimeout(this.stabilizationTimer);
+    if (this.calculus && this.state && this.calculus.onQuiet()) return;
     // Stop needs authenticated ended learner speech, but never waits for playback drain or Jev.
     if (
       this.lessonDefinition.questionGroups &&
@@ -863,6 +935,7 @@ export class LessonRuntime {
   }
 
   private syncTutorStabilization(trigger: string) {
+    if (this.calculus && this.state && !this.lessonDefinition.nodes[this.state.nodeId].completeAfterTutorOutput) return;
     if (this.state && this.lessonDefinition.nodes[this.state.nodeId].completeAfterTutorOutput) {
       this.terminalTranscriptRecovery.observe(this.state, this.status === "live" && !this.steering);
       this.answerRecovery.cancel("terminal_close");
@@ -881,6 +954,7 @@ export class LessonRuntime {
   }
 
   private async classify(trigger: string) {
+    if (this.calculus) return;
     if (
       !this.state ||
       this.status !== "live" ||
@@ -1160,19 +1234,18 @@ export class LessonRuntime {
 
   /** UI support is app context, never fabricated learner transcript or assessment evidence. */
   requestSupport(request: "help" | "repeat") {
+    this.performSupport(request);
+  }
+
+  private performSupport(request: "help" | "repeat", spoken = false) {
     if (
       !this.state ||
-      !this.lessonDefinition.questionGroups ||
+      (!this.lessonDefinition.questionGroups && !this.calculus) ||
       this.state.conversationAdvanceRequested ||
-      this.status !== "live" ||
-      this.state.phase !== "active" ||
+      !this.isQuietActive() ||
       this.lessonDefinition.nodes[this.state.nodeId].completeAfterTutorOutput ||
-      this.state.childSpeaking ||
-      this.state.childCandidate ||
-      this.steering ||
       this.state.outputActivity !== "quiet" ||
-      this.state.quietSinceMs === null ||
-      this.now() - this.state.quietSinceMs < this.state.quietDrainMs
+      (!spoken && (this.state.quietSinceMs === null || this.now() - this.state.quietSinceMs < this.state.quietDrainMs))
     )
       return;
     this.supportRequestedAt = { visitId: this.state.visitId, revision: this.state.transcriptRevision };
@@ -1180,26 +1253,24 @@ export class LessonRuntime {
     this.cancelClassification("learner_support_requested");
     this.answerRecovery.cancel("learner_support_requested");
     this.log("learner.support_requested", { request });
-    this.appendSteering(
+    this.calculus?.invalidate();
+    const sent = this.appendSteering(
       currentNodeContext(this.lessonDefinition, this.state.nodeId),
       this.display.token,
       false,
       request,
     );
+    if (sent && this.calculus)
+      this.recordMathSourceEvent(
+        request === "help" ? "hint" : "neutral-probe",
+        `Application-issued ${request} instruction`,
+      );
     this.publish();
   }
 
   /** Advance along the authored edge without turning a skip into understanding evidence. */
   skipScene(scope: "subpart" | "question" = "subpart") {
-    if (
-      !this.state ||
-      this.status !== "live" ||
-      this.state.phase !== "active" ||
-      this.lessonDefinition.nodes[this.state.nodeId].completeAfterTutorOutput ||
-      this.state.childSpeaking ||
-      this.state.childCandidate !== null ||
-      this.steering !== undefined
-    )
+    if (!this.state || !this.isQuietActive() || this.lessonDefinition.nodes[this.state.nodeId].completeAfterTutorOutput)
       return;
     // A skip is still an authored render/steering transition. Require the same
     // locally observed sustained quiet used by the normal transition path;
@@ -1210,6 +1281,7 @@ export class LessonRuntime {
       this.now() - this.state.quietSinceMs < this.state.quietDrainMs
     )
       return;
+    this.calculus?.invalidate(true);
     const source = runtimeSource(this.state);
     const edge = this.lessonDefinition.nodes[this.state.nodeId].onSuccess;
     const drainFinalObservation =
@@ -1283,6 +1355,7 @@ export class LessonRuntime {
 
   stop(reason = "parent_stop", disconnected = false) {
     if (this.status === "ended") return;
+    this.calculus?.onStop();
     this.missingAnswerCheck = undefined;
     this.cancelClassification(reason);
     this.answerRecovery.cancel(reason);
@@ -1331,8 +1404,30 @@ export class LessonRuntime {
     this.publish();
   }
 
+  confirmMathProposalDisplayed(id: string, boardRevision: number) {
+    return this.calculus?.confirmProposalDisplayed(id, boardRevision) ?? false;
+  }
+
+  confirmMathFeedbackDisplayed(token: string): boolean {
+    return this.calculus?.confirmFeedbackDisplayed(token) ?? false;
+  }
+
+  recordMathSourceEvent(kind: MathSourceEvent["kind"], text: string): boolean {
+    return this.calculus?.recordSourceEvent(kind, text) ?? false;
+  }
+
+  confirmMathProposal(
+    id: string,
+    boardRevision: number,
+    operations: readonly ("differentiate" | "rewrite" | "unassessed")[],
+    method: "ui" | "spoken" = "ui",
+  ) {
+    return this.calculus?.confirmProposal(id, boardRevision, operations, method) ?? false;
+  }
+
   report() {
     const report = {
+      ...(this.calculus ? { math: this.calculus.controller.snapshot() } : {}),
       ...this.journal.report({
         timing: LESSON_TIMING,
         runtime: this.state,
@@ -1344,7 +1439,10 @@ export class LessonRuntime {
       }),
       evidenceEligibility: currentEvidenceEligibility(this.state, this.lessonDefinition),
     };
-    return structuredClone(report) as Omit<typeof report, "evidenceEligibility"> &
+    const mathDiagnostics = this.calculus ? projectMathDiagnostics(report.events) : undefined;
+    return structuredClone({ ...report, ...(mathDiagnostics ? { mathDiagnostics } : {}) }) as {
+      mathDiagnostics?: ReturnType<typeof projectMathDiagnostics>;
+    } & Omit<typeof report, "evidenceEligibility"> &
       Partial<Pick<typeof report, "evidenceEligibility">>;
   }
 }

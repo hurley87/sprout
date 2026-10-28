@@ -16,7 +16,10 @@ export function learnerNavigationIntent(transcript: string, authored = false): N
 
 /** Parse one application-authenticated learner turn; do not merge distinct turns or inspect role labels. */
 export function parseLearnerNavigationText(turnText: string, authored = true): NavigationIntent | null {
-  const text = turnText.trim().replace(/\s+/gu, " ");
+  const raw = turnText.trim().replace(/\s+/gu, " ");
+  const text = /^(?:next(?: problem)?|skip (?:this|the) problem)[.!]?$/i.test(raw)
+    ? raw.replace(/problem/i, "question")
+    : raw;
   if (!text) return null;
   const sentences = text.split(/(?<=[.!?])\s+/u);
   let requested: NavigationIntent | null = null;
