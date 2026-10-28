@@ -1,15 +1,15 @@
-import { CALCULUS_TUTOR_GUIDANCE } from "../calculus/tutor-context";
-import { CALCULUS_PROBLEM_IDS, getCalculusPresentation } from "../calculus/problems";
+import { CALCULUS_TUTOR_GUIDANCE } from "../calculus/work-check";
+import { CALCULUS_PROBLEM_IDS, getCalculusProblem } from "../calculus/problems";
 import { validateLessonDefinition, type LessonNodeDefinition } from "./lesson-definition";
 
 const nodes: Record<string, LessonNodeDefinition> = {};
 for (const [index, id] of CALCULUS_PROBLEM_IDS.entries()) {
-  const problem = getCalculusPresentation(id);
+  const problem = getCalculusProblem(id);
   nodes[id] = {
     id,
     presentation: { sceneId: id, prompt: problem.prompt },
     learningObjective: problem.prompt,
-    tutorBrief: problem.initialTutorContext,
+    tutorBrief: problem.tutorBrief,
     onSuccess: { kind: "node", nodeId: CALCULUS_PROBLEM_IDS[index + 1] ?? "recap" },
   };
 }
@@ -22,7 +22,7 @@ nodes.recap = {
   onSuccess: { kind: "complete" },
 };
 
-/** Explicit opt-in; no public route until the board and feedback integrations exist. */
+/** The application checks each spoken step; the tutor follows that check. */
 export const CALCULUS_LESSON = validateLessonDefinition({
   id: "calculus",
   initialNodeId: CALCULUS_PROBLEM_IDS[0],
@@ -30,12 +30,12 @@ export const CALCULUS_LESSON = validateLessonDefinition({
   conversationFirst: true,
   nodes,
   recovery: {
-    supportClarificationInstruction: "Ask one non-leading clarification of the learner's intended mathematical step.",
-    answerRecoveryInstruction: "Invite the learner to clarify their own intended notation.",
+    supportClarificationInstruction: "Ask one non-leading clarification of the learner's current step.",
+    answerRecoveryInstruction: "Invite the learner to continue their working.",
   },
   // Required closed schema for lesson registration; calculus never invokes this classifier.
   classifier: {
-    objectiveInstructions: "Mathematical actions use the separate application review path.",
+    objectiveInstructions: "Calculus work uses the separate application step check.",
     objectiveCriteria: {
       completed: "Unused",
       incorrect: "Unused",

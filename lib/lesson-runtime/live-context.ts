@@ -1,4 +1,4 @@
-import { CALCULUS_TUTOR_GUIDANCE } from "../calculus/tutor-context";
+import { CALCULUS_TUTOR_GUIDANCE } from "../calculus/work-check";
 import { mae386TeachingInstruction, mae386HelpInstruction } from "./mae386/live-instructions";
 import { currentNodeContext, type LessonDefinition } from "./lesson-definition";
 import type { CurrentNodeSteeringContext, LessonRuntimeState } from "./lesson-runtime-reducer";
@@ -23,7 +23,7 @@ export function supersedeAnswerCheckInstruction(eventId: string) {
 
 export function answerRecoveryInstruction(lesson: LessonDefinition, state: LessonRuntimeState) {
   if (lesson.calculus)
-    return `Application calculus clarification: ${CALCULUS_TUTOR_GUIDANCE} Ask one non-leading question about the learner's own intended step; no answer or completion claim.`;
+    return `Application calculus guidance: ${CALCULUS_TUTOR_GUIDANCE} Invite the learner to continue their working with one non-leading question; no answer or completion claim.`;
   const node = lesson.nodes[state.nodeId];
   if (lesson.conversationFirst && state.hasChildTranscript)
     return "Application conversation guidance: assessment uncertainty must not hold this question. Use the learner’s accumulated answers. Follow the current scene tutor brief for targeted scaffolding when the learner struggles or asks for help; otherwise ask one useful, non-leading follow-up if meaning is unclear. Tutor-supplied content alone is not learner mastery. If the explanation is sufficient or the discussion has run its course, say we can move on and end without a question. Honor a request for the next question. Never ask for repetition to satisfy assessment attribution, claim uncertain concepts are mastered, or wait for an evaluation. The application owns question order and will supply the next rendered screen.";
@@ -120,7 +120,7 @@ export function learnerSupportInstruction(
   lesson?: LessonDefinition,
 ) {
   if (lesson?.calculus)
-    return `Application calculus ${request} request for ${context.nodeId}. ${request === "help" ? "Give one short hint about the current work, without supplying the solution, then invite the learner’s own step. This is assistance, not independent evidence." : `Repeat only the current prompt: ${context.scene.prompt}.`} ${CALCULUS_TUTOR_GUIDANCE}`;
+    return `Application calculus ${request} request for ${context.nodeId}. ${request === "help" ? "Give one short hint about the step the application last said was wrong or missing, without supplying its result, then invite the learner’s own step." : `Repeat only the current prompt: ${context.scene.prompt}.`} ${CALCULUS_TUTOR_GUIDANCE}`;
   if (lesson?.id === "mae386" && request === "help") return mae386HelpInstruction(context);
   return `Application learner control for the current rendered node ${context.nodeId}: ${
     request === "repeat"

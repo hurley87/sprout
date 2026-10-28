@@ -5,9 +5,8 @@ The production prototype is the realtime counting lesson at `/`, backed by
 
 | Document | Purpose |
 | --- | --- |
-| [Calculus demo validation](calculus-demo-validation.md) | Route/setup, learner walkthrough, finite math domain, diagnostics and PENDING live acceptance matrix/forms |
-| [Issue #80 findings](issue-80-findings.md) | Renderer decision, feasibility conclusions, historical automated/provider evidence and remaining human acceptance |
-| [Calculus tutor integration](calculus-tutor-integration.md) | Display/confirmation authority, bounded context and conservative assistance evidence |
+| [Calculus demo](calculus-demo.md) | Worked-steps flow, required steps per problem, tutor outcomes, diagnostics and PENDING live acceptance |
+| [Issue #80 findings](issue-80-findings.md) | Historical: renderer decision and feasibility evidence for the superseded confirmation design |
 | [Architecture](architecture.md) | Authority boundaries, current modules, lifecycle and failure behavior |
 | [Domain glossary](../CONTEXT.md) | Current lesson/runtime terms |
 | [Classifier contract](lesson-classifier.md) | Jev input projection, probabilities and deterministic mapping |

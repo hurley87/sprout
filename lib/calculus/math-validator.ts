@@ -1,25 +1,6 @@
-import { parseMathExpression, type MathExpression as E } from "./math-expression";
-import { getCalculusPresentation, getCalculusReviewKey, type CalculusProblemId } from "./problems";
+import type { MathExpression as E } from "./math-expression";
 
-export type MathCorrectness = "valid" | "incorrect" | "unsupported" | "incomplete";
-export type MathRole = "function" | "derivative";
-export interface MathValidationContext {
-  readonly problemId: CalculusProblemId;
-  /** Omit only when working from the authored original function. For replacement,
-   * callers supply the predecessor being transformed, not the replaced attempt. */
-  readonly current?: { readonly expression: E; readonly role: MathRole };
-  readonly operation: "rewrite" | "differentiate";
-}
-export interface MathValidationResult {
-  /** Detached exact syntax. Normalization is private and never repairs display. */
-  readonly expression?: E;
-  readonly correctness: MathCorrectness;
-  readonly expressionCorrectness: MathCorrectness;
-  readonly transformationCorrectness: MathCorrectness;
-  /** Mathematical completion only; never mastery, navigation, or independence. */
-  readonly completeDerivative: boolean;
-  readonly detail: string;
-}
+export type MathComparison = "match" | "mismatch" | "unsupported";
 
 /** Finite support contract:
  * - Exact integer coefficients; associative/commutative sums/products, subtraction,
@@ -30,10 +11,7 @@ export interface MathValidationResult {
  * - Division ONLY by a literal nonzero integer with integral coefficient result.
  *   No variable cancellation, negative powers, rational functions or domain repair.
  * - Zero powers ONLY of a verified nonzero constant (no 0^0/domain conventions).
- * - Derivatives ONLY of the finite authored original/subexpressions below, matched
- *   modulo this algebra. No recursive differentiation or general solver.
- * - Equality ONLY at the root: both sides must be equal AND the left must denote
- *   the current expression (rewrite) or its derivative (differentiate).
+ * - No derivative notation or general solver: learners state values.
  * Every subtree is checked before cancellation/zero multiplication. Degree <=24,
  * <=64 collected terms, |coeff|<=10^15, <=4096 term products per normalization.
  * Exceeding any boundary abstains, even if later cancellation would simplify it.
@@ -69,7 +47,7 @@ function add(a: Polynomial, b: Polynomial, sign = BigInt(1)): Polynomial {
   for (const [k, v] of b) put(result, k, (result.get(k) ?? BigInt(0)) + sign * v);
   return result;
 }
-function normalizer(derivatives: ReadonlyMap<string, Polynomial>) {
+function normalizer() {
   let products = 0;
   function multiply(a: Polynomial, b: Polynomial): Polynomial {
     const result: Polynomial = new Map();
@@ -127,159 +105,24 @@ function normalizer(derivatives: ReadonlyMap<string, Polynomial>) {
       case "cos":
         if (e.argument.op !== "variable") throw new OutsideDomain("Only sin(x) and cos(x) supported");
         return new Map([[key(0, e.op === "sin" ? 1 : 0, e.op === "cos" ? 1 : 0), BigInt(1)]]);
-      case "derivative": {
-        // An empty table prevents nesting derivatives or deriving new rules.
-        const argument = normalizer(new Map())(e.argument);
-        const value = derivatives.get(signature(argument));
-        if (!value) throw new OutsideDomain("Derivative argument outside authored table");
-        return new Map(value);
-      }
+      case "derivative":
+        throw new OutsideDomain("Derivative notation unsupported");
       case "equal":
         throw new OutsideDomain("Nested equality unsupported");
     }
   }
   return normalize;
 }
-const x: E = { op: "variable", name: "x" };
-const n = (value: number): E => ({ op: "number", value });
-const pow = (exponent: number): E => ({ op: "power", base: x, exponent });
-const mul = (...args: E[]): E => ({ op: "multiply", args });
-function derivativeTable(id: CalculusProblemId): ReadonlyMap<string, Polynomial> {
-  const plain = normalizer(new Map());
-  const original = getCalculusPresentation(id).functionExpression;
-  const pairs: [E, E][] = [[original, getCalculusReviewKey(id).finalForms[0]]];
-  if (id === "cubic-minus-linear") pairs.push([pow(3), mul(n(3), pow(2))], [mul(n(4), x), n(4)]);
-  if (id === "quadratic-sine")
-    pairs.push(
-      [pow(2), mul(n(2), x)],
-      [
-        { op: "sin", argument: x },
-        { op: "cos", argument: x },
-      ],
-    );
-  if (id === "composite-fifth") pairs.push([{ op: "add", args: [mul(n(3), pow(2)), n(1)] }, mul(n(6), x)]);
-  return new Map(pairs.map(([a, b]) => [signature(plain(a)), plain(b)]));
-}
-function hasDerivative(e: E): boolean {
-  switch (e.op) {
-    case "derivative":
-      return true;
-    case "add":
-    case "multiply":
-      return e.args.some(hasDerivative);
-    case "subtract":
-    case "divide":
-    case "equal":
-      return hasDerivative(e.left) || hasDerivative(e.right);
-    case "power":
-      return hasDerivative(e.base);
-    case "negate":
-    case "sin":
-    case "cos":
-      return hasDerivative(e.argument);
-    default:
-      return false;
-  }
-}
-/** Pure assessment only. Caller still owns authenticated source/board authority,
- * faithfulness, reasoning review, assistance provenance and eventual state changes.
- * undefined/null means no complete expression supplied, including strategy-only.
- * Other malformed syntax abstains; it is never evidence of incorrect mathematics.
- */
-export function validateMathExpression(proposed: unknown, context: MathValidationContext): MathValidationResult {
-  // Validate the authored ID even on the no-expression path.
-  const original = getCalculusPresentation(context.problemId).functionExpression;
-  const result = (
-    expression: E | undefined,
-    expressionCorrectness: MathCorrectness,
-    transformationCorrectness: MathCorrectness,
-    detail: string,
-  ): MathValidationResult => {
-    // An unresolved transition/domain keeps the combined verdict unresolved, even
-    // when the separately assessed value is wrong for this problem.
-    const correctness =
-      expressionCorrectness === "unsupported" || transformationCorrectness === "unsupported"
-        ? "unsupported"
-        : expressionCorrectness === "incorrect" || transformationCorrectness === "incorrect"
-          ? "incorrect"
-          : expressionCorrectness === "incomplete" || transformationCorrectness === "incomplete"
-            ? "incomplete"
-            : "valid";
-    const value = expression?.op === "equal" ? expression.right : expression;
-    const role = context.operation === "differentiate" ? "derivative" : (context.current?.role ?? "function");
-    return {
-      ...(expression ? { expression } : {}),
-      correctness,
-      expressionCorrectness,
-      transformationCorrectness,
-      completeDerivative: correctness === "valid" && role === "derivative" && !!value && !hasDerivative(value),
-      detail,
-    };
-  };
-  if (proposed == null) return result(undefined, "incomplete", "incomplete", "No executed expression supplied");
-  let expression: E;
+/** Exact equivalence in the bounded algebra above. "unsupported" means the check
+ * abstains (outside the domain), never that the learner is wrong. An equation is
+ * judged by its right-hand side, the value the learner stated. */
+export function compareMathExpression(proposed: E, accepted: readonly E[]): MathComparison {
+  const normalize = normalizer();
   try {
-    expression = parseMathExpression(proposed);
-  } catch {
-    return result(
-      undefined,
-      "unsupported",
-      "unsupported",
-      "Outside bounded expression syntax; clarify before assessing",
-    );
-  }
-  let normalize: (e: E) => Polynomial;
-  let candidate: Polynomial, expected: Polynomial;
-  const value = expression.op === "equal" ? expression.right : expression;
-  try {
-    normalize = normalizer(derivativeTable(context.problemId));
-    candidate = normalize(value);
-    expected = normalize(
-      context.operation === "differentiate" || context.current?.role === "derivative"
-        ? getCalculusReviewKey(context.problemId).finalForms[0]
-        : original,
-    );
+    const value = signature(normalize(proposed.op === "equal" ? proposed.right : proposed));
+    return accepted.some(form => signature(normalize(form)) === value) ? "match" : "mismatch";
   } catch (error) {
     if (!(error instanceof OutsideDomain)) throw error;
-    return result(expression, "unsupported", "unsupported", error.message);
-  }
-  const expressionCorrectness = signature(candidate) === signature(expected) ? "valid" : "incorrect";
-  try {
-    const current = parseMathExpression(context.current?.expression ?? original);
-    if (current.op === "equal") throw new OutsideDomain("Current context must name a value, not an assertion");
-    if (context.operation === "differentiate" && (context.current?.role === "derivative" || hasDerivative(current)))
-      throw new OutsideDomain("Repeated differentiation outside authored routes");
-    const source: E = context.operation === "differentiate" ? { op: "derivative", argument: current } : current;
-    const sourceForm = normalize(source);
-    if (expression.op === "equal") {
-      const left = normalize(expression.left);
-      if (signature(left) !== signature(candidate))
-        return result(
-          expression,
-          expressionCorrectness,
-          "incorrect",
-          "Asserted equality is false in the supported domain",
-        );
-      if (signature(left) !== signature(sourceForm))
-        return result(
-          expression,
-          expressionCorrectness,
-          "incorrect",
-          "Equality does not describe the requested current transformation",
-        );
-    }
-    const transition = signature(candidate) === signature(sourceForm) ? "valid" : "incorrect";
-    return result(
-      expression,
-      expressionCorrectness,
-      transition,
-      transition === "valid"
-        ? "Verified by bounded exact algebra and authored derivative table"
-        : "Transformation changes the supported current value",
-    );
-  } catch (error) {
-    if (!(error instanceof OutsideDomain))
-      return result(expression, expressionCorrectness, "unsupported", "Invalid current expression context");
-    return result(expression, expressionCorrectness, "unsupported", error.message);
+    return "unsupported";
   }
 }

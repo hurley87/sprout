@@ -1,85 +1,98 @@
-import { MathController } from "../calculus/math-controller";
-import type { MathSourceEvent } from "../calculus/math-evidence";
-import { INTERPRETATION_LIMITS } from "../calculus/math-interpretation-contract";
-import { isCalculusProblemId } from "../calculus/problems";
-import { isSpokenMathConfirmationPrefix, parseSpokenMathConfirmation } from "../calculus/spoken-confirmation";
-import { calculusFeedbackInstruction } from "../calculus/tutor-context";
+import { isCalculusProblemId, type CalculusProblemId } from "../calculus/problems";
+import { applyExtraction, emptyWork, workInstruction, workOutcome, type CalculusWork } from "../calculus/work-check";
+import { EXTRACTION_LIMITS, type WorkExtraction, type WorkExtractionInput } from "../calculus/work-extraction";
 import type { TranscriptEvent } from "../events";
 import { isLearnerStopText, parseLearnerNavigationText } from "./conversation-progression";
 import type { LessonRuntimeState, RuntimeSource } from "./lesson-runtime-reducer";
 
 export type CalculusFragment = { event: TranscriptEvent; source: RuntimeSource; order: number };
-type Operation = "differentiate" | "rewrite" | "unassessed";
 type Context = {
   state: LessonRuntimeState | null;
   fragments: readonly CalculusFragment[];
-  revision: number;
-  order: number;
-  live: boolean;
   quiet: boolean;
   steering: boolean;
   supportRequestedAt?: { visitId: number; revision: number };
 };
+export interface CalculusCheck {
+  readonly requestId: string;
+  readonly learnerTurns: WorkExtractionInput["learnerTurns"];
+  readonly status: string;
+  readonly extraction: WorkExtraction | null;
+  readonly outcome: string | null;
+  readonly instruction: string | null;
+}
+export interface CalculusVisit {
+  readonly visitId: number;
+  readonly problemId: CalculusProblemId;
+  work: CalculusWork;
+  outcome: "active" | "completed" | "skipped" | "stopped";
+  help: number;
+  readonly checks: CalculusCheck[];
+}
+export interface CalculusSnapshot {
+  readonly work: CalculusWork | null;
+  readonly checking: boolean;
+  readonly complete: boolean;
+  readonly visits: readonly CalculusVisit[];
+}
 
+/** Lets the learner talk through a problem; after each turn the whole visit is
+ * re-read into the authored steps, the app checks them, and the tutor is told
+ * what is correct, wrong or missing. Completion advances to the next problem. */
 export class CalculusRuntime {
-  readonly controller: MathController;
-  private reservation?: {
-    id: string;
-    boardRevision: number;
-    visitId: number;
-    turnId: number;
-    startedAt: number;
-    fragmentFloor: number;
-  };
-  private deferredTurns: Parameters<MathController["learnerRevision"]>[1] = [];
+  private visits: CalculusVisit[] = [];
   private consumedFragments = new Set<number>();
   private timer?: ReturnType<typeof setTimeout>;
+  private request?: AbortController;
+  private lastChecked: string | null = null;
+  private lastInstruction: string | null = null;
+  private completed = false;
 
   constructor(
     private readonly runtimeId: string,
     private readonly context: () => Context,
-    private readonly now: () => number,
     private readonly publish: () => void,
     private readonly log: (type: string, detail: unknown) => void,
     private readonly send: (eventId: string, content: string) => void,
-    private readonly nextOrder: () => number,
     private readonly stop: () => void,
     private readonly support: (request: "help" | "repeat") => void,
     private readonly schedule: () => void,
+    private readonly complete: () => boolean,
     private readonly debounceMs: number,
-  ) {
-    this.controller = new MathController(runtimeId, publish, log);
+  ) {}
+
+  private get visit() {
+    const visit = this.visits.at(-1);
+    return visit?.outcome === "active" ? visit : undefined;
+  }
+
+  snapshot(): CalculusSnapshot {
+    const visit = this.visit;
+    return structuredClone({
+      work: visit?.work ?? null,
+      checking: !!this.request,
+      complete: this.completed,
+      visits: this.visits,
+    });
   }
 
   private groups() {
-    const groups: {
-      speaker: TranscriptEvent["speaker"];
-      turnId: number;
-      order: number;
-      lastOrder: number;
-      text: string;
-      consumed: boolean;
-    }[] = [];
+    const groups: { speaker: TranscriptEvent["speaker"]; turnId: number; order: number; text: string }[] = [];
     for (const fragment of this.context().fragments) {
-      const consumed = this.consumedFragments.has(fragment.order);
+      if (this.consumedFragments.has(fragment.order)) continue;
       const previous = groups.at(-1);
       if (
-        !consumed &&
         previous &&
-        !previous.consumed &&
         previous.speaker === fragment.event.speaker &&
         (fragment.event.speaker !== "child" || previous.turnId === fragment.source.childTurnId)
-      ) {
+      )
         previous.text += fragment.event.delta;
-        previous.lastOrder = Math.max(previous.lastOrder, fragment.order);
-      } else
+      else
         groups.push({
           speaker: fragment.event.speaker,
           turnId: fragment.source.childTurnId,
           order: fragment.order,
-          lastOrder: fragment.order,
           text: fragment.event.delta,
-          consumed,
         });
     }
     return groups;
@@ -93,86 +106,23 @@ export class CalculusRuntime {
       .join("");
   }
 
-  onSpeechStarted() {
+  /** Raw microphone activity is often noise or tutor echo; only confirmed speech
+   * makes an in-flight check stale. */
+  onSpeechStarted(confirmed: boolean) {
+    if (!confirmed) return;
     clearTimeout(this.timer);
-    const { state, steering, order } = this.context();
-    if (!state || state.childSpeaking || this.reservation) return;
-    const pending = this.controller.pendingProposal;
-    if (pending?.displayed && !steering && state.phase === "active")
-      this.reservation = {
-        id: pending.id,
-        boardRevision: pending.boardRevision,
-        visitId: state.visitId,
-        turnId: state.childTurnId + 1,
-        startedAt: this.now(),
-        fragmentFloor: order,
-      };
-    else this.controller.invalidate();
-  }
-
-  onTranscript() {
-    const { revision } = this.context();
-    this.deferredTurns = this.groups()
-      .filter(group => group.speaker === "child" && !group.consumed)
-      .map(group => ({
-        id: `turn_${group.turnId}_${group.order}`,
-        speaker: "learner" as const,
-        text: group.text,
-        order: group.lastOrder,
-      }));
-    if (
-      this.reservation &&
-      !isSpokenMathConfirmationPrefix(this.learnerText(), this.controller.pendingProposal?.batch.actions.length ?? 0)
-    )
-      this.reservation = undefined;
-    if (!this.reservation) this.controller.learnerRevision(revision, this.deferredTurns);
-  }
-
-  onSpeechStopped(ended: boolean, localSpeechEndMs: number | null) {
-    const reserved = this.reservation;
-    const { state, fragments: allFragments, revision } = this.context();
-    if (!reserved || !state) return;
-    this.reservation = undefined;
-    const pending = this.controller.pendingProposal;
-    const fragments = allFragments.filter(
-      item =>
-        item.event.speaker === "child" &&
-        item.source.childTurnId === state.childTurnId &&
-        item.order > reserved.fragmentFloor,
-    );
-    const text = fragments.map(item => item.event.delta).join("");
-    const operations = pending ? parseSpokenMathConfirmation(text, pending.batch.actions.length) : null;
-    if (
-      ended &&
-      this.now() - reserved.startedAt <= 8000 &&
-      state.visitId === reserved.visitId &&
-      state.childTurnId === reserved.turnId &&
-      fragments.length > 0 &&
-      operations &&
-      this.confirmProposal(reserved.id, reserved.boardRevision, operations, "spoken")
-    ) {
-      this.log("math.spoken_confirmation", {
-        ...reserved,
-        text,
-        revision,
-        operations,
-        fragments: structuredClone(fragments),
-        localSpeechEndMs,
-      });
-      this.controller.consumeConfirmation(revision, this.deferredTurns);
-    } else {
-      const currentRevision = this.controller.snapshot().current?.identity.transcriptRevision;
-      if (currentRevision !== undefined && revision > currentRevision)
-        this.controller.learnerRevision(revision, this.deferredTurns);
-      else this.controller.invalidate();
-      this.publish();
-    }
+    this.cancelCheck();
   }
 
   onQuiet(): boolean {
     clearTimeout(this.timer);
     const { state, quiet, supportRequestedAt } = this.context();
-    if (!state || !quiet || !state.hasChildTranscript) return true;
+    if (!state || !quiet) return true;
+    if (this.completed) {
+      this.complete();
+      return true;
+    }
+    if (!state.hasChildTranscript) return true;
     const text = this.learnerText();
     if (isLearnerStopText(text)) {
       this.stop();
@@ -183,7 +133,6 @@ export class CalculusRuntime {
       if (supportRequestedAt?.visitId === state.visitId && supportRequestedAt.revision === state.transcriptRevision)
         return true;
       const { visitId, transcriptRevision } = state;
-      this.controller.consumeTurns(this.deferredTurns);
       this.consumeFragments();
       this.support(support);
       if (!this.context().steering)
@@ -194,119 +143,142 @@ export class CalculusRuntime {
       return true;
     }
     if (parseLearnerNavigationText(text)) {
-      this.controller.invalidate();
+      this.cancelCheck();
       return false;
     }
     const visitId = state.visitId;
     this.timer = setTimeout(() => {
       const current = this.context();
-      if (!current.quiet || current.state?.visitId !== visitId) return;
-      const messages = this.groups()
-        .filter(group => group.speaker === "sprout")
-        .map(group => ({ id: `tutor_${group.order}`, text: group.text }));
-      const marker = "[Earlier tutor context omitted; recent suffix follows] ";
-      const tutorContext = messages
-        .filter(message => message.text.trim())
-        .slice(-INTERPRETATION_LIMITS.turns)
-        .map((message, index, recent) => ({
-          ...message,
-          text:
-            message.text.length > INTERPRETATION_LIMITS.text || (index === 0 && messages.length > recent.length)
-              ? marker + message.text.slice(-(INTERPRETATION_LIMITS.text - marker.length))
-              : message.text,
-        }));
-      void this.controller.extract(tutorContext);
+      if (current.quiet && current.state?.visitId === visitId) void this.check();
     }, this.debounceMs);
     return true;
   }
 
+  private turns() {
+    const clip = (text: string) => text.slice(-EXTRACTION_LIMITS.text);
+    const groups = this.groups().filter(group => group.text.trim());
+    return {
+      learnerTurns: groups
+        .filter(group => group.speaker === "child")
+        .slice(-EXTRACTION_LIMITS.turns)
+        .map(group => ({ id: `learner_${group.order}`, text: clip(group.text) })),
+      tutorTurns: groups
+        .filter(group => group.speaker !== "child")
+        .slice(-8)
+        .map(group => ({ id: `tutor_${group.order}`, text: clip(group.text) })),
+    };
+  }
+
+  private async check() {
+    const visit = this.visit;
+    if (!visit || this.completed) return;
+    const { learnerTurns, tutorTurns } = this.turns();
+    const key = JSON.stringify(learnerTurns);
+    if (!learnerTurns.length || key === this.lastChecked) return;
+    this.cancelCheck();
+    const abort = new AbortController();
+    this.request = abort;
+    const requestId = crypto.randomUUID();
+    const input: WorkExtractionInput = { problemId: visit.problemId, learnerTurns, tutorTurns };
+    this.log("calculus.check_started", { requestId, input });
+    this.publish();
+    let status = "provider-failure";
+    let extraction: WorkExtraction | null = null;
+    try {
+      const response = await fetch("/api/calculus-work", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+        signal: AbortSignal.any([abort.signal, AbortSignal.timeout(EXTRACTION_LIMITS.timeoutMs)]),
+      });
+      const body = (await response.json()) as { status?: string; extraction?: WorkExtraction };
+      status = typeof body?.status === "string" ? body.status : "malformed";
+      if (status === "ok" && body.extraction) extraction = body.extraction;
+    } catch {
+      status = abort.signal.aborted ? "cancelled" : "provider-failure";
+    }
+    if (this.request !== abort || abort.signal.aborted || this.visit !== visit) {
+      this.log("calculus.check_ended", { requestId, status: "stale" });
+      return;
+    }
+    this.request = undefined;
+    let outcome = null,
+      instruction = null;
+    if (extraction) {
+      this.lastChecked = key;
+      visit.work = applyExtraction(visit.work, extraction);
+      const result = workOutcome(visit.work);
+      outcome = result.kind;
+      instruction = workInstruction(visit.work, result);
+      if (instruction !== this.lastInstruction) this.instruct(instruction);
+      if (result.kind === "complete") {
+        this.completed = true;
+        this.log("calculus.problem_completed", { visitId: visit.visitId, problemId: visit.problemId });
+        this.complete();
+      }
+    }
+    visit.checks.push({ requestId, learnerTurns, status, extraction, outcome, instruction });
+    this.log("calculus.check_ended", { requestId, status, extraction, work: visit.work, outcome });
+    this.publish();
+  }
+
+  private instruct(content: string) {
+    const eventId = `${this.runtimeId}:math:${crypto.randomUUID()}`;
+    this.lastInstruction = content;
+    try {
+      this.send(eventId, content);
+      this.log("gpt_live.math_feedback_append", { eventId, content });
+    } catch {
+      this.log("gpt_live.math_feedback_failed", { eventId });
+    }
+  }
+
   onStart(nodeId: string, visitId: number) {
-    if (isCalculusProblemId(nodeId)) this.controller.enter(nodeId, visitId);
+    this.enter(nodeId, visitId);
   }
 
   onVisitChange(nodeId: string, visitId: number, outcome: "completed" | "skipped") {
-    clearTimeout(this.timer);
-    if (isCalculusProblemId(nodeId)) this.controller.enter(nodeId, visitId, outcome);
-    else this.controller.finish(outcome);
-    this.reservation = undefined;
+    this.end(outcome);
+    this.enter(nodeId, visitId);
   }
 
-  invalidate(cancelTimer = false) {
-    this.reservation = undefined;
-    this.controller.invalidate();
-    if (cancelTimer) clearTimeout(this.timer);
+  private enter(nodeId: string, visitId: number) {
+    clearTimeout(this.timer);
+    this.cancelCheck();
+    this.consumedFragments.clear();
+    this.lastChecked = this.lastInstruction = null;
+    this.completed = false;
+    if (isCalculusProblemId(nodeId))
+      this.visits.push({ visitId, problemId: nodeId, work: emptyWork(nodeId), outcome: "active", help: 0, checks: [] });
+    this.publish();
+  }
+
+  private end(outcome: CalculusVisit["outcome"]) {
+    const visit = this.visit;
+    if (visit) visit.outcome = this.completed ? "completed" : outcome === "completed" ? "skipped" : outcome;
+  }
+
+  /** Help and repeat are app actions; counted as assistance, never as learner work. */
+  recordSupport(request: "help" | "repeat") {
+    const visit = this.visit;
+    if (visit && request === "help") visit.help++;
+    this.cancelCheck();
+    this.publish();
+  }
+
+  cancelCheck() {
+    this.request?.abort();
+    this.request = undefined;
   }
 
   onStop() {
-    this.controller.finish("stopped");
     clearTimeout(this.timer);
-    this.reservation = undefined;
+    this.cancelCheck();
+    this.end("stopped");
   }
 
   private consumeFragments() {
     for (const fragment of this.context().fragments)
       if (fragment.event.speaker === "child") this.consumedFragments.add(fragment.order);
-  }
-
-  confirmProposalDisplayed(id: string, boardRevision: number) {
-    if (!this.context().live || !this.controller.confirmDisplayed(id, boardRevision)) return false;
-    const feedback = this.controller.feedbackDisplay;
-    if (feedback?.target === "proposal") this.confirmFeedbackDisplayed(feedback.token);
-    return true;
-  }
-
-  confirmFeedbackDisplayed(token: string) {
-    if (!this.context().quiet) return false;
-    const snapshot = this.controller.takeFeedback(token);
-    if (!snapshot) return false;
-    const content = calculusFeedbackInstruction(snapshot);
-    if (!content) {
-      this.publish();
-      return false;
-    }
-    const eventId = `${this.runtimeId}:math:${token}`;
-    try {
-      this.send(eventId, content);
-      const help = !snapshot.pending && snapshot.current?.history.at(-1)?.action.kind === "help";
-      this.recordSourceEvent(help ? "hint" : "neutral-probe", content);
-      this.log("gpt_live.math_feedback_append", {
-        eventId,
-        token,
-        content,
-        deliveryId: snapshot.current?.history.at(-1)?.deliveryId ?? null,
-      });
-    } catch {
-      this.log("gpt_live.math_feedback_failed", { eventId, token });
-    }
-    this.publish();
-    return true;
-  }
-
-  recordSourceEvent(kind: MathSourceEvent["kind"], text: string) {
-    const { live, state } = this.context();
-    if (!live || state?.phase !== "active") return false;
-    const order = this.nextOrder();
-    return this.controller.recordSourceEvent({ id: `app_${order}`, order, kind, text });
-  }
-
-  confirmProposal(id: string, boardRevision: number, operations: readonly Operation[], method: "ui" | "spoken" = "ui") {
-    if (!this.context().quiet || this.reservation) {
-      this.log("math.confirmation_rejected", { id, boardRevision, operations, method, reason: "runtime-gate" });
-      return false;
-    }
-    const pending = this.controller.pendingProposal;
-    const token = this.controller.feedbackDisplay?.token ?? null;
-    const accepted = this.controller.confirm(id, boardRevision, operations);
-    this.log("math.confirmation", {
-      id,
-      boardRevision,
-      operations,
-      method,
-      accepted,
-      proposal: pending?.batch ?? null,
-      token,
-    });
-    if (accepted) this.consumeFragments();
-    return accepted;
   }
 }

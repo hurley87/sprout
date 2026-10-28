@@ -121,13 +121,6 @@ export function useVoiceDemo({
     download,
     support,
     skip,
-    proposalDisplayed: (id: string, revision: number) => runtime.current?.confirmMathProposalDisplayed(id, revision),
-    feedbackDisplayed: (token: string) => runtime.current?.confirmMathFeedbackDisplayed(token),
-    confirmProposal: (
-      id: string,
-      revision: number,
-      operations: readonly ("differentiate" | "rewrite" | "unassessed")[],
-    ) => runtime.current?.confirmMathProposal(id, revision, operations),
   };
 }
 
