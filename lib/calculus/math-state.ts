@@ -1,4 +1,4 @@
-import { parseMathActionBatch, type MathActionBatch, type MathIdentity, type MathProposal } from "./math-action";
+import { parseMathActionBatch, type MathIdentity, type MathProposal } from "./math-action";
 import { exactObject, type MathExpression } from "./math-expression";
 import { isCalculusProblemId } from "./problems";
 import {
@@ -8,6 +8,12 @@ import {
   type MathReview,
   type MathSourceEvent,
 } from "./math-evidence";
+import type { MathValidationContext } from "./math-validator";
+
+export interface MathVersionValidation {
+  readonly base: NonNullable<MathValidationContext["current"]> | null;
+  readonly context: NonNullable<MathValidationContext["current"]> | null;
+}
 
 export interface MathVersion {
   readonly id: string;
@@ -15,6 +21,7 @@ export interface MathVersion {
   readonly predecessorId: string | null;
   readonly expression: MathExpression;
   readonly evidence: MathEvidence;
+  readonly validation?: MathVersionValidation;
 }
 export interface MathStep {
   readonly id: string;
@@ -45,7 +52,6 @@ export interface MathState {
   readonly history: readonly MathHistoryEntry[];
   readonly effectiveEdits: readonly BoardEdit[];
   readonly sourceEvents: readonly MathSourceEvent[];
-  readonly deliveries: readonly { readonly id: string; readonly fingerprint: string }[];
   readonly clarification: { readonly actionId: string; readonly reason: string } | null;
   readonly nextRequested: boolean;
 }
@@ -80,96 +86,41 @@ export function createMathState(identity: MathIdentity): MathState {
     history: [],
     effectiveEdits: [],
     sourceEvents: [],
-    deliveries: [],
     clarification: null,
     nextRequested: false,
   });
 }
 
-/** Opaque in-process acceptance capability. JSON/model fields cannot mint one.
- * The factory is for trusted app code only, with separate semantic review.
- * Reviews run against the staged board and allocated version ID as each action
- * is applied; an array supplies one fixed review per action.
- * It does not authenticate a caller or assess free-text reasoning itself.
- */
-declare const accepted: unique symbol;
-export interface MathAcceptance {
-  readonly [accepted]: true;
-}
 export type MathBatchReview = (
   action: MathProposal,
   index: number,
   board: MathState,
   versionId: string | null,
-) => MathReview;
-interface AcceptedData {
-  readonly state: MathState;
-  readonly deliveryId: string;
-  readonly batch: MathActionBatch;
-  readonly evidence: (...args: Parameters<MathBatchReview>) => MathEvidence;
-  /** Memoized on first application so redelivery never re-runs reviews. */
-  fingerprint: string | null;
-}
-const capabilities = new WeakMap<MathAcceptance, AcceptedData>();
-export function acceptMathBatch(
+) => MathReview & { readonly validation?: MathVersionValidation };
+
+/** Parse and review every action against the staged board, then commit atomically.
+ * IDs derive from app state, never proposals. Delivery IDs only correlate diagnostics.
+ */
+export function commitMathBatch(
   state: MathState,
-  deliveryId: string,
   proposal: unknown,
   authority: {
     readonly turns: readonly MathLearnerTurn[];
-    readonly reviews: readonly MathReview[] | MathBatchReview;
+    readonly review: MathBatchReview;
+    readonly deliveryId?: string;
   },
-): MathAcceptance {
-  if (!deliveryId.trim()) throw new Error("Missing delivery identity");
+): MathState {
+  if (state.status !== "active") throw new Error("Frozen mathematical state");
   const batch = parseMathActionBatch(proposal, {
     identity: state.identity,
     turns: authority.turns,
     logicalStepIds: state.steps.filter(s => s.currentVersionId !== null).map(s => s.id),
     latestUndoableStepId: state.effectiveEdits.at(-1)?.stepId ?? null,
   });
-  const reviews = authority.reviews;
-  if (
-    typeof reviews !== "function" &&
-    (reviews.length !== batch.actions.length || reviews.some(r => r.faithful !== true))
-  )
-    throw new Error("Separate app review required for every action");
-  const review: MathBatchReview = typeof reviews === "function" ? reviews : (_, index) => reviews[index];
   const turns = snapshot(authority.turns);
-  const evidence: AcceptedData["evidence"] = (action, index, board, versionId) => {
-    const result = review(action, index, board, versionId);
-    if (result.faithful !== true) throw new Error("Separate app review required for every action");
-    return collectMathEvidence(
-      batch.identity,
-      action.sources,
-      turns,
-      state.sourceEvents,
-      action.kind === "append" || action.kind === "replace"
-        ? result
-        : { ...result, mathematicallyComplete: false, independenceEstablished: false },
-    );
-  };
-  const capability = Object.freeze({}) as MathAcceptance;
-  capabilities.set(capability, { state, deliveryId, batch, evidence, fingerprint: null });
-  return capability;
-}
-
-/** Atomic, deterministic application. IDs derive from app state, never proposals.
- * Exact capability redelivery is a no-op even after lifecycle freeze; conflicting
- * delivery IDs reject. A capability is bound to the precise immutable snapshot.
- */
-export function applyMathBatch(state: MathState, acceptance: MathAcceptance): MathState {
-  const data = capabilities.get(acceptance);
-  if (!data) throw new Error("Application acceptance required");
-  const duplicate = state.deliveries.find(d => d.id === data.deliveryId);
-  if (duplicate && data.fingerprint !== null) {
-    if (duplicate.fingerprint !== data.fingerprint) throw new Error("Conflicting delivery");
-    return state;
-  }
-  if (!duplicate && (state.status !== "active" || state !== data.state)) throw new Error("Revoked or stale acceptance");
-  const next = structuredClone(data.state) as MutableState;
-  const evidence: MathEvidence[] = [];
+  const next = structuredClone(state) as MutableState;
   let boardChanged = false;
-  data.batch.actions.forEach((action, i) => {
+  batch.actions.forEach((action, index) => {
     const id = `a${next.history.length + 1}`;
     let stepId: string | null = null,
       versionId: string | null = null,
@@ -187,8 +138,18 @@ export function applyMathBatch(state: MathState, acceptance: MathAcceptance): Ma
       stepId = step.id;
       versionId = `${step.id}v${step.versions.length + 1}`;
     }
-    const actionEvidence = data.evidence(action, i, next, versionId);
-    evidence.push(actionEvidence);
+    const result = authority.review(action, index, next, versionId);
+    if (result?.faithful !== true) throw new Error("Separate app review required for every action");
+    const { validation, ...review } = result;
+    const actionEvidence = collectMathEvidence(
+      batch.identity,
+      action.sources,
+      turns,
+      state.sourceEvents,
+      action.kind === "append" || action.kind === "replace"
+        ? review
+        : { ...review, mathematicallyComplete: false, independenceEstablished: false },
+    );
     if (actionEvidence.assessment.disposition === "rejected") throw new Error("Rejected action");
     if (step && versionId && (action.kind === "append" || action.kind === "replace")) {
       if (actionEvidence.assessment.disposition === "clarification-required")
@@ -200,6 +161,7 @@ export function applyMathBatch(state: MathState, acceptance: MathAcceptance): Ma
         predecessorId: step.currentVersionId,
         expression: structuredClone(action.expression),
         evidence: actionEvidence,
+        ...(validation ? { validation } : {}),
       });
       step.currentVersionId = versionId;
       next.clarification = null;
@@ -216,7 +178,7 @@ export function applyMathBatch(state: MathState, acceptance: MathAcceptance): Ma
     else if (action.kind === "next") next.nextRequested = true;
     next.history.push({
       id,
-      deliveryId: data.deliveryId,
+      deliveryId: authority.deliveryId ?? `b${state.revision + 1}`,
       action: structuredClone(action),
       evidence: actionEvidence,
       stepId,
@@ -224,16 +186,8 @@ export function applyMathBatch(state: MathState, acceptance: MathAcceptance): Ma
       withdrawsActionId,
     });
   });
-  const fingerprint = JSON.stringify({ batch: data.batch, evidence });
-  if (duplicate) {
-    if (duplicate.fingerprint !== fingerprint) throw new Error("Conflicting delivery");
-    data.fingerprint = fingerprint;
-    return state;
-  }
   next.revision++;
   if (boardChanged) next.identity.baseBoardRevision++;
-  next.deliveries.push({ id: data.deliveryId, fingerprint });
-  data.fingerprint = fingerprint;
   return snapshot(next);
 }
 type MutableStep = { id: string; currentVersionId: string | null; versions: MathVersion[] };
@@ -247,8 +201,7 @@ type MutableState = {
         : MathState[K];
 };
 
-/** Trusted application lifecycle/source inputs. Every change revokes pending
- * capabilities, even without a board edit. Tutor-only transcript updates can
+/** Trusted application lifecycle/source inputs. Tutor-only transcript updates can
  * leave the captured learner authority unchanged. No navigation or mastery here.
  */
 export function updateMathAuthority(

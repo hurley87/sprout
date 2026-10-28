@@ -2,12 +2,12 @@ import { parseMathActionBatch, type MathActionBatch } from "./math-action";
 import type { MathLearnerTurn, MathSourceEvent } from "./math-evidence";
 import { parseMathInterpretationInput, type MathInterpretationInput } from "./math-interpretation-contract";
 import {
-  acceptMathBatch,
-  applyMathBatch,
+  commitMathBatch,
   createMathState,
   updateMathAuthority,
   type MathBatchReview,
   type MathState,
+  type MathVersionValidation,
 } from "./math-state";
 import { validateMathExpression, type MathValidationContext, type MathValidationResult } from "./math-validator";
 import { getCalculusPresentation, type CalculusProblemId } from "./problems";
@@ -51,8 +51,6 @@ export class MathController {
   private feedbackSequence = 0;
   private visits: MathState[] = [];
   private checks: MathVersionCheck[] = [];
-  private versionContexts = new Map<string, WorkingContext | null>();
-  private versionBases = new Map<string, WorkingContext | null>();
   private current: MathState | null = null;
   private pending: MathPendingProposal | null = null;
   private disposition: MathControllerSnapshot["disposition"] = "idle";
@@ -90,8 +88,6 @@ export class MathController {
       baseBoardRevision: 0,
     });
     this.turns = [];
-    this.versionContexts.clear();
-    this.versionBases.clear();
     this.consumed.clear();
     this.lastKey = "";
     this.disposition = "idle";
@@ -312,8 +308,6 @@ export class MathController {
       this.observe("math.confirmation_rejected", { id, boardRevision, operations });
       return false;
     }
-    const contexts = new Map(this.versionContexts),
-      bases = new Map(this.versionBases);
     const checks: MathVersionCheck[] = [];
     const original: WorkingContext = {
       expression: getCalculusPresentation(state.identity.problemId).functionExpression,
@@ -322,17 +316,18 @@ export class MathController {
     const review: MathBatchReview = (action, index, board, versionId) => {
       const operation = operations[index];
       let validation: MathValidationResult | null = null;
+      let versionValidation: MathVersionValidation | undefined;
       if ((action.kind === "append" || action.kind === "replace") && versionId) {
-        const latest = board.steps.findLast(step => step.currentVersionId !== null);
-        const target =
-          action.kind === "replace" ? board.steps.find(step => step.id === action.targetStepId) : undefined;
+        const source =
+          action.kind === "replace"
+            ? board.steps.find(step => step.id === action.targetStepId)
+            : board.steps.findLast(step => step.currentVersionId !== null);
+        const version = source?.versions.find(version => version.id === source.currentVersionId);
         const base =
           action.kind === "replace"
-            ? target?.currentVersionId
-              ? (bases.get(target.currentVersionId) ?? null)
-              : null
-            : latest?.currentVersionId
-              ? (contexts.get(latest.currentVersionId) ?? null)
+            ? (version?.validation?.base ?? null)
+            : source
+              ? (version?.validation?.context ?? null)
               : original;
         validation =
           operation !== "unassessed" && base
@@ -344,16 +339,16 @@ export class MathController {
             : null;
         const role =
           operation === "unassessed" || !base ? null : operation === "differentiate" ? "derivative" : base.role;
-        bases.set(versionId, base);
-        contexts.set(
-          versionId,
-          role
+        versionValidation = {
+          base,
+          context: role
             ? { expression: action.expression.op === "equal" ? action.expression.right : action.expression, role }
             : null,
-        );
+        };
         checks.push({ visitId: state.identity.visitId, versionId, operation, base, result: validation, role });
       }
       return {
+        validation: versionValidation,
         faithful: true, // Only this explicit learner-confirmation API grants fidelity.
         independenceEstablished: false,
         mathematicallyComplete: validation?.completeDerivative ?? false,
@@ -366,10 +361,7 @@ export class MathController {
       };
     };
     try {
-      const acceptance = acceptMathBatch(state, pending.id, pending.batch, { turns: captured.turns, reviews: review });
-      this.current = applyMathBatch(state, acceptance);
-      this.versionContexts = contexts;
-      this.versionBases = bases;
+      this.current = commitMathBatch(state, pending.batch, { turns: captured.turns, review, deliveryId: pending.id });
       this.checks.push(...checks);
       this.consumed = captured.consumed;
       this.observe("math.committed", {

@@ -142,21 +142,6 @@ export function parseMathActionBatch(value: unknown, context: MathProposalContex
   return { identity: { ...context.identity }, actions };
 }
 
-/** Later application acceptance must recheck live authority and stage ALL actions
- * in order against this one base revision, then commit once or reject the entire
- * batch. Never partially apply. Targets name steps on the base board (no indexes
- * or invented IDs for new appends). Undo reverses the latest effective learner
- * edit at that point; a batch whose earlier edits invalidate that target fails.
- * Strategy/clarify/help/next do not add equations; next is intent, not mastery.
- * This commit deliberately supplies no authenticator, reducer or acceptance factory.
- */
-declare const applicationAuthority: unique symbol;
-export interface AcceptedMathActionBatch {
-  readonly [applicationAuthority]: true;
-  readonly acceptanceId: string;
-  readonly batch: MathActionBatch;
-}
-
 /** App-owned assessments, never fields a model may attach to its proposal. */
 export interface MathActionAssessment {
   readonly disposition: "accepted" | "rejected" | "clarification-required" | "unresolved";

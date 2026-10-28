@@ -24,6 +24,14 @@ spoken confirmation retain separate evidence. Wrong work remains visible;
 correction and undo preserve immutable history. Navigation and Stop revoke stale
 mutation authority. Board publication does not wait for tutor speech completion.
 
+The batch simplification uses one `commitMathBatch` parse/review/commit operation,
+with per-action staged-board review and atomic rejection. It removes acceptance
+capabilities, delivery fingerprints and board delivery deduplication; pending
+proposal identity/display and captured-state checks remain in the controller.
+History delivery IDs remain diagnostic correlation keys. Validation input/context
+now lives on each board version rather than parallel controller maps, with the
+existing exported checks unchanged.
+
 Supported mathematical comparison is deterministic and finite, preserving supplied
 notation. It does not evaluate arbitrary expressions or grant official marks.
 Correctness, interpretation intent, reasoning and assistance are separate;

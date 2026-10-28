@@ -135,7 +135,7 @@ Historical spike evidence is described separately in [findings](issue-80-finding
 | Correction, replacement, undo and predecessor/history fidelity                           | State, evidence, runtime                    | Wrong step → replacement → undo                                                             | PENDING / PENDING |
 | Equivalent expanded/factored math, unsupported alternatives, absent/misleading reasoning | Validator, evidence, runtime                | Correct answers retain unassessed reasoning/independence; no equivalent-form browser matrix | PENDING / PENDING |
 | Hint, echo, praise and supplied-answer provenance; no independent credit                 | Evidence, tutor-context, runtime            | Help event plus conservative evidence/export                                                | PENDING / PENDING |
-| Pauses, streaming fragments, duplicate delivery, stale responses                         | Runtime and diagnostics races/deduplication | Synthetic speech/quiet; delayed extraction after Stop; no live recognition claim            | PENDING / PENDING |
+| Pauses, streaming fragments, duplicate transcript/result events, stale responses         | Runtime event deduplication and stale gates | Synthetic speech/quiet; delayed extraction after Stop; no live recognition claim            | PENDING / PENDING |
 | Rapid next/Stop, early exit, hide/unmount, media teardown                                | Runtime navigation/cancellation             | Spoken skip/next/recap, Stop, hide/unmount track cleanup                                    | PENDING / PENDING |
 
 Primary tests: [runtime](../tests/calculus-runtime.test.ts),

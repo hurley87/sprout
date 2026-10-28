@@ -129,6 +129,17 @@ excluded from subsequent extraction, including after late tutor fragments change
 message grouping. Confirmation establishes intended notation/operation only;
 reasoning and independent understanding remain unassessed.
 
+Confirmation calls `commitMathBatch` once: it parses the source-bound batch,
+requires a faithful review callback for every action against the staged board,
+and publishes the entire batch or nothing. Frozen states and stale batch identities
+reject. The controller also checks the captured state and displayed pending UUID,
+then clears the proposal after commit. History `deliveryId` retains that UUID only
+for feedback/diagnostic correlation; it is not a deduplication mechanism.
+Each created board version retains its validation `base` and resulting `context`
+under `validation`, including null contexts for unchecked operations. Replacement
+and undo read that version metadata directly; exported checks keep their existing
+shape, and version metadata is included in board snapshots and diagnostics.
+
 Exact complete `help` and `repeat` learner turns use the existing support append
 path (with hint or neutral-probe provenance), waiting for observed quiet output.
 Direct `next`, `next problem`, and `skip this problem` use the authored navigation

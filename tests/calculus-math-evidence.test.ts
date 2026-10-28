@@ -1,12 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { collectMathEvidence, type MathReview, type MathSourceEvent } from "../lib/calculus/math-evidence";
-import {
-  acceptMathBatch,
-  applyMathBatch,
-  createMathState,
-  currentMathProgress,
-  updateMathAuthority,
-} from "../lib/calculus/math-state";
+import { commitMathBatch, createMathState, currentMathProgress, updateMathAuthority } from "../lib/calculus/math-state";
 const identity = {
   runtimeId: "run",
   problemId: "quadratic-sine",
@@ -92,15 +86,7 @@ describe("explicit help and reasoning provenance", () => {
         ...(kind === "undo" ? {} : { expression: { op: "number", value: 2 } }),
         ...(kind === "append" ? {} : { targetStepId: "s1" }),
       };
-      state = applyMathBatch(
-        state,
-        acceptMathBatch(
-          state,
-          `d${state.revision}`,
-          { identity: state.identity, actions: [action] },
-          { turns, reviews: [review] },
-        ),
-      );
+      state = commitMathBatch(state, { identity: state.identity, actions: [action] }, { turns, review: () => review });
     }
     commit("append");
     state = updateMathAuthority(state, { kind: "source-event", event: event("supplied-answer", 3) });

@@ -1,12 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-  acceptMathBatch,
-  applyMathBatch,
+  commitMathBatch,
   createMathState,
   currentMathProgress,
   updateMathAuthority,
   type MathState,
-  type MathAcceptance,
 } from "../lib/calculus/math-state";
 import type { MathProposal } from "../lib/calculus/math-action";
 import type { MathReview } from "../lib/calculus/math-evidence";
@@ -30,16 +28,8 @@ const review: MathReview = {
 const append = (): MathProposal => ({ kind: "append", sources, expression });
 const replace = (targetStepId = "s1"): MathProposal => ({ kind: "replace", sources, expression, targetStepId });
 const undo = (targetStepId = "s1"): MathProposal => ({ kind: "undo", sources, targetStepId });
-function accept(
-  state: MathState,
-  actions: readonly MathProposal[],
-  reviews = actions.map(() => review),
-  id = `d${state.revision}`,
-) {
-  return acceptMathBatch(state, id, { identity: state.identity, actions }, { turns, reviews });
-}
-function apply(state: MathState, actions: readonly MathProposal[], reviews?: MathReview[]) {
-  return applyMathBatch(state, accept(state, actions, reviews));
+function apply(state: MathState, actions: readonly MathProposal[], reviews = actions.map(() => review)) {
+  return commitMathBatch(state, { identity: state.identity, actions }, { turns, review: (_, index) => reviews[index] });
 }
 
 describe("mathematical attempt history", () => {
@@ -47,13 +37,12 @@ describe("mathematical attempt history", () => {
     const state = apply(createMathState(identity), [append()]);
     const seen: { versionId: string | null; current: (string | null)[]; history: string[] }[] = [];
     const actions = [replace(), undo(), undo(), append(), append()];
-    const token = acceptMathBatch(
+    const next = commitMathBatch(
       state,
-      "reviewed",
       { identity: state.identity, actions },
       {
         turns,
-        reviews: (_action, _index, board, versionId) => {
+        review: (_action, _index, board, versionId) => {
           seen.push({
             versionId,
             current: board.steps.map(step => step.currentVersionId),
@@ -63,8 +52,6 @@ describe("mathematical attempt history", () => {
         },
       },
     );
-    expect(seen).toEqual([]);
-    const next = applyMathBatch(state, token);
     expect(seen.map(entry => [entry.versionId, entry.current])).toEqual([
       ["s1v2", ["s1v1"]],
       [null, ["s1v2"]],
@@ -73,47 +60,7 @@ describe("mathematical attempt history", () => {
       ["s3v1", [null, "s2v1", null]],
     ]);
     expect(seen.map(entry => entry.history.at(-1))).toEqual(["a1", "a2", "a3", "a4", "a5"]);
-    expect(next).toEqual(
-      applyMathBatch(
-        state,
-        accept(
-          state,
-          actions,
-          actions.map(() => review),
-          "reviewed",
-        ),
-      ),
-    );
-    const frozen = updateMathAuthority(next, { kind: "lifecycle", status: "stopped" });
-    expect(applyMathBatch(frozen, token)).toBe(frozen);
-    expect(seen).toHaveLength(5);
-  });
-  it("preserves reviewed delivery fingerprints and rejects reviewed tails atomically", () => {
-    const state = createMathState(identity);
-    const actions = [append(), append()];
-    const reviewed = (reviews: MathReview[]) =>
-      acceptMathBatch(
-        state,
-        "reviewed",
-        { identity, actions },
-        {
-          turns,
-          reviews: (_action, index) => reviews[index],
-        },
-      );
-    const next = applyMathBatch(state, reviewed([review, review]));
-    expect(applyMathBatch(next, reviewed([review, review]))).toBe(next);
-    expect(() => applyMathBatch(next, reviewed([review, { ...review, mathematicallyComplete: false }]))).toThrow(
-      "Conflicting delivery",
-    );
-    expect(() =>
-      applyMathBatch(
-        state,
-        reviewed([review, { ...review, assessment: { ...review.assessment, disposition: "clarification-required" } }]),
-      ),
-    ).toThrow("Board action not accepted");
-    expect(state.steps).toEqual([]);
-    expect(state.history).toEqual([]);
+    expect(next).toEqual(apply(state, actions));
   });
   it("retains attribution through incorrect replacement, correction and undo", () => {
     const initial = createMathState(identity);
@@ -163,11 +110,10 @@ describe("mathematical attempt history", () => {
     }
     expect(state).toEqual(snapshot);
     expect(() =>
-      acceptMathBatch(
+      commitMathBatch(
         state,
-        "bad",
         { identity: state.identity, actions: [append(), { kind: "append", sources }] },
-        { turns, reviews: [review, review] },
+        { turns, review: () => review },
       ),
     ).toThrow();
     expect(() => apply(state, [append(), replace("missing")])).toThrow();
@@ -189,72 +135,61 @@ describe("mathematical attempt history", () => {
   });
 });
 
-describe("application authority and delivery", () => {
-  it("requires a genuine capability and separate app-owned review", () => {
+describe("application authority", () => {
+  it("requires separate app-owned review for every action", () => {
     const state = createMathState(identity);
-    expect(() => applyMathBatch(state, {} as MathAcceptance)).toThrow();
     expect(() =>
-      acceptMathBatch(
+      commitMathBatch(
         state,
-        "x",
         { identity, actions: [{ ...append(), assessment: review }] },
-        { turns, reviews: [review] },
+        { turns, review: () => review },
       ),
     ).toThrow();
-    expect(() => accept(state, [append()], [{ ...review, faithful: false } as unknown as MathReview])).toThrow();
-    expect(() => accept(state, [append()], [])).toThrow();
-  });
-  it("handles exact delivery twice without adding revisions; conflicts reject", () => {
-    const state = createMathState(identity);
-    const token = accept(state, [append()], [review], "delivery");
-    const changed = applyMathBatch(state, token);
-    expect(applyMathBatch(changed, token)).toBe(changed);
-    const conflict = accept(state, [{ kind: "help", sources }], [review], "delivery");
-    expect(() => applyMathBatch(changed, conflict)).toThrow();
-    const stopped = updateMathAuthority(changed, { kind: "lifecycle", status: "stopped" });
-    expect(applyMathBatch(stopped, token)).toBe(stopped);
+    expect(() => apply(state, [append()], [{ ...review, faithful: false } as unknown as MathReview])).toThrow();
+    expect(() => apply(state, [append()], [])).toThrow("Separate app review required for every action");
+    expect(() => apply(state, [append(), append()], [review])).toThrow("Separate app review required for every action");
+    expect(state.history).toEqual([]);
   });
   it.each(["runtimeId", "problemId", "visitId", "transcriptRevision", "baseBoardRevision"])(
     "rejects stale/wrong %s",
     field => {
       const state = createMathState(identity);
       expect(() =>
-        acceptMathBatch(
+        commitMathBatch(
           state,
-          "bad",
           { identity: { ...identity, [field]: field.includes("Revision") ? 99 : "other" }, actions: [append()] },
-          { turns, reviews: [review] },
+          { turns, review: () => review },
         ),
       ).toThrow();
     },
   );
-  it("revokes acceptance on learner revision, board edit and source change", () => {
-    const state = createMathState(identity),
-      token = accept(state, [append()], [review], "pending");
+  it("rejects stale batches after learner revisions and board edits, and retains current source evidence", () => {
+    const state = createMathState(identity);
     const revised = updateMathAuthority(state, { kind: "learner-revision", transcriptRevision: 2 });
     const sourced = updateMathAuthority(state, {
       kind: "source-event",
       event: { id: "h1", order: 1, kind: "hint", text: "try the rule" },
     });
-    for (const newer of [revised, sourced, apply(state, [append()])])
-      expect(() => applyMathBatch(newer, token)).toThrow();
+    for (const newer of [revised, apply(state, [append()])])
+      expect(() =>
+        commitMathBatch(newer, { identity, actions: [append()] }, { turns, review: () => review }),
+      ).toThrow();
+    expect(apply(sourced, [append()]).history[0].evidence.sourceEventIds).toEqual(["h1"]);
     expect(revised.identity.baseBoardRevision).toBe(0);
     expect(() => updateMathAuthority(revised, { kind: "learner-revision", transcriptRevision: 1 })).toThrow();
   });
   it.each(["stopped", "completed", "skipped", "ended"] as const)(
     "freezes %s without demonstrating mathematics",
     status => {
-      const state = createMathState(identity),
-        token = accept(state, [append()]);
+      const state = createMathState(identity);
       const frozen = updateMathAuthority(state, { kind: "lifecycle", status });
       expect(currentMathProgress(frozen)).toEqual({ mathematicallyComplete: false, demonstratedIndependent: false });
-      expect(() => applyMathBatch(frozen, token)).toThrow();
+      expect(() => apply(frozen, [append()])).toThrow("Frozen mathematical state");
       expect(() => updateMathAuthority(frozen, { kind: "learner-revision", transcriptRevision: 2 })).toThrow();
     },
   );
   it("records non-board intent with explicit revision and no mastery", () => {
-    const state = createMathState(identity),
-      pending = accept(state, [append()]);
+    const state = createMathState(identity);
     const next = apply(state, [
       { kind: "strategy", method: "other", sources },
       { kind: "help", sources },
@@ -265,7 +200,6 @@ describe("application authority and delivery", () => {
     expect(next.nextRequested).toBe(true);
     expect(next.status).toBe("active");
     expect(currentMathProgress(next).demonstratedIndependent).toBe(false);
-    expect(() => applyMathBatch(next, pending)).toThrow();
   });
   it("does not let an earlier completed line mask later unresolved work", () => {
     const state = apply(
@@ -276,17 +210,18 @@ describe("application authority and delivery", () => {
     expect(currentMathProgress(state).mathematicallyComplete).toBe(false);
     expect(currentMathProgress(apply(state, [undo("s2")])).mathematicallyComplete).toBe(true);
   });
-  it("rejects an assessed tail without exposing any staged append", () => {
-    const state = createMathState(identity);
-    const token = accept(
-      state,
-      [append(), append()],
-      [review, { ...review, assessment: { ...review.assessment, disposition: "clarification-required" } }],
-    );
-    expect(() => applyMathBatch(state, token)).toThrow();
-    expect(state.steps).toEqual([]);
-    expect(state.revision).toBe(0);
-  });
+  it.each(["rejected", "clarification-required"] as const)(
+    "rejects a %s tail without exposing any staged append",
+    disposition => {
+      const state = createMathState(identity);
+      expect(() =>
+        apply(state, [append(), append()], [review, { ...review, assessment: { ...review.assessment, disposition } }]),
+      ).toThrow();
+      expect(state.steps).toEqual([]);
+      expect(state.history).toEqual([]);
+      expect(state.revision).toBe(0);
+    },
+  );
   it("freezes detached snapshots and prevents source mutation from changing accepted help", () => {
     const initialIdentity = { ...identity, runtimeId: String(identity.runtimeId) };
     const state = createMathState(initialIdentity);
@@ -304,18 +239,26 @@ describe("application authority and delivery", () => {
     ).toThrow();
     expect(state.sourceEvents).toEqual([]);
   });
-  it("detaches caller expression, reviews, events and earlier snapshots", () => {
+  it("detaches caller expressions, reviews and version validation from earlier snapshots", () => {
     const state = createMathState(identity);
     const action = { ...append(), expression: { op: "number", value: 2 } };
-    const token = acceptMathBatch(
-      state,
-      "detached",
-      { identity, actions: [action] },
-      { turns, reviews: [structuredClone(review)] },
-    );
+    const result = {
+      ...review,
+      assessment: { ...review.assessment },
+      validation: {
+        base: null,
+        context: { expression: { op: "number" as const, value: 2 }, role: "function" as const },
+      },
+    };
+    const next = commitMathBatch(state, { identity, actions: [action] }, { turns, review: () => result });
     action.expression.value = 99;
-    const next = applyMathBatch(state, token);
-    expect(next.steps[0].versions[0].expression).toEqual(expression);
+    result.assessment.correctness = "incorrect";
+    result.validation.context.expression.value = 99;
+    const version = next.steps[0].versions[0];
+    expect(version.expression).toEqual(expression);
+    expect(version.evidence.review).toEqual(review);
+    expect(version.validation).toEqual({ base: null, context: { expression, role: "function" } });
+    expect(() => Object.assign(version.validation!.context!, { role: "derivative" })).toThrow();
     expect(state.history).toEqual([]);
   });
 });

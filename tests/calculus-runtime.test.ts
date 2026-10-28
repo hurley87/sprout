@@ -541,6 +541,15 @@ it("retains replacement inputs and undo contexts within a single mixed batch", a
   expect(math.checks[3].base).toEqual({ expression: wrong, role: "derivative" });
   expect(math.checks[3].result!.transformationCorrectness).toBe("incorrect");
   expect(math.current!.steps[0].currentVersionId).toBe("s1v1");
+  expect(math.current!.steps[0].versions.map(version => version.validation)).toEqual([
+    { base: math.checks[0].base, context: { expression: wrong, role: "derivative" } },
+    { base: math.checks[0].base, context: { expression: correct, role: "derivative" } },
+    { base: math.checks[0].base, context: { expression: correct, role: "derivative" } },
+  ]);
+  expect(math.current!.steps[1].versions[0].validation).toEqual({
+    base: { expression: wrong, role: "derivative" },
+    context: { expression: correct, role: "derivative" },
+  });
 });
 
 it("keeps unassessed and unknown bases unchecked until undo restores known context", async () => {

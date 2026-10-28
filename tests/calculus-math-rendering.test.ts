@@ -11,7 +11,7 @@ import {
   projectMathBoard,
 } from "../lib/calculus/math-rendering";
 import { CALCULUS_PROBLEM_IDS, getCalculusPresentation, getCalculusReviewKey } from "../lib/calculus/problems";
-import { acceptMathBatch, applyMathBatch, createMathState, type MathState } from "../lib/calculus/math-state";
+import { commitMathBatch, createMathState, type MathState } from "../lib/calculus/math-state";
 import type { MathExpression as E } from "../lib/calculus/math-expression";
 import type { MathProposal, MathActionAssessment } from "../lib/calculus/math-action";
 
@@ -26,29 +26,23 @@ const pow = (base: E, exponent: number): E => ({ op: "power", base, exponent });
 const sources = [{ turnId: "u1", start: 0, end: 4, quote: "work" }];
 
 function apply(state: MathState, action: MathProposal, correctness: MathActionAssessment["correctness"] = "unchecked") {
-  return applyMathBatch(
+  return commitMathBatch(
     state,
-    acceptMathBatch(
-      state,
-      `d${state.revision}`,
-      { identity: state.identity, actions: [action] },
-      {
-        turns: [{ id: "u1", speaker: "learner", text: "work", order: 1 }],
-        reviews: [
-          {
-            faithful: true,
-            mathematicallyComplete: false,
-            independenceEstablished: false,
-            assessment: {
-              disposition: correctness === "unsupported" ? "unresolved" : "accepted",
-              correctness,
-              reasoning: "unassessed",
-              assistance: "unknown",
-            },
-          },
-        ],
-      },
-    ),
+    { identity: state.identity, actions: [action] },
+    {
+      turns: [{ id: "u1", speaker: "learner", text: "work", order: 1 }],
+      review: () => ({
+        faithful: true,
+        mathematicallyComplete: false,
+        independenceEstablished: false,
+        assessment: {
+          disposition: correctness === "unsupported" ? "unresolved" : "accepted",
+          correctness,
+          reasoning: "unassessed",
+          assistance: "unknown",
+        },
+      }),
+    },
   );
 }
 

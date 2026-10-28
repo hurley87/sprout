@@ -7,7 +7,7 @@ import {
 } from "../lib/calculus/tutor-context";
 import type { MathProposal } from "../lib/calculus/math-action";
 import type { MathControllerSnapshot } from "../lib/calculus/math-controller";
-import { acceptMathBatch, applyMathBatch, createMathState } from "../lib/calculus/math-state";
+import { commitMathBatch, createMathState } from "../lib/calculus/math-state";
 import { getCalculusPresentation, getCalculusReviewKey } from "../lib/calculus/problems";
 import { CALCULUS_LESSON } from "../lib/lesson-runtime/calculus-lesson";
 import { COUNTING_LESSON } from "../lib/lesson-runtime/counting-lesson";
@@ -45,13 +45,10 @@ function fixture(count = 0): { -readonly [K in keyof MathControllerSnapshot]: Ma
         },
       ],
     };
-    state = applyMathBatch(
-      state,
-      acceptMathBatch(state, `delivery_${i}`, batch, {
-        turns,
-        reviews: [{ faithful: true, assessment, mathematicallyComplete: false, independenceEstablished: false }],
-      }),
-    );
+    state = commitMathBatch(state, batch, {
+      turns,
+      review: () => ({ faithful: true, assessment, mathematicallyComplete: false, independenceEstablished: false }),
+    });
   }
   return {
     current: state,
@@ -188,13 +185,10 @@ it.each(["quadratic-sine", "composite-fifth"] as const)(
           },
         ],
       };
-      state = applyMathBatch(
-        state,
-        acceptMathBatch(state, `batch_${index}`, batch, {
-          turns: [turn],
-          reviews: [{ faithful: true, assessment, mathematicallyComplete: false, independenceEstablished: false }],
-        }),
-      );
+      state = commitMathBatch(state, batch, {
+        turns: [turn],
+        review: () => ({ faithful: true, assessment, mathematicallyComplete: false, independenceEstablished: false }),
+      });
     }
     expect(state.steps.length).toBeGreaterThanOrEqual(2);
     const snapshot: MathControllerSnapshot = {
