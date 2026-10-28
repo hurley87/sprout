@@ -13,6 +13,8 @@ import type { TranscriptEvent } from "../events";
 import { isLearnerStopText, parseLearnerNavigationText } from "./conversation-progression";
 import type { LessonRuntimeState, RuntimeSource } from "./lesson-runtime-reducer";
 
+const SETTLE_MS = 1500;
+
 export type CalculusFragment = { event: TranscriptEvent; source: RuntimeSource; order: number };
 type Operation = "differentiate" | "rewrite" | "unassessed";
 type Context = {
@@ -39,6 +41,8 @@ export class CalculusRuntime {
   private deferredTurns: Parameters<MathController["learnerRevision"]>[1] = [];
   private consumedFragments = new Set<number>();
   private timer?: ReturnType<typeof setTimeout>;
+  private settleTimer?: ReturnType<typeof setTimeout>;
+  private settleSpeechEndMs: number | null = null;
 
   constructor(
     private readonly runtimeId: string,
@@ -102,6 +106,7 @@ export class CalculusRuntime {
    * echo and is usually discarded within ~200ms. Only confirmed speech may cancel
    * in-flight interpretation; a displayed proposal is reserved from the first onset. */
   onSpeechStarted(confirmed = true) {
+    if (this.settleTimer) this.decideReservation(true, this.settleSpeechEndMs, true);
     const { state, steering, order } = this.context();
     if (!state || this.reservation) return;
     const pending = this.controller.pendingProposal;
@@ -138,14 +143,29 @@ export class CalculusRuntime {
       !isSpokenAffirmationPrefix(text)
     )
       this.reservation = undefined;
-    if (!this.reservation) this.controller.learnerRevision(revision, this.deferredTurns);
+    if (!this.reservation) {
+      if (this.settleTimer) clearTimeout(this.settleTimer);
+      this.settleTimer = undefined;
+      this.controller.learnerRevision(revision, this.deferredTurns);
+    } else if (
+      this.settleTimer &&
+      parseSpokenMathConfirmation(text, this.controller.pendingProposal?.batch.actions.length ?? 0)
+    )
+      this.decideReservation(true, this.settleSpeechEndMs, true);
   }
 
   onSpeechStopped(ended: boolean, localSpeechEndMs: number | null) {
+    this.decideReservation(ended, localSpeechEndMs, false);
+  }
+
+  /** Transcription can trail the end-of-speech signal by a few hundred ms, so an
+   * ended turn whose words so far could still become a command waits briefly. */
+  private decideReservation(ended: boolean, localSpeechEndMs: number | null, settled: boolean) {
+    clearTimeout(this.settleTimer);
+    this.settleTimer = undefined;
     const reserved = this.reservation;
     const { state, fragments: allFragments, revision } = this.context();
     if (!reserved || !state) return;
-    this.reservation = undefined;
     const pending = this.controller.pendingProposal;
     const fragments = allFragments.filter(
       item =>
@@ -154,16 +174,29 @@ export class CalculusRuntime {
         item.order > reserved.fragmentFloor,
     );
     const text = fragments.map(item => item.event.delta).join("");
-    const operations = pending ? parseSpokenMathConfirmation(text, pending.batch.actions.length) : null;
+    const count = pending?.batch.actions.length ?? 0;
+    const operations = pending ? parseSpokenMathConfirmation(text, count) : null;
+    const incomplete =
+      pending?.id === reserved.id &&
+      !operations &&
+      !isSpokenAffirmation(text) &&
+      (isSpokenMathConfirmationPrefix(text, count) || isSpokenAffirmationPrefix(text));
+    if (ended && incomplete && !settled) {
+      this.settleSpeechEndMs = localSpeechEndMs;
+      this.settleTimer = setTimeout(() => this.decideReservation(true, localSpeechEndMs, true), SETTLE_MS);
+      return;
+    }
+    this.reservation = undefined;
     const sameTurn =
       ended &&
       this.now() - reserved.startedAt <= 8000 &&
       state.visitId === reserved.visitId &&
       state.childTurnId === reserved.turnId &&
       fragments.length > 0;
-    if (!ended && fragments.length === 0 && pending?.id === reserved.id) {
-      // Discarded activity without learner words (noise, tutor echo) changes nothing.
-      this.log("math.reservation_released", { ...reserved, revision });
+    if (incomplete) {
+      // No learner words, or only the start of a command (noise, tutor echo, a dropped
+      // word): nothing new to interpret, so keep the displayed proposal.
+      this.log("math.reservation_released", { ...reserved, text, revision });
       this.publish();
     } else if (sameTurn && pending?.id === reserved.id && !operations && isSpokenAffirmation(text)) {
       // A generic yes answers the tutor but never accepts. Keep the displayed proposal
@@ -254,10 +287,14 @@ export class CalculusRuntime {
     if (isCalculusProblemId(nodeId)) this.controller.enter(nodeId, visitId, outcome);
     else this.controller.finish(outcome);
     this.reservation = undefined;
+    clearTimeout(this.settleTimer);
+    this.settleTimer = undefined;
   }
 
   invalidate(cancelTimer = false) {
     this.reservation = undefined;
+    clearTimeout(this.settleTimer);
+    this.settleTimer = undefined;
     this.controller.invalidate();
     if (cancelTimer) clearTimeout(this.timer);
   }
@@ -266,6 +303,8 @@ export class CalculusRuntime {
     this.controller.finish("stopped");
     clearTimeout(this.timer);
     this.reservation = undefined;
+    clearTimeout(this.settleTimer);
+    this.settleTimer = undefined;
   }
 
   private consumeFragments() {

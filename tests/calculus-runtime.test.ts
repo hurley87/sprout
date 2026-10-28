@@ -986,11 +986,44 @@ it.each(["microphone.activity_discarded", "microphone.speech_stopped"] as const)
     expect(() => emit(type === "microphone.speech_stopped" ? { type, quietMs: 900 } : { type })).not.toThrow();
     expect(runtime.snapshot().math!.current!.identity.transcriptRevision).toBe(revision);
     expect(runtime.snapshot().math!.current!.steps).toHaveLength(0);
-    // Discarded activity is noise or tutor echo and keeps the proposal; an ended turn without words does not.
-    if (type === "microphone.activity_discarded") expect(runtime.snapshot().math!.pending!.id).toBe(pending.id);
-    else expect(runtime.snapshot().math!.pending).toBeNull();
+    // Activity without learner words (noise, tutor echo) keeps the proposal, including after the settle window.
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(runtime.snapshot().math!.pending!.id).toBe(pending.id);
   },
 );
+
+it("waits for a command word transcribed after speech stopped, then confirms", async () => {
+  start();
+  await learner("three x squared minus four");
+  await respond([action("append", { expression: correct })]);
+  const pending = runtime.snapshot().math!.pending!;
+  runtime.confirmMathProposalDisplayed(pending.id, pending.boardRevision);
+  emit({ type: "microphone.activity_started" });
+  emit({ type: "microphone.speech_started" });
+  emit({ type: "transcript", speaker: "child", delta: " Confirm", startMs: time, endMs: time + 100 });
+  emit({ type: "microphone.speech_stopped", quietMs: 900 });
+  expect(runtime.snapshot().math!.pending!.id).toBe(pending.id);
+  await vi.advanceTimersByTimeAsync(300);
+  emit({ type: "transcript", speaker: "child", delta: " differentiation", startMs: time + 100, endMs: time + 200 });
+  expect(runtime.snapshot().math!.current!.steps).toHaveLength(1);
+  expect(requests).toHaveLength(1);
+});
+
+it("keeps the proposal when only the start of a command arrives", async () => {
+  start();
+  await learner("three x squared minus four");
+  await respond([action("append", { expression: correct })]);
+  const pending = runtime.snapshot().math!.pending!;
+  runtime.confirmMathProposalDisplayed(pending.id, pending.boardRevision);
+  emit({ type: "microphone.activity_started" });
+  emit({ type: "microphone.speech_started" });
+  emit({ type: "transcript", speaker: "child", delta: " Confirm", startMs: time, endMs: time + 100 });
+  emit({ type: "microphone.speech_stopped", quietMs: 900 });
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(runtime.snapshot().math!.current!.steps).toHaveLength(0);
+  expect(runtime.snapshot().math!.pending!.id).toBe(pending.id);
+  expect(requests).toHaveLength(1);
+});
 
 it("does not let discarded microphone activity cancel an in-flight interpretation", async () => {
   start();
