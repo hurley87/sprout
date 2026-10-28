@@ -5,6 +5,15 @@ import type { TranscriptEvent } from "../events";
 import { isLearnerStopText, parseLearnerNavigationText } from "./conversation-progression";
 import type { LessonRuntimeState, RuntimeSource } from "./lesson-runtime-reducer";
 
+const FILLER = /\[[^\]]*\]|\b(?:u+m+|u+h+|e+r+m*|h+m+|m+-?h*m+|and|so|then|okay|ok|right|well)\b|[^a-z0-9]+/gi;
+/** What a check would read: sound tags, fillers and punctuation say nothing about
+ * the work, so a turn of only "[tongue click] Um" or "And" triggers no check. */
+const substance = (turns: readonly { text: string }[]) =>
+  turns
+    .map(turn => turn.text.replace(FILLER, " ").trim().replace(/\s+/g, " "))
+    .filter(Boolean)
+    .join(" | ");
+
 export type CalculusFragment = { event: TranscriptEvent; source: RuntimeSource; order: number };
 type Context = {
   state: LessonRuntimeState | null;
@@ -102,6 +111,14 @@ export class CalculusRuntime {
     return groups;
   }
 
+  /** The problem just shown follows a completed one and the learner has not started
+   * it: the tutor's praise belongs in the new problem's steering, which would
+   * otherwise replace a separate completion instruction before it is spoken. */
+  previousCompleted() {
+    const visit = this.visit;
+    return !!visit && !visit.checks.length && this.visits.at(-2)?.outcome === "completed";
+  }
+
   learnerText() {
     const { state } = this.context();
     return this.groups()
@@ -176,8 +193,8 @@ export class CalculusRuntime {
     const visit = this.visit;
     if (!visit || this.completed) return;
     const { learnerTurns, tutorTurns } = this.turns();
-    const key = JSON.stringify(learnerTurns);
-    if (!learnerTurns.length || key === this.lastChecked) return;
+    const key = substance(learnerTurns);
+    if (!key || key === this.lastChecked) return;
     if (this.request) {
       // One check at a time. Tutor speech or a later learner turn queues another.
       this.recheck = true;
@@ -212,7 +229,7 @@ export class CalculusRuntime {
     this.request = undefined;
     // Words spoken during the check make its feedback out of date: still show its
     // result, but brief the tutor only from a check that covers everything said.
-    const current = key === JSON.stringify(this.turns().learnerTurns) && this.context().quiet;
+    const current = key === substance(this.turns().learnerTurns) && this.context().quiet;
     let outcome = null,
       instruction = null;
     if (extraction) {
@@ -221,12 +238,13 @@ export class CalculusRuntime {
       const result = workOutcome(visit.work);
       outcome = result.kind;
       instruction = workInstruction(visit.work, result);
-      if ((current || result.kind === "complete") && instruction !== this.lastInstruction) this.instruct(instruction);
       if (result.kind === "complete") {
         this.completed = true;
         this.log("calculus.problem_completed", { visitId: visit.visitId, problemId: visit.problemId });
-        this.complete();
-      }
+        // Advancing now carries the praise in the next problem's steering; only a
+        // delayed advance needs the tutor told separately.
+        if (!this.complete() && instruction !== this.lastInstruction) this.instruct(instruction);
+      } else if (current && instruction !== this.lastInstruction) this.instruct(instruction);
     }
     visit.checks.push({ requestId, learnerTurns, status, extraction, outcome, instruction, current });
     this.log("calculus.check_ended", { requestId, status, extraction, work: visit.work, outcome, current });

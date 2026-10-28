@@ -1181,7 +1181,13 @@ export class LessonRuntime {
     }
     const content = request
       ? learnerSupportInstruction(context, request, this.lessonDefinition)
-      : teachingInstruction(context, this.lessonDefinition, startLesson, this.terminalText);
+      : teachingInstruction(
+          context,
+          this.lessonDefinition,
+          startLesson,
+          this.terminalText,
+          this.calculus?.previousCompleted(),
+        );
     const source = runtimeSource(this.state);
     this.steering = {
       support: request !== undefined,

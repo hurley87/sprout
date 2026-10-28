@@ -66,6 +66,11 @@ async function respond(extraction: Omit<WorkExtraction, "rule">, index = request
   requests[index].resolve({ status: "ok", extraction: { rule: null, ...extraction } });
   await vi.advanceTimersByTimeAsync(0);
 }
+const steering = () =>
+  transport.send.mock.calls
+    .map(([command]) => command)
+    .filter(command => command.type === "session.instructions.append" && command.event_id.includes(":steer:"))
+    .map(command => (command as { content: string }).content);
 const work = () => runtime.snapshot().math!.work!;
 const statuses = () => [...work().steps, work().final].map(item => item.status);
 const instructions = () =>
@@ -117,11 +122,14 @@ it("advances to the next problem once every step and the final answer check out"
     unclear: null,
   });
   expect(runtime.snapshot().math!.complete).toBe(true);
-  expect(instructions().at(-1)).toContain("Every step and the final answer are correct");
   emit({ type: "output.activity", state: "quiet" });
   await vi.advanceTimersByTimeAsync(600);
   expect(runtime.snapshot().runtime!.nodeId).toBe("quadratic-sine");
   runtime.confirmRendered(runtime.snapshot().display);
+  // The praise rides on the next problem's steering, so the steering cannot replace it.
+  expect(instructions()).toHaveLength(0);
+  expect(steering().at(-1)).toContain("every step and the final answer were correct");
+  expect(steering().at(-1)).toContain("Differentiate f(x) = x^2 sin(x)");
   expect(work().problemId).toBe("quadratic-sine");
   expect(statuses()).toEqual(["missing", "missing", "missing"]);
   expect(runtime.report().math!.visits.map(visit => visit.outcome)).toEqual(["completed", "active"]);
@@ -145,9 +153,26 @@ it("does not resend an unchanged instruction or recheck unchanged turns", async 
   emit({ type: "output.activity", state: "quiet" });
   await vi.advanceTimersByTimeAsync(600);
   expect(requests).toHaveLength(1);
-  await learner("um");
+  await learner("um, sorry");
   await respond({ steps: [step("d-cubic", threeXSquared)], final: null, unclear: null });
   expect(instructions()).toHaveLength(1);
+});
+
+it("does not check turns of only fillers or sound tags", async () => {
+  start();
+  await learner("[tongue click] Um");
+  expect(requests).toHaveLength(0);
+  await learner("three x squared");
+  await respond({ steps: [step("d-cubic", threeXSquared)], final: null, unclear: null });
+  await learner("[gulp] And...");
+  expect(requests).toHaveLength(1);
+});
+
+it("asks only for the final answer once every step is correct", async () => {
+  start();
+  await learner("three x squared, and four x becomes four");
+  await respond({ steps: [step("d-cubic", threeXSquared), step("d-linear", n(4))], final: null, unclear: null });
+  expect(instructions().at(-1)).toContain("Still to show: the final answer.");
 });
 
 it("finishes a check while the learner keeps talking, then rechecks everything said", async () => {

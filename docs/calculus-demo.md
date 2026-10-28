@@ -34,7 +34,7 @@ what is correct, wrong or missing. The tutor helps with one step at a time.
    | Final answer correct, steps missing | say it's right and ask how they got the first missing step |
    | Something unclear or uncheckable | ask one short clarifying question |
    | Steps correct so far | acknowledge and invite the next step |
-   | Everything correct | acknowledge briefly; the application moves on |
+   | Everything correct | the application moves on; the tutor praises the work as it asks the next problem |
 
 6. When every step **and** the final answer are correct, the application requests
    the next problem itself. "Next", "skip this problem", the Skip button, help,
@@ -63,9 +63,15 @@ A check runs after each learner turn and a short debounce, and takes a few
 seconds. Learners pause mid-thought for about a second, so new speech never
 cancels a check: only one runs at a time, its result always updates the
 checklist, and another check re-reads every turn once it finishes. The tutor is
-briefed only from a check that covers everything the learner has said (or one
-that completes the problem). Unchanged learner turns are not rechecked, and an
-unchanged instruction is not resent.
+briefed only from a check that covers everything the learner has said. Turns
+that change nothing are not rechecked: repeats, and turns of only fillers or
+sound tags ("[tongue click] Um", "And"). An unchanged instruction is not resent.
+
+Because a check takes longer than the tutor takes to reply, the tutor's standing
+guidance limits it to a neutral "Okay" or "Mm-hmm" until a check arrives. When a
+check completes the problem, the praise goes into the next problem's steering
+rather than a separate instruction, which the steering would replace before it
+was spoken.
 
 ## Diagnostics
 
