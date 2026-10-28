@@ -207,8 +207,6 @@ Transcript availability, interpretation start/end and feedback append are distin
 
 Two `requestAnimationFrame` callbacks give a DOM paint-opportunity approximation,
 not proof of physical paint. Missing/uncorrelated times remain `null`.
-Tutor audio/conversation completion times are not exported: there is no per-feedback
-audio completion correlation or provider conversation-completed signal.
 For actual human timing distributions retain count, missing count,
 median/p95/range and clock definition separately for provisional and committed
 work. **Live sample count, distributions, false-commit rate and correction rate

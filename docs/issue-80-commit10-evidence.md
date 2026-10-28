@@ -35,12 +35,13 @@ feedback cannot substitute. The two-requestAnimationFrame DOM callback indicates
 a paint opportunity approximation, **not proof of physical paint**. Missing or
 uncorrelated measurements remain null. Decoded audio activity is exported as
 observed events; no per-feedback audio completion correlation or provider
-conversation-completed signal exists, so completion times are not exported.
+conversation-completed signal exists, so those completion fields remain null.
 
-Manual review records case ID, explicit ground truth, synthetic/manual evidence
-label, interpretation faithfulness, false commit and correction count separately
-from the live export. Live exports contain no evaluation fields. Unreviewed
-counts/rates must remain unknown; neither a correct answer nor confirmation proves faithful
+`MathEvaluationAnnotation` defines case ID, explicit ground truth, synthetic/manual
+evidence label, interpretation faithfulness, false commit and correction count.
+The tests include labelled synthetic wrong-sign ground truth that disagrees with
+parser acceptance. Live exports have no manual evaluation by default. Unreviewed
+counts/rates remain null; neither a correct answer nor confirmation proves faithful
 rendering. No diagnostics add scheduling, response or mathematical acceptance gates.
 
 ## Verification provenance
