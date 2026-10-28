@@ -245,9 +245,9 @@ learner statement. Context acknowledgment alone is not spoken confirmation.
 ## Offline evidence
 
 Historical issue #57 documents and replay results remain unchanged.
-The retired nine-question observer and mapper live under
-`lib/experiments/issue-57/legacy/` solely for historical comparison scripts and
-fixtures; no production module imports them. The projection-A adapter keeps
+The retired nine-question observer, mapper and comparison scripts were removed
+from `lib/experiments/` on October 28, 2026; recover them from commit `adcb0e7`
+if a comparison must be rerun. The projection-A adapter keeps
 narrow evidence construction only for offline comparison. Both offline arms
 reuse canonical Choice criteria, normalization, mapping, and execution, so
 runtime-equivalent implementations cannot diverge.

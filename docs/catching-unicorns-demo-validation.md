@@ -98,7 +98,8 @@ signal, so arbitrarily delayed audio remains a live-validation limitation.
 
 Active Sprout uses `jev-1.14.0`. Issue #42 remains pinned to `jev-1.13.0` and uses
 its isolated frozen question definitions, projections, mapping, executor and
-reducer under `lib/experiments/issue-42/historical-v1/`. Active upgrades do not
+reducer, formerly under `lib/experiments/issue-42/historical-v1/` (removed
+October 28, 2026; recover from commit `adcb0e7`). Active upgrades do not
 require changing that historical contract. Actual active source hashes are run
 provenance, not compatibility exceptions or gates on historical replay. The
 frozen corpus, manifests and historical results remain unchanged. See

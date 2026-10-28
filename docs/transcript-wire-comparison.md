@@ -149,7 +149,7 @@ Playwright `project.outputDir` are refused. Do not set `--output` to a parent of
 Provider-free checks, including cleanup across two separate invocations:
 
 ```bash
-npm test -- tests/transcript-wire.test.ts tests/outbound-audio.test.ts tests/retained-evidence.test.ts tests/transcript-wire-artifacts.test.ts tests/lesson-runtime-scheduling.test.ts
+npm test -- tests/transcript-wire.test.ts tests/outbound-audio.test.ts tests/retained-evidence.test.ts tests/lesson-runtime-scheduling.test.ts
 npm run test:browser -- tests/browser/transport-output.spec.ts --grep 'wire diagnostics|outbound counters'
 npm run test:browser -- tests/browser/retained-diagnostics.spec.ts
 npm run test:browser -- tests/browser/retained-diagnostics.spec.ts
@@ -196,14 +196,14 @@ to this voice change, so this is not a phoneme-controlled experiment.
 local tool versions. Run those commands on the same macOS/voice/FFmpeg versions
 to reproduce; version changes may change checksums. Keep the committed bytes for
 comparison. No voice download, network synthesis or billed service is required.
-`tests/speech-voice-comparison.test.ts` verifies text/settings/checksums, actual WAV
-format, duration and unclipped nonzero samples. Chromium verifies both fixtures
+`tests/fixtures/speech/manifest.json` records text, settings and checksums (the
+checksum test was removed October 28, 2026). Chromium verifies both fixtures
 play fully through the same synthetic microphone path.
 
 Provider-free checks:
 
 ```bash
-npm test -- tests/transcript-wire.test.ts tests/speech-voice-comparison.test.ts tests/child-scenario.test.ts
+npm test -- tests/transcript-wire.test.ts tests/child-scenario.test.ts
 npm run test:browser -- tests/browser/transport-output.spec.ts --grep 'wire diagnostics'
 npm run test:browser -- tests/browser/injection-window.spec.ts
 

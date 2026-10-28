@@ -15,12 +15,12 @@ The production prototype is the realtime counting lesson at `/`, backed by
 | [Classifier contract](lesson-classifier.md) | Jev input projection, probabilities and deterministic mapping |
 | [Reducer contract](lesson-runtime-reducer.md) | Identity, completion gate, render and steering handoff |
 | [Evidence, feedback and delivery tracking](issue-77-tracking-contract.md) | Current lifecycle and proposed behavior-preserving observation contract for issue #77 |
-| [Issue #77 preservation replay](issue-77-tracking-replay.md) | Baseline behavior and scheduling verification, provenance and synthetic replay limits |
+| [Issue #77 preservation replay](issue-77-tracking-replay.md) | Historical: the replay guard, pinned baseline and provenance test were removed October 28, 2026 |
 | [Issue #77 findings](issue-77-findings.md) | Recorded tracking observations, reproducible analysis and deferred policy recommendation |
 | [Browser evaluation guide](lesson-browser-guide.md) | Reproduction steps, timing, diagnostic interpretation and limitations |
 | [Browser test suites](browser-tests.md) | Provider-free versus live selection, configuration and costs |
 | [Catching Unicorns demo validation](catching-unicorns-demo-validation.md) | Demo coverage, source limits, live acceptance status and removal rehearsal |
-| [Issue #42 benchmark readiness](issue-42-benchmark-readiness.md) | Evidence gaps, measurement status and a bounded next-test proposal; empirical comparison remains incomplete |
+| [Issue #42 benchmark readiness](issue-42-benchmark-readiness.md) | Historical: benchmark code, corpus and tests were removed October 28, 2026 |
 | [Issue #76 rubric review bundle](issue-76-rubric-review.md) | Instructor-facing MAE386 reference answers, source citations, atomic criteria and labeled synthetic examples |
 
 The standalone adult-learning demonstrations are available at
@@ -38,6 +38,13 @@ proposals and owns every scene transition.
 Historical prototype data is disposable; compatibility and migrations are out of
 scope. Repository docs describe the surviving system. Broader behavioral evaluation
 belongs to [#57](https://github.com/hurley87/sprout/issues/57).
+
+Pre-MVP test scope: on October 28, 2026 the issue #42/#57 experiment code
+(`lib/experiments/`), its comparison scripts, the issue #42 benchmark corpus, the
+issue #77 replay baseline and their tests were removed to keep the suite fast.
+`issue-42-*`, `issue-57-*` and `issue-77-tracking-replay` documents are historical
+records; commands and test files they cite may no longer exist. Recover from
+commit `adcb0e7` if needed.
 
 The [issue #42 decision](issue-42-decision.md) retains active Jev 1.14 after a
 limited reviewed comparison; the experimental Decisions tooling stays isolated.

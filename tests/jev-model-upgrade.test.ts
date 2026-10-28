@@ -13,7 +13,6 @@ import {
 } from "../lib/lesson-runtime/conversation-observer-contract";
 import { COUNTING_LESSON } from "../lib/lesson-runtime/counting-lesson";
 import { CATCHING_UNICORNS_LESSON } from "../lib/lesson-runtime/catching-unicorns-lesson";
-import { replayReducer } from "../lib/experiments/issue-42/provider-comparison";
 
 const snapshots = [
   {
@@ -93,8 +92,6 @@ it.each(snapshots)("uses 1.14 with unchanged Choice inputs, mapping and reducer 
     expect(active.proposal?.conceptObservations).toEqual([
       { criterionId: "engram-biological", observation: "demonstrated_independent", childMessageIndex: 1 },
     ]);
-    const replay = replayReducer(input, active.proposal);
-    expect(replay.evidence["engram:engram-biological"].source?.childMessageIndex).toBe(1);
   }
 });
 it.each([

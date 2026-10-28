@@ -3,13 +3,6 @@ import { POST } from "../app/api/classify/route";
 import * as canonical from "../lib/lesson-runtime/jev-conversation-state-classifier";
 import { JEV_MODEL } from "../lib/jev";
 import { COUNTING_LESSON } from "../lib/lesson-runtime/counting-lesson";
-import {
-  fullTranscriptObserverState,
-} from "../lib/experiments/issue-57/context-projection";
-import {
-  mapSimplifiedObservation,
-  type SimplifiedOutputs,
-} from "../lib/experiments/issue-57/simplified-observer-contract";
 import { parseLiveClassificationDiagnostic } from "../lib/lesson-runtime/live-classification-diagnostic";
 import fixture from "./fixtures/issue-57-fragmented-confirmation.json";
 const wireInput = { ...fixture.input, lessonId: "counting" };
@@ -21,7 +14,7 @@ const request = (fields: Record<string, unknown> = wireInput) =>
     body: JSON.stringify(fields),
   });
 // Synthetic supplied Choice scores: a transport/mapping control, never an expected Jev result.
-const outputs: SimplifiedOutputs = {
+const outputs: canonical.ConversationStateOutputs = {
   answerCommitment: { choice: "committed", confidence: 0.97, probabilities: { committed: 0.97, unresolved: 0.01, withdrawn: 0.01, no_answer: 0.01 } },
   objectiveState: {
     choice: "completed",
@@ -68,12 +61,12 @@ it("invokes the canonical full-context Choice classifier exactly once (mock prov
   const wire = JSON.parse(fetch.mock.calls[0][1]?.body as string);
   expect(wire).toEqual({
     model: JEV_MODEL,
-    state: fullTranscriptObserverState(input),
+    state: canonical.conversationObserverState(input),
     questions: canonical.conversationStateQuestions(COUNTING_LESSON),
   });
   expect(wire.state.transcript).toBe(fixture.input.transcript);
   expect(Object.keys(wire.state)).toEqual(["nodeId", "scene", "learningObjective", "transcript", "transcriptRevision"]);
-  expect(body.proposal).toEqual(mapSimplifiedObservation(input, outputs).proposal);
+  expect(body.proposal).toEqual(canonical.mapConversationObservation(input, outputs).proposal);
   expect(body.diagnostic).toMatchObject({
     classifierVersion: "conversation-state-v2",
     nodeId: input.nodeId,
