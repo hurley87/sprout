@@ -753,8 +753,42 @@ it("does not accept a proposal from tutor confirmation or an ordinary generic ye
   expect(runtime.snapshot().math!.pending!.id).toBe(pending.id);
   time = 600;
   await learner("Yes.");
-  expect(runtime.confirmMathProposal(pending.id, pending.boardRevision, ["differentiate"])).toBe(false);
   expect(runtime.snapshot().math!.current!.history).toEqual([]);
+  // The generic yes grants nothing but leaves the displayed proposal for explicit confirmation.
+  expect(runtime.snapshot().math!.pending!.id).toBe(pending.id);
+  expect(requests).toHaveLength(1);
+});
+
+it("keeps a multi-action proposal through a bare 'correct' and accepts one spoken command for every action", async () => {
+  start();
+  await learner("rewrite the function then differentiate it");
+  const expression = getCalculusReviewKey("cubic-minus-linear").routes[0].steps[0].expression;
+  const turn = requests.at(-1)!.input.learnerTurns.at(-1)!;
+  await respond([
+    { kind: "append", expression, sources: [{ turnId: turn.id, quote: "rewrite the function" }] },
+    { kind: "append", expression: correct, sources: [{ turnId: turn.id, quote: "differentiate it" }] },
+  ]);
+  const pending = runtime.snapshot().math!.pending!;
+  runtime.confirmMathProposalDisplayed(pending.id, pending.boardRevision);
+  await learner("Correct.");
+  expect(runtime.snapshot().math!.pending!.id).toBe(pending.id);
+  expect(runtime.snapshot().math!.current!.steps).toHaveLength(0);
+  expect(requests).toHaveLength(1);
+  await learner("Confirm differentiation.");
+  expect(runtime.snapshot().math!.current!.steps).toHaveLength(2);
+  expect(runtime.snapshot().math!.checks.map(check => check.operation)).toEqual(["differentiate", "differentiate"]);
+  expect(requests).toHaveLength(1);
+});
+
+it("re-interprets an affirmation that carries new words", async () => {
+  start();
+  await learner("three x squared minus four");
+  await respond([action("append", { expression: correct })]);
+  const pending = runtime.snapshot().math!.pending!;
+  runtime.confirmMathProposalDisplayed(pending.id, pending.boardRevision);
+  await learner("Yes but the sign is wrong.");
+  expect(runtime.snapshot().math!.pending).toBeNull();
+  expect(runtime.snapshot().math!.current!.steps).toHaveLength(0);
 });
 
 it("orders help between fragments before the completed learner action", async () => {
@@ -838,7 +872,7 @@ it("reserves the displayed proposal before onset, accepts only at turn end, and 
 });
 
 it.each([
-  "yes",
+  "yes I think",
   "do not confirm differentiation",
   "confirm differentiation but change four",
   'She said "confirm differentiation"',

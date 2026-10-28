@@ -98,7 +98,7 @@ export function calculusFeedbackInstruction(snapshot: MathControllerSnapshot): s
   const context = calculusTutorContext(snapshot);
   if (!context) return null;
   const response = context.pending
-    ? 'Ask about the EXACT displayed proposal: do all actions, expressions and targets match intent? Ask for "confirm differentiation", "confirm rewrite" or "confirm without checking" per action. Strategy or missing notation needs one non-leading question, never a suggested term. Only the app accepts.'
+    ? 'Ask about the EXACT displayed proposal: do all actions, expressions and targets match intent? End by telling the learner to say exactly "confirm differentiation", "confirm rewrite" or "confirm without checking" (one phrase covers every action), or press Confirm. A plain yes or correct is not accepted; if they say one, repeat the exact phrases. Strategy or missing notation needs one non-leading question, never a suggested term. Only the app accepts.'
     : "Discuss the displayed disposition. For incorrect work say it needs correction; do not give its replacement. Request reasoning; no mastery claim. Strategy is not execution. Missing notation needs clarification. Help is assistance.";
   // Initial session guidance already contains the full pedagogy. Keep each append
   // within the existing browser ceiling; never send a partial expression/proposal.

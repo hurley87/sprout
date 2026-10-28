@@ -2,7 +2,12 @@ import { MathController } from "../calculus/math-controller";
 import type { MathSourceEvent } from "../calculus/math-evidence";
 import { INTERPRETATION_LIMITS } from "../calculus/math-interpretation-contract";
 import { isCalculusProblemId } from "../calculus/problems";
-import { isSpokenMathConfirmationPrefix, parseSpokenMathConfirmation } from "../calculus/spoken-confirmation";
+import {
+  isSpokenAffirmation,
+  isSpokenAffirmationPrefix,
+  isSpokenMathConfirmationPrefix,
+  parseSpokenMathConfirmation,
+} from "../calculus/spoken-confirmation";
 import { calculusFeedbackInstruction } from "../calculus/tutor-context";
 import type { TranscriptEvent } from "../events";
 import { isLearnerStopText, parseLearnerNavigationText } from "./conversation-progression";
@@ -120,9 +125,11 @@ export class CalculusRuntime {
         text: group.text,
         order: group.lastOrder,
       }));
+    const text = this.learnerText();
     if (
       this.reservation &&
-      !isSpokenMathConfirmationPrefix(this.learnerText(), this.controller.pendingProposal?.batch.actions.length ?? 0)
+      !isSpokenMathConfirmationPrefix(text, this.controller.pendingProposal?.batch.actions.length ?? 0) &&
+      !isSpokenAffirmationPrefix(text)
     )
       this.reservation = undefined;
     if (!this.reservation) this.controller.learnerRevision(revision, this.deferredTurns);
@@ -142,12 +149,20 @@ export class CalculusRuntime {
     );
     const text = fragments.map(item => item.event.delta).join("");
     const operations = pending ? parseSpokenMathConfirmation(text, pending.batch.actions.length) : null;
-    if (
+    const sameTurn =
       ended &&
       this.now() - reserved.startedAt <= 8000 &&
       state.visitId === reserved.visitId &&
       state.childTurnId === reserved.turnId &&
-      fragments.length > 0 &&
+      fragments.length > 0;
+    if (sameTurn && pending?.id === reserved.id && !operations && isSpokenAffirmation(text)) {
+      // A generic yes answers the tutor but never accepts. Keep the displayed proposal
+      // and its extraction identity so the learner can still say a confirm command.
+      this.log("math.spoken_affirmation_retained", { ...reserved, text, revision });
+      for (const fragment of fragments) this.consumedFragments.add(fragment.order);
+      this.publish();
+    } else if (
+      sameTurn &&
       operations &&
       this.confirmProposal(reserved.id, reserved.boardRevision, operations, "spoken")
     ) {

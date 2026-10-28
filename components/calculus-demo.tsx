@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { CALCULUS_LESSON } from "@/lib/lesson-runtime/calculus-lesson";
 import { CALCULUS_PROBLEM_IDS } from "@/lib/calculus/problems";
@@ -22,12 +22,18 @@ function Confirmation({
   confirm: (id: string, revision: number, operations: MathOperation[]) => void;
 }) {
   const [operations, setOperations] = useState<MathOperation[]>(pending.batch.actions.map(() => "unassessed"));
+  const ref = useRef<HTMLFieldSetElement>(null);
+  // The panel renders below the proposal; bring it into view so it is not missed.
+  useEffect(() => {
+    if (pending.displayed) ref.current?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+  }, [pending.id, pending.displayed]);
   return (
-    <fieldset disabled={disabled || !pending.displayed} className={styles.confirmation}>
+    <fieldset ref={ref} disabled={disabled || !pending.displayed} className={styles.confirmation}>
       <legend>Confirm your intended actions</legend>
       <p>
-        For one action, say “confirm differentiation”, “confirm rewrite”, or “confirm without checking”. For several,
-        use the controls below, or say “action 1 confirm rewrite; action 2 confirm differentiation”, in order.
+        Say “confirm differentiation”, “confirm rewrite”, or “confirm without checking” to apply it to every action. A
+        plain “yes” is not enough. To choose per action, use the controls below, or say “action 1 confirm rewrite,
+        action 2 confirm differentiation”, in order.
       </p>
       {operations.map((operation, index) => (
         <label key={index}>
