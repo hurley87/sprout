@@ -9,12 +9,6 @@ export interface MathValidationContext {
    * callers supply the predecessor being transformed, not the replaced attempt. */
   readonly current?: { readonly expression: E; readonly role: MathRole };
   readonly operation: "rewrite" | "differentiate";
-  /** Retained learner observations, not authority claims from an interpreter.
-   * Free text is never graded by this mathematical checker. */
-  readonly reasoning?: {
-    readonly method?: "power" | "sum" | "product" | "chain" | "expand" | "other";
-    readonly explanation?: string;
-  };
 }
 export interface MathValidationResult {
   /** Detached exact syntax. Normalization is private and never repairs display. */
@@ -22,10 +16,6 @@ export interface MathValidationResult {
   readonly correctness: MathCorrectness;
   readonly expressionCorrectness: MathCorrectness;
   readonly transformationCorrectness: MathCorrectness;
-  readonly reasoning: "missing" | "strategy-only" | "unassessed";
-  readonly faithfulness: "unassessed";
-  readonly assistance: "unassessed";
-  readonly independence: "unassessed";
   /** Mathematical completion only; never mastery, navigation, or independence. */
   readonly completeDerivative: boolean;
   readonly detail: string;
@@ -191,15 +181,6 @@ function hasDerivative(e: E): boolean {
       return false;
   }
 }
-function assessReasoning(context: MathValidationContext): MathValidationResult["reasoning"] {
-  const r = context.reasoning;
-  if (!r?.method && !r?.explanation?.trim()) return "missing";
-  // A method name alone cannot establish whether the learner's reasoning is
-  // sound: valid rewrites can change which rule applies. Explanations need
-  // separate assessment, including apparently misleading ones.
-  return r.explanation?.trim() ? "unassessed" : "strategy-only";
-}
-
 /** Pure assessment only. Caller still owns authenticated source/board authority,
  * faithfulness, reasoning review, assistance provenance and eventual state changes.
  * undefined/null means no complete expression supplied, including strategy-only.
@@ -208,12 +189,6 @@ function assessReasoning(context: MathValidationContext): MathValidationResult["
 export function validateMathExpression(proposed: unknown, context: MathValidationContext): MathValidationResult {
   // Validate the authored ID even on the no-expression path.
   const original = getCalculusPresentation(context.problemId).functionExpression;
-  const base = {
-    reasoning: assessReasoning(context),
-    faithfulness: "unassessed",
-    assistance: "unassessed",
-    independence: "unassessed",
-  } as const;
   const result = (
     expression: E | undefined,
     expressionCorrectness: MathCorrectness,
@@ -233,7 +208,6 @@ export function validateMathExpression(proposed: unknown, context: MathValidatio
     const value = expression?.op === "equal" ? expression.right : expression;
     const role = context.operation === "differentiate" ? "derivative" : (context.current?.role ?? "function");
     return {
-      ...base,
       ...(expression ? { expression } : {}),
       correctness,
       expressionCorrectness,

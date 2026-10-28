@@ -1,10 +1,6 @@
 import { projectMathDiagnostics } from "../calculus/math-diagnostics";
 import { INTERPRETATION_LIMITS } from "../calculus/math-interpretation-contract";
-import {
-  isSpokenMathConfirmationPrefix,
-  parseSpokenMathConfirmation,
-  type MathOperation,
-} from "../calculus/spoken-confirmation";
+import { isSpokenMathConfirmationPrefix, parseSpokenMathConfirmation } from "../calculus/spoken-confirmation";
 import { calculusFeedbackInstruction } from "../calculus/tutor-context";
 import type { MathSourceEvent } from "../calculus/math-evidence";
 import { MathController, type MathControllerSnapshot } from "../calculus/math-controller";
@@ -116,16 +112,6 @@ export class LessonRuntime {
     startedAt: number;
     fragmentFloor: number;
   };
-  private mathConfirmations: {
-    id: string;
-    boardRevision: number;
-    visitId: number;
-    turnId: number;
-    text: string;
-    revision: number;
-    fragments: Fragment[];
-    operations: MathOperation[];
-  }[] = [];
   private deferredMathTurns: Parameters<MathController["learnerRevision"]>[1] = [];
   private consumedMathFragments = new Set<number>();
   private mathTimer?: ReturnType<typeof setTimeout>;
@@ -932,13 +918,6 @@ export class LessonRuntime {
       operations &&
       this.confirmMathProposal(reserved.id, reserved.boardRevision, operations, "spoken")
     ) {
-      this.mathConfirmations.push({
-        ...reserved,
-        text,
-        revision: this.revision,
-        fragments: structuredClone(fragments),
-        operations,
-      });
       this.log("math.spoken_confirmation", {
         ...reserved,
         text,
@@ -1696,7 +1675,7 @@ export class LessonRuntime {
 
   report() {
     const report = {
-      ...(this.math ? { math: this.math.snapshot(), mathConfirmations: this.mathConfirmations } : {}),
+      ...(this.math ? { math: this.math.snapshot() } : {}),
       ...this.journal.report({
         timing: LESSON_TIMING,
         runtime: this.state,

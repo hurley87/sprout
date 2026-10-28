@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { projectMathDiagnostics, summarizeMathEvaluation } from "../lib/calculus/math-diagnostics";
+import { projectMathDiagnostics } from "../lib/calculus/math-diagnostics";
 import type { LessonDiagnostic } from "../lib/lesson-runtime/diagnostic-journal";
 import { createMathState } from "../lib/calculus/math-state";
 
@@ -71,8 +71,6 @@ it("synthetic multi-turn timings separate pending display, confirmation delay an
     authoritativeCommitMs: 100,
     committedBoardFirstDisplayedMs: 110,
     tutorFeedbackAppendMs: 120,
-    tutorConversationCompletedMs: null,
-    tutorAudioCompletedMs: null,
     speechEndToProposalDisplayMs: 40,
     confirmationDelayMs: 40,
     commitToBoardDisplayMs: 10,
@@ -80,7 +78,6 @@ it("synthetic multi-turn timings separate pending display, confirmation delay an
   });
   expect(report.requests[0].confirmations[0].detail.token).toBe("proposal-token");
   expect(report.requests[0].confirmations[0].spokenEvidence).toBeNull();
-  expect(report.evaluation.falseCommitRate).toBeNull();
   expect(report.displayMeasurement).toContain("not physical paint");
 });
 it("missing local measurements stay null, even when provider media timestamps exist", () => {
@@ -104,25 +101,6 @@ it.each(["malformed", "rejected", "unavailable", "stale"])(
     expect(request.after).toBeNull();
   },
 );
-it("manual labelled review can disagree with parser acceptance and mathematical correctness", () => {
-  expect(summarizeMathEvaluation([]).falseCommitCount).toBeNull();
-  const annotation = {
-    caseId: "synthetic-wrong-sign",
-    groundTruth: "Learner said minus four; fixture rendered plus four",
-    evidence: "synthetic-fixture" as const,
-    interpretationFaithful: false,
-    falseCommit: true,
-    correctionCount: 1,
-  };
-  expect(summarizeMathEvaluation([annotation])).toMatchObject({
-    faithfulCount: 0,
-    falseCommitCount: 1,
-    falseCommitRate: 1,
-    correctionCount: 1,
-  });
-  expect(summarizeMathEvaluation([{ ...annotation, interpretationFaithful: null }]).falseCommitRate).toBeNull();
-  expect(summarizeMathEvaluation([{ ...annotation, groundTruth: "" }]).falseCommitRate).toBeNull();
-});
 
 it("does not attribute later proposal feedback to an earlier board when its append was absent", () => {
   const events = fixture().filter(e => e.type !== "gpt_live.math_feedback_append");

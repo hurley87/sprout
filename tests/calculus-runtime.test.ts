@@ -748,7 +748,10 @@ it("reserves the displayed proposal before onset, accepts only at turn end, and 
   expect(runtime.snapshot().math!.current!.steps).toHaveLength(0);
   emit({ type: "microphone.speech_stopped", quietMs: 900 });
   expect(runtime.snapshot().math!.current!.steps).toHaveLength(1);
-  expect(runtime.report().mathConfirmations?.[0]).toMatchObject({ id: pending.id, text: "confirm differentiation" });
+  expect(runtime.report().mathDiagnostics!.requests[0].confirmations[0].spokenEvidence?.detail).toMatchObject({
+    id: pending.id,
+    text: "confirm differentiation",
+  });
   time += 200;
   await vi.advanceTimersByTimeAsync(400);
   expect(requests).toHaveLength(1);
@@ -1028,7 +1031,6 @@ it("deduplicates event/transcript/result delivery and UI confirmations without i
   expect(
     report.mathDiagnostics!.requests[0].confirmations.filter(e => (e.detail as { accepted: boolean }).accepted),
   ).toHaveLength(1);
-  expect(report.mathConfirmations).toEqual([]);
   expect(report.math!.current!.history[0].evidence.demonstratedIndependent).toBe(false);
 });
 

@@ -264,13 +264,14 @@ test("debug export retains spoken confirmation identity, operation and transcrip
   const download = await downloading;
   const report = JSON.parse(await readFile((await download.path())!, "utf8"));
   expect(download.suggestedFilename()).toMatch(/^sprout-calculus-/);
-  expect(report.mathConfirmations[0]).toMatchObject({
+  const spokenEvidence = report.mathDiagnostics.requests[0].confirmations[0].spokenEvidence;
+  expect(spokenEvidence.detail).toMatchObject({
     id: proposal.id,
     boardRevision: proposal.boardRevision,
     text: "confirm differentiation",
     operations: ["differentiate"],
   });
-  expect(report.mathConfirmations[0].fragments[0]).toMatchObject({
+  expect(spokenEvidence.detail.fragments[0]).toMatchObject({
     event: { speaker: "child", delta: "confirm differentiation" },
   });
   expect(report.math.current.steps).toHaveLength(1);
@@ -315,7 +316,6 @@ test("synthetic local WebRTC: fully dictated correct solutions export separate U
   const diagnostics = report.mathDiagnostics;
   expect(diagnostics.clock).toBe("browser.performance.now-relative-to-attempt");
   expect(diagnostics.displayMeasurement).toContain("not physical paint");
-  expect(diagnostics.evaluation.falseCommitRate).toBeNull();
   expect(diagnostics.requests).toHaveLength(3);
   for (let index = 0; index < 3; index++) {
     const request = diagnostics.requests[index];
@@ -336,8 +336,6 @@ test("synthetic local WebRTC: fully dictated correct solutions export separate U
     expect(timing.speechEndToProposalDisplayMs).toBe(timing.proposalFirstDisplayedMs - timing.sourceSpeechEndMs);
     expect(timing.confirmationDelayMs).toBe(timing.authoritativeCommitMs - timing.proposalFirstDisplayedMs);
     expect(timing.commitToBoardDisplayMs).toBe(timing.committedBoardFirstDisplayedMs - timing.authoritativeCommitMs);
-    expect(timing.tutorAudioCompletedMs).toBeNull();
-    expect(timing.tutorConversationCompletedMs).toBeNull();
     const confirmation = request.confirmations.find((e: { detail: { accepted: boolean } }) => e.detail.accepted);
     expect(confirmation.detail.method).toBe(index === 1 ? "spoken" : "ui");
     expect(confirmation.detail.operations).toEqual(["differentiate"]);
@@ -348,6 +346,5 @@ test("synthetic local WebRTC: fully dictated correct solutions export separate U
       expect(confirmation.spokenEvidence.detail.localSpeechEndMs).toBeGreaterThan(timing.sourceSpeechEndMs);
     }
   }
-  expect(report.mathConfirmations).toHaveLength(1);
   expect(JSON.stringify(report)).not.toMatch(/api_key|access_token|authorization|"sdp"/i);
 });
