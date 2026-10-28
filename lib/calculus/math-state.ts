@@ -88,20 +88,26 @@ export function createMathState(identity: MathIdentity): MathState {
 
 /** Opaque in-process acceptance capability. JSON/model fields cannot mint one.
  * The factory is for trusted app code only, with separate semantic review.
- * Review callbacks run against the staged board and allocated version ID before
- * each action is applied; array reviews remain collected at acceptance time.
+ * Reviews run against the staged board and allocated version ID as each action
+ * is applied; an array supplies one fixed review per action.
  * It does not authenticate a caller or assess free-text reasoning itself.
  */
 declare const accepted: unique symbol;
 export interface MathAcceptance {
   readonly [accepted]: true;
 }
-type MathBatchReview = (action: MathProposal, index: number, board: MathState, versionId: string | null) => MathReview;
+export type MathBatchReview = (
+  action: MathProposal,
+  index: number,
+  board: MathState,
+  versionId: string | null,
+) => MathReview;
 interface AcceptedData {
   readonly state: MathState;
   readonly deliveryId: string;
   readonly batch: MathActionBatch;
-  readonly evidence: readonly MathEvidence[] | ((...args: Parameters<MathBatchReview>) => MathEvidence);
+  readonly evidence: (...args: Parameters<MathBatchReview>) => MathEvidence;
+  /** Memoized on first application so redelivery never re-runs reviews. */
   fingerprint: string | null;
 }
 const capabilities = new WeakMap<MathAcceptance, AcceptedData>();
@@ -127,31 +133,23 @@ export function acceptMathBatch(
     (reviews.length !== batch.actions.length || reviews.some(r => r.faithful !== true))
   )
     throw new Error("Separate app review required for every action");
+  const review: MathBatchReview = typeof reviews === "function" ? reviews : (_, index) => reviews[index];
   const turns = snapshot(authority.turns);
-  const collect = (action: MathProposal, review: MathReview) => {
-    if (review.faithful !== true) throw new Error("Separate app review required for every action");
+  const evidence: AcceptedData["evidence"] = (action, index, board, versionId) => {
+    const result = review(action, index, board, versionId);
+    if (result.faithful !== true) throw new Error("Separate app review required for every action");
     return collectMathEvidence(
       batch.identity,
       action.sources,
       turns,
       state.sourceEvents,
       action.kind === "append" || action.kind === "replace"
-        ? review
-        : { ...review, mathematicallyComplete: false, independenceEstablished: false },
+        ? result
+        : { ...result, mathematicallyComplete: false, independenceEstablished: false },
     );
   };
-  const evidence: AcceptedData["evidence"] =
-    typeof reviews === "function"
-      ? (action, index, board, versionId) => collect(action, reviews(action, index, board, versionId))
-      : batch.actions.map((action, index) => collect(action, reviews[index]));
   const capability = Object.freeze({}) as MathAcceptance;
-  capabilities.set(capability, {
-    state,
-    deliveryId,
-    batch,
-    evidence,
-    fingerprint: typeof evidence === "function" ? null : JSON.stringify({ batch, evidence }),
-  });
+  capabilities.set(capability, { state, deliveryId, batch, evidence, fingerprint: null });
   return capability;
 }
 
@@ -189,15 +187,13 @@ export function applyMathBatch(state: MathState, acceptance: MathAcceptance): Ma
       stepId = step.id;
       versionId = `${step.id}v${step.versions.length + 1}`;
     }
-    const actionEvidence =
-      typeof data.evidence === "function" ? data.evidence(action, i, next, versionId) : data.evidence[i];
+    const actionEvidence = data.evidence(action, i, next, versionId);
     evidence.push(actionEvidence);
     if (actionEvidence.assessment.disposition === "rejected") throw new Error("Rejected action");
     if (step && versionId && (action.kind === "append" || action.kind === "replace")) {
       if (actionEvidence.assessment.disposition === "clarification-required")
         throw new Error("Board action not accepted");
-      stepId = step.id;
-      next.effectiveEdits.push({ actionId: id, stepId, previousVersionId: step.currentVersionId });
+      next.effectiveEdits.push({ actionId: id, stepId: step.id, previousVersionId: step.currentVersionId });
       step.versions.push({
         id: versionId,
         actionId: id,

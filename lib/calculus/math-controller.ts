@@ -1,7 +1,14 @@
 import { parseMathActionBatch, type MathActionBatch } from "./math-action";
-import type { MathLearnerTurn, MathReview, MathSourceEvent } from "./math-evidence";
+import type { MathLearnerTurn, MathSourceEvent } from "./math-evidence";
 import { parseMathInterpretationInput, type MathInterpretationInput } from "./math-interpretation-contract";
-import { acceptMathBatch, applyMathBatch, createMathState, updateMathAuthority, type MathState } from "./math-state";
+import {
+  acceptMathBatch,
+  applyMathBatch,
+  createMathState,
+  updateMathAuthority,
+  type MathBatchReview,
+  type MathState,
+} from "./math-state";
 import { validateMathExpression, type MathValidationContext, type MathValidationResult } from "./math-validator";
 import { getCalculusPresentation, type CalculusProblemId } from "./problems";
 
@@ -312,12 +319,7 @@ export class MathController {
       expression: getCalculusPresentation(state.identity.problemId).functionExpression,
       role: "function",
     };
-    const review = (
-      action: MathActionBatch["actions"][number],
-      index: number,
-      board: MathState,
-      versionId: string | null,
-    ): MathReview => {
+    const review: MathBatchReview = (action, index, board, versionId) => {
       const operation = operations[index];
       let validation: MathValidationResult | null = null;
       if ((action.kind === "append" || action.kind === "replace") && versionId) {
