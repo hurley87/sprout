@@ -62,6 +62,14 @@ export class MathController {
     private readonly observe: (type: string, detail: unknown) => void = () => {},
   ) {}
 
+  get pendingProposal(): MathPendingProposal | null {
+    return this.pending;
+  }
+
+  get feedbackDisplay(): MathFeedbackDisplay | null {
+    return this.feedback;
+  }
+
   snapshot(): MathControllerSnapshot {
     return structuredClone({
       feedback: this.feedback,
