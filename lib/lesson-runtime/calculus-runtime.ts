@@ -98,12 +98,18 @@ export class CalculusRuntime {
       .join("");
   }
 
-  onSpeechStarted() {
-    clearTimeout(this.timer);
+  /** `confirmed` is false for raw microphone activity, which is often noise or tutor
+   * echo and is usually discarded within ~200ms. Only confirmed speech may cancel
+   * in-flight interpretation; a displayed proposal is reserved from the first onset. */
+  onSpeechStarted(confirmed = true) {
     const { state, steering, order } = this.context();
-    if (!state || state.childSpeaking || this.reservation) return;
+    if (!state || this.reservation) return;
     const pending = this.controller.pendingProposal;
-    if (pending?.displayed && !steering && state.phase === "active")
+    const reserve = pending?.displayed && !steering && state.phase === "active";
+    if (!reserve && !confirmed) return;
+    clearTimeout(this.timer);
+    if (state.childSpeaking && reserve) return;
+    if (reserve && pending)
       this.reservation = {
         id: pending.id,
         boardRevision: pending.boardRevision,
@@ -155,7 +161,11 @@ export class CalculusRuntime {
       state.visitId === reserved.visitId &&
       state.childTurnId === reserved.turnId &&
       fragments.length > 0;
-    if (sameTurn && pending?.id === reserved.id && !operations && isSpokenAffirmation(text)) {
+    if (!ended && fragments.length === 0 && pending?.id === reserved.id) {
+      // Discarded activity without learner words (noise, tutor echo) changes nothing.
+      this.log("math.reservation_released", { ...reserved, revision });
+      this.publish();
+    } else if (sameTurn && pending?.id === reserved.id && !operations && isSpokenAffirmation(text)) {
       // A generic yes answers the tutor but never accepts. Keep the displayed proposal
       // and its extraction identity so the learner can still say a confirm command.
       this.log("math.spoken_affirmation_retained", { ...reserved, text, revision });

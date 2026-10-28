@@ -66,6 +66,7 @@ it("keeps only possible command prefixes open while the learner speaks", () => {
 it("recognizes a bare affirmation only as a whole utterance", () => {
   expect(isSpokenAffirmation("Correct.")).toBe(true);
   expect(isSpokenAffirmation("Yes, that's right.")).toBe(true);
+  expect(isSpokenAffirmation("That’s right.")).toBe(true);
   expect(isSpokenAffirmation("yes but the sign is wrong")).toBe(false);
   expect(isSpokenAffirmationPrefix("Cor")).toBe(true);
   expect(isSpokenAffirmationPrefix("no")).toBe(false);

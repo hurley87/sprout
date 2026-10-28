@@ -13,6 +13,7 @@ const numbers = ["one", "two", "three", "four", "five", "six", "seven", "eight"]
 function words(text: string) {
   return text
     .toLowerCase()
+    .replace(/(\w)[’‘](\w)/g, "$1'$2")
     .replace(/[.,;:!?]/g, " ")
     .split(/\s+/)
     .filter(Boolean);

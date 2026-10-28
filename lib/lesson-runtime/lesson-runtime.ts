@@ -520,7 +520,7 @@ export class LessonRuntime {
       case "microphone.speech_started":
         if (this.status !== "live") return;
         this.log(event.type);
-        this.calculus?.onSpeechStarted();
+        this.calculus?.onSpeechStarted(event.type === "microphone.speech_started");
         if (!this.state.childSpeaking) {
           if (
             event.type === "microphone.speech_started" ||

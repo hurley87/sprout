@@ -974,7 +974,7 @@ it("authenticates a whole ordered mixed batch and never a tutor confirmation", a
 });
 
 it.each(["microphone.activity_discarded", "microphone.speech_stopped"] as const)(
-  "revokes a displayed proposal on %s without new words or a fabricated revision",
+  "handles %s without new words or a fabricated revision",
   async type => {
     start();
     await learner("three x squared minus four");
@@ -986,9 +986,22 @@ it.each(["microphone.activity_discarded", "microphone.speech_stopped"] as const)
     expect(() => emit(type === "microphone.speech_stopped" ? { type, quietMs: 900 } : { type })).not.toThrow();
     expect(runtime.snapshot().math!.current!.identity.transcriptRevision).toBe(revision);
     expect(runtime.snapshot().math!.current!.steps).toHaveLength(0);
-    expect(runtime.snapshot().math!.pending).toBeNull();
+    // Discarded activity is noise or tutor echo and keeps the proposal; an ended turn without words does not.
+    if (type === "microphone.activity_discarded") expect(runtime.snapshot().math!.pending!.id).toBe(pending.id);
+    else expect(runtime.snapshot().math!.pending).toBeNull();
   },
 );
+
+it("does not let discarded microphone activity cancel an in-flight interpretation", async () => {
+  start();
+  await learner("three x squared minus four");
+  expect(requests).toHaveLength(1);
+  emit({ type: "microphone.activity_started" });
+  emit({ type: "microphone.activity_discarded" });
+  await respond([action("append", { expression: correct })]);
+  expect(runtime.snapshot().math!.pending).not.toBeNull();
+  expect(runtime.report().mathDiagnostics!.requests[0].disposition).not.toBe("stale");
+});
 
 it("revokes reservation immediately when a later fragment adds correction words", async () => {
   start();
@@ -1084,7 +1097,10 @@ it.each(["stop", "speech", "next"])("exports malformed late interpretation after
   start();
   await learner("x to the power, or perhaps sine x");
   if (race === "stop") runtime.stop();
-  if (race === "speech") emit({ type: "microphone.activity_started" });
+  if (race === "speech") {
+    emit({ type: "microphone.activity_started" });
+    emit({ type: "microphone.speech_started" });
+  }
   if (race === "next") {
     await learner("next");
     await vi.advanceTimersByTimeAsync(2000);
