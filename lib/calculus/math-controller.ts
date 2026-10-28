@@ -305,28 +305,25 @@ export class MathController {
       this.observe("math.confirmation_rejected", { id, boardRevision, operations });
       return false;
     }
-    // Stage contexts along with the ordered batch. A replacement transforms the
-    // replaced attempt's INPUT, never the erroneous value it is correcting.
-    // Undo restores the predecessor version and its retained role/base.
     const contexts = new Map(this.versionContexts),
       bases = new Map(this.versionBases);
     const checks: MathVersionCheck[] = [];
-    const steps = state.steps.map(step => ({
-      id: step.id,
-      currentVersionId: step.currentVersionId,
-      versionIds: step.versions.map(v => v.id),
-    }));
-    const edits = [...state.effectiveEdits];
     const original: WorkingContext = {
       expression: getCalculusPresentation(state.identity.problemId).functionExpression,
       role: "function",
     };
-    const reviews: MathReview[] = pending.batch.actions.map((action, index) => {
+    const review = (
+      action: MathActionBatch["actions"][number],
+      index: number,
+      board: MathState,
+      versionId: string | null,
+    ): MathReview => {
       const operation = operations[index];
       let validation: MathValidationResult | null = null;
-      if (action.kind === "append" || action.kind === "replace") {
-        const latest = steps.findLast(step => step.currentVersionId !== null);
-        const target = action.kind === "replace" ? steps.find(step => step.id === action.targetStepId) : undefined;
+      if ((action.kind === "append" || action.kind === "replace") && versionId) {
+        const latest = board.steps.findLast(step => step.currentVersionId !== null);
+        const target =
+          action.kind === "replace" ? board.steps.find(step => step.id === action.targetStepId) : undefined;
         const base =
           action.kind === "replace"
             ? target?.currentVersionId
@@ -345,16 +342,6 @@ export class MathController {
             : null;
         const role =
           operation === "unassessed" || !base ? null : operation === "differentiate" ? "derivative" : base.role;
-        const step = target ?? { id: `s${steps.length + 1}`, currentVersionId: null, versionIds: [] };
-        if (action.kind === "append") steps.push(step);
-        const versionId = `${step.id}v${step.versionIds.length + 1}`;
-        edits.push({
-          actionId: `a${state.history.length + index + 1}`,
-          stepId: step.id,
-          previousVersionId: step.currentVersionId,
-        });
-        step.versionIds.push(versionId);
-        step.currentVersionId = versionId;
         bases.set(versionId, base);
         contexts.set(
           versionId,
@@ -363,12 +350,6 @@ export class MathController {
             : null,
         );
         checks.push({ visitId: state.identity.visitId, versionId, operation, base, result: validation, role });
-      } else if (action.kind === "undo") {
-        const edit = edits.at(-1);
-        if (edit?.stepId === action.targetStepId) {
-          edits.pop();
-          steps.find(step => step.id === edit.stepId)!.currentVersionId = edit.previousVersionId;
-        }
       }
       return {
         faithful: true, // Only this explicit learner-confirmation API grants fidelity.
@@ -381,9 +362,9 @@ export class MathController {
           assistance: "unknown",
         },
       };
-    });
+    };
     try {
-      const acceptance = acceptMathBatch(state, pending.id, pending.batch, { turns: captured.turns, reviews });
+      const acceptance = acceptMathBatch(state, pending.id, pending.batch, { turns: captured.turns, reviews: review });
       this.current = applyMathBatch(state, acceptance);
       this.versionContexts = contexts;
       this.versionBases = bases;

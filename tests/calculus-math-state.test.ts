@@ -43,6 +43,78 @@ function apply(state: MathState, actions: readonly MathProposal[], reviews?: Mat
 }
 
 describe("mathematical attempt history", () => {
+  it("reviews each action against the real staged board and app-generated version ID", () => {
+    const state = apply(createMathState(identity), [append()]);
+    const seen: { versionId: string | null; current: (string | null)[]; history: string[] }[] = [];
+    const actions = [replace(), undo(), undo(), append(), append()];
+    const token = acceptMathBatch(
+      state,
+      "reviewed",
+      { identity: state.identity, actions },
+      {
+        turns,
+        reviews: (_action, _index, board, versionId) => {
+          seen.push({
+            versionId,
+            current: board.steps.map(step => step.currentVersionId),
+            history: board.history.map(entry => entry.id),
+          });
+          return review;
+        },
+      },
+    );
+    expect(seen).toEqual([]);
+    const next = applyMathBatch(state, token);
+    expect(seen.map(entry => [entry.versionId, entry.current])).toEqual([
+      ["s1v2", ["s1v1"]],
+      [null, ["s1v2"]],
+      [null, ["s1v1"]],
+      ["s2v1", [null, null]],
+      ["s3v1", [null, "s2v1", null]],
+    ]);
+    expect(seen.map(entry => entry.history.at(-1))).toEqual(["a1", "a2", "a3", "a4", "a5"]);
+    expect(next).toEqual(
+      applyMathBatch(
+        state,
+        accept(
+          state,
+          actions,
+          actions.map(() => review),
+          "reviewed",
+        ),
+      ),
+    );
+    const frozen = updateMathAuthority(next, { kind: "lifecycle", status: "stopped" });
+    expect(applyMathBatch(frozen, token)).toBe(frozen);
+    expect(seen).toHaveLength(5);
+  });
+  it("preserves reviewed delivery fingerprints and rejects reviewed tails atomically", () => {
+    const state = createMathState(identity);
+    const actions = [append(), append()];
+    const reviewed = (reviews: MathReview[]) =>
+      acceptMathBatch(
+        state,
+        "reviewed",
+        { identity, actions },
+        {
+          turns,
+          reviews: (_action, index) => reviews[index],
+        },
+      );
+    const next = applyMathBatch(state, reviewed([review, review]));
+    expect(applyMathBatch(next, reviewed([review, review]))).toBe(next);
+    expect(() => applyMathBatch(next, reviewed([review, { ...review, mathematicallyComplete: false }]))).toThrow(
+      "Conflicting delivery",
+    );
+    expect(() =>
+      applyMathBatch(
+        state,
+        reviewed([review, { ...review, assessment: { ...review.assessment, disposition: "clarification-required" } }]),
+      ),
+    ).toThrow("Board action not accepted");
+    expect(state.steps).toEqual([]);
+    expect(state.history).toEqual([]);
+  });
   it("retains attribution through incorrect replacement, correction and undo", () => {
     const initial = createMathState(identity);
     const first = apply(initial, [append()]);

@@ -87,19 +87,22 @@ export function createMathState(identity: MathIdentity): MathState {
 }
 
 /** Opaque in-process acceptance capability. JSON/model fields cannot mint one.
- * The factory is for trusted app code only, after separate semantic review.
+ * The factory is for trusted app code only, with separate semantic review.
+ * Review callbacks run against the staged board and allocated version ID before
+ * each action is applied; array reviews remain collected at acceptance time.
  * It does not authenticate a caller or assess free-text reasoning itself.
  */
 declare const accepted: unique symbol;
 export interface MathAcceptance {
   readonly [accepted]: true;
 }
+type MathBatchReview = (action: MathProposal, index: number, board: MathState, versionId: string | null) => MathReview;
 interface AcceptedData {
   readonly state: MathState;
   readonly deliveryId: string;
   readonly batch: MathActionBatch;
-  readonly evidence: readonly MathEvidence[];
-  readonly fingerprint: string;
+  readonly evidence: readonly MathEvidence[] | ((...args: Parameters<MathBatchReview>) => MathEvidence);
+  fingerprint: string | null;
 }
 const capabilities = new WeakMap<MathAcceptance, AcceptedData>();
 export function acceptMathBatch(
@@ -108,7 +111,7 @@ export function acceptMathBatch(
   proposal: unknown,
   authority: {
     readonly turns: readonly MathLearnerTurn[];
-    readonly reviews: readonly MathReview[];
+    readonly reviews: readonly MathReview[] | MathBatchReview;
   },
 ): MathAcceptance {
   if (!deliveryId.trim()) throw new Error("Missing delivery identity");
@@ -118,22 +121,37 @@ export function acceptMathBatch(
     logicalStepIds: state.steps.filter(s => s.currentVersionId !== null).map(s => s.id),
     latestUndoableStepId: state.effectiveEdits.at(-1)?.stepId ?? null,
   });
-  if (authority.reviews.length !== batch.actions.length || authority.reviews.some(r => r.faithful !== true))
+  const reviews = authority.reviews;
+  if (
+    typeof reviews !== "function" &&
+    (reviews.length !== batch.actions.length || reviews.some(r => r.faithful !== true))
+  )
     throw new Error("Separate app review required for every action");
-  const evidence = batch.actions.map((action, i) =>
-    collectMathEvidence(
+  const turns = snapshot(authority.turns);
+  const collect = (action: MathProposal, review: MathReview) => {
+    if (review.faithful !== true) throw new Error("Separate app review required for every action");
+    return collectMathEvidence(
       batch.identity,
       action.sources,
-      authority.turns,
+      turns,
       state.sourceEvents,
       action.kind === "append" || action.kind === "replace"
-        ? authority.reviews[i]
-        : { ...authority.reviews[i], mathematicallyComplete: false, independenceEstablished: false },
-    ),
-  );
-  const fingerprint = JSON.stringify({ batch, evidence });
+        ? review
+        : { ...review, mathematicallyComplete: false, independenceEstablished: false },
+    );
+  };
+  const evidence: AcceptedData["evidence"] =
+    typeof reviews === "function"
+      ? (action, index, board, versionId) => collect(action, reviews(action, index, board, versionId))
+      : batch.actions.map((action, index) => collect(action, reviews[index]));
   const capability = Object.freeze({}) as MathAcceptance;
-  capabilities.set(capability, { state, deliveryId, batch, evidence, fingerprint });
+  capabilities.set(capability, {
+    state,
+    deliveryId,
+    batch,
+    evidence,
+    fingerprint: typeof evidence === "function" ? null : JSON.stringify({ batch, evidence }),
+  });
   return capability;
 }
 
@@ -145,23 +163,21 @@ export function applyMathBatch(state: MathState, acceptance: MathAcceptance): Ma
   const data = capabilities.get(acceptance);
   if (!data) throw new Error("Application acceptance required");
   const duplicate = state.deliveries.find(d => d.id === data.deliveryId);
-  if (duplicate) {
+  if (duplicate && data.fingerprint !== null) {
     if (duplicate.fingerprint !== data.fingerprint) throw new Error("Conflicting delivery");
     return state;
   }
-  if (state.status !== "active" || state !== data.state) throw new Error("Revoked or stale acceptance");
-  const next = structuredClone(state) as MutableState;
+  if (!duplicate && (state.status !== "active" || state !== data.state)) throw new Error("Revoked or stale acceptance");
+  const next = structuredClone(data.state) as MutableState;
+  const evidence: MathEvidence[] = [];
   let boardChanged = false;
   data.batch.actions.forEach((action, i) => {
-    if (data.evidence[i].assessment.disposition === "rejected") throw new Error("Rejected action");
     const id = `a${next.history.length + 1}`;
     let stepId: string | null = null,
       versionId: string | null = null,
       withdrawsActionId: string | null = null;
+    let step: MutableStep | undefined;
     if (action.kind === "append" || action.kind === "replace") {
-      if (data.evidence[i].assessment.disposition === "clarification-required")
-        throw new Error("Board action not accepted");
-      let step: MutableStep;
       if (action.kind === "append") {
         step = { id: `s${next.steps.length + 1}`, currentVersionId: null, versions: [] };
         next.steps.push(step);
@@ -172,13 +188,22 @@ export function applyMathBatch(state: MathState, acceptance: MathAcceptance): Ma
       }
       stepId = step.id;
       versionId = `${step.id}v${step.versions.length + 1}`;
+    }
+    const actionEvidence =
+      typeof data.evidence === "function" ? data.evidence(action, i, next, versionId) : data.evidence[i];
+    evidence.push(actionEvidence);
+    if (actionEvidence.assessment.disposition === "rejected") throw new Error("Rejected action");
+    if (step && versionId && (action.kind === "append" || action.kind === "replace")) {
+      if (actionEvidence.assessment.disposition === "clarification-required")
+        throw new Error("Board action not accepted");
+      stepId = step.id;
       next.effectiveEdits.push({ actionId: id, stepId, previousVersionId: step.currentVersionId });
       step.versions.push({
         id: versionId,
         actionId: id,
         predecessorId: step.currentVersionId,
         expression: structuredClone(action.expression),
-        evidence: data.evidence[i],
+        evidence: actionEvidence,
       });
       step.currentVersionId = versionId;
       next.clarification = null;
@@ -197,15 +222,22 @@ export function applyMathBatch(state: MathState, acceptance: MathAcceptance): Ma
       id,
       deliveryId: data.deliveryId,
       action: structuredClone(action),
-      evidence: data.evidence[i],
+      evidence: actionEvidence,
       stepId,
       versionId,
       withdrawsActionId,
     });
   });
+  const fingerprint = JSON.stringify({ batch: data.batch, evidence });
+  if (duplicate) {
+    if (duplicate.fingerprint !== fingerprint) throw new Error("Conflicting delivery");
+    data.fingerprint = fingerprint;
+    return state;
+  }
   next.revision++;
   if (boardChanged) next.identity.baseBoardRevision++;
-  next.deliveries.push({ id: data.deliveryId, fingerprint: data.fingerprint });
+  next.deliveries.push({ id: data.deliveryId, fingerprint });
+  data.fingerprint = fingerprint;
   return snapshot(next);
 }
 type MutableStep = { id: string; currentVersionId: string | null; versions: MathVersion[] };

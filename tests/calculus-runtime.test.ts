@@ -78,22 +78,28 @@ async function learner(text: string) {
   time += 200;
   await vi.advanceTimersByTimeAsync(301);
 }
-function action(kind = "append", extra: object = {}, index = requests.length - 1) {
+function action(kind = "append", extra: object = {}, index = requests.length - 1, quote?: string) {
   const turn = requests[index].input.learnerTurns.at(-1)!;
-  return { kind, ...extra, sources: [{ turnId: turn.id, quote: turn.text }] };
+  return { kind, ...extra, sources: [{ turnId: turn.id, quote: quote ?? turn.text }] };
 }
 async function respond(actions: object[], index = requests.length - 1) {
   requests[index].resolve(parseMathInterpretationOutput({ actions }, requests[index].input));
   await vi.advanceTimersByTimeAsync(0);
 }
-function confirm(operation: "differentiate" | "rewrite" | "unassessed" = "differentiate") {
+function confirm(
+  operation:
+    | "differentiate"
+    | "rewrite"
+    | "unassessed"
+    | readonly ("differentiate" | "rewrite" | "unassessed")[] = "differentiate",
+) {
   const pending = runtime.snapshot().math!.pending!;
   expect(runtime.confirmMathProposalDisplayed(pending.id, pending.boardRevision)).toBe(true);
   expect(
     runtime.confirmMathProposal(
       pending.id,
       pending.boardRevision,
-      pending.batch.actions.map(() => operation),
+      typeof operation === "string" ? pending.batch.actions.map(() => operation) : operation,
     ),
   ).toBe(true);
 }
@@ -512,6 +518,67 @@ it("replacement checks its retained input and undo restores role and context for
   confirm("rewrite");
   expect(runtime.snapshot().math!.checks[2].base).toEqual({ expression: wrong, role: "derivative" });
   expect(runtime.snapshot().math!.checks[2].result!.transformationCorrectness).toBe("incorrect");
+});
+
+it("retains replacement inputs and undo contexts within a single mixed batch", async () => {
+  start();
+  await learner("three x squared plus four");
+  await respond([action("append", { expression: wrong })]);
+  confirm();
+  await learner("Correct that, correct it again, undo both corrections, then simplify.");
+  await respond([
+    action("replace", { targetStepId: "s1", expression: correct }, undefined, "Correct that"),
+    action("replace", { targetStepId: "s1", expression: correct }, undefined, "correct it again"),
+    action("undo", { targetStepId: "s1" }, undefined, "undo"),
+    action("undo", { targetStepId: "s1" }, undefined, "both corrections"),
+    action("append", { expression: correct }, undefined, "then simplify"),
+  ]);
+  confirm(["differentiate", "differentiate", "unassessed", "unassessed", "rewrite"]);
+  const math = runtime.snapshot().math!;
+  expect(math.checks.map(check => check.versionId)).toEqual(["s1v1", "s1v2", "s1v3", "s2v1"]);
+  expect(math.checks[1].base).toEqual(math.checks[0].base);
+  expect(math.checks[2].base).toEqual(math.checks[0].base);
+  expect(math.checks[3].base).toEqual({ expression: wrong, role: "derivative" });
+  expect(math.checks[3].result!.transformationCorrectness).toBe("incorrect");
+  expect(math.current!.steps[0].currentVersionId).toBe("s1v1");
+});
+
+it("keeps unassessed and unknown bases unchecked until undo restores known context", async () => {
+  start();
+  await learner("three x squared plus four");
+  await respond([action("append", { expression: wrong })]);
+  confirm();
+  await learner("Replace that without assessing it, then simplify twice.");
+  await respond([
+    action("replace", { targetStepId: "s1", expression: correct }, undefined, "Replace that without assessing it"),
+    action("append", { expression: correct }, undefined, "then simplify"),
+    action("append", { expression: correct }, undefined, "twice"),
+  ]);
+  confirm(["unassessed", "rewrite", "differentiate"]);
+  let math = runtime.snapshot().math!;
+  expect(math.checks.slice(1).map(check => [check.base, check.result, check.role])).toEqual([
+    [math.checks[0].base, null, null],
+    [null, null, null],
+    [null, null, null],
+  ]);
+  for (const targetStepId of ["s3", "s2"]) {
+    await learner("Undo the last line.");
+    await respond([action("undo", { targetStepId })]);
+    confirm("unassessed");
+  }
+  await learner("Undo the replacement, then simplify.");
+  await respond([
+    action("undo", { targetStepId: "s1" }, undefined, "Undo the replacement"),
+    action("append", { expression: correct }, undefined, "then simplify"),
+  ]);
+  confirm(["unassessed", "rewrite"]);
+  math = runtime.snapshot().math!;
+  expect(math.checks.at(-1)).toMatchObject({
+    versionId: "s4v1",
+    base: { expression: wrong, role: "derivative" },
+    role: "derivative",
+  });
+  expect(math.checks.at(-1)!.result!.transformationCorrectness).toBe("incorrect");
 });
 
 function feedbackCommands() {
