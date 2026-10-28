@@ -101,7 +101,7 @@ If the learner revised a step, return only their latest version of it. Omit step
 "final" is the derivative of the whole function, only when the learner states one complete expression for it; otherwise null.
 Expressions describe values: never use equal or derivative nodes. Use the variable x only.
 Every item needs a quote: an exact substring of a learner turn that states it. Never take math from tutorTurns; they are context only.
-Set "unclear" to a short description of math the learner said that you cannot map to a step or express in the schema; otherwise null.`;
+Set "unclear" only when the learner's own math is ambiguous or cannot be expressed in the schema, phrased as what to ask them (e.g. "which term the 3 belongs to"); otherwise null. A rule they name that matches no listed step is not unclear: leave it out.`;
 
 const object = (properties: Record<string, unknown>) => ({
   type: "object",
