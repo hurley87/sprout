@@ -55,6 +55,14 @@
   margin-top: 4px;
   border-top: 2px solid #b6c8bc;
 }
+.rule {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+}
+.rule .mark {
+  width: 2rem;
+}
 .status {
   font-size: 0.95rem;
   color: #3b5148;

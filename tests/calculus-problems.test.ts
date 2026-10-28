@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import type { MathExpression as E } from "../lib/calculus/math-expression";
 import { compareMathExpression } from "../lib/calculus/math-validator";
-import { CALCULUS_PROBLEM_IDS, getCalculusProblem } from "../lib/calculus/problems";
+import { CALCULUS_PROBLEM_IDS, getCalculusProblem, type CalculusMethod } from "../lib/calculus/problems";
 import { applyExtraction, emptyWork, workInstruction, workOutcome } from "../lib/calculus/work-check";
 import type { WorkExtraction } from "../lib/calculus/work-extraction";
 
@@ -14,17 +14,17 @@ const sub = (left: E, right: E): E => ({ op: "subtract", left, right });
 const sin: E = { op: "sin", argument: x };
 const cos: E = { op: "cos", argument: x };
 const inner = add(mul(n(3), pow(x, 2)), n(1));
-const extraction = (steps: [string, E | string][], final: E | null = null, unclear: string | null = null) =>
-  ({
-    steps: steps.map(([stepId, value]) => ({
-      stepId,
-      expression: typeof value === "string" ? null : value,
-      method: typeof value === "string" ? value : null,
-      quote: "q",
-    })),
-    final: final ? { expression: final, quote: "q" } : null,
-    unclear,
-  }) as WorkExtraction;
+const extraction = (
+  steps: [string, E][],
+  final: E | null = null,
+  unclear: string | null = null,
+  rule: CalculusMethod | null = null,
+): WorkExtraction => ({
+  steps: steps.map(([stepId, expression]) => ({ stepId, expression, quote: "q" })),
+  rule: rule ? { method: rule, quote: "q" } : null,
+  final: final ? { expression: final, quote: "q" } : null,
+  unclear,
+});
 
 it("authors every problem with required steps and a final form", () => {
   for (const id of CALCULUS_PROBLEM_IDS) {
@@ -32,8 +32,7 @@ it("authors every problem with required steps and a final form", () => {
     expect(problem.steps.length).toBeGreaterThan(0);
     expect(problem.finalForms.length).toBeGreaterThan(0);
     for (const step of problem.steps)
-      if (step.kind === "expression")
-        for (const form of step.accepted) expect(compareMathExpression(form, step.accepted)).toBe("match");
+      for (const form of step.accepted) expect(compareMathExpression(form, step.accepted)).toBe("match");
   }
 });
 
@@ -83,13 +82,7 @@ it("requires every step as well as the final answer", () => {
 });
 
 it("points the tutor at the wrong step without giving its answer", () => {
-  const work = applyExtraction(
-    emptyWork("quadratic-sine"),
-    extraction([
-      ["method", "product"],
-      ["d-sine", { op: "negate", argument: cos }],
-    ]),
-  );
+  const work = applyExtraction(emptyWork("quadratic-sine"), extraction([["d-sine", { op: "negate", argument: cos }]]));
   const outcome = workOutcome(work);
   expect(outcome).toMatchObject({ kind: "incorrect", item: { id: "d-sine" } });
   const instruction = workInstruction(work, outcome);
@@ -98,11 +91,51 @@ it("points the tutor at the wrong step without giving its answer", () => {
   expect(instruction).not.toMatch(/cosine of x\b(?! *\))/);
 });
 
-it("checks a named method against the step's rule", () => {
-  const wrong = applyExtraction(emptyWork("composite-fifth"), extraction([["method", "product"]]));
-  expect(workOutcome(wrong)).toMatchObject({ kind: "incorrect", item: { id: "method" } });
-  const right = applyExtraction(wrong, extraction([["method", "chain"]]));
-  expect(right.steps[0].status).toBe("correct");
+it("never requires a rule's name: correct work completes the problem", () => {
+  const work = applyExtraction(
+    emptyWork("quadratic-sine"),
+    extraction(
+      [
+        ["d-square", mul(n(2), x)],
+        ["d-sine", cos],
+      ],
+      add(mul(n(2), x, sin), mul(pow(x, 2), cos)),
+    ),
+  );
+  expect(work.rule).toBeNull();
+  expect(workOutcome(work)).toEqual({ kind: "complete" });
+});
+
+it("flags a named rule only when it doesn't fit the whole function", () => {
+  const wrong = applyExtraction(emptyWork("composite-fifth"), extraction([], null, null, "product"));
+  const outcome = workOutcome(wrong);
+  expect(outcome).toMatchObject({ kind: "wrong-rule", rule: { method: "product", fits: false } });
+  const instruction = workInstruction(wrong, outcome);
+  expect(instruction).toContain("Do not name the rule to use");
+  expect(instruction).not.toContain("chain");
+  // The latest rule they name replaces it.
+  expect(applyExtraction(wrong, extraction([], null, null, "chain")).rule?.fits).toBe(true);
+  // Power or sum both fit a sum of powers.
+  for (const rule of ["power", "sum"] as const)
+    expect(workOutcome(applyExtraction(emptyWork("cubic-minus-linear"), extraction([], null, null, rule))).kind).toBe(
+      "in-progress",
+    );
+});
+
+it("asks how parts combine when every part is right but the final answer isn't", () => {
+  const work = applyExtraction(
+    emptyWork("quadratic-sine"),
+    extraction(
+      [
+        ["d-square", mul(n(2), x)],
+        ["d-sine", cos],
+      ],
+      mul(n(2), x, cos),
+    ),
+  );
+  const outcome = workOutcome(work);
+  expect(outcome).toMatchObject({ kind: "combine", item: { id: "final" } });
+  expect(workInstruction(work, outcome)).toContain("how they are combining their parts");
 });
 
 it("keeps earlier steps when a later check omits them, and takes the latest restatement", () => {

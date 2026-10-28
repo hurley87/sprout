@@ -1,7 +1,7 @@
 "use client";
 
 import type { CalculusSnapshot } from "@/lib/lesson-runtime/calculus-runtime";
-import type { WorkItem } from "@/lib/calculus/work-check";
+import type { NamedRule, WorkItem } from "@/lib/calculus/work-check";
 import { renderMathExpression } from "@/lib/calculus/math-rendering";
 import styles from "./work-checklist.module.css";
 
@@ -13,8 +13,6 @@ const MARKS: Record<WorkItem["status"], { symbol: string; text: string }> = {
 };
 
 function Heard({ item }: { item: WorkItem }) {
-  if (item.method)
-    return <span className={styles.heard}>{`${item.method[0].toUpperCase()}${item.method.slice(1)} rule`}</span>;
   if (!item.expression) return <span className={styles.heard}>Not shown yet</span>;
   const result = renderMathExpression(item.expression);
   if (!result.ok) return <span className={styles.heard}>{result.text}</span>;
@@ -43,6 +41,20 @@ function Row({ item, className }: { item: WorkItem; className?: string }) {
   );
 }
 
+/** A named rule is optional, so it is a note rather than a checklist row. */
+function Rule({ rule }: { rule: NamedRule }) {
+  const name = `${rule.method[0].toUpperCase()}${rule.method.slice(1)} rule`;
+  return (
+    <p className={`${styles.rule} ${rule.fits ? styles.correct : styles.incorrect}`} data-rule={rule.method}>
+      <span className={styles.mark} aria-hidden="true">
+        {rule.fits ? "✓" : "✗"}
+      </span>
+      Rule you named: {name}
+      {rule.fits ? "" : ". Look again at how the function is built."}
+    </p>
+  );
+}
+
 /** Read-out of what was heard and checked. Nothing here needs confirming: if it was
  * misheard, the learner just says it again. */
 export function WorkChecklist({ math }: { math: CalculusSnapshot }) {
@@ -65,6 +77,7 @@ export function WorkChecklist({ math }: { math: CalculusSnapshot }) {
             ))}
             <Row item={work.final} className={styles.final} />
           </ol>
+          {work.rule ? <Rule rule={work.rule} /> : null}
           {math.complete ? (
             <p className={styles.done} role="status">
               Every step checks out. Moving to the next problem.

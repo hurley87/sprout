@@ -24,12 +24,7 @@ const threeXSquared = {
     { op: "power", base: { op: "variable", name: "x" }, exponent: 2 },
   ],
 };
-const step = (stepId: string, quote: string, expression: unknown = threeXSquared, method: unknown = null) => ({
-  stepId,
-  expression,
-  method,
-  quote,
-});
+const step = (stepId: string, quote: string, expression: unknown = threeXSquared) => ({ stepId, expression, quote });
 
 it("validates the request: known problem, bounded unique learner turns", () => {
   expect(parseWorkExtractionInput(structuredClone(input))).toEqual(input);
@@ -52,6 +47,7 @@ it("keeps only items quoted from learner speech for known steps", () => {
         step("d-linear", "four x just becomes four", { op: "number", value: 4 }),
         step("d-linear", "four", { op: "script" }),
       ],
+      rule: null,
       final: null,
       unclear: null,
     },
@@ -63,26 +59,24 @@ it("keeps only items quoted from learner speech for known steps", () => {
   ]);
 });
 
-it("needs a method for method steps and an expression for expression steps", () => {
+it("keeps a rule named for the whole function only when quoted from the learner", () => {
   const sine: WorkExtractionInput = {
     problemId: "quadratic-sine",
-    learnerTurns: [{ id: "learner_1", text: "use the product rule" }],
-    tutorTurns: [],
+    learnerTurns: [{ id: "learner_1", text: "I'd use the chain rule" }],
+    tutorTurns: [{ id: "tutor_1", text: "Think about the product rule." }],
   };
-  const extraction = parseWorkExtraction(
-    {
-      steps: [step("method", "product rule", null, "product"), step("d-square", "product rule", null, "product")],
-      final: null,
-      unclear: null,
-    },
-    sine,
-  );
-  expect(extraction.steps).toEqual([{ stepId: "method", expression: null, method: "product", quote: "product rule" }]);
+  const parse = (rule: unknown) => parseWorkExtraction({ steps: [], rule, final: null, unclear: null }, sine).rule;
+  expect(parse({ method: "chain", quote: "chain rule" })).toEqual({ method: "chain", quote: "chain rule" });
+  expect(parse({ method: "product", quote: "the product rule" })).toBeNull();
+  expect(parse({ method: "magic", quote: "chain rule" })).toBeNull();
+  expect(parse(null)).toBeNull();
 });
 
 it("rejects structurally malformed output", () => {
-  expect(() => parseWorkExtraction({ steps: [], final: null }, input)).toThrow();
-  expect(() => parseWorkExtraction({ steps: [], final: null, unclear: null, correct: true }, input)).toThrow();
+  expect(() => parseWorkExtraction({ steps: [], final: null, unclear: null }, input)).toThrow();
+  expect(() =>
+    parseWorkExtraction({ steps: [], rule: null, final: null, unclear: null, correct: true }, input),
+  ).toThrow();
 });
 
 it("sends the authored steps but never accepted answers to the model", async () => {
@@ -97,6 +91,7 @@ it("sends the authored steps but never accepted answers to the model", async () 
               type: "output_text",
               text: JSON.stringify({
                 steps: [step("d-cubic", "three x squared")],
+                rule: null,
                 final: { expression: threeXSquared, quote: "three x squared minus four" },
                 unclear: null,
               }),
@@ -113,8 +108,8 @@ it("sends the authored steps but never accepted answers to the model", async () 
   expect(body.text.format.schema).toEqual(WORK_EXTRACTION_SCHEMA);
   const model = JSON.parse(body.input);
   expect(model.steps).toEqual([
-    { stepId: "d-cubic", label: "Derivative of x³", kind: "expression" },
-    { stepId: "d-linear", label: "Derivative of the 4x term", kind: "expression" },
+    { stepId: "d-cubic", label: "Derivative of x³" },
+    { stepId: "d-linear", label: "Derivative of the 4x term" },
   ]);
   expect(body.input).not.toContain("accepted");
   expect(body.input).not.toContain("finalForms");

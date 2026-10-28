@@ -5,6 +5,7 @@ import { installSyntheticMicrophone } from "../helpers/synthetic-microphone";
 import type { LessonObservationWindow } from "../../lib/lesson-runtime/browser-observation";
 import type { MathExpression as E } from "../../lib/calculus/math-expression";
 import type { WorkExtraction, WorkExtractionInput } from "../../lib/calculus/work-extraction";
+import type { CalculusMethod } from "../../lib/calculus/problems";
 
 const x: E = { op: "variable", name: "x" };
 const n = (value: number): E => ({ op: "number", value });
@@ -14,8 +15,8 @@ const add = (...args: E[]): E => ({ op: "add", args });
 const sin: E = { op: "sin", argument: x };
 const cos: E = { op: "cos", argument: x };
 const inner = add(mul(n(3), pow(x, 2)), n(1));
-type Item = { stepId: string; expression?: E; method?: string } | { final: E };
-// Stand-in for the model: each phrase the learner says maps to one step or the final answer.
+type Item = { stepId: string; expression: E } | { final: E } | { rule: CalculusMethod };
+// Stand-in for the model: each phrase maps to one step, the final answer, or a named rule.
 const PHRASES: Record<string, [string, Item][]> = {
   "cubic-minus-linear": [
     ["three x cubed", { stepId: "d-cubic", expression: mul(n(3), pow(x, 3)) }],
@@ -24,14 +25,12 @@ const PHRASES: Record<string, [string, Item][]> = {
     ["final answer three x squared minus four", { final: { op: "subtract", left: mul(n(3), pow(x, 2)), right: n(4) } }],
   ],
   "quadratic-sine": [
-    ["product rule", { stepId: "method", method: "product" }],
     ["x squared gives two x", { stepId: "d-square", expression: mul(n(2), x) }],
     ["sine gives cosine", { stepId: "d-sine", expression: cos }],
     ["final answer two x sine x plus x squared cosine x", { final: add(mul(n(2), x, sin), mul(pow(x, 2), cos)) }],
   ],
   "composite-fifth": [
-    ["product rule", { stepId: "method", method: "product" }],
-    ["chain rule", { stepId: "method", method: "chain" }],
+    ["product rule", { rule: "product" }],
     ["outside gives five times the inside to the fourth", { stepId: "d-outer", expression: mul(n(5), pow(inner, 4)) }],
     ["inside gives six x", { stepId: "d-inner", expression: mul(n(6), x) }],
     ["final answer thirty x times the inside to the fourth", { final: mul(n(30), x, pow(inner, 4)) }],
@@ -41,27 +40,21 @@ const WRONG = new Set(["three x cubed", "product rule"]);
 const SOLUTIONS: Record<string, string[]> = Object.fromEntries(
   Object.entries(PHRASES).map(([id, phrases]) => [
     id,
-    phrases.map(([phrase]) => phrase).filter(phrase => !WRONG.has(phrase) || id === "quadratic-sine"),
+    phrases.map(([phrase]) => phrase).filter(phrase => !WRONG.has(phrase)),
   ]),
 );
 function extract(input: WorkExtractionInput): WorkExtraction {
-  const extraction: { steps: WorkExtraction["steps"][number][]; final: WorkExtraction["final"] } = {
-    steps: [],
-    final: null,
-  };
+  const extraction: { -readonly [K in keyof WorkExtraction]: WorkExtraction[K] } & {
+    steps: WorkExtraction["steps"][number][];
+  } = { steps: [], rule: null, final: null, unclear: null };
   for (const turn of input.learnerTurns)
     for (const [phrase, item] of PHRASES[input.problemId])
       if (turn.text.includes(phrase) && !(phrase === "three x squared" && turn.text.includes("final answer"))) {
         if ("final" in item) extraction.final = { expression: item.final, quote: phrase };
-        else
-          extraction.steps.push({
-            stepId: item.stepId,
-            expression: item.expression ?? null,
-            method: (item.method ?? null) as never,
-            quote: phrase,
-          });
+        else if ("rule" in item) extraction.rule = { method: item.rule, quote: phrase };
+        else extraction.steps.push({ stepId: item.stepId, expression: item.expression, quote: phrase });
       }
-  return { ...extraction, unclear: null };
+  return extraction;
 }
 
 const current = (page: Page) =>
@@ -159,11 +152,13 @@ test("mocked voice: step checks, targeted feedback, required work and automatic 
   await expect(page.getByText("Every step checks out.")).toBeVisible();
   await ready(page, "quadratic-sine");
   await expect(page.getByRole("region", { name: "Current problem" })).toContainText("x^2 sin(x)");
-  await expect(statusOf(page, "method")).toHaveAttribute("data-status", "missing");
+  await expect(statusOf(page, "d-square")).toHaveAttribute("data-status", "missing");
   await page.getByRole("button", { name: "Skip problem" }).click();
   await ready(page, "composite-fifth");
   await say("I'd use the product rule here");
-  await expect(statusOf(page, "method")).toHaveAttribute("data-status", "incorrect");
+  // Naming a rule is optional; a rule that doesn't fit gets one nudge, without the answer.
+  await expect(page.locator('[data-rule="product"]')).toContainText("Look again at how the function is built");
+  await expect.poll(() => steering(page)).toContain("Do not name the rule to use");
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: testInfo.outputPath("calculus-narrow-work.png"), fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

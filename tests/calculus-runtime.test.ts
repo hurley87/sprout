@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { MathExpression as E } from "../lib/calculus/math-expression";
-import type { CalculusMethod } from "../lib/calculus/problems";
 import type { WorkExtraction, WorkExtractionInput } from "../lib/calculus/work-extraction";
 import type { ClientCommand, ProviderEvent } from "../lib/events";
 import { CALCULUS_LESSON } from "../lib/lesson-runtime/calculus-lesson";
@@ -26,12 +25,7 @@ const x: E = { op: "variable", name: "x" };
 const n = (value: number): E => ({ op: "number", value });
 const threeXSquared: E = { op: "multiply", args: [n(3), { op: "power", base: x, exponent: 2 }] };
 const final: E = { op: "subtract", left: threeXSquared, right: n(4) };
-const step = (stepId: string, expression: E | null, method: CalculusMethod | null = null) => ({
-  stepId,
-  expression,
-  method,
-  quote: "q",
-});
+const step = (stepId: string, expression: E) => ({ stepId, expression, quote: "q" });
 
 beforeEach(() => {
   useRuntimeFakeTimers();
@@ -68,8 +62,8 @@ async function learner(text: string) {
   time += 200;
   await vi.advanceTimersByTimeAsync(301);
 }
-async function respond(extraction: WorkExtraction, index = requests.length - 1) {
-  requests[index].resolve({ status: "ok", extraction });
+async function respond(extraction: Omit<WorkExtraction, "rule">, index = requests.length - 1) {
+  requests[index].resolve({ status: "ok", extraction: { rule: null, ...extraction } });
   await vi.advanceTimersByTimeAsync(0);
 }
 const work = () => runtime.snapshot().math!.work!;
@@ -129,7 +123,7 @@ it("advances to the next problem once every step and the final answer check out"
   expect(runtime.snapshot().runtime!.nodeId).toBe("quadratic-sine");
   runtime.confirmRendered(runtime.snapshot().display);
   expect(work().problemId).toBe("quadratic-sine");
-  expect(statuses()).toEqual(["missing", "missing", "missing", "missing"]);
+  expect(statuses()).toEqual(["missing", "missing", "missing"]);
   expect(runtime.report().math!.visits.map(visit => visit.outcome)).toEqual(["completed", "active"]);
 });
 

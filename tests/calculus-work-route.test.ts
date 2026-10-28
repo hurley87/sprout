@@ -27,7 +27,8 @@ afterEach(() => {
 it("returns the checked extraction without caching", async () => {
   vi.stubEnv("OPENAI_API_KEY", "secret");
   const output = {
-    steps: [{ stepId: "d-linear", expression: { op: "number", value: 4 }, method: null, quote: "becomes four" }],
+    steps: [{ stepId: "d-linear", expression: { op: "number", value: 4 }, quote: "becomes four" }],
+    rule: null,
     final: null,
     unclear: null,
   };
