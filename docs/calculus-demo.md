@@ -50,16 +50,20 @@ Authored in `lib/calculus/problems.ts`.
 
 ## Timing
 
-Checks run after the learner's turn ends and a short debounce. Confirmed speech
-makes an in-flight check stale; raw microphone activity that is later discarded
-(noise, tutor echo) does not. Unchanged learner turns are not rechecked, and an
+A check runs after each learner turn and a short debounce, and takes a few
+seconds. Learners pause mid-thought for about a second, so new speech never
+cancels a check: only one runs at a time, its result always updates the
+checklist, and another check re-reads every turn once it finishes. The tutor is
+briefed only from a check that covers everything the learner has said (or one
+that completes the problem). Unchanged learner turns are not rechecked, and an
 unchanged instruction is not resent.
 
 ## Diagnostics
 
 The debug export's `math.visits` lists each problem visit with its outcome
 (completed, skipped, stopped), help count, final work, and every check: the
-learner turns sent, the model's mapping, the outcome and the tutor instruction.
+learner turns sent, the model's mapping, the outcome, the tutor instruction, and
+whether the learner said more while it ran (`current`).
 Event log entries: `calculus.check_started`, `calculus.check_ended`,
 `calculus.problem_completed`, `gpt_live.math_feedback_append`.
 

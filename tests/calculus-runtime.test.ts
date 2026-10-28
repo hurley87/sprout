@@ -156,17 +156,41 @@ it("does not resend an unchanged instruction or recheck unchanged turns", async 
   expect(instructions()).toHaveLength(1);
 });
 
-it("lets confirmed speech make a check stale, but not discarded microphone noise", async () => {
+it("finishes a check while the learner keeps talking, then rechecks everything said", async () => {
   start();
-  await learner("three x squared");
-  emit({ type: "microphone.activity_started" });
-  emit({ type: "microphone.activity_discarded" });
-  expect(requests[0].signal.aborted).toBe(false);
+  await learner("for x cubed, three x squared");
+  // The learner resumes after a short pause, before the check returns.
   emit({ type: "microphone.activity_started" });
   emit({ type: "microphone.speech_started" });
-  expect(requests[0].signal.aborted).toBe(true);
-  expect(runtime.snapshot().math!.checking).toBe(false);
-  expect(statuses()[0]).toBe("missing");
+  expect(requests[0].signal.aborted).toBe(false);
+  emit({ type: "transcript", speaker: "child", delta: "and four x becomes four", startMs: time, endMs: time + 100 });
+  await respond({ steps: [step("d-cubic", threeXSquared)], final: null, unclear: null });
+  // Its result is shown, but the tutor is not briefed from out-of-date work.
+  expect(statuses()[0]).toBe("correct");
+  expect(instructions()).toHaveLength(0);
+  expect(runtime.report().math!.visits[0].checks[0].current).toBe(false);
+  emit({ type: "microphone.speech_stopped", quietMs: 900 });
+  await vi.advanceTimersByTimeAsync(301);
+  expect(requests).toHaveLength(2);
+  expect(requests[1].input.learnerTurns.map(turn => turn.text)).toEqual([
+    "for x cubed, three x squared",
+    "and four x becomes four",
+  ]);
+  await respond({ steps: [step("d-cubic", threeXSquared), step("d-linear", n(4))], final: null, unclear: null });
+  expect(statuses()).toEqual(["correct", "correct", "missing"]);
+  expect(instructions()).toHaveLength(1);
+});
+
+it("does not restart a running check when the tutor speaks", async () => {
+  start();
+  await learner("three x squared");
+  events.tutorTurn("Mm-hmm.", time);
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(requests).toHaveLength(1);
+  expect(requests[0].signal.aborted).toBe(false);
+  await respond({ steps: [step("d-cubic", threeXSquared)], final: null, unclear: null });
+  expect(statuses()[0]).toBe("correct");
+  expect(instructions()).toHaveLength(1);
 });
 
 it("routes spoken help through app support without checking it as work", async () => {

@@ -20,6 +20,9 @@ export interface CalculusCheck {
   readonly extraction: WorkExtraction | null;
   readonly outcome: string | null;
   readonly instruction: string | null;
+  /** False when the learner said more while this check ran; its result is shown but
+   * the tutor is briefed by the next check. */
+  readonly current: boolean;
 }
 export interface CalculusVisit {
   readonly visitId: number;
@@ -47,6 +50,7 @@ export class CalculusRuntime {
   private lastChecked: string | null = null;
   private lastInstruction: string | null = null;
   private completed = false;
+  private recheck = false;
 
   constructor(
     private readonly runtimeId: string,
@@ -106,12 +110,11 @@ export class CalculusRuntime {
       .join("");
   }
 
-  /** Raw microphone activity is often noise or tutor echo; only confirmed speech
-   * makes an in-flight check stale. */
+  /** Learners pause mid-thought for about a second, shorter than a check takes, so
+   * new speech never cancels a check: it finishes, and the next one re-reads every turn.
+   * Raw microphone activity (often noise or tutor echo) does not even delay a check. */
   onSpeechStarted(confirmed: boolean) {
-    if (!confirmed) return;
-    clearTimeout(this.timer);
-    this.cancelCheck();
+    if (confirmed) clearTimeout(this.timer);
   }
 
   onQuiet(): boolean {
@@ -175,7 +178,12 @@ export class CalculusRuntime {
     const { learnerTurns, tutorTurns } = this.turns();
     const key = JSON.stringify(learnerTurns);
     if (!learnerTurns.length || key === this.lastChecked) return;
-    this.cancelCheck();
+    if (this.request) {
+      // One check at a time. Tutor speech or a later learner turn queues another.
+      this.recheck = true;
+      return;
+    }
+    this.recheck = false;
     const abort = new AbortController();
     this.request = abort;
     const requestId = crypto.randomUUID();
@@ -202,6 +210,9 @@ export class CalculusRuntime {
       return;
     }
     this.request = undefined;
+    // Words spoken during the check make its feedback out of date: still show its
+    // result, but brief the tutor only from a check that covers everything said.
+    const current = key === JSON.stringify(this.turns().learnerTurns) && this.context().quiet;
     let outcome = null,
       instruction = null;
     if (extraction) {
@@ -210,16 +221,17 @@ export class CalculusRuntime {
       const result = workOutcome(visit.work);
       outcome = result.kind;
       instruction = workInstruction(visit.work, result);
-      if (instruction !== this.lastInstruction) this.instruct(instruction);
+      if ((current || result.kind === "complete") && instruction !== this.lastInstruction) this.instruct(instruction);
       if (result.kind === "complete") {
         this.completed = true;
         this.log("calculus.problem_completed", { visitId: visit.visitId, problemId: visit.problemId });
         this.complete();
       }
     }
-    visit.checks.push({ requestId, learnerTurns, status, extraction, outcome, instruction });
-    this.log("calculus.check_ended", { requestId, status, extraction, work: visit.work, outcome });
+    visit.checks.push({ requestId, learnerTurns, status, extraction, outcome, instruction, current });
+    this.log("calculus.check_ended", { requestId, status, extraction, work: visit.work, outcome, current });
     this.publish();
+    if (this.recheck && this.context().quiet) void this.check();
   }
 
   private instruct(content: string) {
@@ -247,7 +259,7 @@ export class CalculusRuntime {
     this.cancelCheck();
     this.consumedFragments.clear();
     this.lastChecked = this.lastInstruction = null;
-    this.completed = false;
+    this.completed = this.recheck = false;
     if (isCalculusProblemId(nodeId))
       this.visits.push({ visitId, problemId: nodeId, work: emptyWork(nodeId), outcome: "active", help: 0, checks: [] });
     this.publish();
