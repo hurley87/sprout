@@ -1,7 +1,7 @@
-import { validateLessonDefinition } from "../../lib/lesson-runtime/lesson-definition";
+import { validateLessonDefinition, type LessonDefinition } from "../../lib/lesson-runtime/lesson-definition";
 
 /** Neutral infrastructure fixture; it is not a rubric for Catching Unicorns. */
-export const TEST_CONCEPT_LESSON = validateLessonDefinition({
+export const TEST_CONCEPT_LESSON: LessonDefinition = validateLessonDefinition({
   id: "test-concepts",
   initialNodeId: "concept-a",
   recovery: {

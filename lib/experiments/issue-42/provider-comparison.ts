@@ -17,7 +17,7 @@ import {
 import type {
   ConversationStateClassifierInput,
   ConversationStateProposal,
-} from "./historical-v1/lib/lesson-runtime/conversation-state-classifier";
+} from "../../lesson-runtime/conversation-state-classifier";
 import { transcriptMessages } from "./historical-v1/lib/lesson-runtime/tutor-observation";
 import {
   loadBenchmark,
