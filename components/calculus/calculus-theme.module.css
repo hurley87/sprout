@@ -1,0 +1,79 @@
+.theme {
+  --bg: #f5f4fa;
+  --surface: #ffffff;
+  --ink: #1c1a3a;
+  --ink2: #5b5878;
+  --line: #e3e1ee;
+  --primary: #3b30a0;
+  --onPrimary: #ffffff;
+  --accent: #f2765a;
+  --ok: #1b68a8;
+  --okBg: #e2eef9;
+  --look: #94520a;
+  --lookBg: #fff0d9;
+  --lookLine: #f0c27a;
+  --unk: #61499a;
+  --unkBg: #eee9f8;
+  --chk: #3b30a0;
+  --chkBg: #eeedfb;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-figtree), system-ui, sans-serif;
+}
+
+/* Animation classes referencing these module-local keyframes must live in this file. */
+@keyframes sproutPulse {
+  0% {
+    transform: scale(0.92);
+    opacity: 0.45;
+  }
+  100% {
+    transform: scale(1.65);
+    opacity: 0;
+  }
+}
+
+@keyframes sproutWave {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes sproutSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes sproutDot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+@keyframes sproutFill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme,
+  .theme *,
+  .theme *::before,
+  .theme *::after {
+    animation: none !important;
+  }
+}

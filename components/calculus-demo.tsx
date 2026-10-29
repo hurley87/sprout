@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Figtree } from "next/font/google";
 import { CALCULUS_LESSON } from "@/lib/lesson-runtime/calculus-lesson";
 import { CALCULUS_PROBLEM_IDS } from "@/lib/calculus/problems";
 import { useVoiceDemo } from "./voice-demo/use-voice-demo";
@@ -8,6 +9,13 @@ import { VoiceDemoControls } from "./voice-demo/controls";
 import { scrubSecrets } from "./voice-demo/diagnostics";
 import { WorkChecklist } from "./calculus/work-checklist";
 import styles from "./calculus-demo.module.css";
+import theme from "./calculus/calculus-theme.module.css";
+
+const figtree = Figtree({
+  weight: ["400", "500", "600", "700", "800"],
+  subsets: ["latin"],
+  variable: "--font-figtree",
+});
 
 export default function CalculusDemo({ debug = false }: { debug?: boolean }) {
   const { audio, sceneRef, snapshot, live, start, stop, download, support, skip, supportReady } = useVoiceDemo({
@@ -21,7 +29,7 @@ export default function CalculusDemo({ debug = false }: { debug?: boolean }) {
   const completed = state?.phase === "complete";
   const number = CALCULUS_PROBLEM_IDS.findIndex(id => id === nodeId) + 1;
   return (
-    <main className={styles.page}>
+    <main className={`${styles.page} ${theme.theme} ${figtree.variable}`}>
       <header>
         <p>Spoken practice · Three problems</p>
         <h1>Calculus practice</h1>
