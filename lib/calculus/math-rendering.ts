@@ -1,40 +1,72 @@
 import { renderToString } from "katex";
 import { parseMathExpression, type MathExpression } from "./math-expression";
-import type { MathProposal } from "./math-action";
-import type { MathEvidence } from "./math-evidence";
-import type { MathState } from "./math-state";
 
 export type MathDisplay = { readonly latex: string; readonly text: string };
 const group = (value: MathDisplay): MathDisplay => ({
   latex: `\\left(${value.latex}\\right)`,
   text: `open parenthesis ${value.text} close parenthesis`,
 });
+// Binding strength: sums < products < unary minus < powers < atoms and functions.
+function precedence(e: MathExpression): number {
+  switch (e.op) {
+    case "add":
+    case "subtract":
+    case "equal":
+      return 1;
+    case "multiply":
+    case "divide":
+      return 2;
+    case "negate":
+      return 3;
+    case "power":
+      return 4;
+    case "number":
+      return e.value < 0 ? 3 : 5;
+    default:
+      return 5;
+  }
+}
+const startsWithDigit = (latex: string) => /^[\d-]/.test(latex);
 
-/** Only validated, bounded syntax enters the serializer. Explicit grouping keeps
- * even nested associative operations and negative numeric power bases faithful.
+/** Only validated, bounded syntax enters the serializer. Parentheses appear only where
+ * precedence needs them, so the display stays faithful without extra grouping.
  * No comparison normalization, solver, or provider-supplied LaTeX is involved.
  */
 export function serializeMathExpression(input: unknown): MathDisplay {
+  function child(e: MathExpression, minimum: number): MathDisplay {
+    const value = render(e);
+    return precedence(e) < minimum ? group(value) : value;
+  }
   function render(e: MathExpression): MathDisplay {
     switch (e.op) {
       case "number": {
-        const value = Object.is(e.value, -0) ? "-0" : String(e.value);
+        const value = String(e.value);
         return { latex: value, text: value.startsWith("-") ? `negative ${value.slice(1)}` : value };
       }
       case "variable":
         return { latex: "x", text: "x" };
-      case "add":
-      case "multiply": {
-        const args = e.args.map(arg => group(render(arg)));
+      case "add": {
+        const args = e.args.map(arg => child(arg, 1));
         return {
-          latex: args.map(arg => arg.latex).join(e.op === "add" ? " + " : " \\cdot "),
-          text: args.map(arg => arg.text).join(e.op === "add" ? " plus " : " times "),
+          latex: args.map((arg, i) => (i && !arg.latex.startsWith("-") ? `+ ${arg.latex}` : arg.latex)).join(" "),
+          text: args.map(arg => arg.text).join(" plus "),
+        };
+      }
+      case "multiply": {
+        const args = e.args.map((arg, i) => child(arg, i ? 4 : 3));
+        // Juxtapose like handwriting (3x^2); a dot where digits would run together or
+        // a factor would read as part of a trig argument.
+        const dot = (i: number) =>
+          i > 0 && (startsWithDigit(args[i].latex) || ["sin", "cos"].includes(e.args[i - 1].op));
+        return {
+          latex: args.map((arg, i) => (dot(i) ? `\\cdot ${arg.latex}` : arg.latex)).join(" "),
+          text: args.map(arg => arg.text).join(" times "),
         };
       }
       case "subtract":
       case "equal": {
-        const left = group(render(e.left)),
-          right = group(render(e.right));
+        const left = child(e.left, 1),
+          right = child(e.right, e.op === "subtract" ? 2 : 1);
         return {
           latex: `${left.latex} ${e.op === "subtract" ? "-" : "="} ${right.latex}`,
           text: `${left.text} ${e.op === "subtract" ? "minus" : "equals"} ${right.text}`,
@@ -49,21 +81,20 @@ export function serializeMathExpression(input: unknown): MathDisplay {
         };
       }
       case "power": {
-        const base = group(render(e.base));
-        const exponent = render({ op: "number", value: e.exponent });
+        const base = child(e.base, 5);
         return {
-          latex: `${base.latex}^{${exponent.latex}}`,
-          text: `${base.text} to the power ${exponent.text}`,
+          latex: `${base.latex}^{${e.exponent}}`,
+          text: `${base.text} to the power ${e.exponent < 0 ? `negative ${-e.exponent}` : e.exponent}`,
         };
       }
       case "negate": {
-        const arg = group(render(e.argument));
+        const arg = child(e.argument, 3);
         return { latex: `-${arg.latex}`, text: `negative ${arg.text}` };
       }
       case "sin":
       case "cos":
       case "derivative": {
-        const arg = group(render(e.argument));
+        const arg = e.argument.op === "variable" ? render(e.argument) : group(render(e.argument));
         return {
           latex: `${e.op === "derivative" ? "\\frac{d}{dx}" : `\\${e.op}`} ${arg.latex}`,
           text: `${e.op === "derivative" ? "derivative with respect to x of" : e.op === "sin" ? "sine of" : "cosine of"} ${arg.text}`,
@@ -72,83 +103,6 @@ export function serializeMathExpression(input: unknown): MathDisplay {
     }
   }
   return render(parseMathExpression(input));
-}
-
-export function mathEvidenceLabel(evidence: MathEvidence): string {
-  const a = evidence.assessment;
-  const correctness = {
-    unchecked: "Provisional: not checked",
-    valid: "Mathematically checked: correct",
-    incorrect: "Incorrect as written",
-    unsupported: "Unresolved: this form cannot be checked yet",
-    incomplete: "Incomplete work",
-  }[a.correctness];
-  const disposition = {
-    accepted: "Recorded",
-    rejected: "Not accepted",
-    "clarification-required": "Needs clarification",
-    unresolved: "Needs further review",
-  }[a.disposition];
-  const reasoning = {
-    unassessed: "Reasoning not assessed",
-    "strategy-only": "Method named; reasoning not yet assessed",
-    supported: "Reasoning supported",
-    missing: "Reasoning still needed",
-    misleading: "Reasoning needs correction",
-  }[a.reasoning];
-  const assistance = {
-    unknown: "Help received is not established",
-    independent: "Independent work established",
-    "neutral-probe": "After a neutral question",
-    hinted: "With a hint",
-    "answer-supplied": "After an answer was supplied",
-  }[a.assistance];
-  return `${correctness}. ${disposition}. ${reasoning}. ${assistance}.`;
-}
-
-/** Explicit display projection: no validator keys, tutor context or source-event
- * text. Sources here are only the retained learner quotes for these actions.
- */
-export function projectMathAction(action: MathProposal) {
-  return {
-    operation: action.kind,
-    target:
-      "targetStepId" in action
-        ? action.targetStepId
-        : action.kind === "append"
-          ? "new logical step"
-          : "current problem",
-    detail: action.kind === "clarify" ? action.reason : action.kind === "strategy" ? action.method : null,
-    expression: "expression" in action ? action.expression : null,
-    sources: action.sources.map(source => ({ ...source })),
-  };
-}
-
-export function projectMathBoard(state: MathState) {
-  return {
-    status: state.status,
-    clarification: state.clarification?.reason ?? null,
-    nextRequested: state.nextRequested,
-    steps: state.steps.map(step => ({
-      id: step.id,
-      withdrawn: step.currentVersionId === null,
-      versions: step.versions.map(version => ({
-        id: version.id,
-        predecessorId: version.predecessorId,
-        current: version.id === step.currentVersionId,
-        expression: version.expression,
-        status: mathEvidenceLabel(version.evidence),
-      })),
-    })),
-    history: state.history.map(entry => ({
-      id: entry.id,
-      stepId: entry.stepId,
-      versionId: entry.versionId,
-      withdrawsActionId: entry.withdrawsActionId,
-      status: mathEvidenceLabel(entry.evidence),
-      ...projectMathAction(entry.action),
-    })),
-  };
 }
 
 /** Never use KaTeX error HTML or interpolate an exception into markup. The only
@@ -169,7 +123,7 @@ export function renderMathExpression(
       text: display.text,
       html: renderToString(display.latex, {
         output: "html",
-        displayMode: true,
+        displayMode: false,
         trust: false,
         strict: "error",
         throwOnError: true,

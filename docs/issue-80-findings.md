@@ -1,8 +1,11 @@
 # Issue #80 findings and evidence status
 
+> **Superseded.** The proposal-and-confirmation design described here was replaced
+> by the worked-steps flow in [calculus-demo.md](calculus-demo.md). Kept for history.
+
 October 23, 2026. Implementation is complete through commit 10,
 `fa18bb45343e79aa1714baec8b10328d2b33ba2f`, on `codex/80-feasibility`.
-The [validation runbook](calculus-demo-validation.md) supplies route/setup guidance,
+The [validation runbook](calculus-demo.md) supplies route/setup guidance,
 the acceptance matrix and evidence forms. **Actual microphone acceptance, current
 provider-adapter success, spoken tutor compliance, and Bill's critique remain
 PENDING. Issue #80 is not accepted or closed.**
@@ -32,8 +35,8 @@ Correctness, interpretation intent, reasoning and assistance are separate;
 reasoning/independent understanding remain conservative and unassessed. Tutor
 recitation/praise cannot become learner work. Context instructions and safe board
 mutation cannot prove that the live tutor avoids every verbal answer leak.
-See the [walkthrough, domain boundary and acceptance matrix](calculus-demo-validation.md)
-and [tutor synchronization contract](calculus-tutor-integration.md).
+See the [walkthrough, domain boundary and acceptance matrix](calculus-demo.md)
+and [tutor synchronization contract](calculus-demo.md).
 
 The **ordered equation list plus KaTeX** was chosen over tldraw in an isolated
 renderer comparison.
@@ -85,7 +88,7 @@ Live interpretation fidelity, false-commit count/rate, correction frequency,
 interpretation failures and speech-to-display distribution: **PENDING/null**.
 The synthetic deliberately mislabeled wrong-sign fixture shows that parser
 acceptance and mathematical correctness cannot substitute for manual ground truth.
-Use the [local evidence forms](calculus-demo-validation.md#human-session-and-evidence-form)
+Use the [local evidence forms](calculus-demo.md#human-session-and-evidence-form)
 before computing rates. Bill's qualitative critique is a separate human record,
 not another automated success count.
 
@@ -100,7 +103,7 @@ tests call `git show`, so run them from a checkout with Git history.
 
 Refresh credentials locally, then perform the explicitly opted-in production
 adapter text replay and record schema/output failures without silently retrying.
-Run every [human matrix row](calculus-demo-validation.md#acceptance-matrix-and-evidence-classes)
+Run every [human matrix row](calculus-demo.md#acceptance-matrix-and-evidence-classes)
 at a recorded SHA with instructor ground truth; inspect proposals, exports,
 corrections and media teardown. Gather Bill's dated critique and a real
 assistive-technology audit. Agree latency criteria before applying a numeric

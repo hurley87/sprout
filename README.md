@@ -33,16 +33,15 @@ The existing demos at `/demos/catching-unicorns` and `/demos/mae386` remain
 available. [MAE386 validation](docs/mae386-demo-validation.md) records its bounded
 coverage and pending live work.
 
-[Calculus practice](http://127.0.0.1:3000/demos/calculus) adds three authored
-problems with dictated steps, full provisional review, explicit operation
-confirmation, correction/undo and retained history. Use
+[Calculus practice](http://127.0.0.1:3000/demos/calculus) has the learner work
+three authored problems aloud. Each step is checked as they speak, the tutor helps
+with the specific step that is wrong or missing, and the next problem follows once
+every step and the final answer are correct. Use
 [`?debug=1`](http://127.0.0.1:3000/demos/calculus?debug=1) for session JSON export.
-See the [calculus setup and acceptance runbook](docs/calculus-demo-validation.md)
-and [renderer decision, feasibility findings and evidence](docs/issue-80-findings.md). Its voice and
-`/api/math-action` interpretation use the server-only `OPENAI_API_KEY`; refresh
-credentials locally, never paste secrets into chat. Correct math and confirmation
-do not establish reasoning or independent understanding. Real microphone/tutor
-acceptance and Bill's critique remain **PENDING**.
+See the [calculus demo guide](docs/calculus-demo.md). Its voice and
+`/api/calculus-work` step mapping use the server-only `OPENAI_API_KEY`; refresh
+credentials locally, never paste secrets into chat. Live acceptance remains
+**PENDING**.
 
 ## Check
 

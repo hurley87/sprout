@@ -177,6 +177,8 @@ export type LessonRuntimeEvent = { readonly atMs: number } & (
       readonly source: ClassificationSource;
       readonly transcriptSnapshot: string;
       readonly intent?: NavigationIntent;
+      /** Calculus only: the application checked the problem complete. */
+      readonly appCompleted?: true;
     }
   | {
       readonly type: "question.observation";
@@ -925,8 +927,10 @@ export function reduceLessonRuntime(
       break;
     }
     case "conversation.advance.requested": {
-      const intent =
-        lesson.questionGroups || lesson.calculus
+      const appCompleted = lesson.calculus && event.appCompleted;
+      const intent: NavigationIntent | null = appCompleted
+        ? { action: "next", scope: "subpart" }
+        : lesson.questionGroups || lesson.calculus
           ? parseLearnerNavigationText(state.learnerUtterance?.text ?? "")
           : learnerNavigationIntent(event.transcriptSnapshot);
       if (
@@ -941,7 +945,7 @@ export function reduceLessonRuntime(
         ...next,
         conversationAdvanceRequested: "learner",
         ...(lesson.questionGroups || lesson.calculus
-          ? { navigationIntent: intent, navigationSource: state.learnerUtterance!.source }
+          ? { navigationIntent: intent, navigationSource: appCompleted ? event.source : state.learnerUtterance!.source }
           : {}),
         quietSinceMs:
           state.outputActivity === "quiet"

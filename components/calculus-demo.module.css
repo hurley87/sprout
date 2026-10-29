@@ -25,8 +25,7 @@
   margin: 24px 0;
   align-items: start;
 }
-.prompt,
-.confirmation {
+.prompt {
   background: #f1f7f4;
   padding: 20px;
   border: 1px solid #b8cec2;
@@ -41,8 +40,7 @@
   gap: 12px;
   margin: 16px 0;
 }
-.page button,
-.page select {
+.page button {
   border: 1px solid #557569;
   border-radius: 6px;
   padding: 10px 14px;
@@ -50,31 +48,19 @@
   color: #172c33;
   min-height: 44px;
 }
-.page button:disabled,
-.page fieldset:disabled {
+.page button:disabled {
   opacity: 0.55;
 }
 .page button:enabled {
   cursor: pointer;
 }
-.page button:focus-visible,
-.page select:focus-visible {
+.page button:focus-visible {
   outline: 3px solid #147154;
   outline-offset: 3px;
 }
 .page .start {
   background: #205c48;
   color: white;
-}
-.confirmation {
-  margin-top: 16px;
-}
-.confirmation label {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-  margin: 12px 0;
 }
 .page pre {
   max-height: 480px;
@@ -85,8 +71,5 @@
 @media (max-width: 720px) {
   .layout {
     grid-template-columns: minmax(0, 1fr);
-  }
-  .confirmation select {
-    max-width: 100%;
   }
 }

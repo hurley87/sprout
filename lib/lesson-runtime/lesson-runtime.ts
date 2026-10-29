@@ -1,7 +1,4 @@
-import { projectMathDiagnostics } from "../calculus/math-diagnostics";
-import type { MathSourceEvent } from "../calculus/math-evidence";
-import type { MathControllerSnapshot } from "../calculus/math-controller";
-import { CalculusRuntime, type CalculusFragment } from "./calculus-runtime";
+import { CalculusRuntime, type CalculusFragment, type CalculusSnapshot } from "./calculus-runtime";
 import { questionRecap, type QuestionOutcomeSnapshot } from "./mae386/question-outcomes";
 import type { RewriteTranscript } from "./mae386/rewrite-proposal";
 import { learnerNavigationIntent, parseLearnerNavigationText, isLearnerStopText } from "./conversation-progression";
@@ -71,7 +68,7 @@ export type LessonObservation = {
 };
 
 export type LessonSnapshot = {
-  math?: MathControllerSnapshot;
+  math?: CalculusSnapshot;
   status: "prepared" | "connecting" | "live" | "ended";
   runtime: LessonRuntimeState | null;
   display: RenderIdentity;
@@ -152,22 +149,18 @@ export class LessonRuntime {
         () => ({
           state: this.state,
           fragments: this.fragments,
-          revision: this.revision,
-          order: this.order,
-          live: this.status === "live",
           quiet: this.isQuietActive(),
           steering: !!this.steering,
           supportRequestedAt: this.supportRequestedAt,
         }),
-        () => this.now(),
         () => this.publish(),
         (type, detail) => this.log(type, detail),
         (eventId, content) =>
           this.transport.send({ type: "session.instructions.append", event_id: eventId, delegation_id: null, content }),
-        () => ++this.order,
         () => this.stop("learner_stop"),
         request => this.performSupport(request, true),
         () => this.scheduleClassification("spoken_support_quiet"),
+        () => this.completeCalculusProblem(),
         LESSON_TIMING.childSnapshotDebounceMs,
       );
     this.journal = new DiagnosticJournal(this.runtimeId, () => this.now(), this.lessonDefinition.initialNodeId);
@@ -323,7 +316,7 @@ export class LessonRuntime {
 
   snapshot(): LessonSnapshot {
     return {
-      math: this.calculus?.controller.snapshot(),
+      math: this.calculus?.snapshot(),
       status: this.status,
       runtime: this.state,
       display: this.display,
@@ -520,7 +513,7 @@ export class LessonRuntime {
       case "microphone.speech_started":
         if (this.status !== "live") return;
         this.log(event.type);
-        this.calculus?.onSpeechStarted();
+        this.calculus?.onSpeechStarted(event.type === "microphone.speech_started");
         if (!this.state.childSpeaking) {
           if (
             event.type === "microphone.speech_started" ||
@@ -543,10 +536,7 @@ export class LessonRuntime {
       case "microphone.activity_discarded":
       case "microphone.speech_stopped": {
         if (this.status !== "live") return;
-        const observedAtMs = this.log(
-          event.type,
-          event.type === "microphone.speech_stopped" ? { quietMs: event.quietMs } : null,
-        );
+        this.log(event.type, event.type === "microphone.speech_stopped" ? { quietMs: event.quietMs } : null);
         if (this.state.childSpeaking) {
           if (event.type === "microphone.speech_stopped" && this.state.childCandidate) {
             this.cancelClassification("child_turn_confirmed");
@@ -587,10 +577,6 @@ export class LessonRuntime {
             else if (!this.lessonDefinition.conversationFirst || !this.requestedNavigation())
               this.answerRecovery.arm(this.state, !this.steering);
           }
-          this.calculus?.onSpeechStopped(
-            event.type === "microphone.speech_stopped",
-            event.type === "microphone.speech_stopped" ? observedAtMs : null,
-          );
           this.scheduleClassification(event.type);
         }
         return;
@@ -745,13 +731,6 @@ export class LessonRuntime {
       source = runtimeSource(this.state);
       fragment = { ...fragment, source };
     }
-    if (speaker === "tutor" && this.calculus)
-      this.calculus.controller.recordSourceEvent({
-        id: `tutor_${fragment.order}`,
-        order: ++this.order,
-        kind: "unknown-help",
-        text: event.delta,
-      });
     if (this.calculus)
       this.log("math.transcript_available", { delta: event.delta, order: fragment.order, speaker }, source, speaker);
     this.fragments.push(fragment);
@@ -783,7 +762,6 @@ export class LessonRuntime {
         transcript: text,
       });
     this.revision++;
-    if (speaker === "child") this.calculus?.onTranscript();
     this.log(
       "transcript.snapshot",
       { speaker, transcript: text, startMs: event.startMs, endMs: event.endMs },
@@ -1203,7 +1181,13 @@ export class LessonRuntime {
     }
     const content = request
       ? learnerSupportInstruction(context, request, this.lessonDefinition)
-      : teachingInstruction(context, this.lessonDefinition, startLesson, this.terminalText);
+      : teachingInstruction(
+          context,
+          this.lessonDefinition,
+          startLesson,
+          this.terminalText,
+          this.calculus?.previousCompleted(),
+        );
     const source = runtimeSource(this.state);
     this.steering = {
       support: request !== undefined,
@@ -1253,18 +1237,14 @@ export class LessonRuntime {
     this.cancelClassification("learner_support_requested");
     this.answerRecovery.cancel("learner_support_requested");
     this.log("learner.support_requested", { request });
-    this.calculus?.invalidate();
+    this.calculus?.cancelCheck();
     const sent = this.appendSteering(
       currentNodeContext(this.lessonDefinition, this.state.nodeId),
       this.display.token,
       false,
       request,
     );
-    if (sent && this.calculus)
-      this.recordMathSourceEvent(
-        request === "help" ? "hint" : "neutral-probe",
-        `Application-issued ${request} instruction`,
-      );
+    if (sent) this.calculus?.recordSupport(request);
     this.publish();
   }
 
@@ -1281,7 +1261,7 @@ export class LessonRuntime {
       this.now() - this.state.quietSinceMs < this.state.quietDrainMs
     )
       return;
-    this.calculus?.invalidate(true);
+    this.calculus?.cancelCheck();
     const source = runtimeSource(this.state);
     const edge = this.lessonDefinition.nodes[this.state.nodeId].onSuccess;
     const drainFinalObservation =
@@ -1404,30 +1384,34 @@ export class LessonRuntime {
     this.publish();
   }
 
-  confirmMathProposalDisplayed(id: string, boardRevision: number) {
-    return this.calculus?.confirmProposalDisplayed(id, boardRevision) ?? false;
-  }
-
-  confirmMathFeedbackDisplayed(token: string): boolean {
-    return this.calculus?.confirmFeedbackDisplayed(token) ?? false;
-  }
-
-  recordMathSourceEvent(kind: MathSourceEvent["kind"], text: string): boolean {
-    return this.calculus?.recordSourceEvent(kind, text) ?? false;
-  }
-
-  confirmMathProposal(
-    id: string,
-    boardRevision: number,
-    operations: readonly ("differentiate" | "rewrite" | "unassessed")[],
-    method: "ui" | "spoken" = "ui",
-  ) {
-    return this.calculus?.confirmProposal(id, boardRevision, operations, method) ?? false;
+  /** The app, not the tutor, decides a calculus problem is done: request the authored next edge. */
+  private completeCalculusProblem() {
+    if (
+      !this.state ||
+      this.status !== "live" ||
+      this.steering ||
+      this.state.childSpeaking ||
+      this.state.phase !== "active" ||
+      this.state.conversationAdvanceRequested === "learner"
+    )
+      return false;
+    this.dispatch({
+      type: "conversation.advance.requested",
+      appCompleted: true,
+      source: {
+        ...runtimeSource(this.state),
+        nodeId: this.state.nodeId,
+        transcriptRevision: this.state.transcriptRevision,
+      },
+      transcriptSnapshot: this.transcript,
+      atMs: this.now(),
+    });
+    return true;
   }
 
   report() {
     const report = {
-      ...(this.calculus ? { math: this.calculus.controller.snapshot() } : {}),
+      ...(this.calculus ? { math: this.calculus.snapshot() } : {}),
       ...this.journal.report({
         timing: LESSON_TIMING,
         runtime: this.state,
@@ -1439,10 +1423,7 @@ export class LessonRuntime {
       }),
       evidenceEligibility: currentEvidenceEligibility(this.state, this.lessonDefinition),
     };
-    const mathDiagnostics = this.calculus ? projectMathDiagnostics(report.events) : undefined;
-    return structuredClone({ ...report, ...(mathDiagnostics ? { mathDiagnostics } : {}) }) as {
-      mathDiagnostics?: ReturnType<typeof projectMathDiagnostics>;
-    } & Omit<typeof report, "evidenceEligibility"> &
+    return structuredClone(report) as Omit<typeof report, "evidenceEligibility"> &
       Partial<Pick<typeof report, "evidenceEligibility">>;
   }
 }
