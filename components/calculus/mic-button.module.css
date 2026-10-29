@@ -1,0 +1,159 @@
+.control {
+  margin-top: auto;
+  padding-bottom: 36px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.wrap {
+  --mic-size: 96px;
+  position: relative;
+  width: 112px;
+  height: 112px;
+  display: grid;
+  place-items: center;
+  isolation: isolate;
+}
+
+.big {
+  --mic-size: 120px;
+  width: 136px;
+  height: 136px;
+}
+
+.button {
+  position: relative;
+  width: var(--mic-size);
+  height: var(--mic-size);
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 2px solid;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.primary {
+  background: var(--primary);
+  color: var(--onPrimary);
+  border-color: var(--primary);
+  box-shadow: 0 14px 30px -12px var(--primary);
+}
+
+.quiet {
+  background: var(--surface);
+  color: var(--primary);
+  border-color: var(--line);
+}
+
+.ok {
+  background: var(--okBg);
+  color: var(--ok);
+  border-color: var(--okBg);
+}
+
+.look {
+  background: var(--lookBg);
+  color: var(--look);
+  border-color: var(--lookLine);
+}
+
+.button:focus-visible,
+.action:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 6px;
+}
+
+.pulse,
+.spinner {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+.pulse {
+  width: var(--mic-size);
+  height: var(--mic-size);
+  background: var(--accent);
+  z-index: -1;
+}
+
+.spinner {
+  inset: 0;
+  border: 3px solid var(--chkBg);
+  border-top-color: var(--chk);
+}
+
+.icon {
+  width: 36px;
+  height: 36px;
+}
+
+.check {
+  width: 38px;
+  height: 38px;
+}
+
+.wave {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 36px;
+  height: 36px;
+}
+
+.wave > span {
+  width: 4px;
+  height: 28px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.line {
+  min-height: 22px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink2);
+  text-align: center;
+}
+
+.action {
+  height: 52px;
+  padding: 0 28px;
+  border-radius: 999px;
+  border: 0;
+  background: var(--primary);
+  color: var(--onPrimary);
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+@media (max-width: 720px) {
+  .control {
+    padding-bottom: 40px;
+    gap: 12px;
+  }
+
+  .wrap {
+    --mic-size: 80px;
+    width: 96px;
+    height: 96px;
+  }
+
+  .icon,
+  .check,
+  .wave {
+    width: 30px;
+    height: 30px;
+  }
+
+  .line {
+    font-size: 15px;
+  }
+}
