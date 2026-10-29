@@ -212,6 +212,34 @@ it("does not show reconnecting during problem rendering", () => {
   ).toBe("tutor");
 });
 
+it.each(["Microphone unavailable", "Permission denied", "NotAllowedError", "Access DENIED"])(
+  "uses microphone recovery copy for %s",
+  error => {
+    expect(micState(input({ error }))).toMatchObject({
+      kind: "error",
+      label: "Microphone blocked",
+      action: "Allow microphone",
+    });
+  },
+);
+
+it.each(["Connection lost", "Session request failed", "Service unavailable"])(
+  "preserves non-permission errors with generic recovery: %s",
+  error => {
+    expect(micState(input({ error }))).toEqual({
+      kind: "error",
+      icon: "off",
+      look: "look",
+      pulse: false,
+      spin: false,
+      big: false,
+      label: "Try again",
+      line: "Something went wrong",
+      action: "Try again",
+    });
+  },
+);
+
 it("does not mutate or share mutable state with callers", () => {
   const value = input();
   const original = structuredClone(value);

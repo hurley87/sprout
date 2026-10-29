@@ -3,11 +3,21 @@
 import Link from "next/link";
 import { Figtree } from "next/font/google";
 import { CALCULUS_LESSON } from "@/lib/lesson-runtime/calculus-lesson";
-import { CALCULUS_PROBLEM_IDS } from "@/lib/calculus/problems";
+import type { CalculusVisit } from "@/lib/lesson-runtime/calculus-runtime";
+import {
+  CALCULUS_PROBLEM_IDS,
+  getCalculusProblem,
+  isCalculusProblemId,
+  type CalculusProblemId,
+} from "@/lib/calculus/problems";
+import { renderMathExpression } from "@/lib/calculus/math-rendering";
+import { emptyWork } from "@/lib/calculus/work-check";
 import { useVoiceDemo } from "./voice-demo/use-voice-demo";
-import { VoiceDemoControls } from "./voice-demo/controls";
 import { scrubSecrets } from "./voice-demo/diagnostics";
+import { CalculusHeader, type CalculusProgressSegment } from "./calculus/calculus-header";
 import { WorkChecklist } from "./calculus/work-checklist";
+import { MicButton } from "./calculus/mic-button";
+import { micState } from "./calculus/mic-state";
 import styles from "./calculus-demo.module.css";
 import theme from "./calculus/calculus-theme.module.css";
 
@@ -16,6 +26,29 @@ const figtree = Figtree({
   subsets: ["latin"],
   variable: "--font-figtree",
 });
+
+function ProblemEquation({ problemId }: { problemId: CalculusProblemId }) {
+  const result = renderMathExpression(getCalculusProblem(problemId).functionExpression);
+  return (
+    <span className={styles.equation}>
+      <span aria-hidden="true">
+        <span className={styles.functionLabel}>f(x) = </span>
+        {result.ok ? <span dangerouslySetInnerHTML={{ __html: result.html }} /> : result.text}
+      </span>
+      <span className={styles.srOnly}>f of x equals {result.text}</span>
+    </span>
+  );
+}
+
+function recapNote(visit: CalculusVisit) {
+  if (visit.outcome === "skipped") return "Skipped";
+  if (visit.outcome !== "completed") return "Not finished";
+  const corrected = visit.checks.some(check => ["incorrect", "combine", "wrong-rule"].includes(check.outcome ?? ""));
+  if (visit.help && corrected) return "Needed a hint and another look";
+  if (visit.help) return "Needed a hint";
+  if (corrected) return "One step needed another look";
+  return "First try";
+}
 
 export default function CalculusDemo({ debug = false }: { debug?: boolean }) {
   const { audio, sceneRef, snapshot, live, start, stop, download, support, skip, supportReady } = useVoiceDemo({
@@ -26,83 +59,128 @@ export default function CalculusDemo({ debug = false }: { debug?: boolean }) {
   const state = snapshot?.runtime;
   const nodeId = state?.nodeId ?? CALCULUS_LESSON.initialNodeId;
   const identity = snapshot?.display ?? { token: "initial", nodeId, sceneId: nodeId };
-  const completed = state?.phase === "complete";
-  const number = CALCULUS_PROBLEM_IDS.findIndex(id => id === nodeId) + 1;
+  const completed = nodeId === "recap" || state?.phase === "complete";
+  const before = !snapshot;
+  const problemId = isCalculusProblemId(nodeId) ? nodeId : null;
+  const number = CALCULUS_PROBLEM_IDS.findIndex(id => id === problemId) + 1;
+  const visits = snapshot?.math?.visits ?? [];
+  const lastVisits = CALCULUS_PROBLEM_IDS.map(id => visits.findLast(visit => visit.problemId === id));
+  const progress = CALCULUS_PROBLEM_IDS.map((_, index): CalculusProgressSegment => {
+    if (before) return "next";
+    if (!completed && index === number - 1) return "current";
+    if (lastVisits[index]?.outcome === "skipped") return "skip";
+    if (lastVisits[index]?.outcome === "completed") return "done";
+    return "next";
+  });
+  const math =
+    snapshot?.math ?? (problemId ? { work: emptyWork(problemId), checking: false, complete: false, visits: [] } : null);
+
   return (
-    <main className={`${styles.page} ${theme.theme} ${figtree.variable}`}>
-      <header>
-        <p>Spoken practice · Three problems</p>
-        <h1>Calculus practice</h1>
-        <p>Talk through your working out loud. Each step is checked as you go.</p>
-      </header>
-      <div className={styles.layout}>
+    <div className={`${styles.page} ${theme.theme} ${figtree.variable}`}>
+      <CalculusHeader
+        progress={progress}
+        label={before ? "3 problems" : completed ? "All problems done" : `Problem ${number} of 3`}
+        showStuck={!before && !completed}
+        stuckDisabled={!supportReady}
+        onHint={() => support("help")}
+        onRepeat={() => support("repeat")}
+        onSkip={() => skip("question")}
+      />
+      <main className={styles.main}>
         <section
           aria-label="Current problem"
-          className={styles.prompt}
+          className={before ? styles.intro : completed ? styles.recapHeading : styles.prompt}
           ref={sceneRef}
           data-render-token={identity.token}
           data-node-id={identity.nodeId ?? "complete"}
           data-scene-id={identity.sceneId ?? "complete"}
         >
-          <p>{number ? `Problem ${number} of 3` : "Practice recap"}</p>
-          <h2>{CALCULUS_LESSON.nodes[nodeId]?.presentation.prompt ?? "Practice finished"}</h2>
-          <p>Show each step as well as your final answer. Ask for help at any point.</p>
+          {before ? (
+            <>
+              <p className={styles.eyebrow}>Spoken practice</p>
+              <h1 className={styles.title}>Differentiation</h1>
+            </>
+          ) : completed ? (
+            <>
+              <span className={styles.doneDisc} aria-hidden="true">
+                ✓
+              </span>
+              <h1 className={styles.recapTitle}>Practice done</h1>
+              <p className={styles.recapNote}>Practice finished.</p>
+            </>
+          ) : problemId ? (
+            <>
+              <p className={styles.eyebrow}>Differentiate</p>
+              <h1 className={styles.problemTitle}>
+                <ProblemEquation problemId={problemId} />
+              </h1>
+              <p className={styles.srOnly}>Problem {number} of 3</p>
+              <p className={styles.srOnly}>{CALCULUS_LESSON.nodes[nodeId]?.presentation.prompt}</p>
+            </>
+          ) : null}
         </section>
-        <div className={styles.work}>
-          {snapshot?.math ? (
-            <WorkChecklist math={snapshot.math} />
-          ) : (
-            <section aria-label="Your work">
-              <h2>Your work</h2>
-              <p>Start practice, then talk through your steps.</p>
+        {completed ? (
+          <>
+            <section className={styles.recapCard} aria-label="Recap">
+              {lastVisits.map((visit, index) => {
+                if (!visit) return null;
+                const items = [...visit.work.steps, visit.work.final];
+                return (
+                  <div className={styles.recapRow} key={visit.problemId}>
+                    <span className={styles.problemNumber}>{index + 1}</span>
+                    <div>
+                      <div className={styles.recapEquation}>
+                        <ProblemEquation problemId={visit.problemId} />
+                      </div>
+                      <p className={styles.recapNote}>{recapNote(visit)}</p>
+                    </div>
+                    <div
+                      className={styles.dots}
+                      role="img"
+                      aria-label={items
+                        .map(item => `${item.label}: ${item.status === "correct" ? "correct" : "not correct yet"}`)
+                        .join("; ")}
+                    >
+                      {items.map(item => (
+                        <span
+                          key={item.id}
+                          aria-hidden="true"
+                          className={`${styles.dot} ${item.status === "correct" ? styles.correctDot : ""}`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
             </section>
-          )}
-        </div>
-      </div>
-      <footer>
-        <p aria-live="polite">
-          {completed
-            ? "Practice finished."
-            : snapshot?.status === "ended"
-              ? "Session stopped. Your work so far is shown above."
-              : state?.childSpeaking
-                ? "Listening…"
-                : live
-                  ? "Connected. Talk through your next step when ready."
-                  : "Ready to begin."}
-        </p>
-        {snapshot?.error ? <p role="alert">{snapshot.error}</p> : null}
-        {nodeId !== "recap" ? (
-          <div className={styles.controls}>
-            <button disabled={!supportReady} onClick={() => support("help")}>
-              Help
+            <button className={styles.restart} onClick={start}>
+              Practise again
             </button>
-            <button disabled={!supportReady} onClick={() => support("repeat")}>
-              Repeat problem
-            </button>
-            <button disabled={!supportReady} onClick={() => skip("question")}>
-              Skip problem
-            </button>
-          </div>
+          </>
+        ) : (
+          <>
+            {!before && math ? (
+              <div className={styles.work}>
+                <WorkChecklist math={math} />
+              </div>
+            ) : null}
+            <div className={styles.micArea}>
+              <MicButton state={micState({ snapshot, live })} onStart={start} onStop={stop} onAction={start} />
+            </div>
+          </>
+        )}
+        {snapshot?.error ? (
+          <p className={styles.error} role="alert">
+            {snapshot.error}
+          </p>
         ) : null}
-        <VoiceDemoControls
-          snapshot={snapshot}
-          showDownload={debug}
-          live={live}
-          completed={completed}
-          start={start}
-          stop={stop}
-          download={download}
-          startLabel="Start practice"
-          restartLabel="Restart practice"
-          classNames={{ controls: styles.controls, startButton: styles.start, button: styles.button }}
-        />
-        <p>You can also say “help”, “repeat”, “next”, or “stop”.</p>
-      </footer>
-      <Link href="/">Back to home</Link>
+      </main>
+      <Link href="/" className={styles.home}>
+        Back to home
+      </Link>
       <audio ref={audio} />
       {debug ? (
-        <details>
+        <details className={styles.debug}>
           <summary>Session details</summary>
           <p>
             Export includes the transcript, every step check with what was heard and how it was judged, tutor
@@ -114,6 +192,6 @@ export default function CalculusDemo({ debug = false }: { debug?: boolean }) {
           <pre>{JSON.stringify(scrubSecrets(snapshot), null, 2)}</pre>
         </details>
       ) : null}
-    </main>
+    </div>
   );
 }

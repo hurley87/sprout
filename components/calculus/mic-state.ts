@@ -112,8 +112,9 @@ const STATES: Record<MicState["kind"], Omit<MicState, "kind">> = {
 // Errors win, then absent/stopped sessions, completion, checking, learner speech,
 // connection setup, and observed tutor audio. Rendering is not reconnecting.
 export function micState({ snapshot, live }: MicStateInput): MicState {
+  const error = snapshot?.error;
   let kind: MicState["kind"];
-  if (snapshot?.error) kind = "error";
+  if (error) kind = "error";
   else if (!snapshot) kind = "before";
   else if (!live || snapshot.status === "ended" || snapshot.runtime?.phase === "stopped") kind = "ended";
   else if (snapshot.math?.complete || snapshot.runtime?.phase === "complete") kind = "complete";
@@ -122,5 +123,8 @@ export function micState({ snapshot, live }: MicStateInput): MicState {
   else if (snapshot.status !== "live" || !snapshot.runtime) kind = "connecting";
   else if (snapshot.runtime.outputActivity === "active") kind = "tutor";
   else kind = "your-turn";
+  if (error && !/microphone|permission|notallowed|denied/i.test(error)) {
+    return { ...STATES.error, kind: "error", label: "Try again", line: "Something went wrong", action: "Try again" };
+  }
   return { kind, ...STATES[kind] };
 }
