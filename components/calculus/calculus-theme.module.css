@@ -69,6 +69,36 @@
   }
 }
 
+.checkDots {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 4px;
+  margin-left: 4px;
+}
+
+.checkDots > span {
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--chk);
+  animation: sproutDot 1.2s infinite;
+}
+
+.checkDots > span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.checkDots > span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+.advanceBar {
+  display: block;
+  height: 100%;
+  background: var(--ok);
+  transform-origin: left;
+  animation: sproutFill 3.5s linear both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .theme,
   .theme *,

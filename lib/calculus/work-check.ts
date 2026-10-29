@@ -1,13 +1,14 @@
 import type { MathExpression } from "./math-expression";
 import { serializeMathExpression } from "./math-rendering";
 import { compareMathExpression, type MathComparison } from "./math-validator";
-import { getCalculusProblem, type CalculusMethod, type CalculusProblemId } from "./problems";
+import { getCalculusProblem, type CalculusMethod, type CalculusProblemId, type WorkStep } from "./problems";
 import type { WorkExtraction } from "./work-extraction";
 
 export type WorkStatus = "missing" | "correct" | "incorrect" | "unsupported";
 export interface WorkItem {
   readonly id: string;
   readonly label: string;
+  readonly labelMath?: WorkStep["labelMath"];
   readonly status: WorkStatus;
   readonly expression: MathExpression | null;
   readonly quote: string | null;
@@ -48,7 +49,10 @@ export function emptyWork(problemId: CalculusProblemId): CalculusWork {
   const problem = getCalculusProblem(problemId);
   return {
     problemId,
-    steps: problem.steps.map(step => blank(step.id, step.label)),
+    steps: problem.steps.map(step => ({
+      ...blank(step.id, step.label),
+      ...(step.labelMath ? { labelMath: step.labelMath } : {}),
+    })),
     final: blank("final", "Final answer"),
     rule: null,
     unclear: null,

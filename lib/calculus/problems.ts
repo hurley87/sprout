@@ -22,6 +22,7 @@ export type CalculusMethod = "power" | "product" | "chain" | "sum" | "other";
 export interface WorkStep {
   readonly id: string;
   readonly label: string;
+  readonly labelMath?: { readonly text: string; readonly expression: E };
   readonly accepted: readonly E[];
 }
 
@@ -46,10 +47,20 @@ const problems: Record<CalculusProblemId, CalculusProblem> = {
     tutorBrief: "Ask how they would begin, then let them work term by term.",
     rules: ["power", "sum"],
     steps: [
-      { id: "d-cubic", label: "Derivative of x³", accepted: [mul(n(3), pow(x, 2))] },
+      {
+        id: "d-cubic",
+        label: "Derivative of x³",
+        labelMath: { text: "Derivative of", expression: pow(x, 3) },
+        accepted: [mul(n(3), pow(x, 2))],
+      },
       // Learners naturally say "the derivative of 4x is 4" and keep the subtraction;
       // the sign is checked in the final answer.
-      { id: "d-linear", label: "Derivative of the 4x term", accepted: [n(4), n(-4)] },
+      {
+        id: "d-linear",
+        label: "Derivative of the 4x term",
+        labelMath: { text: "Derivative of", expression: mul(n(4), x) },
+        accepted: [n(4), n(-4)],
+      },
     ],
     finalForms: [sub(mul(n(3), pow(x, 2)), n(4))],
   },
@@ -60,8 +71,18 @@ const problems: Record<CalculusProblemId, CalculusProblem> = {
     tutorBrief: "Invite them to describe how they would handle the product, then differentiate each factor.",
     rules: ["product"],
     steps: [
-      { id: "d-square", label: "Derivative of x²", accepted: [mul(n(2), x)] },
-      { id: "d-sine", label: "Derivative of sin x", accepted: [cos] },
+      {
+        id: "d-square",
+        label: "Derivative of x²",
+        labelMath: { text: "Derivative of", expression: pow(x, 2) },
+        accepted: [mul(n(2), x)],
+      },
+      {
+        id: "d-sine",
+        label: "Derivative of sin x",
+        labelMath: { text: "Derivative of", expression: sin },
+        accepted: [cos],
+      },
     ],
     finalForms: [add(mul(n(2), x, sin), mul(pow(x, 2), cos))],
   },
@@ -77,7 +98,12 @@ const problems: Record<CalculusProblemId, CalculusProblem> = {
         label: "Derivative of the outer power",
         accepted: [mul(n(5), pow(inner, 4))],
       },
-      { id: "d-inner", label: "Derivative of the inside, 3x² + 1", accepted: [mul(n(6), x)] },
+      {
+        id: "d-inner",
+        label: "Derivative of the inside, 3x² + 1",
+        labelMath: { text: "Derivative of the inside,", expression: inner },
+        accepted: [mul(n(6), x)],
+      },
     ],
     finalForms: [mul(n(30), x, pow(inner, 4))],
   },
