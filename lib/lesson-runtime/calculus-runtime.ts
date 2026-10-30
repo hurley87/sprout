@@ -1,6 +1,16 @@
-import { isCalculusProblemId, type CalculusProblemId } from "../calculus/problems";
+import {
+  CALCULUS_PROBLEM_IDS,
+  getCalculusProblem,
+  isCalculusProblemId,
+  type CalculusProblemId,
+} from "../calculus/problems";
 import { applyExtraction, emptyWork, workInstruction, workOutcome, type CalculusWork } from "../calculus/work-check";
-import { EXTRACTION_LIMITS, type WorkExtraction, type WorkExtractionInput } from "../calculus/work-extraction";
+import {
+  EXTRACTION_LIMITS,
+  type ExtractionDiagnostics,
+  type WorkExtraction,
+  type WorkExtractionInput,
+} from "../calculus/work-extraction";
 import type { TranscriptEvent } from "../events";
 import { isLearnerStopText, parseLearnerNavigationText } from "./conversation-progression";
 import type { LessonRuntimeState, RuntimeSource } from "./lesson-runtime-reducer";
@@ -13,6 +23,46 @@ const substance = (turns: readonly { text: string }[]) =>
     .map(turn => turn.text.replace(FILLER, " ").trim().replace(/\s+/g, " "))
     .filter(Boolean)
     .join(" | ");
+/** Check failures worth one retry; "unavailable" (no key) will not recover. */
+const RETRYABLE = new Set(["timeout", "provider-failure", "malformed"]);
+const CHECK_FAILED =
+  "The application could not check what the learner just said. Without judging it, ask them to say their last step again.";
+
+export type VisitSummary = "first-try" | "hint" | "another-look" | "hint-and-look" | "skipped" | "unfinished";
+/** How a problem visit went, as the recap card and the spoken recap both report it. */
+export function visitSummary(visit: Pick<CalculusVisit, "outcome" | "help" | "checks">): VisitSummary {
+  if (visit.outcome === "skipped") return "skipped";
+  if (visit.outcome !== "completed") return "unfinished";
+  const corrected = visit.checks.some(check => ["incorrect", "combine", "wrong-rule"].includes(check.outcome ?? ""));
+  return visit.help ? (corrected ? "hint-and-look" : "hint") : corrected ? "another-look" : "first-try";
+}
+
+const list = (items: string[]) => new Intl.ListFormat("en", { style: "long", type: "conjunction" }).format(items);
+/** The spoken close, from each problem's latest visit. Claims only what the checks
+ * recorded, never independent understanding. */
+export function calculusRecap(visits: readonly CalculusVisit[]): string {
+  const groups = {
+    "first-try": [] as string[],
+    hint: [] as string[],
+    "another-look": [] as string[],
+    skipped: [] as string[],
+  };
+  const latest = CALCULUS_PROBLEM_IDS.flatMap(id => visits.findLast(visit => visit.problemId === id) ?? []);
+  for (const visit of latest) {
+    const summary = visitSummary(visit);
+    const group = summary === "hint-and-look" ? "hint" : summary === "unfinished" ? "skipped" : summary;
+    groups[group].push(getCalculusProblem(visit.problemId).recapName);
+  }
+  const names = (items: string[]) => (items.length === CALCULUS_PROBLEM_IDS.length ? "every problem" : list(items));
+  const sentences: string[] = [];
+  if (groups["first-try"].length) sentences.push(`You got ${names(groups["first-try"])} right on the first try.`);
+  if (groups.hint.length) sentences.push(`You finished ${names(groups.hint)} after a hint.`);
+  if (groups["another-look"].length)
+    sentences.push(`You finished ${names(groups["another-look"])} after another look.`);
+  if (groups.skipped.length) sentences.push(`You skipped ${names(groups.skipped)}.`);
+  sentences.push("Thanks for practicing.");
+  return sentences.join(" ");
+}
 
 export type CalculusFragment = { event: TranscriptEvent; source: RuntimeSource; order: number };
 type Context = {
@@ -29,8 +79,8 @@ export interface CalculusCheck {
   readonly extraction: WorkExtraction | null;
   readonly outcome: string | null;
   readonly instruction: string | null;
-  /** False when the learner said more while this check ran; its result is shown but
-   * the tutor is briefed by the next check. */
+  /** False when the learner said more or is not quiet; incorrect results are
+   * withheld and the tutor is briefed by the next check. */
   readonly current: boolean;
 }
 export interface CalculusVisit {
@@ -56,10 +106,13 @@ export class CalculusRuntime {
   private consumedFragments = new Set<number>();
   private timer?: ReturnType<typeof setTimeout>;
   private request?: AbortController;
+  private requestKey: string | null = null;
   private lastChecked: string | null = null;
   private lastInstruction: string | null = null;
   private completed = false;
   private recheck = false;
+  /** Learner speech whose check already failed once and was retried. */
+  private retriedKey: string | null = null;
 
   constructor(
     private readonly runtimeId: string,
@@ -71,6 +124,8 @@ export class CalculusRuntime {
     private readonly support: (request: "help" | "repeat") => void,
     private readonly schedule: () => void,
     private readonly complete: () => boolean,
+    /** The next screen is the terminal recap, whose steering allows only its authored close. */
+    private readonly nextIsTerminal: () => boolean,
     private readonly debounceMs: number,
   ) {}
 
@@ -111,6 +166,10 @@ export class CalculusRuntime {
     return groups;
   }
 
+  recap() {
+    return calculusRecap(this.visits);
+  }
+
   /** The problem just shown follows a completed one and the learner has not started
    * it: the tutor's praise belongs in the new problem's steering, which would
    * otherwise replace a separate completion instruction before it is spoken. */
@@ -128,7 +187,7 @@ export class CalculusRuntime {
   }
 
   /** Learners pause mid-thought for about a second, shorter than a check takes, so
-   * new speech never cancels a check: it finishes, and the next one re-reads every turn.
+   * speech start alone never cancels a check; a substantive finished turn can.
    * Raw microphone activity (often noise or tutor echo) does not even delay a check. */
   onSpeechStarted(confirmed: boolean) {
     if (confirmed) clearTimeout(this.timer);
@@ -166,6 +225,10 @@ export class CalculusRuntime {
       this.cancelCheck();
       return false;
     }
+    const key = substance(this.turns().learnerTurns);
+    // Always supersede for new substance at turn end, never for speech or filler.
+    // Each replacement re-reads the visit; after the last substantive turn it can finish.
+    if (this.request && key && key !== this.requestKey) this.cancelCheck();
     const visitId = state.visitId;
     this.timer = setTimeout(() => {
       const current = this.context();
@@ -203,38 +266,54 @@ export class CalculusRuntime {
     this.recheck = false;
     const abort = new AbortController();
     this.request = abort;
+    this.requestKey = key;
     const requestId = crypto.randomUUID();
     const input: WorkExtractionInput = { problemId: visit.problemId, learnerTurns, tutorTurns };
     this.log("calculus.check_started", { requestId, input });
     this.publish();
     let status = "provider-failure";
     let extraction: WorkExtraction | null = null;
+    let timing: { extractionMs: number } | undefined;
+    let diagnostics: ExtractionDiagnostics | undefined;
+    const timeout = AbortSignal.timeout(EXTRACTION_LIMITS.clientTimeoutMs);
     try {
       const response = await fetch("/api/calculus-work", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
-        signal: AbortSignal.any([abort.signal, AbortSignal.timeout(EXTRACTION_LIMITS.timeoutMs)]),
+        signal: AbortSignal.any([abort.signal, timeout]),
       });
-      const body = (await response.json()) as { status?: string; extraction?: WorkExtraction };
+      const body = (await response.json()) as {
+        status?: string;
+        extraction?: WorkExtraction;
+        timing?: { extractionMs?: number };
+        diagnostics?: ExtractionDiagnostics;
+      };
+      if (
+        typeof body?.timing?.extractionMs === "number" &&
+        Number.isFinite(body.timing.extractionMs) &&
+        body.timing.extractionMs >= 0
+      )
+        timing = { extractionMs: body.timing.extractionMs };
+      if (body?.diagnostics && Array.isArray(body.diagnostics.dropped)) diagnostics = body.diagnostics;
       status = typeof body?.status === "string" ? body.status : "malformed";
       if (status === "ok" && body.extraction) extraction = body.extraction;
     } catch {
-      status = abort.signal.aborted ? "cancelled" : "provider-failure";
+      status = abort.signal.aborted ? "cancelled" : timeout.aborted ? "timeout" : "provider-failure";
     }
     if (this.request !== abort || abort.signal.aborted || this.visit !== visit) {
-      this.log("calculus.check_ended", { requestId, status: "stale" });
+      this.log("calculus.check_ended", { requestId, status: "stale", timing, diagnostics });
       return;
     }
     this.request = undefined;
-    // Words spoken during the check make its feedback out of date: still show its
-    // result, but brief the tutor only from a check that covers everything said.
+    // Out-of-date checks can add correct work, but cannot introduce incorrect work.
     const current = key === substance(this.turns().learnerTurns) && this.context().quiet;
     let outcome = null,
       instruction = null;
     if (extraction) {
-      this.lastChecked = key;
-      visit.work = applyExtraction(visit.work, extraction);
+      this.lastChecked = current ? key : null;
+      visit.work = applyExtraction(visit.work, extraction, { allowIncorrect: current });
+      // Log feedback from the filtered work; retain the raw extraction for diagnosis.
       const result = workOutcome(visit.work);
       outcome = result.kind;
       instruction = workInstruction(visit.work, result);
@@ -242,14 +321,35 @@ export class CalculusRuntime {
         this.completed = true;
         this.log("calculus.problem_completed", { visitId: visit.visitId, problemId: visit.problemId });
         // Advancing now carries the praise in the next problem's steering; only a
-        // delayed advance needs the tutor told separately.
-        if (!this.complete() && instruction !== this.lastInstruction) this.instruct(instruction);
+        // delayed advance needs the tutor told separately. Not before the recap: its
+        // steering follows within a second and forbids anything but the close, and
+        // the conflicting praise preceded a silent recap in a live session.
+        if (!this.complete() && !this.nextIsTerminal() && instruction !== this.lastInstruction)
+          this.instruct(instruction);
       } else if (current && instruction !== this.lastInstruction) this.instruct(instruction);
     }
     visit.checks.push({ requestId, learnerTurns, status, extraction, outcome, instruction, current });
-    this.log("calculus.check_ended", { requestId, status, extraction, work: visit.work, outcome, current });
+    this.log("calculus.check_ended", {
+      requestId,
+      status,
+      extraction,
+      work: visit.work,
+      outcome,
+      current,
+      timing,
+      diagnostics,
+    });
     this.publish();
-    if (this.recheck && this.context().quiet) void this.check();
+    if (!this.context().quiet) return;
+    if (this.recheck) void this.check();
+    else if (!extraction && RETRYABLE.has(status) && current) {
+      // Nothing else re-checks the learner's last words: retry once, then have the
+      // tutor ask for them again rather than wait in silence.
+      if (this.retriedKey !== key) {
+        this.retriedKey = key;
+        void this.check();
+      } else if (CHECK_FAILED !== this.lastInstruction) this.instruct(CHECK_FAILED);
+    }
   }
 
   private instruct(content: string) {
@@ -276,7 +376,7 @@ export class CalculusRuntime {
     clearTimeout(this.timer);
     this.cancelCheck();
     this.consumedFragments.clear();
-    this.lastChecked = this.lastInstruction = null;
+    this.lastChecked = this.lastInstruction = this.retriedKey = null;
     this.completed = this.recheck = false;
     if (isCalculusProblemId(nodeId))
       this.visits.push({ visitId, problemId: nodeId, work: emptyWork(nodeId), outcome: "active", help: 0, checks: [] });

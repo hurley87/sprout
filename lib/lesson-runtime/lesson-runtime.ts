@@ -161,6 +161,10 @@ export class LessonRuntime {
         request => this.performSupport(request, true),
         () => this.scheduleClassification("spoken_support_quiet"),
         () => this.completeCalculusProblem(),
+        () => {
+          const edge = this.state && this.lessonDefinition.nodes[this.state.nodeId].onSuccess;
+          return edge?.kind === "node" && !!this.lessonDefinition.nodes[edge.nodeId].completeAfterTutorOutput;
+        },
         LESSON_TIMING.childSnapshotDebounceMs,
       );
     this.journal = new DiagnosticJournal(this.runtimeId, () => this.now(), this.lessonDefinition.initialNodeId);
@@ -442,7 +446,7 @@ export class LessonRuntime {
             this.lessonDefinition.nodes[effect.identity.nodeId].completeAfterTutorOutput
           )
             // Freeze before React can render or asynchronous assessment can settle.
-            this.terminalText ??= evidenceRecap(this.lessonDefinition, this.state);
+            this.terminalText ??= this.calculus?.recap() ?? evidenceRecap(this.lessonDefinition, this.state);
           this.display = effect.identity;
           break;
         case "steering.ready":
@@ -574,7 +578,7 @@ export class LessonRuntime {
               this.state.terminalLearnerPending
             )
               this.terminalTranscriptRecovery.arm(this.state, !this.steering);
-            else if (!this.lessonDefinition.conversationFirst || !this.requestedNavigation())
+            else if (!this.calculus && (!this.lessonDefinition.conversationFirst || !this.requestedNavigation()))
               this.answerRecovery.arm(this.state, !this.steering);
           }
           this.scheduleClassification(event.type);
@@ -1170,7 +1174,7 @@ export class LessonRuntime {
     if (terminal) {
       this.terminalText ??= this.state.questionOutcomes
         ? questionRecap(this.state.questionOutcomes).spoken
-        : evidenceRecap(this.lessonDefinition, this.state);
+        : (this.calculus?.recap() ?? evidenceRecap(this.lessonDefinition, this.state));
       this.terminalTimer = setTimeout(
         () =>
           this.fail(

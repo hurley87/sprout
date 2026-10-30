@@ -41,7 +41,9 @@ export async function POST(request: Request) {
     return json({ status: "malformed" }, 400);
   }
   if (!process.env.OPENAI_API_KEY) return json({ status: "unavailable" }, STATUS.unavailable);
+  const startedAt = performance.now();
   const result = await extractWork(input, createResponsesWorkProvider(process.env.OPENAI_API_KEY), { signal });
+  const timing = { extractionMs: Math.round(performance.now() - startedAt) };
   const final = timeout.aborted ? { status: "timeout" as const } : result;
-  return json(final, STATUS[final.status]);
+  return json({ ...final, timing }, STATUS[final.status]);
 }

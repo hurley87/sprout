@@ -1,0 +1,218 @@
+.header {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  flex-shrink: 0;
+  height: 80px;
+  padding: 0 32px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.leaf {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 50% 50% 50% 4px;
+  background: var(--accent);
+}
+
+.progress {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.segment {
+  height: 8px;
+  width: 24px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  transition:
+    width 0.3s,
+    background-color 0.3s;
+}
+
+.done {
+  background: var(--ok);
+}
+
+.current {
+  width: 40px;
+  background: var(--primary);
+}
+
+.next,
+.skip {
+  background: var(--line);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.stuck {
+  position: relative;
+}
+
+.trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 16px 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink2);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.trigger:hover {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.questionMark {
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.dropdown {
+  box-sizing: border-box;
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 5;
+  width: 280px;
+  max-width: calc(100vw - 32px);
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: 0 18px 48px -18px rgba(10, 10, 40, 0.35);
+}
+
+.menu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 46px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.menuItem:hover {
+  background: var(--bg);
+}
+
+.menuItem[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.trigger:focus-visible,
+.menuItem:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.itemGlyph {
+  width: 24px;
+  flex-shrink: 0;
+  text-align: center;
+  color: var(--primary);
+}
+
+.note {
+  margin: 6px 4px 2px;
+  padding: 10px 8px 4px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink2);
+}
+
+@media (max-width: 720px) {
+  .header {
+    height: 64px;
+    margin-top: 20px;
+    padding: 0 18px;
+    grid-template-columns: 44px 1fr 44px;
+  }
+
+  .leaf {
+    width: 18px;
+    height: 18px;
+  }
+
+  .brandText {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .triggerText {
+    display: none;
+  }
+
+  .trigger {
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border-radius: 50%;
+  }
+
+  .questionMark {
+    width: auto;
+    height: auto;
+    border: 0;
+    font-size: 17px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .segment {
+    transition: none;
+  }
+}

@@ -14,8 +14,12 @@ what is correct, wrong or missing. The tutor helps with one step at a time.
    (`lib/calculus/work-extraction.ts`). The model only parses: it returns the
    expression the learner stated for each step, any rule they named for the whole
    function, and the final answer, each with a quote that must occur in learner
-   speech. It never sees accepted answers and never judges
-   correctness.
+   speech. Quotes are compared as words, ignoring punctuation, fillers ("uh",
+   "um") and sound tags, so a quote that runs across a pause still matches; the
+   words and their order must be the learner's. It never sees accepted answers and
+   never judges correctness. It runs at low reasoning effort: the default effort
+   took up to 14 seconds on longer problems and exceeded the 10-second limit,
+   while "none" misread steps spoken across pauses.
 3. The application **checks** each step and the final answer by exact equivalence
    (`lib/calculus/math-validator.ts`, `lib/calculus/work-check.ts`). Reordered,
    factored and expanded forms count. Notation outside the bounded algebra is
@@ -40,6 +44,12 @@ what is correct, wrong or missing. The tutor helps with one step at a time.
    the next problem itself. "Next", "skip this problem", the Skip button, help,
    repeat and stop still work as before; a problem left early is recorded as
    skipped.
+7. After the last problem, the tutor reads a fixed close built from the same
+   per-problem results as the recap card, e.g. "You got the polynomial and the
+   composite function right on the first try. You finished the product after
+   another look. Thanks for practicing." It uses words only (`recapName` in
+   `problems.ts`), because the spoken close is verified against transcribed
+   speech and digits or symbols may be transcribed differently.
 
 ## Required steps
 
@@ -67,18 +77,29 @@ briefed only from a check that covers everything the learner has said. Turns
 that change nothing are not rechecked: repeats, and turns of only fillers or
 sound tags ("[tongue click] Um", "And"). An unchanged instruction is not resent.
 
+If the check of the learner's latest words times out or fails while they are
+quiet, it is retried once, since nothing else would check those words again. If
+the retry also fails, the tutor is told to ask them to say their last step again.
+
 Because a check takes longer than the tutor takes to reply, the tutor's standing
 guidance limits it to a neutral "Okay" or "Mm-hmm" until a check arrives. When a
 check completes the problem, the praise goes into the next problem's steering
 rather than a separate instruction, which the steering would replace before it
-was spoken.
+was spoken. If the learner is still talking, the advance waits and the praise is
+sent separately, except before the recap: its steering allows only the authored
+close, and in one live session the conflicting praise preceded a recap the tutor
+never spoke.
 
 ## Diagnostics
 
 The debug export's `math.visits` lists each problem visit with its outcome
 (completed, skipped, stopped), help count, final work, and every check: the
 learner turns sent, the model's mapping, the outcome, the tutor instruction, and
-whether the learner said more while it ran (`current`).
+whether the learner said more while it ran (`current`). Each
+`calculus.check_ended` event also carries `diagnostics`: the model's raw output
+(`raw`) and every item the parser dropped, with the reason (`dropped`:
+`unknown-step`, `unknown-method`, `unquoted` or `invalid-expression`). Timed-out
+checks have none.
 Event log entries: `calculus.check_started`, `calculus.check_ended`,
 `calculus.problem_completed`, `gpt_live.math_feedback_append`.
 

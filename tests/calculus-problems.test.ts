@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import type { MathExpression as E } from "../lib/calculus/math-expression";
 import { compareMathExpression } from "../lib/calculus/math-validator";
+import { renderMathExpression } from "../lib/calculus/math-rendering";
 import { CALCULUS_PROBLEM_IDS, getCalculusProblem, type CalculusMethod } from "../lib/calculus/problems";
 import { applyExtraction, emptyWork, workInstruction, workOutcome } from "../lib/calculus/work-check";
 import type { WorkExtraction } from "../lib/calculus/work-extraction";
@@ -33,6 +34,33 @@ it("authors every problem with required steps and a final form", () => {
     expect(problem.finalForms.length).toBeGreaterThan(0);
     for (const step of problem.steps)
       for (const form of step.accepted) expect(compareMathExpression(form, step.accepted)).toBe("match");
+  }
+});
+
+it("carries optional display maths without changing plain tutor labels", () => {
+  const expected = [
+    ["Derivative of x³", { text: "Derivative of", expression: pow(x, 3) }],
+    ["Derivative of the 4x term", { text: "Derivative of", expression: mul(n(4), x) }],
+    ["Derivative of x²", { text: "Derivative of", expression: pow(x, 2) }],
+    ["Derivative of sin x", { text: "Derivative of", expression: sin }],
+    ["Derivative of the outer power", undefined],
+    ["Derivative of the inside, 3x² + 1", { text: "Derivative of the inside,", expression: inner }],
+  ];
+  expect(
+    CALCULUS_PROBLEM_IDS.flatMap(id => getCalculusProblem(id).steps.map(step => [step.label, step.labelMath])),
+  ).toEqual(expected);
+  for (const id of CALCULUS_PROBLEM_IDS) {
+    const problem = getCalculusProblem(id);
+    const work = emptyWork(id);
+    const updated = applyExtraction(work, extraction(problem.steps.map(step => [step.id, step.accepted[0]])));
+    for (const [index, step] of problem.steps.entries()) {
+      expect(work.steps[index].label).toBe(step.label);
+      expect(work.steps[index].labelMath).toEqual(step.labelMath);
+      expect(updated.steps[index].labelMath).toEqual(step.labelMath);
+      if (step.labelMath) expect(renderMathExpression(step.labelMath.expression).ok).toBe(true);
+    }
+    expect(work.final.labelMath).toBeUndefined();
+    expect(workInstruction(work, workOutcome(work))).toContain(problem.steps[0].label);
   }
 });
 

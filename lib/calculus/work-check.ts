@@ -1,13 +1,14 @@
 import type { MathExpression } from "./math-expression";
 import { serializeMathExpression } from "./math-rendering";
 import { compareMathExpression, type MathComparison } from "./math-validator";
-import { getCalculusProblem, type CalculusMethod, type CalculusProblemId } from "./problems";
+import { getCalculusProblem, type CalculusMethod, type CalculusProblemId, type WorkStep } from "./problems";
 import type { WorkExtraction } from "./work-extraction";
 
 export type WorkStatus = "missing" | "correct" | "incorrect" | "unsupported";
 export interface WorkItem {
   readonly id: string;
   readonly label: string;
+  readonly labelMath?: WorkStep["labelMath"];
   readonly status: WorkStatus;
   readonly expression: MathExpression | null;
   readonly quote: string | null;
@@ -48,7 +49,10 @@ export function emptyWork(problemId: CalculusProblemId): CalculusWork {
   const problem = getCalculusProblem(problemId);
   return {
     problemId,
-    steps: problem.steps.map(step => blank(step.id, step.label)),
+    steps: problem.steps.map(step => ({
+      ...blank(step.id, step.label),
+      ...(step.labelMath ? { labelMath: step.labelMath } : {}),
+    })),
     final: blank("final", "Final answer"),
     rule: null,
     unclear: null,
@@ -58,26 +62,35 @@ export function emptyWork(problemId: CalculusProblemId): CalculusWork {
 /** Each extraction restates the learner's latest version of what it found. Steps it
  * omits keep their earlier record: the model sees every turn, but may not repeat
  * every step each time. Correctness is decided here, never by the model. */
-export function applyExtraction(work: CalculusWork, extraction: WorkExtraction): CalculusWork {
+export function applyExtraction(
+  work: CalculusWork,
+  extraction: WorkExtraction,
+  { allowIncorrect = true }: { allowIncorrect?: boolean } = {},
+): CalculusWork {
   const problem = getCalculusProblem(work.problemId);
   const steps = work.steps.map(item => {
     const found = extraction.steps.findLast(step => step.stepId === item.id);
     const step = problem.steps.find(candidate => candidate.id === item.id)!;
     if (!found) return item;
     const checked = status(compareMathExpression(found.expression, step.accepted));
+    if (!allowIncorrect && checked === "incorrect") return item;
     return { ...item, status: checked, expression: found.expression, quote: found.quote };
   });
   const rule = extraction.rule
     ? { ...extraction.rule, fits: problem.rules.includes(extraction.rule.method) }
     : work.rule;
-  const final = extraction.final
-    ? {
-        ...work.final,
-        status: status(compareMathExpression(extraction.final.expression, problem.finalForms)),
-        expression: extraction.final.expression,
-        quote: extraction.final.quote,
-      }
-    : work.final;
+  const finalStatus = extraction.final
+    ? status(compareMathExpression(extraction.final.expression, problem.finalForms))
+    : work.final.status;
+  const final =
+    extraction.final && (allowIncorrect || finalStatus !== "incorrect")
+      ? {
+          ...work.final,
+          status: finalStatus,
+          expression: extraction.final.expression,
+          quote: extraction.final.quote,
+        }
+      : work.final;
   return { ...work, steps, final, rule, unclear: extraction.unclear };
 }
 

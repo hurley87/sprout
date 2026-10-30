@@ -1,77 +1,204 @@
 .board {
+  box-sizing: border-box;
+  width: 100%;
   min-width: 0;
-  max-width: 100%;
-  padding: clamp(12px, 3vw, 28px);
-  color: #17332b;
-  background: #fcfdf9;
-  border: 1px solid #b6c8bc;
-  border-radius: 16px;
-  line-height: 1.6;
+  max-width: 780px;
+  padding: 8px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 2px solid var(--line);
+  border-radius: 28px;
+  box-shadow:
+    0 1px 2px rgba(20, 20, 50, 0.04),
+    0 16px 40px -20px rgba(20, 20, 60, 0.18);
   overflow-wrap: anywhere;
 }
-.board h2 {
-  line-height: 1.25;
+.complete {
+  border-color: var(--ok);
 }
 .steps {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   list-style: none;
   padding: 0;
-  margin: 16px 0;
+  margin: 0;
 }
-.steps li {
+.row {
   display: grid;
-  grid-template-columns: 2rem minmax(0, 1fr);
-  gap: 4px 12px;
-  padding: 12px 0;
-  border-bottom: 1px solid #d5dfd8;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 18px;
+  box-sizing: border-box;
+  min-height: 78px;
+  padding: 16px 22px;
+  border-radius: 20px;
+  border-top: 1px solid transparent;
 }
-.steps li:last-child {
-  border-bottom: 0;
+.row + .row {
+  border-top-color: var(--line);
 }
 .mark {
-  grid-row: span 2;
-  font-size: 1.25rem;
-  font-weight: 700;
-  text-align: center;
-}
-.correct .mark {
-  color: #1d6b4c;
-}
-.incorrect .mark {
-  color: #a3382a;
-}
-.unsupported .mark,
-.missing .mark {
-  color: #6a7d75;
+  grid-column: 1;
+  grid-row: 1 / 3;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 36px;
+  height: 36px;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  font-size: 17px;
+  font-weight: 800;
 }
 .label {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+  font-size: 16px;
   font-weight: 600;
 }
-.heard {
-  min-width: 0;
-  overflow-x: auto;
-  font-size: 1.1rem;
+.labelMath {
+  font-size: 17px;
+  white-space: nowrap;
 }
-.final {
-  margin-top: 4px;
-  border-top: 2px solid #b6c8bc;
+.labelMath :global(.katex),
+.expression :global(.katex) {
+  font-size: 1em;
+}
+.heard {
+  grid-column: 3;
+  grid-row: 1 / 3;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  font-size: 27px;
+}
+.placeholder {
+  color: var(--line);
+  font-size: 24px;
+  font-weight: 700;
+}
+.note {
+  grid-column: 2;
+  grid-row: 2;
+  margin-top: 3px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.correct .mark {
+  background: var(--okBg);
+  border-color: var(--okBg);
+  color: var(--ok);
+}
+.row.incorrect {
+  background: var(--lookBg);
+  border-top-color: transparent;
+}
+.incorrect .mark {
+  background: var(--surface);
+  border-color: var(--lookLine);
+  color: var(--look);
+}
+.incorrect .note {
+  color: var(--look);
+}
+.row.unsupported {
+  background: var(--unkBg);
+  border-top-color: transparent;
+}
+.unsupported .mark {
+  background: var(--surface);
+  border-color: var(--unk);
+  color: var(--unk);
+}
+.unsupported .note {
+  color: var(--unk);
+}
+.missing .mark {
+  border: 2px dashed var(--line);
+}
+.missing .label {
+  color: var(--ink2);
+}
+.row.checking {
+  background: var(--chkBg);
+  border-top-color: transparent;
+}
+.checking .mark {
+  border: 2px dotted var(--chk);
+  color: var(--chk);
+}
+.checking .expression {
+  color: var(--ink2);
 }
 .rule {
   display: flex;
-  gap: 12px;
-  align-items: baseline;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 14px 10px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  font-size: 15px;
 }
-.rule .mark {
-  width: 2rem;
+.ruleFits {
+  background: var(--okBg);
+  color: var(--ok);
 }
-.status {
-  font-size: 0.95rem;
-  color: #3b5148;
+.ruleMisfit {
+  background: var(--lookBg);
+  color: var(--look);
+}
+.ruleMark {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  box-sizing: border-box;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 800;
+}
+.ruleMessage {
+  color: var(--ink);
 }
 .done {
-  padding: 12px;
-  background: #e6f4ec;
-  border: 1px solid #8fbfa5;
-  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 4px;
+  padding: 14px 22px;
+  border-radius: 20px;
+  background: var(--okBg);
+  color: var(--ok);
+  font-size: 17px;
+  font-weight: 700;
+}
+.doneMark {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--ok);
+  color: var(--surface);
+  font-size: 15px;
+}
+.advanceTrack {
+  flex: 0 0 120px;
+  height: 4px;
+  margin-left: auto;
+  border-radius: 2px;
+  background: var(--surface);
+  overflow: hidden;
 }
 .srOnly {
   position: absolute;
@@ -80,7 +207,66 @@
   padding: 0;
   margin: -1px;
   overflow: hidden;
-  clip-path: inset(50%);
+  clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+@media (max-width: 720px) {
+  .board {
+    padding: 6px;
+    border-radius: 24px;
+    box-shadow: 0 12px 32px -20px rgba(20, 20, 60, 0.2);
+  }
+  .row {
+    grid-template-columns: 32px minmax(0, 1fr);
+    align-items: start;
+    gap: 4px 14px;
+    padding: 14px;
+    border-radius: 18px;
+  }
+  .mark {
+    grid-row: 1 / 4;
+    width: 32px;
+    height: 32px;
+    font-size: 15px;
+  }
+  .label {
+    font-size: 14px;
+  }
+  .labelMath {
+    font-size: 15px;
+  }
+  .heard {
+    grid-column: 2;
+    grid-row: 2;
+    min-height: 28px;
+    font-size: 22px;
+  }
+  .placeholder {
+    font-size: 20px;
+  }
+  .note {
+    grid-row: 3;
+    margin-top: 0;
+    font-size: 13px;
+  }
+  .rule {
+    display: grid;
+    grid-template-columns: 20px minmax(0, 1fr);
+    gap: 4px 8px;
+    margin: 4px 8px 8px;
+    padding: 12px 14px;
+    font-size: 14px;
+  }
+  .ruleMessage {
+    grid-column: 1 / -1;
+  }
+  .ruleMark {
+    width: 20px;
+    height: 20px;
+    font-size: 11px;
+  }
+  .done {
+    padding: 14px;
+  }
 }
