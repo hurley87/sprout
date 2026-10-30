@@ -574,7 +574,7 @@ export class LessonRuntime {
               this.state.terminalLearnerPending
             )
               this.terminalTranscriptRecovery.arm(this.state, !this.steering);
-            else if (!this.lessonDefinition.conversationFirst || !this.requestedNavigation())
+            else if (!this.calculus && (!this.lessonDefinition.conversationFirst || !this.requestedNavigation()))
               this.answerRecovery.arm(this.state, !this.steering);
           }
           this.scheduleClassification(event.type);

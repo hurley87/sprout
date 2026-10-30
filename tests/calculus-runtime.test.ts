@@ -3,6 +3,9 @@ import type { MathExpression as E } from "../lib/calculus/math-expression";
 import type { WorkExtraction, WorkExtractionInput } from "../lib/calculus/work-extraction";
 import type { ClientCommand, ProviderEvent } from "../lib/events";
 import { CALCULUS_LESSON } from "../lib/lesson-runtime/calculus-lesson";
+import { ANSWER_RECOVERY_WAIT_MS } from "../lib/lesson-runtime/answer-recovery";
+import { COUNTING_LESSON } from "../lib/lesson-runtime/counting-lesson";
+import type { LessonDefinition } from "../lib/lesson-runtime/lesson-definition";
 import { LessonRuntime } from "../lib/lesson-runtime/lesson-runtime";
 import { providerEvents, useRuntimeFakeTimers } from "./helpers/runtime-harness";
 
@@ -52,8 +55,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
-function start() {
-  runtime = new LessonRuntime({} as HTMLAudioElement, () => {}, CALCULUS_LESSON);
+function start(definition: LessonDefinition = CALCULUS_LESSON) {
+  runtime = new LessonRuntime({} as HTMLAudioElement, () => {}, definition);
   runtime.confirmRendered(runtime.snapshot().display);
   events.acknowledgeSteering(transport.send.mock.calls.at(-1)![0].event_id, 0);
 }
@@ -78,6 +81,56 @@ const instructions = () =>
     .map(([command]) => command)
     .filter(command => command.type === "session.instructions.append" && command.event_id.includes(":math:"))
     .map(command => (command as { content: string }).content);
+
+it.each([
+  { definition: CALCULUS_LESSON, recovers: false },
+  { definition: COUNTING_LESSON, recovers: true },
+])("only schedules missing-transcript recovery when enabled for $definition.id", async ({ definition, recovers }) => {
+  start(definition);
+  emit({ type: "output.activity", state: "quiet" });
+  emit({ type: "microphone.activity_started" });
+  emit({ type: "microphone.speech_started" });
+  emit({ type: "microphone.speech_stopped", quietMs: 900 });
+  expect(runtime.report().events).toContainEqual(
+    expect.objectContaining({
+      type: "classifier.blocked",
+      detail: expect.objectContaining({ reason: "missing_current_turn_child_transcript" }),
+    }),
+  );
+  expect(runtime.report().events.some(event => event.type === "answer_recovery.scheduled")).toBe(recovers);
+  await vi.advanceTimersByTimeAsync(ANSWER_RECOVERY_WAIT_MS + 1);
+  expect(runtime.report().events.some(event => event.type === "answer_recovery.requested")).toBe(recovers);
+  expect(runtime.report().events.some(event => event.type === "gpt_live.answer_recovery_append")).toBe(recovers);
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+it("leaves late final answers to the math check instead of recovering over learner speech", async () => {
+  start();
+  emit({ type: "output.activity", state: "quiet" });
+  emit({ type: "microphone.activity_started" });
+  emit({ type: "microphone.speech_started" });
+  emit({ type: "microphone.speech_stopped", quietMs: 900 });
+  await vi.advanceTimersByTimeAsync(3000);
+  emit({ type: "microphone.activity_started" });
+  emit({ type: "microphone.speech_started" });
+  emit({ type: "transcript", speaker: "child", delta: "three x squared minus four", startMs: 100, endMs: 200 });
+  await vi.advanceTimersByTimeAsync(ANSWER_RECOVERY_WAIT_MS);
+  expect(runtime.snapshot().runtime!.childSpeaking).toBe(true);
+  expect(transport.send).toHaveBeenCalledOnce();
+  emit({ type: "microphone.speech_stopped", quietMs: 900 });
+  await vi.advanceTimersByTimeAsync(301);
+  expect(requests).toHaveLength(1);
+  await respond({
+    steps: [step("d-cubic", threeXSquared), step("d-linear", n(4))],
+    final: { expression: final, quote: "q" },
+    unclear: null,
+  });
+  await vi.advanceTimersByTimeAsync(ANSWER_RECOVERY_WAIT_MS + 1);
+  expect(runtime.report().events.some(event => event.type.startsWith("answer_recovery."))).toBe(false);
+  expect(runtime.report().events.some(event => event.type === "gpt_live.answer_recovery_append")).toBe(false);
+  expect(runtime.snapshot().runtime!.phase).toBe("rendering");
+  expect(runtime.report().math!.visits[0].outcome).toBe("completed");
+});
 
 it("checks each spoken turn against the steps and briefs the tutor without confirmation", async () => {
   start();
