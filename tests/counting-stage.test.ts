@@ -17,10 +17,11 @@ describe("authored counting artwork", () => {
     expect(markup).toContain('data-counting-objects="true"');
     expect(markup).toContain(`data-background="${node.object === "duck" ? "pond" : "garden"}"`);
     expect(markup).toContain(`aria-label="${node.quantity} ${node.object}${node.quantity === 1 ? "" : "s"} to count"`);
-    expect(markup.replace(/<[^>]*>/g, "")).not.toMatch(/\d|one|two|three/i);
+    expect(markup.replace(/<[^>]*>/g, "")).not.toMatch(/\d|one|two|three|four/i);
     expect(markup).not.toMatch(/🦆|🦋|<button|\/Downloads\//);
     const images = markup.match(/<img\b[^>]*>/g)!;
-    expect(images).toHaveLength(node.quantity + 1);
+    // The flower meadow is drawn in CSS so no baked-in flowers compete with the counted ones.
+    expect(images).toHaveLength(node.quantity + (node.sceneId === "flowers-bloom" ? 0 : 1));
     for (const image of images) expect(image).toContain('alt=""');
   });
 
@@ -47,14 +48,36 @@ describe("authored counting artwork", () => {
     }
   });
 
-  it("supports four separate flowers without baked-in decorative flowers or new lesson nodes", () => {
-    const node = { id: "future-flower-node", sceneId: "flowers-bloom", object: "flower", quantity: 4 };
+  it("shows four separate flowers on the flower node without baked-in decorative flowers", () => {
+    const node = COUNTING_LESSON_GRAPH["count-4-flowers"];
     const markup = renderToStaticMarkup(createElement(CountingStage, { node }));
     expect(markup.match(/data-counting-object="flower"/g)).toHaveLength(4);
     expect(markup.match(/src="\/counting\/flower.svg"/g)).toHaveLength(4);
     expect(markup).toContain('data-flower-free="true"');
     expect(markup).not.toContain("/counting/garden.svg");
-    expect(Object.keys(COUNTING_LESSON_GRAPH)).toHaveLength(3);
+  });
+
+  it("authors exactly one layout per lesson scene, with matching kind and quantity", () => {
+    const nodes = Object.values(COUNTING_LESSON_GRAPH);
+    expect(Object.keys(COUNTING_SCENES).sort()).toEqual(nodes.map(node => node.sceneId).sort());
+    for (const node of nodes) {
+      const scene = countingScene(node);
+      expect(scene.object).toBe(node.object);
+      expect(scene.objects).toHaveLength(node.quantity);
+    }
+  });
+
+  it("rearranges the familiar butterfly group rather than reusing its layout", () => {
+    const familiar = countingScene(COUNTING_LESSON_GRAPH["count-3-butterflies"]);
+    const moved = countingScene(COUNTING_LESSON_GRAPH["count-3-moved-butterflies"]);
+    expect(moved.objects).toHaveLength(familiar.objects.length);
+    for (const object of moved.objects)
+      expect(familiar.objects.some(other => other.x === object.x && other.y === object.y)).toBe(false);
+    const ducklings = countingScene(COUNTING_LESSON_GRAPH["count-3-ducklings"]);
+    const friends = countingScene(COUNTING_LESSON_GRAPH["count-2-ducks"]);
+    expect(ducklings.background).toBe("pond");
+    for (const object of ducklings.objects)
+      expect(friends.objects.some(other => other.x === object.x && other.y === object.y)).toBe(false);
   });
 
   it("rejects missing artwork or quantity/kind drift instead of silently showing the wrong count", () => {
@@ -76,7 +99,11 @@ describe("authored counting artwork", () => {
       expect(readFileSync(`public/counting/${asset}.svg`, "utf8")).toContain('<svg xmlns="http://www.w3.org/2000/svg"');
     }
     const markup = renderToStaticMarkup(createElement(CountingStage, { node: null }));
-    expect(markup).toContain("Counting complete");
+    expect(markup).toContain("Garden celebration!");
+    expect(markup).toContain('aria-label="Lesson complete"');
+    expect(markup).toContain('data-background="garden"');
     expect(markup).not.toContain("data-counting-object");
+    expect(markup).not.toContain("/counting/flower.svg");
+    expect(markup.replace(/<[^>]*>/g, "")).not.toMatch(/\d|one|two|three|four/i);
   });
 });

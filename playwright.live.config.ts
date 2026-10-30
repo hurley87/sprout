@@ -21,7 +21,8 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: 0,
-  timeout: 120_000,
+  // Six authored scenes per full-lesson case.
+  timeout: 180_000,
   globalTimeout: 600_000,
   expect: { timeout: 15_000 },
   webServer: {

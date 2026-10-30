@@ -3,7 +3,7 @@ import type { WindowEvidence } from "../../helpers/injection-window";
 import { matchesLessonEvent } from "../../helpers/lesson-observer";
 import { scopeFromEvent } from "../../helpers/child-scenario";
 import {
-  assertCompletedLesson,
+  assertLessonProgress,
   classifierEvidence,
   currentChildText,
   detail,
@@ -360,9 +360,11 @@ export function formatButterflySummary(
   return lines.join("\n") + "\n";
 }
 
+/** The butterfly garden is mid-adventure: its success must advance to the authored next scene. */
 export function assertButterflyCompletion(report: Report, landed: WindowEvidence, freshAnswerRecovery = false) {
-  assertCompletedLesson(
+  assertLessonProgress(
     report,
+    "count-3-butterflies",
     false,
     !freshAnswerRecovery && ("noise" in landed.request.audio || landed.request.audio.fixture === "uh")
       ? {

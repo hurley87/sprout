@@ -81,7 +81,10 @@ it("selects exact committed phrases and authored correct/wrong quantities; verif
   for (const [node, correct, wrong] of [
     ["count-1-duck", "one", "two"],
     ["count-2-ducks", "two", "three"],
-    ["count-3-butterflies", "three", "one"],
+    ["count-3-butterflies", "three", "four"],
+    ["count-3-ducklings", "three", "four"],
+    ["count-4-flowers", "four", "one"],
+    ["count-3-moved-butterflies", "three", "four"],
   ] as const) {
     expect(countingAnswer(node, true)).toBe(correct);
     expect(countingAnswer(node, false)).toBe(wrong);

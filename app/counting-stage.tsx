@@ -92,7 +92,12 @@ export function CountingStage({
           )}
         </>
       ) : (
-        <p className={styles.complete}>Counting complete</p>
+        <>
+          <div className={styles.background} data-background="garden" aria-hidden="true">
+            <Image src="/counting/garden.svg" alt="" width={960} height={600} preload />
+          </div>
+          <p className={styles.complete}>Garden celebration! Thanks for counting with Sprout.</p>
+        </>
       )}
     </div>
   );

@@ -1,6 +1,13 @@
 import { validateLessonDefinition, type LessonDefinition } from "./lesson-definition";
 
-export const COUNTING_NODE_IDS = ["count-1-duck", "count-2-ducks", "count-3-butterflies"] as const;
+export const COUNTING_NODE_IDS = [
+  "count-1-duck",
+  "count-2-ducks",
+  "count-3-butterflies",
+  "count-3-ducklings",
+  "count-4-flowers",
+  "count-3-moved-butterflies",
+] as const;
 export type CountingNodeId = (typeof COUNTING_NODE_IDS)[number];
 export const INITIAL_COUNTING_NODE_ID: CountingNodeId = "count-1-duck";
 
@@ -21,19 +28,37 @@ const countingLesson = {
     "count-1-duck": {
       id: "count-1-duck", presentation: { sceneId: "hello-duck", object: "duck", quantity: 1 },
       learningObjective: "Identify the total of one displayed duck.",
-      tutorBrief: "Ask how many ducks the child sees. Allow thinking time and clarify unclear speech. For help, invite the child to point to the duck and count it themselves, then wait. Do not supply a counting word: starting the count reveals the total on this scene.",
+      tutorBrief: "Meet the duck: someone is splashing in the pond. Set the scene in a short, playful sentence without saying how many, then ask how many ducks the child sees. Allow thinking time and clarify unclear speech. For help, invite the child to point to the duck and count it themselves, then wait. Do not supply a counting word: starting the count reveals the total on this scene.",
       onSuccess: { kind: "node", nodeId: "count-2-ducks" },
     },
     "count-2-ducks": {
       id: "count-2-ducks", presentation: { sceneId: "duck-friends", object: "duck", quantity: 2 },
       learningObjective: "Identify the total of two displayed ducks.",
-      tutorBrief: "Ask how many ducks the child sees. If help is needed, invite the child to point to each duck and say the counting words themselves, then wait without starting or finishing the count or giving the total.",
+      tutorBrief: "A friend arrives: a duck friend has come to swim along. Mention the new friend without saying how many ducks there are now, then ask the child to count all the ducks. If help is needed, invite the child to point to each duck and say the counting words themselves, then wait without starting or finishing the count or giving the total.",
       onSuccess: { kind: "node", nodeId: "count-3-butterflies" },
     },
     "count-3-butterflies": {
       id: "count-3-butterflies", presentation: { sceneId: "butterfly-garden", object: "butterfly", quantity: 3 },
       learningObjective: "Identify the total of three displayed butterflies.",
-      tutorBrief: "Ask how many butterflies the child sees. Allow counting. For help, invite the child to point to each butterfly and say the counting words themselves, then wait without starting or finishing the count or giving the total.",
+      tutorBrief: "Butterfly garden: butterflies are visiting the garden. Ask how many butterflies came to visit. Allow counting. For help, invite the child to point to each butterfly and say the counting words themselves, then wait without starting or finishing the count or giving the total.",
+      onSuccess: { kind: "node", nodeId: "count-3-ducklings" },
+    },
+    "count-3-ducklings": {
+      id: "count-3-ducklings", presentation: { sceneId: "duckling-parade", object: "duck", quantity: 3 },
+      learningObjective: "Identify the total of three displayed ducks in a new group.",
+      tutorBrief: "Help the ducklings: little ducks paddle in a line. Ask the child to point to each duckling once and count them themselves, then ask how many ducklings there are. You only hear the child: never say you saw pointing or touching. Then wait without starting or finishing the count or giving the total.",
+      onSuccess: { kind: "node", nodeId: "count-4-flowers" },
+    },
+    "count-4-flowers": {
+      id: "count-4-flowers", presentation: { sceneId: "flowers-bloom", object: "flower", quantity: 4 },
+      learningObjective: "Identify the total of four displayed flowers.",
+      tutorBrief: "Flowers bloom: new flowers popped up. Ask how many flowers bloomed; allow extra time. Help one step at a time, waiting after each: count slowly left to right; point to each flower just once; try again from the first flower. The child says the counting words themselves; help without starting or finishing the count or giving the total. Stay warm; never rush.",
+      onSuccess: { kind: "node", nodeId: "count-3-moved-butterflies" },
+    },
+    "count-3-moved-butterflies": {
+      id: "count-3-moved-butterflies", presentation: { sceneId: "butterflies-move", object: "butterfly", quantity: 3 },
+      learningObjective: "Identify the total of three displayed butterflies in a new arrangement.",
+      tutorBrief: "Butterflies move: butterflies flutter in new places. Ask how many butterflies the child sees now. Never mention earlier scenes or counts. For help, invite the child to point to each butterfly once and count themselves, then wait without starting or finishing the count or giving the total.",
       onSuccess: { kind: "complete" },
     },
   },
@@ -64,11 +89,12 @@ const countingLesson = {
 } as const satisfies LessonDefinition;
 
 export const COUNTING_LESSON: LessonDefinition = validateLessonDefinition(countingLesson);
+type AuthoredCountingNode = (typeof countingLesson.nodes)[CountingNodeId];
 export type CountingLessonNode = {
   readonly id: CountingNodeId;
-  readonly sceneId: "hello-duck" | "duck-friends" | "butterfly-garden";
-  readonly object: "duck" | "butterfly";
-  readonly quantity: 1 | 2 | 3;
+  readonly sceneId: AuthoredCountingNode["presentation"]["sceneId"];
+  readonly object: AuthoredCountingNode["presentation"]["object"];
+  readonly quantity: AuthoredCountingNode["presentation"]["quantity"];
   readonly learningObjective: string;
   readonly tutorBrief: string;
   readonly onSuccess: { readonly kind: "node"; readonly nodeId: CountingNodeId } | { readonly kind: "complete" };

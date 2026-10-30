@@ -2,6 +2,7 @@
 
 import {
   COUNTING_LESSON_GRAPH,
+  COUNTING_NODE_IDS,
   INITIAL_COUNTING_NODE_ID,
   isCountingNodeId,
 } from "@/lib/lesson-runtime/counting-lesson";
@@ -11,6 +12,13 @@ import { useVoiceDemo } from "@/components/voice-demo/use-voice-demo";
 import { VoiceDemoControls } from "@/components/voice-demo/controls";
 import { lessonPresentation } from "./lesson-presentation";
 import { CountingStage } from "./counting-stage";
+
+// Shape and size, not only colour, distinguish finished, current and upcoming scenes.
+const PROGRESS_LEAF = {
+  done: "h-4 w-4 bg-emerald-600",
+  current: "h-6 w-6 bg-emerald-300 ring-2 ring-emerald-800 ring-offset-2",
+  upcoming: "h-4 w-4",
+} as const;
 
 export default function Lesson({
   lessonDefinition,
@@ -31,6 +39,8 @@ export default function Lesson({
   const state = snapshot?.runtime;
   const presentation = lessonPresentation(snapshot);
   const completed = presentation.kind === "complete";
+  // Authored order of the rendered scene; the terminal render has no counting node.
+  const step = node ? COUNTING_NODE_IDS.indexOf(node.id) : COUNTING_NODE_IDS.length;
 
   return (
     <main className="mx-auto w-full max-w-5xl space-y-6 px-3 py-6 text-center sm:p-6">
@@ -39,6 +49,24 @@ export default function Lesson({
         {presentation.message}
       </p>
       <CountingStage node={node} renderToken={display?.token} sceneRef={sceneRef} />
+      <ol aria-label="Adventure progress" className="flex items-center justify-center gap-3">
+        {COUNTING_NODE_IDS.map((id, index) => {
+          const progress = index < step ? "done" : index === step ? "current" : "upcoming";
+          return (
+            <li
+              key={id}
+              data-progress={progress}
+              aria-current={progress === "current" ? "step" : undefined}
+              className={`rounded-[0_80%] border-2 border-emerald-700 ${PROGRESS_LEAF[progress]}`}
+            >
+              <span className="sr-only">
+                Scene {index + 1}
+                {progress === "done" ? ", done" : progress === "current" ? ", playing now" : ""}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
       <VoiceDemoControls
         snapshot={snapshot}
         live={live}

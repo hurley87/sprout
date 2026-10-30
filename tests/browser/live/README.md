@@ -8,7 +8,7 @@ entire directory and starts its server with empty provider credential overrides.
 
 | Selection                           | Behavior and assertion                                                                                                                                                                                         |
 | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@baseline @happy-path`             | All three authored answers; exactly one completion per scene and terminal lesson completion.                                                                                                                   |
+| `@baseline @happy-path`             | All six authored answers; exactly one completion per scene and terminal lesson completion.                                                                                                                     |
 | `@baseline @incorrect-then-correct` | Three ducks on the two-duck node; non-completion decision and three-second hold; fresh two-duck answer recovers.                                                                                               |
 | `@baseline @self-correction`        | Continuous “Three. Uh, I mean two.”; authority must include the settled correction.                                                                                                                            |
 | `@support @help`                    | Help request, classified tutor scaffold, three-second hold, fresh learner answer and full completion.                                                                                                          |
@@ -25,7 +25,8 @@ entire directory and starts its server with empty provider credential overrides.
 
 Butterfly cases first complete the one- and two-duck visits using existing ready
 and completion gates. They then play “Uh, I think, uh, there are three butterflies.” on
-`count-3-butterflies`. Tags `@noise`, `@filler`, `@barge-in`, `@during-output`,
+`count-3-butterflies`. That scene is mid-adventure, so recovery means one legitimate
+advance to the rendered `count-3-ducklings` scene, not lesson completion. Tags `@noise`, `@filler`, `@barge-in`, `@during-output`,
 `@confirmation-quiet` and `@classifier-in-flight` select compact subsets. There is
 one attempt per case, rather than a cross-product of timings.
 
@@ -35,7 +36,7 @@ Supply `OPENAI_API_KEY` and `TYPESAFE_API_KEY` through your secure invoking
 environment. The config checks names without loading credential files. Every
 execution command below can incur **GPT-Live and Jev charges**. Each case opens
 one session and can issue multiple classifier requests; failure still costs
-money. One worker, zero retries, 120 seconds per test and 600 seconds overall
+money. One worker, zero retries, 180 seconds per test and 600 seconds overall
 bound execution. Prefer one case. The overall limit can interrupt a full suite.
 Port 3100 must be available; the config refuses to reuse a running server.
 
@@ -135,7 +136,7 @@ only after replaying the exact candidate-start/discard reducer states, proving
 no intervening confirmed speech/child transcript, and requiring a new classifier
 request/result with the current turn/revision. Old semantic authority is never
 restored. Confirmed speech cannot use this candidate allowance; genuine barge-in
-cannot use it at all. Noise/filler strict regressions additionally demand terminal completion within
+cannot use it at all. Noise/filler strict regressions additionally demand that advance within
 eight seconds after injection start. Probes can retain a live held or bounded
 starvation outcome; `recoveryVerified` is true only after full safe completion.
 Eight seconds without a decision is reported as **bounded starvation or pending**,

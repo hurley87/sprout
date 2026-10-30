@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ConversationStateProposal } from "../lib/lesson-runtime/conversation-state-classifier";
-import { COUNTING_LESSON_GRAPH, type CountingNodeId } from "../lib/lesson-runtime/counting-lesson";
+import { COUNTING_LESSON_GRAPH, COUNTING_NODE_IDS, type CountingNodeId } from "../lib/lesson-runtime/counting-lesson";
 import {
   classificationSource,
   createLessonRuntime,
@@ -838,23 +838,23 @@ describe("transcript-state lesson runtime authority", () => {
   it("follows all authored edges to a terminal render and never releases a future node", () => {
     const runtime = new Runtime();
     const tokens: string[] = [];
-    for (const nodeId of ["count-1-duck", "count-2-ducks", "count-3-butterflies"]) {
+    for (const nodeId of COUNTING_NODE_IDS) {
       expect(runtime.state.nodeId).toBe(nodeId);
       runtime.pending();
       tokens.push(runtime.state.pendingRender!.identity.token);
-      if (nodeId === "count-3-butterflies") {
+      if (nodeId === "count-3-moved-butterflies") {
         expect(runtime.state.lessonComplete).toBe(true);
         expect(runtime.state.pendingRender!.identity).toEqual({
-          token: '["test-runtime",4]',
+          token: '["test-runtime",7]',
           nodeId: null,
           sceneId: null,
         });
-      }
+      } else expect(runtime.state.lessonComplete).toBe(false);
       runtime.confirm();
     }
-    expect(new Set(tokens).size).toBe(3);
+    expect(new Set(tokens).size).toBe(6);
     expect(runtime.state).toMatchObject({ phase: "complete", lessonComplete: true, pendingRender: null });
-    expect(runtime.result.effects).toEqual([{ type: "lesson.completed", renderToken: '["test-runtime",4]' }]);
+    expect(runtime.result.effects).toEqual([{ type: "lesson.completed", renderToken: '["test-runtime",7]' }]);
     const state = runtime.state;
     expect(runtime.tick().state).toBe(state);
     expect(runtime.childStart().state).toBe(state);
@@ -863,14 +863,19 @@ describe("transcript-state lesson runtime authority", () => {
 
   it("an interrupted terminal render does not leave the lesson complete", () => {
     const runtime = new Runtime();
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < COUNTING_NODE_IDS.length - 1; i++) {
       runtime.pending();
       runtime.confirm();
     }
     runtime.pending();
+    expect(runtime.state.lessonComplete).toBe(true);
     const { identity, origin } = runtime.state.pendingRender!;
     runtime.send({ type: "child.turn.started", source: origin });
-    expect(runtime.state).toMatchObject({ phase: "stopped", nodeId: "count-3-butterflies", lessonComplete: false });
+    expect(runtime.state).toMatchObject({
+      phase: "stopped",
+      nodeId: "count-3-moved-butterflies",
+      lessonComplete: false,
+    });
     expect(runtime.send({ type: "render.confirmed", runtimeId: runtime.state.runtimeId, identity }).effects).toEqual(
       [],
     );

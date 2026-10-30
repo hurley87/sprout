@@ -23,7 +23,7 @@ import {
   runtimeSource,
   type LessonRuntimeEvent,
 } from "./helpers/counting-runtime";
-import { COUNTING_NODE_IDS } from "../lib/lesson-runtime/counting-lesson";
+import { COUNTING_LESSON_GRAPH, COUNTING_NODE_IDS } from "../lib/lesson-runtime/counting-lesson";
 // This offline builder exercises the original confirmation-era report assertions.
 import { LEGACY_COUNTING_LESSON as COUNTING_LESSON } from "./helpers/counting-runtime";
 import type { LessonDiagnostic } from "../lib/lesson-runtime/lesson-runtime";
@@ -46,6 +46,9 @@ it("live baseline answers match each scene, including butterflies on the final n
     "count-1-duck": "I see one duck.",
     "count-2-ducks": "I see two ducks.",
     "count-3-butterflies": "I see three butterflies.",
+    "count-3-ducklings": "I see three ducks.",
+    "count-4-flowers": "I see four flowers.",
+    "count-3-moved-butterflies": "I see three butterflies.",
   });
   expect(manifest.fixtures["answer-three-ducks"].text).toBe("I see three ducks.");
   expect(manifest.fixtures["answer-three-ducks"].sha256).not.toBe(manifest.fixtures["answer-three"].sha256);
@@ -120,7 +123,8 @@ function completedReport(correction = false, discardedNoise = false): Report {
     log("output.activity", { state: "quiet" });
     apply({ type: "output.activity", source: runtimeSource(state), state: "quiet", atMs: ++clock });
     const source = classificationSource(state)!;
-    const child = correction && index === 1 ? "Three. Uh, I mean two." : ["One.", "Two.", "Three."][index];
+    const child =
+      correction && index === 1 ? "Three. Uh, I mean two." : `${["One", "Two", "Three", "Four"][COUNTING_LESSON_GRAPH[node].quantity - 1]}.`;
     log("classifier.started", { transcript: `Child: ${child}\nTutor: confirmation in arbitrary words` }, source);
     const outputs: ConversationStateOutputs = {
       objectiveState: {
@@ -688,7 +692,8 @@ it.each(["cancelled authority", "stale revision", "duplicate completion", "rende
       });
     if (fault === "stale revision")
       report.events.find(e => e.type === "classifier.result" && e.visitId === 3)!.transcriptRevision++;
-    if (fault === "duplicate completion") report.events.push(transitions(report.events).at(-1)!);
+    if (fault === "duplicate completion")
+      report.events.push(transitions(report.events).find(e => detail<Change>(e).before.visitId === 3)!);
     if (fault === "render ordering")
       report.events = report.events.filter(e => !(e.type === "render.confirmed" && e.visitId === 4));
     const summary = butterflySummary(report, landed, 9000, fault === "genuine interruption");

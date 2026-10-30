@@ -5,4 +5,7 @@ export const LIVE_CORRECT_ANSWERS = {
   "count-1-duck": "answer-one",
   "count-2-ducks": "answer-two",
   "count-3-butterflies": "answer-three",
+  "count-3-ducklings": "answer-three-ducks",
+  "count-4-flowers": "answer-four-flowers",
+  "count-3-moved-butterflies": "answer-three",
 } as const satisfies Record<CountingNodeId, SpeechFixture>;
