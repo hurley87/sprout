@@ -182,6 +182,22 @@
   cursor: pointer;
 }
 
+.diagnostics {
+  min-height: 44px;
+  margin-bottom: 24px;
+  padding: 10px 20px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--primary);
+  font: inherit;
+}
+
+.diagnostics:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .home {
   display: inline-flex;
   align-items: center;

@@ -170,6 +170,11 @@ export default function CalculusDemo({ debug = false }: { debug?: boolean }) {
             </div>
           </>
         )}
+        {debug ? (
+          <button type="button" className={styles.diagnostics} disabled={!snapshot} onClick={download}>
+            Download diagnostics
+          </button>
+        ) : null}
         {snapshot?.error ? (
           <p className={styles.error} role="alert">
             {snapshot.error}
