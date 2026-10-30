@@ -1,0 +1,57 @@
+.stage {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  aspect-ratio: 8 / 5;
+  overflow: hidden;
+  border: 2px solid #d7e4cd;
+  border-radius: clamp(20px, 4vw, 40px);
+  background: #e1f1d7;
+  box-shadow: 0 8px 0 #dfe6d5;
+}
+
+.background,
+.objects {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.background img,
+.object img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.meadow {
+  background:
+    radial-gradient(ellipse 95% 65% at 30% 115%, #8bc39b 99%, transparent 100%),
+    radial-gradient(ellipse 100% 65% at 70% 130%, #9ad0a0 99%, transparent 100%), linear-gradient(#fbf8f0, #e1f1d7);
+}
+
+.object {
+  position: absolute;
+}
+
+.loading,
+.complete {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  margin: 0;
+  padding: 24px;
+  background: #f5faeff2;
+  color: #294936;
+  font-size: clamp(18px, 3vw, 28px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage,
+  .stage * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

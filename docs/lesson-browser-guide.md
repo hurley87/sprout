@@ -18,6 +18,18 @@ diagnostic. Counting's labels and thresholds are unchanged.
 
 ## Run and collect
 
+The counting artwork lives in `public/counting/`. `app/counting-scenes.ts` authors
+normalized object centers and widths on an 8:5 stage; each independently rendered
+character stays separate from its background. Add a matching layout when authoring
+a new scene: a quantity/kind mismatch is rejected rather than silently miscounted.
+The unused `flowers-bloom` layout supports four standalone flowers over a simplified,
+flower-free CSS meadow (not the decorative flowers in `garden.svg`). It does not
+add a lesson node. Artwork loads eagerly into fixed aspect boxes; a picture-loading
+or recovery message covers partial artwork. Render confirmation still follows the
+committed stage's exact identity attributes, not image callbacks. Characters are
+not tap controls; voice remains authoritative. The stage is static and disables
+future CSS animation/transition under reduced motion.
+
 1. Run `npm run dev` with the existing local configuration. GPT-Live needs
    `OPENAI_API_KEY`, and Jev needs `TYPESAFE_API_KEY`. Do not put credentials in
    diagnostics. No database deployment or server is needed.
@@ -25,7 +37,7 @@ diagnostic. Counting's labels and thresholds are unchanged.
    with microphone support. Keep this tab visible. Headphones can help separate
    microphone activity from tutor playback in the first attempt.
    The ordinary `/` route welcomes the child with one large **Play** button,
-   one emoji counting scene, and no transcript, gate state, events, or export.
+   one illustrated counting scene, and no transcript, gate state, events, or export.
    Only the exact `?debug=1` flag adds developer diagnostics; the opt-in observation
    bridge works independently on either view. During a session, **Stop** is secondary.
 3. Click **Play** and allow microphone access. One duck is rendered

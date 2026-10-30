@@ -10,6 +10,7 @@ import { LESSON_TIMING } from "@/lib/lesson-runtime/lesson-runtime";
 import { useVoiceDemo } from "@/components/voice-demo/use-voice-demo";
 import { VoiceDemoControls } from "@/components/voice-demo/controls";
 import { lessonPresentation } from "./lesson-presentation";
+import { CountingStage } from "./counting-stage";
 
 export default function Lesson({
   lessonDefinition,
@@ -32,32 +33,12 @@ export default function Lesson({
   const completed = presentation.kind === "complete";
 
   return (
-    <main className="mx-auto w-full max-w-5xl space-y-6 p-6 text-center">
+    <main className="mx-auto w-full max-w-5xl space-y-6 px-3 py-6 text-center sm:p-6">
       <h1>Sprout</h1>
       <p role={presentation.kind === "error" ? "alert" : "status"} className="text-xl">
         {presentation.message}
       </p>
-      <div
-        ref={sceneRef}
-        className="flex min-h-80 flex-wrap items-center justify-center gap-6 rounded-3xl bg-emerald-50 p-8 text-8xl sm:min-h-96 sm:text-9xl"
-        role="img"
-        aria-label={
-          node ? `${node.quantity} ${node.object}${node.quantity === 1 ? "" : "s"} to count` : "Lesson complete"
-        }
-        data-render-token={display?.token}
-        data-node-id={nodeId ?? "complete"}
-        data-scene-id={node?.sceneId ?? "complete"}
-      >
-        {node ? (
-          Array.from({ length: node.quantity }, (_, index) => (
-            <span aria-hidden="true" key={`${node.id}:${index}`}>
-              {node.object === "duck" ? "🦆" : "🦋"}
-            </span>
-          ))
-        ) : (
-          <span className="text-2xl">Counting complete</span>
-        )}
-      </div>
+      <CountingStage node={node} renderToken={display?.token} sceneRef={sceneRef} />
       <VoiceDemoControls
         snapshot={snapshot}
         live={live}

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" role="img" aria-labelledby="title desc">
+  <title id="title">Friendly yellow duckling</title>
+  <desc id="desc">A smiling duckling with a round head, orange beak, and tiny wings.</desc>
+  <defs>
+    <linearGradient id="body" x1="0" y1="0" x2="0.8" y2="1"><stop stop-color="#FFE98D"/><stop offset="0.65" stop-color="#FFD557"/><stop offset="1" stop-color="#FFC94E"/></linearGradient>
+    <linearGradient id="head" x1="0" y1="0" x2="0.8" y2="1"><stop stop-color="#FFF3AC"/><stop offset="1" stop-color="#FFDC67"/></linearGradient>
+    <linearGradient id="beak" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#FFA65A"/><stop offset="1" stop-color="#F17C42"/></linearGradient>
+  </defs>
+  <ellipse cx="164" cy="280" rx="90" ry="12" fill="#455B55" opacity=".10"/>
+  <path d="M100 243 Q74 241 67 220 Q62 202 79 196 Q85 215 105 210Z" fill="#F7C449" stroke="#A87945" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M90 182 C110 154 177 150 223 172 C266 192 265 239 233 257 C199 279 126 271 96 251 C68 234 71 202 90 182Z" fill="url(#body)" stroke="#986B47" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M115 204 C146 187 185 204 193 224 C202 250 176 256 155 250 C130 244 118 225 115 204Z" fill="#FFE38A" stroke="#B57B3F" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M138 209 Q160 215 173 232" fill="none" stroke="#F4BC50" stroke-width="5" stroke-linecap="round"/>
+  <path d="M107 142 C107 93 146 60 188 63 C230 66 251 99 244 143 C238 188 207 203 169 198 C133 194 108 176 107 142Z" fill="url(#head)" stroke="#986B47" stroke-width="5"/>
+  <path d="M165 67 Q155 50 168 41 Q171 55 183 60 Q188 42 201 43 Q195 59 201 67" fill="#FFE785" stroke="#986B47" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M220 142 C235 135 257 138 271 148 Q280 157 266 168 Q241 181 218 165Z" fill="url(#beak)" stroke="#986B47" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M226 155 Q245 157 263 153" fill="none" stroke="#D8753F" stroke-width="3.2" stroke-linecap="round"/>
+  <ellipse cx="191" cy="131" rx="7.8" ry="10.5" fill="#45392F"/>
+  <circle cx="194" cy="126" r="3.1" fill="white"/>
+  <ellipse cx="152" cy="155" rx="13" ry="8" fill="#F5A388" opacity=".48"/>
+  <ellipse cx="218" cy="158" rx="7" ry="5" fill="#F5A388" opacity=".30"/>
+  <path d="M142 268 Q138 283 130 286 M149 270 Q151 284 160 287" fill="none" stroke="#EFA050" stroke-width="7" stroke-linecap="round"/>
+  <path d="M208 269 Q210 283 204 287 M217 266 Q221 279 230 283" fill="none" stroke="#EFA050" stroke-width="7" stroke-linecap="round"/>
+</svg>

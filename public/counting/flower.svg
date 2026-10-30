@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 320" role="img" aria-labelledby="title desc">
+  <title id="title">Cheerful pink flower</title>
+  <desc id="desc">A smiling flower with soft pink petals, a golden center, green stem, and two leaves.</desc>
+  <defs>
+    <linearGradient id="petal" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#FFD7E9"/><stop offset="1" stop-color="#F29BC1"/></linearGradient>
+    <linearGradient id="center" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#FFEAA0"/><stop offset="1" stop-color="#F7C75F"/></linearGradient>
+    <linearGradient id="stem" x1="0" y1="0" x2="0.9" y2="1"><stop stop-color="#89D07E"/><stop offset="1" stop-color="#4E9B62"/></linearGradient>
+    <linearGradient id="leaf" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#A8E08C"/><stop offset="1" stop-color="#64B26C"/></linearGradient>
+  </defs>
+  <ellipse cx="144" cy="292" rx="72" ry="10" fill="#455B55" opacity=".08"/>
+  <path d="M140 247 C140 215 139 186 140 156 C141 136 146 123 154 114" fill="none" stroke="url(#stem)" stroke-width="11" stroke-linecap="round"/>
+  <path d="M148 189 C178 174 203 177 208 190 C212 204 189 213 158 211" fill="url(#leaf)" stroke="#5E8F60" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M135 214 C106 196 81 196 73 208 C66 221 87 234 122 232" fill="url(#leaf)" stroke="#5E8F60" stroke-width="4" stroke-linejoin="round"/>
+
+  <g transform="translate(146 96)">
+    <ellipse cx="0" cy="-42" rx="28" ry="38" fill="url(#petal)" stroke="#9E7282" stroke-width="4"/>
+    <ellipse cx="29" cy="-28" rx="28" ry="38" transform="rotate(45 29 -28)" fill="url(#petal)" stroke="#9E7282" stroke-width="4"/>
+    <ellipse cx="42" cy="0" rx="28" ry="38" transform="rotate(90 42 0)" fill="url(#petal)" stroke="#9E7282" stroke-width="4"/>
+    <ellipse cx="29" cy="28" rx="28" ry="38" transform="rotate(135 29 28)" fill="url(#petal)" stroke="#9E7282" stroke-width="4"/>
+    <ellipse cx="0" cy="42" rx="28" ry="38" fill="url(#petal)" stroke="#9E7282" stroke-width="4"/>
+    <ellipse cx="-29" cy="28" rx="28" ry="38" transform="rotate(-135 -29 28)" fill="url(#petal)" stroke="#9E7282" stroke-width="4"/>
+    <ellipse cx="-42" cy="0" rx="28" ry="38" transform="rotate(-90 -42 0)" fill="url(#petal)" stroke="#9E7282" stroke-width="4"/>
+    <ellipse cx="-29" cy="-28" rx="28" ry="38" transform="rotate(-45 -29 -28)" fill="url(#petal)" stroke="#9E7282" stroke-width="4"/>
+    <circle cx="0" cy="0" r="38" fill="url(#center)" stroke="#A48353" stroke-width="5"/>
+    <circle cx="-10" cy="-6" r="4.2" fill="#4B3C39"/>
+    <circle cx="10" cy="-6" r="4.2" fill="#4B3C39"/>
+    <path d="M-11 10 Q0 20 11 10" fill="none" stroke="#9C6F4D" stroke-width="3" stroke-linecap="round"/>
+    <ellipse cx="-18" cy="11" rx="7" ry="4.5" fill="#F6B1A4" opacity=".45"/>
+    <ellipse cx="18" cy="11" rx="7" ry="4.5" fill="#F6B1A4" opacity=".45"/>
+    <circle cx="-6" cy="-18" r="3.5" fill="#F4D77A" opacity=".8"/>
+    <circle cx="11" cy="-14" r="3" fill="#F4D77A" opacity=".75"/>
+    <circle cx="7" cy="2" r="2.5" fill="#F4D77A" opacity=".75"/>
+    <circle cx="-14" cy="4" r="3" fill="#F4D77A" opacity=".75"/>
+  </g>
+</svg>
