@@ -29,8 +29,8 @@ export interface CalculusCheck {
   readonly extraction: WorkExtraction | null;
   readonly outcome: string | null;
   readonly instruction: string | null;
-  /** False when the learner said more while this check ran; its result is shown but
-   * the tutor is briefed by the next check. */
+  /** False when the learner said more or is not quiet; incorrect results are
+   * withheld and the tutor is briefed by the next check. */
   readonly current: boolean;
 }
 export interface CalculusVisit {
@@ -227,14 +227,14 @@ export class CalculusRuntime {
       return;
     }
     this.request = undefined;
-    // Words spoken during the check make its feedback out of date: still show its
-    // result, but brief the tutor only from a check that covers everything said.
+    // Out-of-date checks can add correct work, but cannot introduce incorrect work.
     const current = key === substance(this.turns().learnerTurns) && this.context().quiet;
     let outcome = null,
       instruction = null;
     if (extraction) {
-      this.lastChecked = key;
-      visit.work = applyExtraction(visit.work, extraction);
+      this.lastChecked = current ? key : null;
+      visit.work = applyExtraction(visit.work, extraction, { allowIncorrect: current });
+      // Log feedback from the filtered work; retain the raw extraction for diagnosis.
       const result = workOutcome(visit.work);
       outcome = result.kind;
       instruction = workInstruction(visit.work, result);

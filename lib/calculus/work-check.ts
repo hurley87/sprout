@@ -62,26 +62,35 @@ export function emptyWork(problemId: CalculusProblemId): CalculusWork {
 /** Each extraction restates the learner's latest version of what it found. Steps it
  * omits keep their earlier record: the model sees every turn, but may not repeat
  * every step each time. Correctness is decided here, never by the model. */
-export function applyExtraction(work: CalculusWork, extraction: WorkExtraction): CalculusWork {
+export function applyExtraction(
+  work: CalculusWork,
+  extraction: WorkExtraction,
+  { allowIncorrect = true }: { allowIncorrect?: boolean } = {},
+): CalculusWork {
   const problem = getCalculusProblem(work.problemId);
   const steps = work.steps.map(item => {
     const found = extraction.steps.findLast(step => step.stepId === item.id);
     const step = problem.steps.find(candidate => candidate.id === item.id)!;
     if (!found) return item;
     const checked = status(compareMathExpression(found.expression, step.accepted));
+    if (!allowIncorrect && checked === "incorrect") return item;
     return { ...item, status: checked, expression: found.expression, quote: found.quote };
   });
   const rule = extraction.rule
     ? { ...extraction.rule, fits: problem.rules.includes(extraction.rule.method) }
     : work.rule;
-  const final = extraction.final
-    ? {
-        ...work.final,
-        status: status(compareMathExpression(extraction.final.expression, problem.finalForms)),
-        expression: extraction.final.expression,
-        quote: extraction.final.quote,
-      }
-    : work.final;
+  const finalStatus = extraction.final
+    ? status(compareMathExpression(extraction.final.expression, problem.finalForms))
+    : work.final.status;
+  const final =
+    extraction.final && (allowIncorrect || finalStatus !== "incorrect")
+      ? {
+          ...work.final,
+          status: finalStatus,
+          expression: extraction.final.expression,
+          quote: extraction.final.quote,
+        }
+      : work.final;
   return { ...work, steps, final, rule, unclear: extraction.unclear };
 }
 

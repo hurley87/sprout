@@ -200,6 +200,99 @@ it("finishes a check while the learner keeps talking, then rechecks everything s
   expect(instructions()).toHaveLength(1);
 });
 
+it.each([threeXSquared, n(3)])(
+  "withholds stale three-times-one feedback, then applies a current check (%j)",
+  async expression => {
+    start();
+    await learner("I bring the three down, so three times one is");
+    emit({ type: "microphone.speech_started" });
+    emit({ type: "transcript", speaker: "child", delta: "three x squared", startMs: time, endMs: time + 100 });
+    await respond({
+      steps: [{ ...step("d-cubic", { op: "multiply", args: [n(3), n(1)] }), quote: "three times one" }],
+      final: { expression: n(3), quote: "three times one" },
+      unclear: null,
+    });
+    expect(statuses()).toEqual(["missing", "missing", "missing"]);
+    expect(work().steps[0].expression).toBeNull();
+    expect(work().final.expression).toBeNull();
+    expect(instructions()).toHaveLength(0);
+    expect(runtime.report().math!.visits[0].checks[0]).toMatchObject({
+      current: false,
+      outcome: "in-progress",
+      extraction: { steps: [{ quote: "three times one" }] },
+    });
+    expect(runtime.report().math!.visits[0].checks[0].instruction).not.toContain("not correct");
+    emit({ type: "microphone.speech_stopped", quietMs: 900 });
+    await vi.advanceTimersByTimeAsync(301);
+    expect(requests).toHaveLength(2);
+    expect(requests[1].input.learnerTurns.map(turn => turn.text).join(" ")).toContain("three x squared");
+    const correct = expression === threeXSquared;
+    await respond({
+      steps: [step("d-cubic", expression)],
+      final: { expression: correct ? final : n(3), quote: "current final" },
+      unclear: null,
+    });
+    expect(statuses()).toEqual([correct ? "correct" : "incorrect", "missing", correct ? "correct" : "incorrect"]);
+    expect(runtime.report().math!.visits[0].checks[1].current).toBe(true);
+    expect(instructions().at(-1)?.includes("not correct")).toBe(!correct);
+  },
+);
+
+it.each([threeXSquared, n(3)])(
+  "keeps previous step and final records when stale mismatches arrive (%j)",
+  async expression => {
+    start();
+    await learner("my cubic derivative and final answer");
+    await respond({
+      steps: [step("d-cubic", expression)],
+      final: { expression: final, quote: "earlier final" },
+      unclear: null,
+    });
+    const previous = work();
+    await learner("three times one is");
+    emit({ type: "microphone.speech_started" });
+    await respond({
+      steps: [step("d-cubic", n(1)), step("d-linear", n(4))],
+      final: { expression: n(1), quote: "one" },
+      unclear: null,
+    });
+    expect(work().steps[0]).toEqual(previous.steps[0]);
+    expect(work().final).toEqual(previous.final);
+    expect(work().steps[1].status).toBe("correct");
+  },
+);
+
+it("rechecks after becoming quiet even when resumed speech only adds filler", async () => {
+  start();
+  await learner("three times one is");
+  emit({ type: "microphone.speech_started" });
+  await respond({ steps: [step("d-cubic", n(3))], final: null, unclear: null });
+  expect(statuses()[0]).toBe("missing");
+  expect(runtime.report().math!.visits[0].checks[0].current).toBe(false);
+  emit({ type: "transcript", speaker: "child", delta: "um", startMs: time, endMs: time + 100 });
+  emit({ type: "microphone.speech_stopped", quietMs: 900 });
+  await vi.advanceTimersByTimeAsync(301);
+  expect(requests).toHaveLength(2);
+  expect(requests[1].input.learnerTurns.map(turn => turn.text)).toContain("um");
+  await respond({ steps: [step("d-cubic", n(3))], final: null, unclear: null });
+  expect(statuses()[0]).toBe("incorrect");
+  expect(runtime.report().math!.visits[0].checks[1].current).toBe(true);
+});
+
+it("still detects completion from stale correct steps and final answers", async () => {
+  start();
+  await learner("three x squared, minus four, so three x squared minus four");
+  emit({ type: "microphone.speech_started" });
+  await respond({
+    steps: [step("d-cubic", threeXSquared), step("d-linear", n(4))],
+    final: { expression: final, quote: "three x squared minus four" },
+    unclear: null,
+  });
+  expect(statuses()).toEqual(["correct", "correct", "correct"]);
+  expect(runtime.snapshot().math!.complete).toBe(true);
+  expect(runtime.report().math!.visits[0].checks[0]).toMatchObject({ current: false, outcome: "complete" });
+});
+
 it("does not restart a running check when the tutor speaks", async () => {
   start();
   await learner("three x squared");
