@@ -56,6 +56,7 @@ export class CalculusRuntime {
   private consumedFragments = new Set<number>();
   private timer?: ReturnType<typeof setTimeout>;
   private request?: AbortController;
+  private requestKey: string | null = null;
   private lastChecked: string | null = null;
   private lastInstruction: string | null = null;
   private completed = false;
@@ -128,7 +129,7 @@ export class CalculusRuntime {
   }
 
   /** Learners pause mid-thought for about a second, shorter than a check takes, so
-   * new speech never cancels a check: it finishes, and the next one re-reads every turn.
+   * speech start alone never cancels a check; a substantive finished turn can.
    * Raw microphone activity (often noise or tutor echo) does not even delay a check. */
   onSpeechStarted(confirmed: boolean) {
     if (confirmed) clearTimeout(this.timer);
@@ -166,6 +167,10 @@ export class CalculusRuntime {
       this.cancelCheck();
       return false;
     }
+    const key = substance(this.turns().learnerTurns);
+    // Always supersede for new substance at turn end, never for speech or filler.
+    // Each replacement re-reads the visit; after the last substantive turn it can finish.
+    if (this.request && key && key !== this.requestKey) this.cancelCheck();
     const visitId = state.visitId;
     this.timer = setTimeout(() => {
       const current = this.context();
@@ -203,27 +208,40 @@ export class CalculusRuntime {
     this.recheck = false;
     const abort = new AbortController();
     this.request = abort;
+    this.requestKey = key;
     const requestId = crypto.randomUUID();
     const input: WorkExtractionInput = { problemId: visit.problemId, learnerTurns, tutorTurns };
     this.log("calculus.check_started", { requestId, input });
     this.publish();
     let status = "provider-failure";
     let extraction: WorkExtraction | null = null;
+    let timing: { extractionMs: number } | undefined;
+    const timeout = AbortSignal.timeout(EXTRACTION_LIMITS.clientTimeoutMs);
     try {
       const response = await fetch("/api/calculus-work", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
-        signal: AbortSignal.any([abort.signal, AbortSignal.timeout(EXTRACTION_LIMITS.timeoutMs)]),
+        signal: AbortSignal.any([abort.signal, timeout]),
       });
-      const body = (await response.json()) as { status?: string; extraction?: WorkExtraction };
+      const body = (await response.json()) as {
+        status?: string;
+        extraction?: WorkExtraction;
+        timing?: { extractionMs?: number };
+      };
+      if (
+        typeof body?.timing?.extractionMs === "number" &&
+        Number.isFinite(body.timing.extractionMs) &&
+        body.timing.extractionMs >= 0
+      )
+        timing = { extractionMs: body.timing.extractionMs };
       status = typeof body?.status === "string" ? body.status : "malformed";
       if (status === "ok" && body.extraction) extraction = body.extraction;
     } catch {
-      status = abort.signal.aborted ? "cancelled" : "provider-failure";
+      status = abort.signal.aborted ? "cancelled" : timeout.aborted ? "timeout" : "provider-failure";
     }
     if (this.request !== abort || abort.signal.aborted || this.visit !== visit) {
-      this.log("calculus.check_ended", { requestId, status: "stale" });
+      this.log("calculus.check_ended", { requestId, status: "stale", timing });
       return;
     }
     this.request = undefined;
@@ -247,7 +265,7 @@ export class CalculusRuntime {
       } else if (current && instruction !== this.lastInstruction) this.instruct(instruction);
     }
     visit.checks.push({ requestId, learnerTurns, status, extraction, outcome, instruction, current });
-    this.log("calculus.check_ended", { requestId, status, extraction, work: visit.work, outcome, current });
+    this.log("calculus.check_ended", { requestId, status, extraction, work: visit.work, outcome, current, timing });
     this.publish();
     if (this.recheck && this.context().quiet) void this.check();
   }

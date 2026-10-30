@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { MathExpression as E } from "../lib/calculus/math-expression";
-import type { WorkExtraction, WorkExtractionInput } from "../lib/calculus/work-extraction";
+import { EXTRACTION_LIMITS, type WorkExtraction, type WorkExtractionInput } from "../lib/calculus/work-extraction";
 import type { ClientCommand, ProviderEvent } from "../lib/events";
 import { CALCULUS_LESSON } from "../lib/lesson-runtime/calculus-lesson";
 import { ANSWER_RECOVERY_WAIT_MS } from "../lib/lesson-runtime/answer-recovery";
@@ -53,6 +53,7 @@ beforeEach(() => {
 afterEach(() => {
   runtime?.stop();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   vi.useRealTimers();
 });
 function start(definition: LessonDefinition = CALCULUS_LESSON) {
@@ -251,6 +252,111 @@ it("finishes a check while the learner keeps talking, then rechecks everything s
   await respond({ steps: [step("d-cubic", threeXSquared), step("d-linear", n(4))], final: null, unclear: null });
   expect(statuses()).toEqual(["correct", "correct", "missing"]);
   expect(instructions()).toHaveLength(1);
+});
+
+it("supersedes in-flight checks after substantive turns end and debounces the latest full visit", async () => {
+  start();
+  await learner("three x");
+  emit({ type: "microphone.speech_started" });
+  emit({ type: "transcript", speaker: "child", delta: "squared", startMs: time, endMs: time + 100 });
+  expect(requests[0].signal.aborted).toBe(false);
+  emit({ type: "microphone.speech_stopped", quietMs: 900 });
+  expect(requests[0].signal.aborted).toBe(true);
+  expect(requests).toHaveLength(1);
+  await vi.advanceTimersByTimeAsync(301);
+  expect(requests).toHaveLength(2);
+  expect(runtime.snapshot().math!.checking).toBe(true);
+  expect(requests[1].signal.aborted).toBe(false);
+  time += 200;
+  await learner("minus four, so three x squared minus four");
+  expect(requests[1].signal.aborted).toBe(true);
+  expect(requests).toHaveLength(3);
+  expect(requests[2].input.learnerTurns.map(turn => turn.text)).toEqual([
+    "three x",
+    "squared",
+    "minus four, so three x squared minus four",
+  ]);
+  expect(runtime.report().events.filter(event => event.type === "calculus.check_ended")).toMatchObject([
+    { detail: { status: "stale" } },
+    { detail: { status: "stale" } },
+  ]);
+  expect(runtime.report().math!.visits[0].checks).toHaveLength(0);
+  await respond({
+    steps: [step("d-cubic", threeXSquared), step("d-linear", n(4))],
+    final: { expression: final, quote: "three x squared minus four" },
+    unclear: null,
+  });
+  expect(runtime.snapshot().math!.complete).toBe(true);
+});
+
+it("does not supersede an in-flight check for noise, speech without text, or filler", async () => {
+  start();
+  await learner("three x squared");
+  emit({ type: "microphone.activity_started" });
+  emit({ type: "microphone.speech_started" });
+  emit({ type: "microphone.speech_stopped", quietMs: 900 });
+  await vi.advanceTimersByTimeAsync(301);
+  expect(requests).toHaveLength(1);
+  expect(requests[0].signal.aborted).toBe(false);
+  await learner("[tongue click] Um, and...");
+  expect(requests).toHaveLength(1);
+  expect(requests[0].signal.aborted).toBe(false);
+  await respond({ steps: [step("d-cubic", threeXSquared)], final: null, unclear: null });
+  expect(statuses()[0]).toBe("correct");
+});
+
+it("ignores a superseded response even if the transport finishes after cancellation", async () => {
+  vi.mocked(fetch).mockImplementationOnce(
+    async (_url, init) =>
+      new Promise<Response>(resolve => {
+        requests.push({
+          input: JSON.parse(init!.body as string),
+          signal: init!.signal!,
+          resolve: body => resolve(Response.json(body)),
+        });
+      }),
+  );
+  start();
+  await learner("three x");
+  await learner("three x squared minus four");
+  expect(requests[0].signal.aborted).toBe(true);
+  await respond({ steps: [step("d-cubic", n(3))], final: null, unclear: null }, 0);
+  expect(statuses()).toEqual(["missing", "missing", "missing"]);
+  expect(runtime.snapshot().math!.checking).toBe(true);
+  expect(requests[1].signal.aborted).toBe(false);
+  await respond({ steps: [step("d-cubic", threeXSquared)], final: null, unclear: null });
+  expect(statuses()[0]).toBe("correct");
+});
+
+it("honors the client timeout and records it without changing work", async () => {
+  const timeout = vi.spyOn(AbortSignal, "timeout").mockImplementation(timeoutMs => {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(new DOMException("Timed out", "TimeoutError")), timeoutMs);
+    return controller.signal;
+  });
+  start();
+  await learner("three x squared");
+  expect(EXTRACTION_LIMITS.timeoutMs).toBe(10_000);
+  expect(EXTRACTION_LIMITS.clientTimeoutMs).toBe(12_000);
+  expect(timeout).toHaveBeenCalledWith(EXTRACTION_LIMITS.clientTimeoutMs);
+  await vi.advanceTimersByTimeAsync(EXTRACTION_LIMITS.clientTimeoutMs - 2);
+  expect(requests[0].signal.aborted).toBe(false);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(requests[0].signal.aborted).toBe(true);
+  expect(runtime.snapshot().math!.checking).toBe(false);
+  expect(statuses()).toEqual(["missing", "missing", "missing"]);
+  expect(runtime.report().math!.visits[0].checks[0].status).toBe("timeout");
+});
+
+it("includes returned extraction timing in the check diagnostic", async () => {
+  start();
+  await learner("three x squared");
+  requests[0].resolve({ status: "timeout", timing: { extractionMs: 10_000 } });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(runtime.report().events.find(event => event.type === "calculus.check_ended")?.detail).toMatchObject({
+    status: "timeout",
+    timing: { extractionMs: 10_000 },
+  });
 });
 
 it.each([threeXSquared, n(3)])(

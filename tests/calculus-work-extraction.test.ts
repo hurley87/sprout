@@ -1,5 +1,6 @@
 import { expect, it, vi } from "vitest";
 import {
+  EXTRACTION_LIMITS,
   WORK_EXTRACTION_MODEL,
   WORK_EXTRACTION_SCHEMA,
   createResponsesWorkProvider,
@@ -123,4 +124,18 @@ it("reports provider failure, malformed output, and cancellation", async () => {
   const controller = new AbortController();
   controller.abort();
   expect(await extractWork(input, failing, { signal: controller.signal })).toEqual({ status: "cancelled" });
+});
+
+it("bounds provider extraction with the shorter server timeout", async () => {
+  const controller = new AbortController();
+  const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(controller.signal);
+  try {
+    const result = extractWork(input, { generate: () => new Promise(() => {}) });
+    expect(timeout).toHaveBeenCalledWith(EXTRACTION_LIMITS.timeoutMs);
+    expect(EXTRACTION_LIMITS.timeoutMs).toBeLessThan(EXTRACTION_LIMITS.clientTimeoutMs);
+    controller.abort();
+    expect(await result).toEqual({ status: "timeout" });
+  } finally {
+    timeout.mockRestore();
+  }
 });

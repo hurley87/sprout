@@ -6,7 +6,8 @@ export const EXTRACTION_LIMITS = {
   bytes: 65_536,
   turns: 24,
   text: 2000,
-  timeoutMs: 30_000,
+  timeoutMs: 10_000,
+  clientTimeoutMs: 12_000,
   outputBytes: 65_536,
 } as const;
 export const WORK_EXTRACTION_MODEL = "gpt-6-luna";
