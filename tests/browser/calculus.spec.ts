@@ -63,6 +63,29 @@ const steering = (page: Page) =>
   page.evaluate(() => (window as unknown as LocalSessionWindow).steeringContents.at(-1) ?? "");
 const statusOf = (page: Page, step: string) =>
   page.getByRole("region", { name: "Your work" }).locator(`[data-step="${step}"]`);
+const stuckButton = (page: Page) => page.getByRole("button", { name: "Stuck? Hint, repeat or skip", exact: true });
+async function menuAction(page: Page, name: string) {
+  await stuckButton(page).click();
+  const menu = page.getByRole("menu", { name: "Stuck? Hint, repeat or skip" });
+  await expect(menu).toBeVisible();
+  const item = menu.getByRole("menuitem", { name, exact: true });
+  await expect(item).toHaveAttribute("aria-disabled", "false");
+  await item.click();
+  await expect(menu).toHaveCount(0);
+}
+async function expectRecap(page: Page, notes: string[]) {
+  await expect(page.getByRole("heading", { name: "Practice done", exact: true })).toBeVisible();
+  const recap = page.getByRole("region", { name: "Recap", exact: true });
+  await expect(recap).toBeVisible();
+  await expect(recap.locator(":scope > div")).toHaveCount(3);
+  for (const [index, note] of notes.entries()) {
+    const row = recap.locator(":scope > div").nth(index);
+    await expect(row).toContainText(String(index + 1));
+    await expect(row.getByText(note, { exact: true })).toBeVisible();
+    await expect(row.getByRole("img")).toHaveAccessibleName(/Derivative of/);
+  }
+  await expect(page.getByRole("button", { name: "Practise again", exact: true })).toBeVisible();
+}
 async function ready(page: Page, id: string) {
   await expect(page.locator(`[data-node-id="${id}"]`)).toBeVisible();
   await expect.poll(async () => (await current(page))?.status).toBe("live");
@@ -84,8 +107,13 @@ async function setup(page: Page) {
   });
   await page.goto("/demos/calculus?debug=1");
   await microphone.loadSpeech("answer-three");
-  await page.getByRole("button", { name: "Start practice" }).click();
+  const mic = page.getByRole("button", { name: "Start practice", exact: true });
+  await expect(mic).toBeVisible();
+  await expect(page.getByRole("button", { name: "Download diagnostics", exact: true })).toBeDisabled();
+  await mic.click();
+  await expect(page.getByRole("button", { name: "End session", exact: true })).toBeVisible();
   await ready(page, "cubic-minus-linear");
+  await expect(page.getByRole("button", { name: "Download diagnostics", exact: true })).toBeEnabled();
   const say = async (text: string) => {
     const playback = await microphone.playSpeech("answer-three");
     await expect.poll(async () => (await current(page))?.runtime?.childSpeaking).toBe(true);
@@ -114,11 +142,58 @@ test("initial prompt, strict debug opt-in and narrow layout", async ({ page }) =
   await page.setViewportSize({ width: 390, height: 844 });
   for (const flag of ["", "?debug=true", "?debug=1&debug=0"]) {
     await page.goto(`/demos/calculus${flag}`);
-    await expect(page.getByRole("heading", { name: "Calculus practice", exact: true })).toBeVisible();
-    await expect(page.getByRole("region", { name: "Current problem" })).toContainText("x^3 - 4x");
+    const intro = page.getByRole("region", { name: "Current problem" });
+    await expect(intro.getByText("Spoken practice", { exact: true })).toBeVisible();
+    await expect(intro.getByRole("heading", { name: "Differentiation", exact: true })).toBeVisible();
+    await expect(intro).not.toContainText("x^3 - 4x");
+    await expect(page.getByRole("button", { name: "Start practice", exact: true })).toBeVisible();
+    await expect(stuckButton(page)).toHaveCount(0);
     await expect(page.getByText("Session details", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Download diagnostics", exact: true })).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }
+  await page.goto("/demos/calculus?debug=1");
+  await expect(page.getByRole("button", { name: "Download diagnostics", exact: true })).toBeDisabled();
+  await expect(page.getByText("Session details", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test("Stuck menu actions, Escape focus and mic stop/restart", async ({ page }) => {
+  const { microphone } = await setup(page);
+  const trigger = stuckButton(page);
+  await expect(trigger).toHaveAttribute("aria-haspopup", "menu");
+  await expect(trigger).toHaveAttribute("aria-expanded", "false");
+  await trigger.click();
+  await expect(trigger).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByRole("menuitem")).toHaveCount(3);
+  for (const name of ["Give me a hint", "Repeat the problem", "Skip to next"]) {
+    await expect(page.getByRole("menuitem", { name, exact: true })).toBeVisible();
+  }
+  await expect(page.getByRole("menuitem", { name: "Give me a hint", exact: true })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  await expect(trigger).toHaveAttribute("aria-expanded", "false");
+  await expect(trigger).toBeFocused();
+  await menuAction(page, "Give me a hint");
+  await expect.poll(async () => (await current(page))?.math?.visits[0].help).toBe(1);
+  await expect.poll(() => steering(page)).toContain("hint");
+  await ready(page, "cubic-minus-linear");
+  await menuAction(page, "Repeat the problem");
+  await expect.poll(() => steering(page)).toContain("Repeat only the current prompt");
+  expect((await current(page))?.math?.visits[0].help).toBe(1);
+  await ready(page, "cubic-minus-linear");
+  await menuAction(page, "Skip to next");
+  await ready(page, "quadratic-sine");
+  expect((await current(page))?.math?.visits[0].outcome).toBe("skipped");
+  await page.getByRole("button", { name: "End session", exact: true }).click();
+  await expect(page.getByRole("status")).toHaveText("Session stopped. Your work so far is shown above.");
+  await expect
+    .poll(async () => (await microphone.state()).trackStates.filter(track => track === "live").length)
+    .toBe(1);
+  await page.getByRole("button", { name: "Restart practice", exact: true }).click();
+  await ready(page, "cubic-minus-linear");
+  await expect(page.getByRole("button", { name: "End session", exact: true })).toBeVisible();
+  expect((await current(page))?.math?.visits).toHaveLength(1);
 });
 
 test("mocked voice: step checks, targeted feedback, required work and automatic next problem", async ({
@@ -153,7 +228,7 @@ test("mocked voice: step checks, targeted feedback, required work and automatic 
   await ready(page, "quadratic-sine");
   await expect(page.getByRole("region", { name: "Current problem" })).toContainText("x^2 sin(x)");
   await expect(statusOf(page, "d-square")).toHaveAttribute("data-status", "missing");
-  await page.getByRole("button", { name: "Skip problem" }).click();
+  await menuAction(page, "Skip to next");
   await ready(page, "composite-fifth");
   await say("I'd use the product rule here");
   // Naming a rule is optional; a rule that doesn't fit gets one nudge, without the answer.
@@ -198,6 +273,7 @@ test("spoken problem navigation, natural completion and stopped labels stay dist
   await ready(page, "composite-fifth");
   await say("next");
   await ready(page, "recap");
+  await expectRecap(page, ["Skipped", "Skipped", "Skipped"]);
   const recap = (await current(page))!.recapText!;
   await page.evaluate(
     text => (window as unknown as LocalSessionWindow).sendTranscript("session.output_transcript.delta", text),
@@ -209,7 +285,7 @@ test("spoken problem navigation, natural completion and stopped labels stay dist
   await expect.poll(async () => (await microphone.state()).trackStates.filter(t => t === "live").length).toBe(1);
 });
 
-test("a check that returns after Stop cannot change the work", async ({ page }) => {
+test("a check that returns after End session cannot change the work", async ({ page }) => {
   const { say } = await setup(page);
   await page.unroute("**/api/calculus-work");
   let release!: () => void;
@@ -226,7 +302,9 @@ test("a check that returns after Stop cannot change the work", async ({ page }) 
   });
   await say("three x squared");
   await expect.poll(() => requested).toBe(true);
-  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  await expect(page.getByRole("status")).toHaveText("Checking what you said…");
+  await page.getByRole("button", { name: "End session", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Restart practice", exact: true })).toBeVisible();
   release();
   await expect.poll(async () => (await current(page))?.math?.checking).toBe(false);
   expect((await current(page))?.math?.visits[0].work.steps[0].status).toBe("missing");
@@ -245,7 +323,12 @@ test("synthetic local WebRTC: all three problems worked aloud, exported with eve
     }
   }
   await ready(page, "recap");
-  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  await expectRecap(page, ["First try", "First try", "First try"]);
+  await page.evaluate(
+    text => (window as unknown as LocalSessionWindow).sendTranscript("session.output_transcript.delta", text!),
+    (await current(page))!.recapText,
+  );
+  await expect.poll(async () => (await current(page))?.status).toBe("ended");
   await page.getByText("Session details", { exact: true }).click();
   const downloading = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export session", exact: true }).click();
@@ -263,7 +346,17 @@ test("synthetic local WebRTC: all three problems worked aloud, exported with eve
     expect(visit.checks.at(-1).outcome).toBe("complete");
   }
   expect(JSON.stringify(report)).not.toMatch(/api_key|access_token|authorization|"sdp"/i);
+  const diagnosticsDownloading = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download diagnostics", exact: true }).click();
+  const diagnosticsDownload = await diagnosticsDownloading;
+  const diagnostics = JSON.parse(await readFile((await diagnosticsDownload.path())!, "utf8"));
+  expect(diagnostics.math).toEqual(report.math);
+  await page.getByRole("button", { name: "Practise again", exact: true }).click();
+  await ready(page, "cubic-minus-linear");
+  await expect(page.getByRole("region", { name: "Recap", exact: true })).toHaveCount(0);
+  expect((await current(page))?.math?.visits).toHaveLength(1);
   await page.goto("/demos/calculus");
   await expect(page.getByText("Session details", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Export session" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Download diagnostics" })).toHaveCount(0);
 });
