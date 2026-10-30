@@ -79,7 +79,10 @@ Because a check takes longer than the tutor takes to reply, the tutor's standing
 guidance limits it to a neutral "Okay" or "Mm-hmm" until a check arrives. When a
 check completes the problem, the praise goes into the next problem's steering
 rather than a separate instruction, which the steering would replace before it
-was spoken.
+was spoken. If the learner is still talking, the advance waits and the praise is
+sent separately, except before the recap: its steering allows only the authored
+close, and in one live session the conflicting praise preceded a recap the tutor
+never spoke.
 
 ## Diagnostics
 

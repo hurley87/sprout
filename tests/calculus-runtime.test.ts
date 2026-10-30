@@ -28,6 +28,7 @@ const x: E = { op: "variable", name: "x" };
 const n = (value: number): E => ({ op: "number", value });
 const threeXSquared: E = { op: "multiply", args: [n(3), { op: "power", base: x, exponent: 2 }] };
 const final: E = { op: "subtract", left: threeXSquared, right: n(4) };
+const inner: E = { op: "add", args: [threeXSquared, n(1)] };
 const step = (stepId: string, expression: E) => ({ stepId, expression, quote: "q" });
 
 beforeEach(() => {
@@ -497,6 +498,40 @@ it("still detects completion from stale correct steps and final answers", async 
   expect(statuses()).toEqual(["correct", "correct", "correct"]);
   expect(runtime.snapshot().math!.complete).toBe(true);
   expect(runtime.report().math!.visits[0].checks[0]).toMatchObject({ current: false, outcome: "complete" });
+  // The advance waits for the learner, so the tutor is told separately.
+  expect(instructions()).toEqual([expect.stringContaining("Every step and the final answer are correct")]);
+});
+
+it("sends no separate praise when a delayed advance leads to the recap", async () => {
+  start();
+  for (const nodeId of ["quadratic-sine", "composite-fifth"]) {
+    emit({ type: "output.activity", state: "quiet" });
+    await vi.advanceTimersByTimeAsync(600);
+    await learner("Next question.");
+    emit({ type: "output.activity", state: "quiet" });
+    await vi.advanceTimersByTimeAsync(600);
+    expect(runtime.snapshot().runtime!.nodeId).toBe(nodeId);
+    runtime.confirmRendered(runtime.snapshot().display);
+    events.acknowledgeSteering(transport.send.mock.calls.at(-1)![0].event_id, 0);
+  }
+  await learner("six x times five, three x squared plus one to the fourth");
+  emit({ type: "microphone.speech_started" });
+  const outer: E = { op: "multiply", args: [n(5), { op: "power", base: inner, exponent: 4 }] };
+  const sixX: E = { op: "multiply", args: [n(6), x] };
+  await respond({
+    steps: [step("d-outer", outer), step("d-inner", sixX)],
+    final: { expression: { op: "multiply", args: [sixX, outer] }, quote: "q" },
+    unclear: null,
+  });
+  expect(runtime.snapshot().math!.complete).toBe(true);
+  expect(instructions()).toEqual([]);
+  emit({ type: "microphone.speech_stopped", quietMs: 900 });
+  emit({ type: "output.activity", state: "quiet" });
+  await vi.advanceTimersByTimeAsync(600);
+  expect(runtime.snapshot().runtime!.nodeId).toBe("recap");
+  runtime.confirmRendered(runtime.snapshot().display);
+  expect(steering().at(-1)).toContain("This is the terminal recap");
+  expect(instructions()).toEqual([]);
 });
 
 it("does not restart a running check when the tutor speaks", async () => {

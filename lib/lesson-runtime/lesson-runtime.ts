@@ -161,6 +161,10 @@ export class LessonRuntime {
         request => this.performSupport(request, true),
         () => this.scheduleClassification("spoken_support_quiet"),
         () => this.completeCalculusProblem(),
+        () => {
+          const edge = this.state && this.lessonDefinition.nodes[this.state.nodeId].onSuccess;
+          return edge?.kind === "node" && !!this.lessonDefinition.nodes[edge.nodeId].completeAfterTutorOutput;
+        },
         LESSON_TIMING.childSnapshotDebounceMs,
       );
     this.journal = new DiagnosticJournal(this.runtimeId, () => this.now(), this.lessonDefinition.initialNodeId);

@@ -83,6 +83,8 @@ export class CalculusRuntime {
     private readonly support: (request: "help" | "repeat") => void,
     private readonly schedule: () => void,
     private readonly complete: () => boolean,
+    /** The next screen is the terminal recap, whose steering allows only its authored close. */
+    private readonly nextIsTerminal: () => boolean,
     private readonly debounceMs: number,
   ) {}
 
@@ -274,8 +276,11 @@ export class CalculusRuntime {
         this.completed = true;
         this.log("calculus.problem_completed", { visitId: visit.visitId, problemId: visit.problemId });
         // Advancing now carries the praise in the next problem's steering; only a
-        // delayed advance needs the tutor told separately.
-        if (!this.complete() && instruction !== this.lastInstruction) this.instruct(instruction);
+        // delayed advance needs the tutor told separately. Not before the recap: its
+        // steering follows within a second and forbids anything but the close, and
+        // the conflicting praise preceded a silent recap in a live session.
+        if (!this.complete() && !this.nextIsTerminal() && instruction !== this.lastInstruction)
+          this.instruct(instruction);
       } else if (current && instruction !== this.lastInstruction) this.instruct(instruction);
     }
     visit.checks.push({ requestId, learnerTurns, status, extraction, outcome, instruction, current });
