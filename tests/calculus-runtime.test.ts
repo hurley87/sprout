@@ -343,9 +343,56 @@ it("honors the client timeout and records it without changing work", async () =>
   expect(requests[0].signal.aborted).toBe(false);
   await vi.advanceTimersByTimeAsync(1);
   expect(requests[0].signal.aborted).toBe(true);
-  expect(runtime.snapshot().math!.checking).toBe(false);
   expect(statuses()).toEqual(["missing", "missing", "missing"]);
   expect(runtime.report().math!.visits[0].checks[0].status).toBe("timeout");
+});
+
+it("retries a failed check of the learner's last words once, then asks for them again", async () => {
+  start();
+  await learner("three x squared");
+  requests[0].resolve({ status: "timeout" });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(requests).toHaveLength(2);
+  expect(requests[1].input).toEqual(requests[0].input);
+  expect(instructions()).toEqual([]);
+  requests[1].resolve({ status: "provider-failure" });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(requests).toHaveLength(2);
+  expect(runtime.snapshot().math!.checking).toBe(false);
+  expect(instructions()).toEqual([expect.stringContaining("ask them to say their last step again")]);
+  // New speech is checked as usual.
+  await learner("so three x squared minus four");
+  expect(requests).toHaveLength(3);
+});
+
+it("does not retry when checking is unavailable, and a retry can succeed", async () => {
+  start();
+  await learner("three x squared");
+  requests[0].resolve({ status: "unavailable" });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(requests).toHaveLength(1);
+  await learner("so three x squared minus four");
+  requests[1].resolve({ status: "malformed" });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(requests).toHaveLength(3);
+  await respond({ steps: [step("d-cubic", threeXSquared)], final: null, unclear: null });
+  expect(statuses()).toEqual(["correct", "missing", "missing"]);
+  expect(instructions()).toEqual([expect.stringContaining("Correct so far")]);
+});
+
+it("logs the returned raw output and dropped items with the check", async () => {
+  start();
+  await learner("three x squared");
+  const diagnostics = {
+    raw: { steps: [], rule: null, final: { expression: n(4), quote: "four" }, unclear: null },
+    dropped: [{ item: "final", reason: "unquoted", value: { expression: n(4), quote: "four" } }],
+  };
+  requests[0].resolve({ status: "ok", extraction: { steps: [], rule: null, final: null, unclear: null }, diagnostics });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(runtime.report().events.find(event => event.type === "calculus.check_ended")?.detail).toMatchObject({
+    status: "ok",
+    diagnostics,
+  });
 });
 
 it("includes returned extraction timing in the check diagnostic", async () => {

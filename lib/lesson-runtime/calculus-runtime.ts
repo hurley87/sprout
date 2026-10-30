@@ -1,6 +1,11 @@
 import { isCalculusProblemId, type CalculusProblemId } from "../calculus/problems";
 import { applyExtraction, emptyWork, workInstruction, workOutcome, type CalculusWork } from "../calculus/work-check";
-import { EXTRACTION_LIMITS, type WorkExtraction, type WorkExtractionInput } from "../calculus/work-extraction";
+import {
+  EXTRACTION_LIMITS,
+  type ExtractionDiagnostics,
+  type WorkExtraction,
+  type WorkExtractionInput,
+} from "../calculus/work-extraction";
 import type { TranscriptEvent } from "../events";
 import { isLearnerStopText, parseLearnerNavigationText } from "./conversation-progression";
 import type { LessonRuntimeState, RuntimeSource } from "./lesson-runtime-reducer";
@@ -13,6 +18,10 @@ const substance = (turns: readonly { text: string }[]) =>
     .map(turn => turn.text.replace(FILLER, " ").trim().replace(/\s+/g, " "))
     .filter(Boolean)
     .join(" | ");
+/** Check failures worth one retry; "unavailable" (no key) will not recover. */
+const RETRYABLE = new Set(["timeout", "provider-failure", "malformed"]);
+const CHECK_FAILED =
+  "The application could not check what the learner just said. Without judging it, ask them to say their last step again.";
 
 export type CalculusFragment = { event: TranscriptEvent; source: RuntimeSource; order: number };
 type Context = {
@@ -61,6 +70,8 @@ export class CalculusRuntime {
   private lastInstruction: string | null = null;
   private completed = false;
   private recheck = false;
+  /** Learner speech whose check already failed once and was retried. */
+  private retriedKey: string | null = null;
 
   constructor(
     private readonly runtimeId: string,
@@ -216,6 +227,7 @@ export class CalculusRuntime {
     let status = "provider-failure";
     let extraction: WorkExtraction | null = null;
     let timing: { extractionMs: number } | undefined;
+    let diagnostics: ExtractionDiagnostics | undefined;
     const timeout = AbortSignal.timeout(EXTRACTION_LIMITS.clientTimeoutMs);
     try {
       const response = await fetch("/api/calculus-work", {
@@ -228,6 +240,7 @@ export class CalculusRuntime {
         status?: string;
         extraction?: WorkExtraction;
         timing?: { extractionMs?: number };
+        diagnostics?: ExtractionDiagnostics;
       };
       if (
         typeof body?.timing?.extractionMs === "number" &&
@@ -235,13 +248,14 @@ export class CalculusRuntime {
         body.timing.extractionMs >= 0
       )
         timing = { extractionMs: body.timing.extractionMs };
+      if (body?.diagnostics && Array.isArray(body.diagnostics.dropped)) diagnostics = body.diagnostics;
       status = typeof body?.status === "string" ? body.status : "malformed";
       if (status === "ok" && body.extraction) extraction = body.extraction;
     } catch {
       status = abort.signal.aborted ? "cancelled" : timeout.aborted ? "timeout" : "provider-failure";
     }
     if (this.request !== abort || abort.signal.aborted || this.visit !== visit) {
-      this.log("calculus.check_ended", { requestId, status: "stale", timing });
+      this.log("calculus.check_ended", { requestId, status: "stale", timing, diagnostics });
       return;
     }
     this.request = undefined;
@@ -265,9 +279,27 @@ export class CalculusRuntime {
       } else if (current && instruction !== this.lastInstruction) this.instruct(instruction);
     }
     visit.checks.push({ requestId, learnerTurns, status, extraction, outcome, instruction, current });
-    this.log("calculus.check_ended", { requestId, status, extraction, work: visit.work, outcome, current, timing });
+    this.log("calculus.check_ended", {
+      requestId,
+      status,
+      extraction,
+      work: visit.work,
+      outcome,
+      current,
+      timing,
+      diagnostics,
+    });
     this.publish();
-    if (this.recheck && this.context().quiet) void this.check();
+    if (!this.context().quiet) return;
+    if (this.recheck) void this.check();
+    else if (!extraction && RETRYABLE.has(status) && current) {
+      // Nothing else re-checks the learner's last words: retry once, then have the
+      // tutor ask for them again rather than wait in silence.
+      if (this.retriedKey !== key) {
+        this.retriedKey = key;
+        void this.check();
+      } else if (CHECK_FAILED !== this.lastInstruction) this.instruct(CHECK_FAILED);
+    }
   }
 
   private instruct(content: string) {
@@ -294,7 +326,7 @@ export class CalculusRuntime {
     clearTimeout(this.timer);
     this.cancelCheck();
     this.consumedFragments.clear();
-    this.lastChecked = this.lastInstruction = null;
+    this.lastChecked = this.lastInstruction = this.retriedKey = null;
     this.completed = this.recheck = false;
     if (isCalculusProblemId(nodeId))
       this.visits.push({ visitId, problemId: nodeId, work: emptyWork(nodeId), outcome: "active", help: 0, checks: [] });

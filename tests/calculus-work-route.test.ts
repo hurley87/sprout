@@ -42,6 +42,7 @@ it("returns the checked extraction without caching", async () => {
   expect(await response.json()).toEqual({
     status: "ok",
     extraction: output,
+    diagnostics: { raw: output, dropped: [] },
     timing: { extractionMs: 275 },
   });
 });
