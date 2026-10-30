@@ -1,20 +1,32 @@
+/* Fills its container. The background bleeds to every edge, while the authored 8:5 world of
+ * characters is fitted (never cropped) into the room the page leaves via --stage-top/--stage-bottom. */
 .stage {
   position: relative;
   isolation: isolate;
   width: 100%;
-  aspect-ratio: 8 / 5;
+  height: 100%;
   overflow: hidden;
-  border: 2px solid #d7e4cd;
-  border-radius: clamp(20px, 4vw, 40px);
   background: #e1f1d7;
-  box-shadow: 0 8px 0 #dfe6d5;
+  container-type: size;
+  --room: calc(100cqh - var(--stage-top, 0px) - var(--stage-bottom, 0px));
 }
 
 .background,
 .objects {
   position: absolute;
-  inset: 0;
   pointer-events: none;
+}
+
+.background {
+  inset: 0;
+}
+
+.objects {
+  left: 50%;
+  top: calc(var(--stage-top, 0px) + var(--room) / 2);
+  width: min(100cqw - 2rem, var(--room) * 1.6);
+  aspect-ratio: 8 / 5;
+  translate: -50% -50%;
 }
 
 .background img,
@@ -24,6 +36,11 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+
+.background img {
+  object-fit: cover;
+  object-position: 50% 100%;
 }
 
 .meadow {
@@ -54,7 +71,7 @@
 
 .complete {
   left: 50%;
-  bottom: 8%;
+  top: 24%;
   width: max-content;
   max-width: 88%;
   text-align: center;

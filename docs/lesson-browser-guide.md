@@ -48,8 +48,13 @@ and answer acceptance are unchanged. Speech fixtures `four` and
 ## Run and collect
 
 The counting artwork lives in `public/counting/`. `app/counting-scenes.ts` authors
-normalized object centers and widths on an 8:5 stage; each independently rendered
-character stays separate from its background. Add a matching layout when authoring
+normalized object centers and widths on an 8:5 world; each independently rendered
+character stays separate from its background. The scene fills the whole screen:
+the background bleeds to every edge, while the 8:5 world of characters is fitted,
+never cropped, between the status pill at the top and the progress leaves and Stop
+at the bottom. Play and Play again float over the centre of the scene, or lower
+down on portrait screens so the characters stay visible. The "Sprout" heading is
+for screen readers only. Add a matching layout when authoring
 a new scene: a quantity/kind mismatch is rejected rather than silently miscounted.
 The `flowers-bloom` layout shows four standalone flowers over a simplified,
 flower-free CSS meadow (not the decorative flowers in `garden.svg`). Artwork loads eagerly into fixed aspect boxes; a picture-loading

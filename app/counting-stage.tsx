@@ -8,9 +8,9 @@ import styles from "./counting-stage.module.css";
 
 // Friends from the adventure gather in the garden; nothing here is counted.
 const CELEBRATION = [
-  { asset: "duck", x: 0.2, y: 0.6, width: 0.2 },
-  { asset: "butterfly-coral", x: 0.5, y: 0.3, width: 0.17 },
-  { asset: "butterfly-sky", x: 0.8, y: 0.5, width: 0.17 },
+  { asset: "duck", x: 0.2, y: 0.72, width: 0.2 },
+  { asset: "butterfly-coral", x: 0.16, y: 0.3, width: 0.15 },
+  { asset: "butterfly-sky", x: 0.84, y: 0.5, width: 0.15 },
 ] as const;
 
 export function CountingStage({

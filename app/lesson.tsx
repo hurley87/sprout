@@ -13,6 +13,7 @@ import { VoiceDemoControls } from "@/components/voice-demo/controls";
 import { lessonPresentation, stageMotion, voiceActivity } from "./lesson-presentation";
 import { CountingStage } from "./counting-stage";
 import { VoiceCue } from "./voice-cue";
+import styles from "./lesson.module.css";
 
 // Shape and size, not only colour, distinguish finished, current and upcoming scenes.
 const PROGRESS_LEAF = {
@@ -44,58 +45,60 @@ export default function Lesson({
   const step = node ? COUNTING_NODE_IDS.indexOf(node.id) : COUNTING_NODE_IDS.length;
 
   return (
-    <main className="mx-auto w-full max-w-5xl space-y-6 px-3 py-6 text-center sm:p-6">
-      <h1>Sprout</h1>
-      <div className="flex items-center justify-center gap-3">
-        <VoiceCue activity={voiceActivity(presentation)} />
-        <p role={presentation.kind === "error" ? "alert" : "status"} className="text-xl">
-          {presentation.message}
-        </p>
-      </div>
-      <CountingStage
-        node={node}
-        renderToken={display?.token}
-        sceneRef={sceneRef}
-        motion={stageMotion(snapshot, lessonDefinition)}
-      />
-      <ol aria-label="Adventure progress" className="flex items-center justify-center gap-3">
-        {COUNTING_NODE_IDS.map((id, index) => {
-          const progress = index < step ? "done" : index === step ? "current" : "upcoming";
-          return (
-            <li
-              key={id}
-              data-progress={progress}
-              aria-current={progress === "current" ? "step" : undefined}
-              className={`rounded-[0_80%] border-2 border-emerald-700 ${PROGRESS_LEAF[progress]}`}
-            >
-              <span className="sr-only">
-                Scene {index + 1}
-                {progress === "done" ? ", done" : progress === "current" ? ", playing now" : ""}
-              </span>
-            </li>
-          );
-        })}
-      </ol>
-      <VoiceDemoControls
-        snapshot={snapshot}
-        live={live}
-        completed={completed}
-        start={start}
-        stop={stop}
-        download={download}
-        startLabel="Play"
-        restartLabel="Play again"
-        showDownload={false}
-        showStop={live}
-        classNames={{
-          controls: "flex justify-center",
-          startButton: "min-h-20 min-w-48 rounded-full bg-emerald-800 px-12 py-5 text-3xl font-semibold text-white",
-          button: "min-h-11 rounded-full border px-6 py-2 text-sm",
-        }}
-      />
+    <main className="w-full">
+      <section className={styles.screen}>
+        <div className={styles.scene}>
+          <CountingStage
+            node={node}
+            renderToken={display?.token}
+            sceneRef={sceneRef}
+            motion={stageMotion(snapshot, lessonDefinition)}
+          />
+        </div>
+        <div className={styles.top}>
+          <h1 className={styles.title}>Sprout</h1>
+          <div className={styles.status}>
+            <VoiceCue activity={voiceActivity(presentation)} />
+            <p role={presentation.kind === "error" ? "alert" : "status"}>{presentation.message}</p>
+          </div>
+        </div>
+        <div className={styles.bottom}>
+          <ol aria-label="Adventure progress" className={`flex items-center gap-3 ${styles.progress}`}>
+            {COUNTING_NODE_IDS.map((id, index) => {
+              const progress = index < step ? "done" : index === step ? "current" : "upcoming";
+              return (
+                <li
+                  key={id}
+                  data-progress={progress}
+                  aria-current={progress === "current" ? "step" : undefined}
+                  className={`rounded-[0_80%] border-2 border-emerald-700 ${PROGRESS_LEAF[progress]}`}
+                >
+                  <span className="sr-only">
+                    Scene {index + 1}
+                    {progress === "done" ? ", done" : progress === "current" ? ", playing now" : ""}
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+          <VoiceDemoControls
+            snapshot={snapshot}
+            live={live}
+            completed={completed}
+            start={start}
+            stop={stop}
+            download={download}
+            startLabel="Play"
+            restartLabel="Play again"
+            showDownload={false}
+            showStop={live}
+            classNames={{ controls: styles.controls, startButton: styles.play, button: styles.stop }}
+          />
+        </div>
+      </section>
       <audio ref={audio} />
       {debug && (
-        <aside aria-label="Developer diagnostics" className="space-y-6 text-left">
+        <aside aria-label="Developer diagnostics" className={`space-y-6 text-left ${styles.debug}`}>
           <div className="flex flex-wrap items-center gap-3">
             <button className="rounded border px-4 py-2 disabled:opacity-40" disabled={!snapshot} onClick={download}>
               Export diagnostics

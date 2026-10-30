@@ -1,0 +1,124 @@
+/* One full-viewport scene. Overlays sit in normal flow above it; Play floats over its centre. */
+.screen {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100dvh;
+  min-height: 20rem;
+  overflow: hidden;
+}
+
+/* Behind the overlays; tells the stage how much room they take so no character hides beneath. */
+.scene {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  --stage-top: 4.5rem;
+  --stage-bottom: 5rem;
+}
+
+.top,
+.bottom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+}
+
+/* The page heading stays for screen readers but leaves the scene uncluttered. */
+.title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 auto;
+  max-width: 36rem;
+  padding: 0.4rem 1.1rem;
+  border-radius: 999px;
+  background: #fffdf6e6;
+  box-shadow: 0 3px 0 #dfe6d5;
+  font-size: clamp(1rem, 2.5vw, 1.25rem);
+  text-align: center;
+}
+
+.status p {
+  margin: 0;
+}
+
+.progress {
+  padding: 0.6rem 1rem;
+  border-radius: 999px;
+  background: #fffdf6e6;
+  box-shadow: 0 3px 0 #dfe6d5;
+}
+
+/* Lets Play position against the whole screen while Stop flows beside the progress. */
+.controls {
+  display: contents;
+}
+
+.play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+  min-width: 12rem;
+  min-height: 5rem;
+  padding: 1.25rem 3rem;
+  border: 4px solid #fffdf6;
+  border-radius: 999px;
+  background: #1f6b43;
+  box-shadow:
+    0 8px 0 #134a2c,
+    0 16px 32px #0f3b2240;
+  color: white;
+  font-size: clamp(1.75rem, 5vw, 2.5rem);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.play:active {
+  translate: -50% calc(-50% + 4px);
+  box-shadow:
+    0 4px 0 #134a2c,
+    0 8px 16px #0f3b2240;
+}
+
+/* Portrait scenes are a narrow band, so float Play below the characters instead of over them. */
+@media (orientation: portrait) {
+  .play {
+    top: 78%;
+  }
+}
+
+.stop {
+  min-height: 2.75rem;
+  padding: 0.5rem 1.5rem;
+  border: 2px solid #8aa894;
+  border-radius: 999px;
+  background: #fffdf6e6;
+  font-size: 0.9rem;
+}
+
+.stop:disabled {
+  opacity: 0.5;
+}
+
+.debug {
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: 1.5rem;
+}

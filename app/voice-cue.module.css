@@ -1,12 +1,11 @@
 .cue {
   flex: none;
-  width: 4.5rem;
-  height: 3rem;
+  width: 3.4rem;
+  height: 2.25rem;
 }
 
-/* Reserve space so the status line does not jump when the session is not live. */
 .cue[data-voice-activity="off"] {
-  visibility: hidden;
+  display: none;
 }
 
 /* Waiting is a calm, dimmed Sprout: nothing spins or suggests an answer is being judged. */
