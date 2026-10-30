@@ -29,6 +29,9 @@ export interface WorkStep {
 export interface CalculusProblem {
   readonly id: CalculusProblemId;
   readonly prompt: string;
+  /** How the spoken recap names the problem: words only, since the recap is verified
+   * against transcribed speech and digits or symbols may come back differently. */
+  readonly recapName: string;
   readonly functionExpression: E;
   readonly tutorBrief: string;
   readonly steps: readonly WorkStep[];
@@ -43,6 +46,7 @@ const problems: Record<CalculusProblemId, CalculusProblem> = {
   "cubic-minus-linear": {
     id: "cubic-minus-linear",
     prompt: "Differentiate f(x) = x^3 - 4x.",
+    recapName: "the polynomial",
     functionExpression: sub(pow(x, 3), mul(n(4), x)),
     tutorBrief: "Ask how they would begin, then let them work term by term.",
     rules: ["power", "sum"],
@@ -67,6 +71,7 @@ const problems: Record<CalculusProblemId, CalculusProblem> = {
   "quadratic-sine": {
     id: "quadratic-sine",
     prompt: "Differentiate f(x) = x^2 sin(x).",
+    recapName: "the product",
     functionExpression: mul(pow(x, 2), sin),
     tutorBrief: "Invite them to describe how they would handle the product, then differentiate each factor.",
     rules: ["product"],
@@ -89,6 +94,7 @@ const problems: Record<CalculusProblemId, CalculusProblem> = {
   "composite-fifth": {
     id: "composite-fifth",
     prompt: "Differentiate f(x) = (3x^2 + 1)^5.",
+    recapName: "the composite function",
     functionExpression: pow(inner, 5),
     tutorBrief: "Invite them to describe the structure, then differentiate the outside and the inside.",
     rules: ["chain"],

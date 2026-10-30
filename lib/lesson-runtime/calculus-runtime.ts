@@ -1,4 +1,9 @@
-import { isCalculusProblemId, type CalculusProblemId } from "../calculus/problems";
+import {
+  CALCULUS_PROBLEM_IDS,
+  getCalculusProblem,
+  isCalculusProblemId,
+  type CalculusProblemId,
+} from "../calculus/problems";
 import { applyExtraction, emptyWork, workInstruction, workOutcome, type CalculusWork } from "../calculus/work-check";
 import {
   EXTRACTION_LIMITS,
@@ -22,6 +27,42 @@ const substance = (turns: readonly { text: string }[]) =>
 const RETRYABLE = new Set(["timeout", "provider-failure", "malformed"]);
 const CHECK_FAILED =
   "The application could not check what the learner just said. Without judging it, ask them to say their last step again.";
+
+export type VisitSummary = "first-try" | "hint" | "another-look" | "hint-and-look" | "skipped" | "unfinished";
+/** How a problem visit went, as the recap card and the spoken recap both report it. */
+export function visitSummary(visit: Pick<CalculusVisit, "outcome" | "help" | "checks">): VisitSummary {
+  if (visit.outcome === "skipped") return "skipped";
+  if (visit.outcome !== "completed") return "unfinished";
+  const corrected = visit.checks.some(check => ["incorrect", "combine", "wrong-rule"].includes(check.outcome ?? ""));
+  return visit.help ? (corrected ? "hint-and-look" : "hint") : corrected ? "another-look" : "first-try";
+}
+
+const list = (items: string[]) => new Intl.ListFormat("en", { style: "long", type: "conjunction" }).format(items);
+/** The spoken close, from each problem's latest visit. Claims only what the checks
+ * recorded, never independent understanding. */
+export function calculusRecap(visits: readonly CalculusVisit[]): string {
+  const groups = {
+    "first-try": [] as string[],
+    hint: [] as string[],
+    "another-look": [] as string[],
+    skipped: [] as string[],
+  };
+  const latest = CALCULUS_PROBLEM_IDS.flatMap(id => visits.findLast(visit => visit.problemId === id) ?? []);
+  for (const visit of latest) {
+    const summary = visitSummary(visit);
+    const group = summary === "hint-and-look" ? "hint" : summary === "unfinished" ? "skipped" : summary;
+    groups[group].push(getCalculusProblem(visit.problemId).recapName);
+  }
+  const names = (items: string[]) => (items.length === CALCULUS_PROBLEM_IDS.length ? "every problem" : list(items));
+  const sentences: string[] = [];
+  if (groups["first-try"].length) sentences.push(`You got ${names(groups["first-try"])} right on the first try.`);
+  if (groups.hint.length) sentences.push(`You finished ${names(groups.hint)} after a hint.`);
+  if (groups["another-look"].length)
+    sentences.push(`You finished ${names(groups["another-look"])} after another look.`);
+  if (groups.skipped.length) sentences.push(`You skipped ${names(groups.skipped)}.`);
+  sentences.push("Thanks for practicing.");
+  return sentences.join(" ");
+}
 
 export type CalculusFragment = { event: TranscriptEvent; source: RuntimeSource; order: number };
 type Context = {
@@ -123,6 +164,10 @@ export class CalculusRuntime {
         });
     }
     return groups;
+  }
+
+  recap() {
+    return calculusRecap(this.visits);
   }
 
   /** The problem just shown follows a completed one and the learner has not started

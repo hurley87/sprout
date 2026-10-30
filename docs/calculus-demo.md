@@ -44,6 +44,12 @@ what is correct, wrong or missing. The tutor helps with one step at a time.
    the next problem itself. "Next", "skip this problem", the Skip button, help,
    repeat and stop still work as before; a problem left early is recorded as
    skipped.
+7. After the last problem, the tutor reads a fixed close built from the same
+   per-problem results as the recap card, e.g. "You got the polynomial and the
+   composite function right on the first try. You finished the product after
+   another look. Thanks for practicing." It uses words only (`recapName` in
+   `problems.ts`), because the spoken close is verified against transcribed
+   speech and digits or symbols may be transcribed differently.
 
 ## Required steps
 

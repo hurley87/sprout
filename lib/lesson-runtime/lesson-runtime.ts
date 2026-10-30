@@ -446,7 +446,7 @@ export class LessonRuntime {
             this.lessonDefinition.nodes[effect.identity.nodeId].completeAfterTutorOutput
           )
             // Freeze before React can render or asynchronous assessment can settle.
-            this.terminalText ??= evidenceRecap(this.lessonDefinition, this.state);
+            this.terminalText ??= this.calculus?.recap() ?? evidenceRecap(this.lessonDefinition, this.state);
           this.display = effect.identity;
           break;
         case "steering.ready":
@@ -1174,7 +1174,7 @@ export class LessonRuntime {
     if (terminal) {
       this.terminalText ??= this.state.questionOutcomes
         ? questionRecap(this.state.questionOutcomes).spoken
-        : evidenceRecap(this.lessonDefinition, this.state);
+        : (this.calculus?.recap() ?? evidenceRecap(this.lessonDefinition, this.state));
       this.terminalTimer = setTimeout(
         () =>
           this.fail(

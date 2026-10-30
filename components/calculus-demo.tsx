@@ -4,7 +4,7 @@ import "katex/dist/katex.min.css";
 import Link from "next/link";
 import { Figtree } from "next/font/google";
 import { CALCULUS_LESSON } from "@/lib/lesson-runtime/calculus-lesson";
-import type { CalculusVisit } from "@/lib/lesson-runtime/calculus-runtime";
+import { visitSummary, type CalculusVisit, type VisitSummary } from "@/lib/lesson-runtime/calculus-runtime";
 import {
   CALCULUS_PROBLEM_IDS,
   getCalculusProblem,
@@ -41,15 +41,15 @@ function ProblemEquation({ problemId }: { problemId: CalculusProblemId }) {
   );
 }
 
-function recapNote(visit: CalculusVisit) {
-  if (visit.outcome === "skipped") return "Skipped";
-  if (visit.outcome !== "completed") return "Not finished";
-  const corrected = visit.checks.some(check => ["incorrect", "combine", "wrong-rule"].includes(check.outcome ?? ""));
-  if (visit.help && corrected) return "Needed a hint and another look";
-  if (visit.help) return "Needed a hint";
-  if (corrected) return "One step needed another look";
-  return "First try";
-}
+const RECAP_NOTES: Record<VisitSummary, string> = {
+  skipped: "Skipped",
+  unfinished: "Not finished",
+  "hint-and-look": "Needed a hint and another look",
+  hint: "Needed a hint",
+  "another-look": "One step needed another look",
+  "first-try": "First try",
+};
+const recapNote = (visit: CalculusVisit) => RECAP_NOTES[visitSummary(visit)];
 
 export default function CalculusDemo({ debug = false }: { debug?: boolean }) {
   const { audio, sceneRef, snapshot, live, start, stop, download, support, skip, supportReady } = useVoiceDemo({

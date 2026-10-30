@@ -531,6 +531,10 @@ it("sends no separate praise when a delayed advance leads to the recap", async (
   expect(runtime.snapshot().runtime!.nodeId).toBe("recap");
   runtime.confirmRendered(runtime.snapshot().display);
   expect(steering().at(-1)).toContain("This is the terminal recap");
+  const close =
+    "You got the composite function right on the first try. You skipped the polynomial and the product. Thanks for practicing.";
+  expect(steering().at(-1)).toContain(JSON.stringify(close));
+  expect(runtime.snapshot().recapText).toBe(close);
   expect(instructions()).toEqual([]);
 });
 
