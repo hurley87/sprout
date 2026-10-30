@@ -21,15 +21,22 @@ diagnostic. Counting's labels and thresholds are unchanged.
 1. Run `npm run dev` with the existing local configuration. GPT-Live needs
    `OPENAI_API_KEY`, and Jev needs `TYPESAFE_API_KEY`. Do not put credentials in
    diagnostics. No database deployment or server is needed.
-2. Open <http://127.0.0.1:3000/> in a browser
+2. Open <http://127.0.0.1:3000/?debug=1> for this diagnostic walkthrough in a browser
    with microphone support. Keep this tab visible. Headphones can help separate
    microphone activity from tutor playback in the first attempt.
-3. Click **Start lesson** and allow microphone access. One duck is rendered
+   The ordinary `/` route welcomes the child with one large **Play** button,
+   one emoji counting scene, and no transcript, gate state, events, or export.
+   Only the exact `?debug=1` flag adds developer diagnostics; the opt-in observation
+   bridge works independently on either view. During a session, **Stop** is secondary.
+3. Click **Play** and allow microphone access. One duck is rendered
    before the runtime is created and before the live connection starts. Once the
    session starts, the first steering append explicitly identifies the parent
    Start action and instructs GPT-Live to speak first immediately, then listen.
    Later node appends do not repeat this startup instruction. Wait for GPT-Live
    to ask how many ducks you see.
+   “Getting ready to play…” does not claim microphone input is live. Activity copy
+   uses session/VAD/output state, not transcript guesses. Startup failures offer a
+   grown-up-assisted retry; the technical error remains in debug diagnostics.
 4. Say **"One"** once, then pause. Expect a natural acknowledgment. Inspect the
    current-visit transcript: the tutor's acknowledgment snapshot must still
    include `Child: One`, preceded by the tutor's question.
@@ -46,6 +53,9 @@ diagnostic. Counting's labels and thresholds are unchanged.
    restarting: each new attempt replaces the previous in-memory log. Refreshing
    also clears it. The export includes transcript text but no audio, credentials,
    SDP, raw Jev bodies, or durable evidence records.
+   Parent Stop shows “We’ve stopped for now,” never a completion claim. Only the
+   runtime’s authored completion shows the completed message. **Play** starts a
+   fresh attempt after stopping or failure; **Play again** follows completion.
 
 For follow-up evaluation, repeat fresh attempts for these cases:
 

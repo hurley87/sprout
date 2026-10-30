@@ -12,8 +12,10 @@ export function VoiceDemoControls({
   restartLabel,
   classNames,
   showDownload = true,
+  showStop = true,
 }: {
   showDownload?: boolean;
+  showStop?: boolean;
   snapshot: LessonSnapshot | null;
   live: boolean;
   completed: boolean;
@@ -38,6 +40,7 @@ export function VoiceDemoControls({
           </button>
         ) : null
       ) : (
+        showStop &&
         !completed && (
           <button className={classNames.button} disabled={!live} onClick={stop}>
             Stop

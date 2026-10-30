@@ -158,9 +158,9 @@ export class ChildScenario {
   }
 
   parentStart() {
-    return this.action("parentStart", "parent Start lesson click", async () => {
+    return this.action("parentStart", "parent Play click", async () => {
       if (this.runtimeId) throw new Error("Restart requires a separate run() so the previous report is retained first");
-      await this.page.getByRole("button", { name: "Start lesson", exact: true }).click();
+      await this.page.getByRole("button", { name: "Play", exact: true }).click();
       await this.observation();
       this.position = { after: { runtimeId: this.runtimeId!, offset: 0 }, scope: { runtimeId: this.runtimeId! } };
     });
