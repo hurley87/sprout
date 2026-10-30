@@ -10,8 +10,9 @@ import type { LessonDefinition } from "@/lib/lesson-runtime/lesson-definition";
 import { LESSON_TIMING } from "@/lib/lesson-runtime/lesson-runtime";
 import { useVoiceDemo } from "@/components/voice-demo/use-voice-demo";
 import { VoiceDemoControls } from "@/components/voice-demo/controls";
-import { lessonPresentation } from "./lesson-presentation";
+import { lessonPresentation, stageMotion, voiceActivity } from "./lesson-presentation";
 import { CountingStage } from "./counting-stage";
+import { VoiceCue } from "./voice-cue";
 
 // Shape and size, not only colour, distinguish finished, current and upcoming scenes.
 const PROGRESS_LEAF = {
@@ -45,10 +46,18 @@ export default function Lesson({
   return (
     <main className="mx-auto w-full max-w-5xl space-y-6 px-3 py-6 text-center sm:p-6">
       <h1>Sprout</h1>
-      <p role={presentation.kind === "error" ? "alert" : "status"} className="text-xl">
-        {presentation.message}
-      </p>
-      <CountingStage node={node} renderToken={display?.token} sceneRef={sceneRef} />
+      <div className="flex items-center justify-center gap-3">
+        <VoiceCue activity={voiceActivity(presentation)} />
+        <p role={presentation.kind === "error" ? "alert" : "status"} className="text-xl">
+          {presentation.message}
+        </p>
+      </div>
+      <CountingStage
+        node={node}
+        renderToken={display?.token}
+        sceneRef={sceneRef}
+        motion={stageMotion(snapshot, lessonDefinition)}
+      />
       <ol aria-label="Adventure progress" className="flex items-center justify-center gap-3">
         {COUNTING_NODE_IDS.map((id, index) => {
           const progress = index < step ? "done" : index === step ? "current" : "upcoming";

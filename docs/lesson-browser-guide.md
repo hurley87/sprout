@@ -55,8 +55,37 @@ The `flowers-bloom` layout shows four standalone flowers over a simplified,
 flower-free CSS meadow (not the decorative flowers in `garden.svg`). Artwork loads eagerly into fixed aspect boxes; a picture-loading
 or recovery message covers partial artwork. Render confirmation still follows the
 committed stage's exact identity attributes, not image callbacks. Characters are
-not tap controls; voice remains authoritative. The stage is static and disables
-future CSS animation/transition under reduced motion.
+not tap controls; voice remains authoritative.
+
+### Motion, success and voice cue
+
+The stage exposes `data-motion` (`app/lesson-presentation.ts` → `stageMotion`); it is
+presentation only and never gates render confirmation or the next scene.
+
+- `idle`: characters arrive with a short staggered entrance, then a duck bobs,
+  a butterfly drifts or a flower sways. `calm` pauses that movement while the child
+  is speaking (VAD) and after Stop or failure.
+- `success`: a brief wiggle (duck), flutter (butterfly) or bloom (flower), plus a
+  soft glow. `showsSuccessFeedback` requires a live, error-free, active runtime
+  whose node is the displayed one, no pending render or steering, the child not
+  speaking, the reducer's own `hasCurrentCompletionEvidence` (for counting: a
+  committed correct answer, `answerAccepted`, from the current visit's ended child
+  turn) **and** `tutorOutputObserved`, the onset of Sprout's reply to that
+  turn. Wrong, unclear, uncommitted, help, still-answering, interrupted or
+  superseded answers clear that evidence, so they never celebrate. Only the
+  reducer's audio drain remains, so the answered group is still displayed; the
+  transition clears the evidence and the next scene starts at `idle`. Counting
+  advances on learner evidence, and semantic `acknowledgmentObserved` needs
+  longer tutor quiet than the drain, so it is not required here.
+- `celebrate`: after authored completion, the garden celebration shows a duck and two
+  butterflies floating gently beside the message, above an obvious **Play again**.
+
+A small Sprout cue beside the status text (`data-voice-activity`) follows the same
+session/VAD/output facts: sound waves while Sprout speaks, a glowing ear while the
+child's voice is detected, a still ear for “Your turn!”, a dimmed Sprout while
+waiting, and nothing before the session is live or after it ends. Nothing spins.
+Under `prefers-reduced-motion` the stage and cue have no animation or transition;
+success remains a static glow.
 
 1. Run `npm run dev` with the existing local configuration. GPT-Live needs
    `OPENAI_API_KEY`, and Jev needs `TYPESAFE_API_KEY`. Do not put credentials in
