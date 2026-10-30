@@ -251,12 +251,20 @@
     font-size: 13px;
   }
   .rule {
+    display: grid;
+    grid-template-columns: 20px minmax(0, 1fr);
+    gap: 4px 8px;
     margin: 4px 8px 8px;
     padding: 12px 14px;
     font-size: 14px;
   }
   .ruleMessage {
-    flex-basis: 100%;
+    grid-column: 1 / -1;
+  }
+  .ruleMark {
+    width: 20px;
+    height: 20px;
+    font-size: 11px;
   }
   .done {
     padding: 14px;

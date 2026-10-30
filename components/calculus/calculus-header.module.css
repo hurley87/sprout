@@ -71,7 +71,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 40px;
+  height: 44px;
   padding: 0 16px 0 10px;
   border-radius: 999px;
   border: 1px solid var(--line);
@@ -107,7 +107,7 @@
   right: 0;
   z-index: 5;
   width: 280px;
-  max-width: calc(100vw - 36px);
+  max-width: calc(100vw - 32px);
   padding: 8px;
   border: 1px solid var(--line);
   border-radius: 18px;
@@ -172,6 +172,7 @@
 @media (max-width: 720px) {
   .header {
     height: 64px;
+    margin-top: 20px;
     padding: 0 18px;
     grid-template-columns: 44px 1fr 44px;
   }

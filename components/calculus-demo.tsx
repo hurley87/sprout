@@ -1,5 +1,6 @@
 "use client";
 
+import "katex/dist/katex.min.css";
 import Link from "next/link";
 import { Figtree } from "next/font/google";
 import { CALCULUS_LESSON } from "@/lib/lesson-runtime/calculus-lesson";
