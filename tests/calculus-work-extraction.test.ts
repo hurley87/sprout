@@ -60,6 +60,30 @@ it("keeps only items quoted from learner speech for known steps", () => {
   ]);
 });
 
+it("keeps an answer the learner paused through, quoted across consecutive turns", () => {
+  const paused: WorkExtractionInput = {
+    problemId: "quadratic-sine",
+    learnerTurns: [
+      { id: "learner_1", text: ". And, the derivative of sine x is cos x" },
+      { id: "learner_2", text: " [breath] And the final answer is" },
+      { id: "learner_3", text: " x squared" },
+      { id: "learner_4", text: " times cos x" },
+      { id: "learner_5", text: " plus" },
+      { id: "learner_6", text: " two x times sine x" },
+    ],
+    tutorTurns: [{ id: "tutor_1", text: "So it's x squared cos x plus two x sine x." }],
+  };
+  const final = (quote: string) =>
+    parseWorkExtraction({ steps: [], rule: null, final: { expression: threeXSquared, quote }, unclear: null }, paused)
+      .final?.quote ?? null;
+  const spanning = "And the final answer is x squared times cos x plus two x times sine x";
+  expect(final(spanning)).toBe(spanning);
+  expect(final("cos x And the final answer")).toBe("cos x And the final answer");
+  // Words out of order, or the tutor's phrasing, are still not learner speech.
+  expect(final("x squared plus two x times sine x")).toBeNull();
+  expect(final("x squared cos x plus two x sine x")).toBeNull();
+});
+
 it("keeps a rule named for the whole function only when quoted from the learner", () => {
   const sine: WorkExtractionInput = {
     problemId: "quadratic-sine",

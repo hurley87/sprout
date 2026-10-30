@@ -60,16 +60,24 @@ export function parseWorkExtractionInput(value: unknown): WorkExtractionInput {
   return { problemId: v.problemId, learnerTurns: turns(v.learnerTurns, 1), tutorTurns: turns(v.tutorTurns, 0) };
 }
 
+const collapse = (text: string) => text.replace(/\s+/g, " ").trim().toLowerCase();
+const joinedSpeech = (turns: WorkExtractionInput["learnerTurns"]) =>
+  collapse(turns.map(turn => turn.text.replace(/\[[^\]]*\]/g, " ").replace(/^[\s.,;:!?]+/, "")).join(" "));
+
 /** Structure is strict; individual items whose quote is not learner speech, or whose
  * step or expression is invalid, are dropped rather than trusted. */
 export function parseWorkExtraction(value: unknown, input: WorkExtractionInput): WorkExtraction {
   const v = exactObject(value, ["steps", "rule", "final", "unclear"]);
   const problem = getCalculusProblem(input.problemId);
+  // Learners pause mid-expression, so one answer can span several turns: a quote may run
+  // across consecutive turns, joined with single spaces and without transcript noise.
+  const speech = joinedSpeech(input.learnerTurns);
   const spoken = (quote: unknown): quote is string =>
     typeof quote === "string" &&
     quote.trim().length > 0 &&
     quote.length <= EXTRACTION_LIMITS.text &&
-    input.learnerTurns.some(turn => turn.text.toLowerCase().includes(quote.toLowerCase()));
+    (input.learnerTurns.some(turn => turn.text.toLowerCase().includes(quote.toLowerCase())) ||
+      speech.includes(collapse(quote)));
   const steps = boundedArray(v.steps, 16, 0).flatMap(raw => {
     const s = exactObject(raw, ["stepId", "expression", "quote"]);
     const step = problem.steps.find(candidate => candidate.id === s.stepId);
@@ -106,7 +114,7 @@ For each listed step the learner actually stated, return its stepId with the exp
 If the learner revised a step, return only their latest version of it. Omit steps they have not stated.
 "final" is the derivative of the whole function, only when the learner states one complete expression for it; otherwise null.
 Expressions describe values: never use equal or derivative nodes. Use the variable x only.
-Every item needs a quote: an exact substring of a learner turn that states it. Never take math from tutorTurns; they are context only.
+Every item needs a quote: an exact substring of a learner turn that states it. If the learner paused so it spans consecutive learner turns, quote those turns joined with single spaces, leaving out leading punctuation and bracketed noises like [breath]. Never take math from tutorTurns; they are context only.
 Set "unclear" only when the learner's own math is ambiguous or cannot be expressed in the schema, phrased as what to ask them (e.g. "which term the 3 belongs to"); otherwise null. A named rule is never unclear: report it as "rule" or leave it out.`;
 
 const object = (properties: Record<string, unknown>) => ({
