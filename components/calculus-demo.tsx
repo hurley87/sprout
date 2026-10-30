@@ -18,7 +18,7 @@ import { scrubSecrets } from "./voice-demo/diagnostics";
 import { CalculusHeader, type CalculusProgressSegment } from "./calculus/calculus-header";
 import { WorkChecklist } from "./calculus/work-checklist";
 import { MicButton } from "./calculus/mic-button";
-import { micState } from "./calculus/mic-state";
+import { useMicState } from "./calculus/use-mic-state";
 import styles from "./calculus-demo.module.css";
 import theme from "./calculus/calculus-theme.module.css";
 
@@ -58,6 +58,7 @@ export default function CalculusDemo({ debug = false }: { debug?: boolean }) {
     exportPrefix: "sprout-calculus",
   });
   const state = snapshot?.runtime;
+  const microphone = useMicState({ snapshot, live });
   const nodeId = state?.nodeId ?? CALCULUS_LESSON.initialNodeId;
   const identity = snapshot?.display ?? { token: "initial", nodeId, sceneId: nodeId };
   const completed = nodeId === "recap" || state?.phase === "complete";
@@ -166,7 +167,7 @@ export default function CalculusDemo({ debug = false }: { debug?: boolean }) {
               </div>
             ) : null}
             <div className={styles.micArea}>
-              <MicButton state={micState({ snapshot, live })} onStart={start} onStop={stop} onAction={start} />
+              <MicButton state={microphone} onStart={start} onStop={stop} onAction={start} />
             </div>
           </>
         )}

@@ -10,6 +10,7 @@ export type MicStateInput = {
     math?: Pick<CalculusSnapshot, "checking" | "complete">;
   } | null;
   live: boolean;
+  tutorSpeaking?: boolean;
 };
 
 export type MicState = {
@@ -111,7 +112,7 @@ const STATES: Record<MicState["kind"], Omit<MicState, "kind">> = {
 
 // Errors win, then absent/stopped sessions, completion, checking, learner speech,
 // connection setup, and observed tutor audio. Rendering is not reconnecting.
-export function micState({ snapshot, live }: MicStateInput): MicState {
+export function micState({ snapshot, live, tutorSpeaking = false }: MicStateInput): MicState {
   const error = snapshot?.error;
   let kind: MicState["kind"];
   if (error) kind = "error";
@@ -121,7 +122,7 @@ export function micState({ snapshot, live }: MicStateInput): MicState {
   else if (snapshot.math?.checking) kind = "checking";
   else if (snapshot.runtime?.childSpeaking) kind = "listening";
   else if (snapshot.status !== "live" || !snapshot.runtime) kind = "connecting";
-  else if (snapshot.runtime.outputActivity === "active") kind = "tutor";
+  else if (snapshot.runtime.outputActivity === "active" || tutorSpeaking) kind = "tutor";
   else kind = "your-turn";
   if (error && !/microphone|permission|notallowed|denied/i.test(error)) {
     return { ...STATES.error, kind: "error", label: "Try again", line: "Something went wrong", action: "Try again" };

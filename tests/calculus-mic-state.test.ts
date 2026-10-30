@@ -1,5 +1,8 @@
-import { expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { micState, type MicState, type MicStateInput } from "../components/calculus/mic-state";
+import { createTutorSpeakingHold } from "../components/calculus/tutor-speaking-hold";
+
+afterEach(() => vi.useRealTimers());
 
 type Snapshot = NonNullable<MicStateInput["snapshot"]>;
 
@@ -246,4 +249,68 @@ it("does not mutate or share mutable state with callers", () => {
   micState(value).line = "Changed by caller";
   expect(value).toEqual(original);
   expect(micState(value).line).toBe("Your turn");
+});
+
+it("holds tutor visuals across quick quiet gaps and releases after 600 ms of continuous quiet", () => {
+  vi.useFakeTimers();
+  let tutorSpeaking = false;
+  const hold = createTutorSpeakingHold(value => {
+    tutorSpeaking = value;
+  });
+  const quiet = input();
+  const visual = () => micState({ ...quiet, tutorSpeaking });
+
+  expect(visual().kind).toBe("your-turn");
+  hold.update("tutor");
+  for (const gapMs of [50, 100, 500, 599]) {
+    hold.update("your-turn");
+    vi.advanceTimersByTime(gapMs);
+    expect(visual()).toMatchObject({ kind: "tutor", label: "End session", pulse: false });
+    hold.update("tutor");
+  }
+  hold.update("your-turn");
+  vi.advanceTimersByTime(599);
+  expect(visual().kind).toBe("tutor");
+  vi.advanceTimersByTime(1);
+  expect(visual().kind).toBe("your-turn");
+  hold.cancel();
+});
+
+it.each([
+  input({ math: { checking: true, complete: false } }),
+  input({ math: { checking: false, complete: true } }),
+  input({ error: "Connection lost" }),
+  input({ status: "ended" }),
+  input({ runtime: { phase: "stopped", childSpeaking: false, outputActivity: "quiet" } }),
+  input({ runtime: { phase: "active", childSpeaking: true, outputActivity: "quiet" } }),
+  input({ status: "connecting", runtime: null }),
+  { snapshot: null, live: false },
+])("does not delay higher-priority transitions or retain the hold afterward", value => {
+  vi.useFakeTimers();
+  let tutorSpeaking = false;
+  const hold = createTutorSpeakingHold(value => {
+    tutorSpeaking = value;
+  });
+  hold.update("tutor");
+  hold.update("your-turn");
+  const expected = micState(value);
+  expect(micState({ ...value, tutorSpeaking })).toEqual(expected);
+  hold.update(expected.kind);
+  expect(tutorSpeaking).toBe(false);
+  expect(vi.getTimerCount()).toBe(0);
+  hold.update("your-turn");
+  expect(tutorSpeaking).toBe(false);
+});
+
+it("cancels the quiet timer on cleanup", () => {
+  vi.useFakeTimers();
+  const onChange = vi.fn();
+  const hold = createTutorSpeakingHold(onChange);
+  hold.update("tutor");
+  hold.update("your-turn");
+  onChange.mockClear();
+  hold.cancel();
+  vi.advanceTimersByTime(1000);
+  expect(onChange).not.toHaveBeenCalled();
+  expect(vi.getTimerCount()).toBe(0);
 });
