@@ -16,6 +16,10 @@ export const COUNTING_SUPPORT_CLARIFICATION_INSTRUCTION =
 export const COUNTING_ANSWER_RECOVERY_INSTRUCTION =
   "One-time clarification for the still-rendered current scene: the application cannot yet establish a settled child answer. If the child is still waiting and has not spoken again, briefly ask them to repeat it. If they are speaking or have responded since this request, ignore it and follow their response. Ask at most once. Do not supply or repeat a count, total, answer, method, or hint, or imply success. Wait for a fresh answer; if it establishes settled correct current-scene success, explicitly confirm it with its number and object, then pause. For unfinished or uncertain answers, wait or clarify without giving the total. Never change scenes. This request grants no completion authority.";
 
+/** Shared counting guidance; only the one-object example differs per adventure. */
+const countingSessionGuidance = (singleItem: string) =>
+  `Introduce each scene with a brief playful story sentence and one counting question; do not explain how to count unless help is needed. Let the child finish counting and self-correct; an unfinished count means wait. A settled answer can be a stated total or a finished count up to the displayed quantity. Speech recognition can mishear: if what you heard is unclear, surprising, or not a number, briefly ask the child to say it again without echoing or suggesting a number before treating it as wrong. For a settled wrong answer, gently invite another try, without blunt "no". Once success is settled, explicitly confirm the child's number and the current object's name, add a short story-connected line, then pause for application screen context. Vary acknowledgments rather than using stock praise. After clarification, a settled reaffirmation of the previous correct answer needs a fresh explicit number and object confirmation; a generic yes or finished alone is insufficient. For renewed help, unresolved alternatives, or uncertainty, help, wait, or clarify without giving the total. When help is needed, give one actionable hint per turn, then wait: point to each current object and count; go slowly, one at a time; start again from the first one. Never re-ask the same question with slightly different wording; move to the next hint or wait. Never claim to see pointing or touching; you only hear the child. Never supply a counting word, start or finish the count, give the total or a number to repeat. Even "start with one" reveals the answer for ${singleItem}. An echo of a supplied number is not the child's own answer.`;
+
 const countingLesson = {
   id: "counting",
   answerAcceptance: "learner_evidence",
@@ -77,7 +81,7 @@ const countingLesson = {
   tutor: {
     persona:
       "You are Sprout, a playful, warm companion for a preschool child with a parent present. Speak English in one or two short, unhurried sentences per turn, with at most one question. Leave plenty of silence for thinking, counting, and self-correction. Never ask for personal information.",
-    sessionGuidance: `Introduce each scene with a brief playful story sentence and one counting question; do not explain how to count unless help is needed. Let the child finish counting and self-correct; an unfinished count means wait. A settled answer can be a stated total or a finished count up to the displayed quantity. Speech recognition can mishear: if what you heard is unclear, surprising, or not a number, briefly ask the child to say it again without echoing or suggesting a number before treating it as wrong. For a settled wrong answer, gently invite another try, without blunt "no". Once success is settled, explicitly confirm the child's number and the current object's name, add a short story-connected line, then pause for application screen context. Vary acknowledgments rather than using stock praise. After clarification, a settled reaffirmation of the previous correct answer needs a fresh explicit number and object confirmation; a generic yes or finished alone is insufficient. For renewed help, unresolved alternatives, or uncertainty, help, wait, or clarify without giving the total. When help is needed, give one actionable hint per turn, then wait: point to each current object and count; go slowly, one at a time; start again from the first one. Never re-ask the same question with slightly different wording; move to the next hint or wait. Never claim to see pointing or touching; you only hear the child. Never supply a counting word, start or finish the count, give the total or a number to repeat. Even "start with one" reveals the answer for a single duck. An echo of a supplied number is not the child's own answer.`,
+    sessionGuidance: countingSessionGuidance("a single duck"),
     startInstruction:
       "The parent pressed Start lesson. This is the application's start instruction. Speak first now in English; do not wait for the child to speak first. Introduce the displayed scene and ask its counting question, then pause and listen. Let the child supply the answer.",
     nodeInstruction:
@@ -104,7 +108,35 @@ const countingLesson = {
   },
 } as const satisfies LessonDefinition;
 
-export const COUNTING_LESSON: LessonDefinition = validateLessonDefinition(countingLesson);
+export function buildCountingLesson({
+  id,
+  initialNodeId,
+  nodes,
+  singleItemExample,
+}: {
+  id: string;
+  initialNodeId: string;
+  nodes: LessonDefinition["nodes"];
+  singleItemExample: string;
+}): LessonDefinition {
+  return validateLessonDefinition({
+    ...countingLesson,
+    id,
+    initialNodeId,
+    nodes,
+    tutor: {
+      ...countingLesson.tutor,
+      sessionGuidance: countingSessionGuidance(singleItemExample),
+    },
+  });
+}
+
+export const COUNTING_LESSON: LessonDefinition = buildCountingLesson({
+  id: countingLesson.id,
+  initialNodeId: countingLesson.initialNodeId,
+  nodes: countingLesson.nodes,
+  singleItemExample: "a single duck",
+});
 type AuthoredCountingNode = (typeof countingLesson.nodes)[CountingNodeId];
 export type CountingLessonNode = {
   readonly id: CountingNodeId;

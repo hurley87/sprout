@@ -183,3 +183,15 @@ export function authoredQuestionProgress(lesson: LessonDefinition, nodeId: strin
     subpartCount: group.nodeIds.length,
   };
 }
+
+/** Authored node order: follow success edges from the initial node to completion. */
+export function lessonNodeOrder(lesson: LessonDefinition): string[] {
+  const ids: string[] = [];
+  for (let id = lesson.initialNodeId; ;) {
+    const node = lesson.nodes[id];
+    if (!isLessonNodeId(lesson, id) || ids.includes(id)) throw new Error(`Invalid lesson graph at ${id}`);
+    ids.push(id);
+    if (node.onSuccess.kind === "complete") return ids;
+    id = node.onSuccess.nodeId;
+  }
+}

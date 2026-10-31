@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import Lesson from "../app/lesson";
-import { COUNTING_LESSON } from "../lib/lesson-runtime/counting-lesson";
+import { GARDEN_THEME } from "../app/counting-themes";
 import { lessonPresentation } from "../app/lesson-presentation";
 
 type Snapshot = NonNullable<Parameters<typeof lessonPresentation>[0]>;
@@ -21,7 +21,7 @@ const active: Snapshot = {
 
 describe("counting child presentation", () => {
   it("renders one welcome Play button and no diagnostics by default", () => {
-    const markup = renderToStaticMarkup(createElement(Lesson, { lessonDefinition: COUNTING_LESSON }));
+    const markup = renderToStaticMarkup(createElement(Lesson, { theme: GARDEN_THEME }));
     expect(markup).toContain("Come count with Sprout!");
     expect(markup).toContain(">Play</button>");
     expect(markup.match(/<button/g)).toHaveLength(1);
@@ -29,7 +29,7 @@ describe("counting child presentation", () => {
   });
 
   it("retains gate details, transcript and export in the debug view", () => {
-    const markup = renderToStaticMarkup(createElement(Lesson, { lessonDefinition: COUNTING_LESSON, debug: true }));
+    const markup = renderToStaticMarkup(createElement(Lesson, { theme: GARDEN_THEME, debug: true }));
     expect(markup).toContain("Developer diagnostics");
     expect(markup).toContain("Progression gate");
     expect(markup).toContain("Current visit transcript");

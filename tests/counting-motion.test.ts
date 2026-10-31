@@ -6,6 +6,7 @@ import { runtimeSource, type LessonRuntimeState } from "../lib/lesson-runtime/le
 import type { LessonSnapshot } from "../lib/lesson-runtime/lesson-runtime";
 import { lessonPresentation, showsSuccessFeedback, stageMotion, voiceActivity } from "../app/lesson-presentation";
 import { CountingStage } from "../app/counting-stage";
+import { GARDEN_THEME } from "../app/counting-themes";
 import { VoiceCue } from "../app/voice-cue";
 import { createReducerHarness, prepareLearnerClassification } from "./helpers/runtime-harness";
 
@@ -166,7 +167,9 @@ describe("counting stage motion", () => {
   });
 
   it("exposes motion on the stage for tests", () => {
-    const markup = renderToStaticMarkup(createElement(CountingStage, { node: null, motion: "celebrate" }));
+    const markup = renderToStaticMarkup(
+      createElement(CountingStage, { theme: GARDEN_THEME, node: null, motion: "celebrate" }),
+    );
     expect(markup).toContain('data-motion="celebrate"');
     expect(markup.match(/data-celebration-character=/g)).toHaveLength(3);
     expect(markup.match(/data-celebration-flower=/g)).toHaveLength(4);

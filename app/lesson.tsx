@@ -1,12 +1,8 @@
 "use client";
 
-import {
-  COUNTING_LESSON_GRAPH,
-  COUNTING_NODE_IDS,
-  INITIAL_COUNTING_NODE_ID,
-  isCountingNodeId,
-} from "@/lib/lesson-runtime/counting-lesson";
-import type { LessonDefinition } from "@/lib/lesson-runtime/lesson-definition";
+import { useMemo } from "react";
+import { isLessonNodeId, lessonNodeOrder } from "@/lib/lesson-runtime/lesson-definition";
+import type { CountingTheme } from "./counting-themes";
 import { LESSON_TIMING } from "@/lib/lesson-runtime/lesson-runtime";
 import { useVoiceDemo } from "@/components/voice-demo/use-voice-demo";
 import { VoiceDemoControls } from "@/components/voice-demo/controls";
@@ -15,20 +11,8 @@ import { CountingStage } from "./counting-stage";
 import { VoiceCue } from "./voice-cue";
 import styles from "./lesson.module.css";
 
-// Shape and size, not only colour, distinguish finished, current and upcoming scenes.
-const PROGRESS_LEAF = {
-  done: "h-4 w-4 bg-emerald-600",
-  current: "h-6 w-6 bg-emerald-300 ring-2 ring-emerald-800 ring-offset-2",
-  upcoming: "h-4 w-4",
-} as const;
-
-export default function Lesson({
-  lessonDefinition,
-  debug = false,
-}: {
-  lessonDefinition: LessonDefinition;
-  debug?: boolean;
-}) {
+export default function Lesson({ theme, debug = false }: { theme: CountingTheme; debug?: boolean }) {
+  const lessonDefinition = theme.lesson;
   const { audio, sceneRef, snapshot, live, start, stop, download } = useVoiceDemo({
     lesson: lessonDefinition,
     exportReport: runtime => runtime.report(),
@@ -36,19 +20,33 @@ export default function Lesson({
   });
   const display = snapshot?.display;
   const status = snapshot?.status;
-  const nodeId = display ? display.nodeId : INITIAL_COUNTING_NODE_ID;
-  const node = nodeId && isCountingNodeId(nodeId) ? COUNTING_LESSON_GRAPH[nodeId] : null;
+  const nodeIds = useMemo(() => lessonNodeOrder(lessonDefinition), [lessonDefinition]);
+  const nodeId = display ? display.nodeId : lessonDefinition.initialNodeId;
+  const presented = nodeId && isLessonNodeId(lessonDefinition, nodeId) ? lessonDefinition.nodes[nodeId] : null;
+  const node = presented
+    ? {
+        id: presented.id,
+        sceneId: String(presented.presentation.sceneId),
+        object: String(presented.presentation.object),
+        quantity: Number(presented.presentation.quantity),
+      }
+    : null;
   const state = snapshot?.runtime;
-  const presentation = lessonPresentation(snapshot, showsSuccessFeedback(snapshot, lessonDefinition) ? node : null);
+  const presentation = lessonPresentation(
+    snapshot,
+    showsSuccessFeedback(snapshot, lessonDefinition) ? node : null,
+    theme.copy,
+  );
   const completed = presentation.kind === "complete";
   // Authored order of the rendered scene; the terminal render has no counting node.
-  const step = node ? COUNTING_NODE_IDS.indexOf(node.id) : COUNTING_NODE_IDS.length;
+  const step = node ? nodeIds.indexOf(node.id) : nodeIds.length;
 
   return (
     <main className="w-full">
       <section className={styles.screen}>
         <div className={styles.scene}>
           <CountingStage
+            theme={theme}
             node={node}
             renderToken={display?.token}
             sceneRef={sceneRef}
@@ -64,14 +62,14 @@ export default function Lesson({
         </div>
         <div className={styles.bottom}>
           <ol aria-label="Adventure progress" className={`flex items-center gap-3 ${styles.progress}`}>
-            {COUNTING_NODE_IDS.map((id, index) => {
+            {nodeIds.map((id, index) => {
               const progress = index < step ? "done" : index === step ? "current" : "upcoming";
               return (
                 <li
                   key={id}
                   data-progress={progress}
                   aria-current={progress === "current" ? "step" : undefined}
-                  className={`rounded-[0_80%] border-2 border-emerald-700 ${PROGRESS_LEAF[progress]}`}
+                  className={`${theme.progress.base} ${theme.progress[progress]}`}
                 >
                   <span className="sr-only">
                     Scene {index + 1}
@@ -112,7 +110,7 @@ export default function Lesson({
           <section className="space-y-2 rounded border p-4">
             <h2 className="font-semibold">Progression gate</h2>
             <p>
-              Node: {state?.nodeId ?? INITIAL_COUNTING_NODE_ID} · Phase: {state?.phase ?? "not started"} · Visit:{" "}
+              Node: {state?.nodeId ?? lessonDefinition.initialNodeId} · Phase: {state?.phase ?? "not started"} · Visit:{" "}
               {state?.visitId ?? "—"} · Child turn: {state?.childTurnId ?? "—"} · Revision:{" "}
               {state?.transcriptRevision ?? 0} ({state?.transcriptSource ?? "unknown"})
             </p>

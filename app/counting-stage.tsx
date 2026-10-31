@@ -1,35 +1,63 @@
 "use client";
 
-import Image from "next/image";
+import Image, { type ImageProps } from "next/image";
 import { useState, type CSSProperties, type Ref } from "react";
 import { countingScene } from "./counting-scenes";
+import type { CountingTheme } from "./counting-themes";
 import type { StageMotion } from "./lesson-presentation";
 import styles from "./counting-stage.module.css";
 
-// Friends from the adventure gather in the garden; nothing here is counted.
-const CELEBRATION = [
-  { asset: "duck", x: 0.2, y: 0.72, width: 0.2 },
-  { asset: "butterfly-coral", x: 0.16, y: 0.3, width: 0.15 },
-  { asset: "butterfly-sky", x: 0.84, y: 0.5, width: 0.15 },
-] as const;
+type AssetImageProps = Omit<ImageProps, "src" | "alt" | "width" | "height"> & { theme: CountingTheme; asset: string };
+
+/** Decorative theme artwork at its authored intrinsic size. */
+function AssetImage({ theme, asset, ...props }: AssetImageProps) {
+  if (!Object.hasOwn(theme.assets, asset)) throw new Error(`Counting theme has no artwork named ${asset}`);
+  const { src, width, height } = theme.assets[asset];
+  return <Image src={src} alt="" width={width} height={height} {...props} />;
+}
+
+function Backdrop({
+  theme,
+  background,
+  plainBackdrop,
+  imageProps,
+}: {
+  theme: CountingTheme;
+  background: string;
+  plainBackdrop?: string;
+  imageProps?: Omit<AssetImageProps, "theme" | "asset">;
+}) {
+  return (
+    <div
+      className={plainBackdrop ? `${styles.background} ${styles[plainBackdrop]}` : styles.background}
+      data-background={background}
+      data-plain-backdrop={plainBackdrop}
+      aria-hidden="true"
+    >
+      {!plainBackdrop && <AssetImage theme={theme} asset={background} preload {...imageProps} />}
+    </div>
+  );
+}
 
 export function CountingStage({
+  theme,
   node,
   renderToken,
   sceneRef,
   motion = "idle",
 }: {
+  theme: CountingTheme;
   node: { id: string; sceneId: string; object: string; quantity: number } | null;
   renderToken?: string;
   sceneRef?: Ref<HTMLDivElement>;
   /** Presentation only, derived from the runtime snapshot; it never gates render confirmation. */
   motion?: StageMotion;
 }) {
-  const scene = node ? countingScene(node) : null;
+  const scene = node ? countingScene(node, theme.scenes) : null;
   const [loaded, setLoaded] = useState<ReadonlySet<string>>(new Set());
   const [failed, setFailed] = useState<ReadonlySet<string>>(new Set());
   const assets = scene
-    ? [...(scene.flowerFree ? [] : [scene.background]), ...scene.objects.map(object => object.asset)]
+    ? [...(scene.plainBackdrop ? [] : [scene.background]), ...scene.objects.map(object => object.asset)]
     : [];
   const pending = assets.some(asset => !loaded.has(asset));
   const unavailable = assets.some(asset => failed.has(asset));
@@ -37,6 +65,10 @@ export function CountingStage({
     onLoad: () => setLoaded(previous => new Set(previous).add(asset)),
     onError: () => setFailed(previous => new Set(previous).add(asset)),
   });
+  const aspect = (asset: string) => {
+    const { width, height } = theme.assets[asset];
+    return width === height ? "1" : `${width} / ${height}`;
+  };
 
   return (
     <div
@@ -54,23 +86,12 @@ export function CountingStage({
     >
       {scene ? (
         <>
-          <div
-            className={`${styles.background} ${scene.flowerFree ? styles.meadow : ""}`}
-            data-background={scene.background}
-            data-flower-free={scene.flowerFree || undefined}
-            aria-hidden="true"
-          >
-            {!scene.flowerFree && (
-              <Image
-                src={`/counting/${scene.background}.svg`}
-                alt=""
-                width={960}
-                height={600}
-                preload
-                {...imageEvents(scene.background)}
-              />
-            )}
-          </div>
+          <Backdrop
+            theme={theme}
+            background={scene.background}
+            plainBackdrop={scene.plainBackdrop}
+            imageProps={imageEvents(scene.background)}
+          />
           <div className={styles.objects} data-counting-objects aria-hidden="true">
             {motion === "success" && (
               <div className={styles.numeral} data-success-numeral>
@@ -88,19 +109,17 @@ export function CountingStage({
                     left: `${object.x * 100}%`,
                     top: `${object.y * 100}%`,
                     width: `${object.width * 100}%`,
-                    aspectRatio: object.asset === "flower" ? "280 / 320" : "1",
+                    aspectRatio: aspect(object.asset),
                     transform: `translate(-50%, -50%) scaleX(${object.flipped ? -1 : 1})`,
                     // Staggers entrances and keeps idle movement out of step.
                     ["--i" as string]: index,
                   } as CSSProperties
                 }
               >
-                <Image
+                <AssetImage
+                  theme={theme}
+                  asset={object.asset}
                   className={styles.character}
-                  src={`/counting/${object.asset}.svg`}
-                  alt=""
-                  width={object.asset === "flower" ? 280 : 320}
-                  height={320}
                   preload
                   {...imageEvents(object.asset)}
                 />
@@ -115,24 +134,21 @@ export function CountingStage({
         </>
       ) : (
         <>
-          <div className={styles.background} data-background="garden" aria-hidden="true">
-            <Image src="/counting/garden.svg" alt="" width={960} height={600} preload />
-          </div>
+          <Backdrop theme={theme} background={theme.celebration.background} />
           <div className={styles.objects} aria-hidden="true">
-            {[0, 1, 2, 3].map(index => (
+            {theme.celebration.decorations.map((decoration, index) => (
               <div
                 key={index}
                 className={styles.celebrationFlower}
                 data-celebration-flower
-                // Right of the duck friend, so no flower hides behind it.
-                style={{ left: `${36 + index * 16}%`, ["--i" as string]: index } as CSSProperties}
+                style={{ left: `${decoration.left}%`, ["--i" as string]: index } as CSSProperties}
               >
-                <Image className={styles.character} src="/counting/flower.svg" alt="" width={280} height={320} />
+                <AssetImage theme={theme} asset={decoration.asset} className={styles.character} />
               </div>
             ))}
-            {CELEBRATION.map((friend, index) => (
+            {theme.celebration.friends.map((friend, index) => (
               <div
-                key={friend.asset}
+                key={`${friend.asset}:${index}`}
                 className={styles.friend}
                 data-celebration-character={friend.asset}
                 style={
@@ -144,17 +160,11 @@ export function CountingStage({
                   } as CSSProperties
                 }
               >
-                <Image
-                  className={styles.character}
-                  src={`/counting/${friend.asset}.svg`}
-                  alt=""
-                  width={320}
-                  height={320}
-                />
+                <AssetImage theme={theme} asset={friend.asset} className={styles.character} />
               </div>
             ))}
           </div>
-          <p className={styles.complete}>Garden celebration! Thanks for counting with Sprout.</p>
+          <p className={styles.complete}>{theme.celebration.message}</p>
         </>
       )}
     </div>
