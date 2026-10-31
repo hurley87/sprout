@@ -21,6 +21,8 @@ export type CountingTheme = {
   /** "glow": during the conversation an abstract moon glow replaces the talking/listening pill, held
    * through brief gaps in tutor audio; the words remain for screen readers. Default: the pill. */
   readonly statusCue?: "glow";
+  /** "night": dark controls that sit with a night-time scene. Default: the garden's light controls. */
+  readonly palette?: "night";
   /** Tailwind classes; shape and size, not only colour, distinguish finished, current and upcoming scenes. */
   readonly progress: {
     readonly base: string;

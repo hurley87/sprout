@@ -53,7 +53,7 @@ export default function Lesson({ theme, debug = false }: { theme: CountingTheme;
 
   return (
     <main className="w-full">
-      <section className={styles.screen}>
+      <section className={styles.screen} data-palette={theme.palette}>
         <div className={styles.scene}>
           <CountingStage
             theme={theme}
