@@ -35,7 +35,8 @@ describe("Halloween counting adventure", () => {
         expect(HALLOWEEN_THEME.assets[asset]).toBeDefined();
         expect(existsSync(`public${HALLOWEEN_THEME.assets[asset].src}`)).toBe(true);
       }
-      if (["pumpkin", "lantern"].includes(scene.object)) expect(scene.plainBackdrop).toBe("twilight");
+      expect(scene).toMatchObject({ background: "porch" });
+      expect(scene.plainBackdrop).toBeUndefined();
       expect(node.tutorBrief.replace(/one by one|one at a time/gi, "")).not.toMatch(
         /\d|\b(?:one|two|three|four|five|six)\b/i,
       );
@@ -49,6 +50,9 @@ describe("Halloween counting adventure", () => {
     }
     const celebration = renderToStaticMarkup(createElement(CountingStage, { theme: HALLOWEEN_THEME, node: null }));
     expect(celebration).not.toContain("data-counting-object=");
+    expect(Object.keys(HALLOWEEN_THEME.assets).sort()).toEqual(
+      ["bat", "ghost", "lantern", "party-yard", "porch", "pumpkin"].sort(),
+    );
     expect(HALLOWEEN_THEME.celebration.message).not.toMatch(/\d|\b(?:one|two|three|four|five|six)\b/i);
   });
 });

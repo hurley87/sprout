@@ -130,11 +130,6 @@
   animation-duration: 3.6s;
 }
 
-.stage:is([data-motion="idle"], [data-motion="calm"]) .object[data-counting-object="helper"] .character {
-  animation-name: halloween-bob;
-  animation-duration: 3.4s;
-}
-
 .stage:is([data-motion="idle"], [data-motion="calm"]) .object[data-counting-object="pumpkin"] .character {
   animation-name: halloween-wobble;
   animation-duration: 4s;
@@ -333,13 +328,6 @@
   }
 }
 
-@keyframes halloween-bob {
-  50% {
-    translate: 0 -2%;
-    rotate: 2deg;
-  }
-}
-
 @keyframes halloween-wobble {
   25% {
     rotate: -2deg;
@@ -357,10 +345,4 @@
     animation: none !important;
     transition: none !important;
   }
-}
-
-.twilight {
-  background:
-    radial-gradient(ellipse at 50% 20%, #f4e3bd88, transparent 35%),
-    linear-gradient(to bottom, #4a386f 0%, #8a6b9b 72%, #3d4d32 72%, #473b2f 100%);
 }

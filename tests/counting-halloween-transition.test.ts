@@ -7,7 +7,7 @@ import { runtimeSource } from "../lib/lesson-runtime/lesson-runtime-reducer";
 import { classifierProposal } from "./helpers/runtime-classifier";
 import { createReducerHarness, prepareLearnerClassification } from "./helpers/runtime-harness";
 
-/** Replays live attempt 5c98607e: "Two" is accepted, the tutor says "Yes, two helpers!", pauses
+/** Replays live attempt 5c98607e: a correct answer is accepted, the tutor confirms it, pauses
  * ~300 ms, then continues its story line 11 ms after the next scene was requested. */
 function replayPausedAcknowledgment(lesson: LessonDefinition) {
   const h = createReducerHarness("paused-acknowledgment", { lesson, quietDrainMs: transitionQuietMs(lesson) });
@@ -42,7 +42,7 @@ describe("Halloween scene transitions wait for the whole tutor reply", () => {
     const { h, pause } = replayPausedAcknowledgment(COUNTING_HALLOWEEN_LESSON);
     expect(transitionQuietMs(COUNTING_HALLOWEEN_LESSON)).toBe(1_000);
     expect(pause.effects).not.toContainEqual(expect.objectContaining({ type: "render.requested" }));
-    expect(h.state).toMatchObject({ phase: "active", nodeId: "count-1-helper", answerAccepted: true });
+    expect(h.state).toMatchObject({ phase: "active", nodeId: "count-1-ghost", answerAccepted: true });
 
     h.send({ type: "output.activity", source: runtimeSource(h.state), state: "quiet" }, 900);
     const early = h.send({ type: "clock.tick", source: runtimeSource(h.state) }, 999);
@@ -51,7 +51,7 @@ describe("Halloween scene transitions wait for the whole tutor reply", () => {
     expect(settled.effects).toContainEqual(
       expect.objectContaining({
         type: "render.requested",
-        identity: expect.objectContaining({ nodeId: "count-2-helpers" }),
+        identity: expect.objectContaining({ nodeId: "count-2-bats" }),
       }),
     );
     expect(h.state.phase).toBe("rendering");

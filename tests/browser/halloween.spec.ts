@@ -138,7 +138,7 @@ test("lesson identity reaches live setup and diagnostics export", async ({ page 
     const liveRequest = await request;
     expect(liveRequest.postDataJSON().lessonId).toBe(lessonId);
     await (await liveRequest.response())!.finished();
-    await scene(page, observer, lessonId === "counting" ? "count-1-duck" : "count-1-helper");
+    await scene(page, observer, lessonId === "counting" ? "count-1-duck" : COUNTING_HALLOWEEN_NODE_IDS[0]);
     if (lessonId === "counting-halloween") {
       const diagnostics = page.getByRole("complementary", { name: "Developer diagnostics" });
       const download = page.waitForEvent("download");
@@ -161,7 +161,7 @@ test("wrong and unclear answers hold; correction advances", async ({ page }) => 
   for (const outcome of ["incorrect", "unclear"] as const) {
     verdict = outcome;
     await answer(page, observer, microphone, COUNTING_HALLOWEEN_NODE_IDS[0], outcome);
-    await expect(page.locator('[data-node-id="count-1-helper"][data-scene-id]')).toBeVisible();
+    await expect(page.locator(`[data-node-id="${COUNTING_HALLOWEEN_NODE_IDS[0]}"][data-scene-id]`)).toBeVisible();
   }
   verdict = "correct";
   await answer(page, observer, microphone, COUNTING_HALLOWEEN_NODE_IDS[0]);
@@ -193,7 +193,7 @@ test("Halloween direct load, refresh, diagnostics and garden remain available", 
   await page.goto("/halloween");
   await expect(page.getByRole("status")).toHaveText("Come count Halloween friends with Sprout!");
   await expect(page.getByRole("button", { name: "Play", exact: true })).toBeEnabled();
-  await expect(page.locator('[data-counting-object="helper"]')).toHaveCount(1);
+  await expect(page.locator('[data-counting-object="ghost"]')).toHaveCount(1);
   await expect(page.locator("[data-progress]")).toHaveCount(7);
   await expect(page.locator("[data-artwork-state]")).toHaveCount(0);
   await page.reload();

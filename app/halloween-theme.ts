@@ -4,11 +4,12 @@ import type { CountingTheme } from "./counting-themes";
 const character = (name: string) => ({ src: `/counting/halloween/${name}.png`, width: 640, height: 640 });
 const background = (name: string) => ({ src: `/counting/halloween/${name}.jpg`, width: 1619, height: 971 });
 
+// Every counting scene uses the porch. It has a big jack-o'-lantern by the steps (bottom left), small
+// pumpkin lights in the tree (top right) and a porch lamp (top left), so counted pumpkins and lanterns
+// stay in the open middle, away from those decorations.
 export const HALLOWEEN_THEME: CountingTheme = {
   lesson: COUNTING_HALLOWEEN_LESSON,
   assets: {
-    "helper-pumpkin": character("helper-pumpkin"),
-    "helper-vampire": character("helper-vampire"),
     bat: character("bat"),
     pumpkin: character("pumpkin"),
     lantern: character("lantern"),
@@ -17,61 +18,59 @@ export const HALLOWEEN_THEME: CountingTheme = {
     "party-yard": background("party-yard"),
   },
   scenes: {
-    "helper-arrives": {
+    "ghost-peeks": {
       background: "porch",
-      object: "helper",
-      objects: [{ asset: "helper-pumpkin", x: 0.5, y: 0.62, width: 0.3 }],
+      object: "ghost",
+      objects: [{ asset: "ghost", x: 0.5, y: 0.52, width: 0.26 }],
     },
-    "helper-friend": {
-      background: "porch",
-      object: "helper",
-      objects: [
-        { asset: "helper-pumpkin", x: 0.33, y: 0.62, width: 0.28 },
-        { asset: "helper-vampire", x: 0.67, y: 0.62, width: 0.28 },
-      ],
-    },
-    "friendly-bats": {
+    "bat-friends": {
       background: "porch",
       object: "bat",
       objects: [
-        { asset: "bat", x: 0.2, y: 0.37, width: 0.23 },
-        { asset: "bat", x: 0.5, y: 0.28, width: 0.23, flipped: true },
-        { asset: "bat", x: 0.8, y: 0.4, width: 0.23 },
+        { asset: "bat", x: 0.33, y: 0.4, width: 0.26 },
+        { asset: "bat", x: 0.67, y: 0.44, width: 0.26, flipped: true },
       ],
     },
     "pumpkin-path": {
       background: "porch",
-      plainBackdrop: "twilight",
       object: "pumpkin",
       objects: [
-        { asset: "pumpkin", x: 0.2, y: 0.65, width: 0.25 },
-        { asset: "pumpkin", x: 0.5, y: 0.65, width: 0.25 },
-        { asset: "pumpkin", x: 0.8, y: 0.65, width: 0.25 },
+        { asset: "pumpkin", x: 0.3, y: 0.7, width: 0.2 },
+        { asset: "pumpkin", x: 0.5, y: 0.7, width: 0.2 },
+        { asset: "pumpkin", x: 0.7, y: 0.7, width: 0.2 },
+      ],
+    },
+    "ghosts-float": {
+      background: "porch",
+      object: "ghost",
+      objects: [
+        { asset: "ghost", x: 0.3, y: 0.62, width: 0.22 },
+        { asset: "ghost", x: 0.5, y: 0.34, width: 0.22 },
+        { asset: "ghost", x: 0.7, y: 0.62, width: 0.22, flipped: true },
       ],
     },
     "party-lanterns": {
       background: "porch",
-      plainBackdrop: "twilight",
       object: "lantern",
       objects: [
-        { asset: "lantern", x: 0.14, y: 0.48, width: 0.2 },
-        { asset: "lantern", x: 0.38, y: 0.57, width: 0.2 },
-        { asset: "lantern", x: 0.62, y: 0.57, width: 0.2 },
-        { asset: "lantern", x: 0.86, y: 0.48, width: 0.2 },
+        { asset: "lantern", x: 0.24, y: 0.55, width: 0.17 },
+        { asset: "lantern", x: 0.42, y: 0.63, width: 0.17 },
+        { asset: "lantern", x: 0.58, y: 0.63, width: 0.17 },
+        { asset: "lantern", x: 0.76, y: 0.55, width: 0.17 },
       ],
     },
-    "helpers-gather": {
+    "bats-swoop": {
       background: "porch",
-      object: "helper",
+      object: "bat",
       objects: [
-        { asset: "helper-pumpkin", x: 0.16, y: 0.65, width: 0.15 },
-        { asset: "helper-vampire", x: 0.33, y: 0.6, width: 0.15, flipped: true },
-        { asset: "helper-pumpkin", x: 0.5, y: 0.65, width: 0.15 },
-        { asset: "helper-vampire", x: 0.67, y: 0.6, width: 0.15 },
-        { asset: "helper-pumpkin", x: 0.84, y: 0.65, width: 0.15, flipped: true },
+        { asset: "bat", x: 0.16, y: 0.48, width: 0.17 },
+        { asset: "bat", x: 0.33, y: 0.3, width: 0.17, flipped: true },
+        { asset: "bat", x: 0.5, y: 0.52, width: 0.17 },
+        { asset: "bat", x: 0.67, y: 0.3, width: 0.17, flipped: true },
+        { asset: "bat", x: 0.84, y: 0.48, width: 0.17 },
       ],
     },
-    "shy-ghosts": {
+    "ghost-party": {
       background: "porch",
       object: "ghost",
       objects: [
@@ -88,8 +87,8 @@ export const HALLOWEEN_THEME: CountingTheme = {
     background: "party-yard",
     decorations: [],
     friends: [
-      { asset: "helper-pumpkin", x: 0.12, y: 0.72, width: 0.16 },
-      { asset: "helper-vampire", x: 0.88, y: 0.72, width: 0.16 },
+      { asset: "pumpkin", x: 0.12, y: 0.74, width: 0.14 },
+      { asset: "lantern", x: 0.88, y: 0.72, width: 0.13 },
       { asset: "bat", x: 0.04, y: 0.55, width: 0.1 },
       { asset: "ghost", x: 0.96, y: 0.55, width: 0.1 },
     ],
