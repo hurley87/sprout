@@ -46,7 +46,9 @@ describe("learner name", () => {
 
   it("is used only by lessons that opt in", () => {
     const halloween = createLiveSessionConfig(COUNTING_HALLOWEEN_LESSON, "Evie").instructions;
-    expect(halloween).toContain("The child's name is Evie. Greet Evie by name");
+    expect(halloween).toContain(`The child's name is Evie. Say "Evie" once, in your very first greeting.`);
+    expect(halloween).toContain("Do not open new scenes, questions or confirmations with the name");
+    expect(halloween).toContain("at most once more in the whole session");
     expect(createLiveSessionConfig(COUNTING_HALLOWEEN_LESSON).instructions).not.toContain("child's name");
     expect(createLiveSessionConfig(COUNTING_LESSON, "Evie")).toEqual(createLiveSessionConfig(COUNTING_LESSON));
   });
@@ -63,6 +65,6 @@ describe("learner name", () => {
     });
     expect((await live(request)).status).toBe(201);
     const body = JSON.parse(String((fetch.mock.calls[0] as unknown as [string, RequestInit])[1].body));
-    expect(body.session.instructions).toContain("Greet Evie by name");
+    expect(body.session.instructions).toContain(`Say "Evie" once, in your very first greeting.`);
   });
 });
