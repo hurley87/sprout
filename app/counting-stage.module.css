@@ -290,3 +290,9 @@
     transition: none !important;
   }
 }
+
+.twilight {
+  background:
+    radial-gradient(ellipse at 50% 20%, #f4e3bd88, transparent 35%),
+    linear-gradient(to bottom, #4a386f 0%, #8a6b9b 72%, #3d4d32 72%, #473b2f 100%);
+}
