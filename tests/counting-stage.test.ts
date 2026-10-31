@@ -3,12 +3,15 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { CountingStage } from "../app/counting-stage";
+import { GARDEN_THEME } from "../app/counting-themes";
 import { COUNTING_SCENES, countingScene } from "../app/counting-scenes";
 import { COUNTING_LESSON_GRAPH } from "../lib/lesson-runtime/counting-lesson";
 
 describe("authored counting artwork", () => {
   it.each(Object.values(COUNTING_LESSON_GRAPH))("matches $id without displaying its answer", node => {
-    const markup = renderToStaticMarkup(createElement(CountingStage, { node, renderToken: "exact-token" }));
+    const markup = renderToStaticMarkup(
+      createElement(CountingStage, { theme: GARDEN_THEME, node, renderToken: "exact-token" }),
+    );
     expect(markup.match(/data-counting-object=/g)).toHaveLength(node.quantity);
     expect(markup.match(new RegExp(`data-counting-object="${node.object}"`, "g"))).toHaveLength(node.quantity);
     expect(markup).toContain(`data-node-id="${node.id}"`);
@@ -50,10 +53,10 @@ describe("authored counting artwork", () => {
 
   it("shows four separate flowers on the flower node without baked-in decorative flowers", () => {
     const node = COUNTING_LESSON_GRAPH["count-4-flowers"];
-    const markup = renderToStaticMarkup(createElement(CountingStage, { node }));
+    const markup = renderToStaticMarkup(createElement(CountingStage, { theme: GARDEN_THEME, node }));
     expect(markup.match(/data-counting-object="flower"/g)).toHaveLength(4);
     expect(markup.match(/src="\/counting\/flower.svg"/g)).toHaveLength(4);
-    expect(markup).toContain('data-flower-free="true"');
+    expect(markup).toContain('data-plain-backdrop="meadow"');
     expect(markup).not.toContain("/counting/garden.svg");
   });
 
@@ -98,7 +101,7 @@ describe("authored counting artwork", () => {
     ]) {
       expect(readFileSync(`public/counting/${asset}.svg`, "utf8")).toContain('<svg xmlns="http://www.w3.org/2000/svg"');
     }
-    const markup = renderToStaticMarkup(createElement(CountingStage, { node: null }));
+    const markup = renderToStaticMarkup(createElement(CountingStage, { theme: GARDEN_THEME, node: null }));
     expect(markup).toContain("Garden celebration!");
     expect(markup).toContain('aria-label="Lesson complete"');
     expect(markup).toContain('data-background="garden"');
@@ -110,7 +113,7 @@ describe("authored counting artwork", () => {
   it("renders the authored numeral only during success", () => {
     for (const node of Object.values(COUNTING_LESSON_GRAPH)) {
       for (const motion of ["idle", "calm", "success"] as const) {
-        const markup = renderToStaticMarkup(createElement(CountingStage, { node, motion }));
+        const markup = renderToStaticMarkup(createElement(CountingStage, { theme: GARDEN_THEME, node, motion }));
         if (motion === "success") expect(markup).toContain(`data-success-numeral="true">${node.quantity}</div>`);
         else expect(markup).not.toContain("data-success-numeral");
       }

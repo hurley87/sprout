@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ClientCommand, ProviderEvent } from "../lib/events";
-import { COUNTING_LESSON } from "../lib/lesson-runtime/counting-lesson";
+import { SHARED_WINDOW_COUNTING_LESSON as COUNTING_LESSON } from "./helpers/counting-runtime";
 import { LessonRuntime } from "../lib/lesson-runtime/lesson-runtime";
 import {
   classificationSource,

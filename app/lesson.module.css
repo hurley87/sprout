@@ -58,6 +58,15 @@
   margin: 0;
 }
 
+/* During the conversation the pill keeps its place but holds an abstract cue instead of words. */
+.status[data-status-cue="glow"] {
+  padding: 0.45rem 1.1rem;
+  background: #2b1d47d9;
+  box-shadow:
+    0 3px 0 #160e27,
+    0 0 0 1px #ffd98a40;
+}
+
 .progress {
   padding: 0.6rem 1rem;
   border-radius: 999px;
@@ -115,6 +124,45 @@
 
 .stop:disabled {
   opacity: 0.5;
+}
+
+/* Night palette: Stop matches the status pill, with a small rounded-square stop mark. */
+.screen[data-palette="night"] .stop {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  border-color: #ffd98a59;
+  background: #2b1d47e6;
+  box-shadow: 0 3px 0 #160e27;
+  color: #fff3cf;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transition:
+    background-color 200ms ease,
+    border-color 200ms ease;
+}
+
+.screen[data-palette="night"] .stop::before {
+  content: "";
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 0.2rem;
+  background: #ffb45a;
+}
+
+.screen[data-palette="night"] .stop:hover {
+  border-color: #ffd98a99;
+  background: #3a2760;
+}
+
+.screen[data-palette="night"] .stop:active {
+  translate: 0 2px;
+  box-shadow: 0 1px 0 #160e27;
+}
+
+.screen[data-palette="night"] .stop:focus-visible {
+  outline: 3px solid #ffd98a;
+  outline-offset: 3px;
 }
 
 .debug {

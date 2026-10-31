@@ -9,25 +9,38 @@ type PresentationSnapshot = Pick<LessonSnapshot, "status" | "error" | "awaitingS
   > | null;
 };
 
+export type PresentationCopy = {
+  readonly welcome: string;
+  readonly complete: string;
+  /** Irregular plurals for the success line; everything else adds "s". */
+  readonly plurals?: Readonly<Record<string, string>>;
+};
+
+export const GARDEN_COPY: PresentationCopy = {
+  welcome: "Come count with Sprout!",
+  complete: "Our counting adventure is complete!",
+  plurals: { butterfly: "butterflies" },
+};
+
 export function lessonPresentation(
   snapshot: PresentationSnapshot | null,
   successNode?: { quantity: number; object: string } | null,
+  copy: PresentationCopy = GARDEN_COPY,
 ) {
   if (snapshot?.error)
     return {
       kind: "error",
       message: "Sprout couldn’t connect. Ask a grown-up to check the microphone and connection, then try Play again.",
     };
-  if (!snapshot) return { kind: "welcome", message: "Come count with Sprout!" };
-  if (snapshot.runtime?.phase === "complete")
-    return { kind: "complete", message: "Our counting adventure is complete!" };
+  if (!snapshot) return { kind: "welcome", message: copy.welcome };
+  if (snapshot.runtime?.phase === "complete") return { kind: "complete", message: copy.complete };
   if (snapshot.status === "ended")
     return { kind: "ended", message: "We’ve stopped for now. You can play again whenever you like." };
   if (snapshot.status !== "live") return { kind: "connecting", message: "Getting ready to play…" };
   if (successNode)
     return {
       kind: "understood",
-      message: `${successNode.quantity} ${successNode.quantity === 1 ? successNode.object : successNode.object === "butterfly" ? "butterflies" : `${successNode.object}s`}!`,
+      message: `${successNode.quantity} ${successNode.quantity === 1 ? successNode.object : (copy.plurals?.[successNode.object] ?? `${successNode.object}s`)}!`,
     };
   if (snapshot.runtime?.outputActivity === "active") return { kind: "speaking", message: "Sprout is talking…" };
   if (snapshot.runtime?.childSpeaking) return { kind: "listening", message: "Sprout is listening…" };

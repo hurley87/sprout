@@ -1,8 +1,5 @@
-export type CountingObject = "duck" | "butterfly" | "flower";
-type CharacterAsset = "duck" | "butterfly-coral" | "butterfly-sky" | "butterfly-lavender" | "flower";
-
 export type CountingPlacement = {
-  readonly asset: CharacterAsset;
+  readonly asset: string;
   readonly x: number;
   readonly y: number;
   readonly width: number;
@@ -10,9 +7,11 @@ export type CountingPlacement = {
 };
 
 export type CountingScene = {
-  readonly background: "pond" | "garden";
-  readonly object: CountingObject;
-  readonly flowerFree?: boolean;
+  readonly background: string;
+  /** CSS-module backdrop class drawn instead of the background artwork, so nothing behind the
+   * countable objects can be mistaken for one of them. */
+  readonly plainBackdrop?: string;
+  readonly object: string;
   readonly objects: readonly CountingPlacement[];
 };
 
@@ -51,7 +50,7 @@ export const COUNTING_SCENES = {
   "flowers-bloom": {
     background: "garden",
     object: "flower",
-    flowerFree: true,
+    plainBackdrop: "meadow",
     objects: [
       { asset: "flower", x: 0.16, y: 0.62, width: 0.22 },
       { asset: "flower", x: 0.39, y: 0.48, width: 0.22 },
@@ -70,8 +69,11 @@ export const COUNTING_SCENES = {
   },
 } as const satisfies Record<string, CountingScene>;
 
-export function countingScene(presentation: { sceneId: string; object: string; quantity: number }): CountingScene {
-  const scene: CountingScene | undefined = COUNTING_SCENES[presentation.sceneId as keyof typeof COUNTING_SCENES];
+export function countingScene(
+  presentation: { sceneId: string; object: string; quantity: number },
+  scenes: Readonly<Record<string, CountingScene>> = COUNTING_SCENES,
+): CountingScene {
+  const scene = Object.hasOwn(scenes, presentation.sceneId) ? scenes[presentation.sceneId] : undefined;
   if (!scene || scene.object !== presentation.object || scene.objects.length !== presentation.quantity) {
     throw new Error(`Counting artwork does not match authored scene: ${presentation.sceneId}`);
   }
