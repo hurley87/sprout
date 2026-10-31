@@ -10,7 +10,7 @@ import type { LessonDefinition } from "@/lib/lesson-runtime/lesson-definition";
 import { LESSON_TIMING } from "@/lib/lesson-runtime/lesson-runtime";
 import { useVoiceDemo } from "@/components/voice-demo/use-voice-demo";
 import { VoiceDemoControls } from "@/components/voice-demo/controls";
-import { lessonPresentation, stageMotion, voiceActivity } from "./lesson-presentation";
+import { lessonPresentation, showsSuccessFeedback, stageMotion, voiceActivity } from "./lesson-presentation";
 import { CountingStage } from "./counting-stage";
 import { VoiceCue } from "./voice-cue";
 import styles from "./lesson.module.css";
@@ -39,7 +39,7 @@ export default function Lesson({
   const nodeId = display ? display.nodeId : INITIAL_COUNTING_NODE_ID;
   const node = nodeId && isCountingNodeId(nodeId) ? COUNTING_LESSON_GRAPH[nodeId] : null;
   const state = snapshot?.runtime;
-  const presentation = lessonPresentation(snapshot);
+  const presentation = lessonPresentation(snapshot, showsSuccessFeedback(snapshot, lessonDefinition) ? node : null);
   const completed = presentation.kind === "complete";
   // Authored order of the rendered scene; the terminal render has no counting node.
   const step = node ? COUNTING_NODE_IDS.indexOf(node.id) : COUNTING_NODE_IDS.length;

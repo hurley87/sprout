@@ -72,6 +72,11 @@ export function CountingStage({
             )}
           </div>
           <div className={styles.objects} data-counting-objects aria-hidden="true">
+            {motion === "success" && (
+              <div className={styles.numeral} data-success-numeral>
+                {node!.quantity}
+              </div>
+            )}
             {scene.objects.map((object, index) => (
               <div
                 key={`${node!.sceneId}:${index}`}
@@ -114,6 +119,17 @@ export function CountingStage({
             <Image src="/counting/garden.svg" alt="" width={960} height={600} preload />
           </div>
           <div className={styles.objects} aria-hidden="true">
+            {[0, 1, 2, 3].map(index => (
+              <div
+                key={index}
+                className={styles.celebrationFlower}
+                data-celebration-flower
+                // Right of the duck friend, so no flower hides behind it.
+                style={{ left: `${36 + index * 16}%`, ["--i" as string]: index } as CSSProperties}
+              >
+                <Image className={styles.character} src="/counting/flower.svg" alt="" width={280} height={320} />
+              </div>
+            ))}
             {CELEBRATION.map((friend, index) => (
               <div
                 key={friend.asset}

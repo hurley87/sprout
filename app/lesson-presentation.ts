@@ -3,10 +3,16 @@ import type { LessonSnapshot } from "@/lib/lesson-runtime/lesson-runtime";
 import { hasCurrentCompletionEvidence } from "@/lib/lesson-runtime/lesson-runtime-reducer";
 
 type PresentationSnapshot = Pick<LessonSnapshot, "status" | "error" | "awaitingSteering"> & {
-  runtime: Pick<NonNullable<LessonSnapshot["runtime"]>, "phase" | "childSpeaking" | "outputActivity"> | null;
+  runtime: Pick<
+    NonNullable<LessonSnapshot["runtime"]>,
+    "phase" | "childSpeaking" | "outputActivity" | "hasChildTranscript" | "transcriptSource"
+  > | null;
 };
 
-export function lessonPresentation(snapshot: PresentationSnapshot | null) {
+export function lessonPresentation(
+  snapshot: PresentationSnapshot | null,
+  successNode?: { quantity: number; object: string } | null,
+) {
   if (snapshot?.error)
     return {
       kind: "error",
@@ -18,14 +24,21 @@ export function lessonPresentation(snapshot: PresentationSnapshot | null) {
   if (snapshot.status === "ended")
     return { kind: "ended", message: "We’ve stopped for now. You can play again whenever you like." };
   if (snapshot.status !== "live") return { kind: "connecting", message: "Getting ready to play…" };
-  if (snapshot.runtime?.outputActivity === "active") return { kind: "speaking", message: "Sprout is speaking…" };
+  if (successNode)
+    return {
+      kind: "understood",
+      message: `${successNode.quantity} ${successNode.quantity === 1 ? successNode.object : successNode.object === "butterfly" ? "butterflies" : `${successNode.object}s`}!`,
+    };
+  if (snapshot.runtime?.outputActivity === "active") return { kind: "speaking", message: "Sprout is talking…" };
   if (snapshot.runtime?.childSpeaking) return { kind: "listening", message: "Sprout is listening…" };
   if (snapshot.awaitingSteering || snapshot.runtime?.phase !== "active")
     return { kind: "waiting", message: "One moment…" };
-  return { kind: "ready", message: "Your turn!" };
+  if (snapshot.runtime.hasChildTranscript && snapshot.runtime.transcriptSource === "child")
+    return { kind: "thinking", message: "Sprout is thinking…" };
+  return { kind: "ready", message: "Your turn to count!" };
 }
 
-export type VoiceActivity = "off" | "waiting" | "your-turn" | "listening" | "speaking";
+export type VoiceActivity = "off" | "waiting" | "your-turn" | "listening" | "speaking" | "thinking" | "understood";
 
 /** The cue follows the same session/VAD/output facts as the status copy; it never shows a
  * listening ear before the session (and its microphone input) is live. */
@@ -34,6 +47,8 @@ export function voiceActivity(presentation: ReturnType<typeof lessonPresentation
     case "speaking":
     case "listening":
     case "waiting":
+    case "thinking":
+    case "understood":
       return presentation.kind;
     case "ready":
       return "your-turn";
@@ -69,6 +84,15 @@ export function stageMotion(snapshot: MotionSnapshot | null, lesson: LessonDefin
   if (snapshot?.runtime?.phase === "complete" && !snapshot.error) return "celebrate";
   if (showsSuccessFeedback(snapshot, lesson)) return "success";
   // Hold still while the child is answering and once the session has stopped or failed.
-  if (snapshot?.error || snapshot?.status === "ended" || snapshot?.runtime?.childSpeaking) return "calm";
+  const kind = lessonPresentation(snapshot).kind;
+  if (
+    snapshot?.error ||
+    snapshot?.status === "ended" ||
+    snapshot?.runtime?.childSpeaking ||
+    kind === "ready" ||
+    kind === "listening" ||
+    kind === "thinking"
+  )
+    return "calm";
   return "idle";
 }

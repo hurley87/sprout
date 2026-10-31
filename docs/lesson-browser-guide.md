@@ -72,9 +72,9 @@ presentation only and never gates render confirmation or the next scene.
 
 - `idle`: characters arrive with a short staggered entrance, then a duck bobs,
   a butterfly drifts or a flower sways. `calm` pauses that movement while the child
-  is speaking (VAD) and after Stop or failure.
-- `success`: a brief wiggle (duck), flutter (butterfly) or bloom (flower), plus a
-  soft glow. `showsSuccessFeedback` requires a live, error-free, active runtime
+  is concentrating (your turn, listening, or thinking) and after Stop or failure.
+- `success`: a repeating wiggle and ripple (duck), rising wing flap (butterfly) or
+  bloom (flower), plus a glow and the accepted scene's numeral. `showsSuccessFeedback` requires a live, error-free, active runtime
   whose node is the displayed one, no pending render or steering, the child not
   speaking, the reducer's own `hasCurrentCompletionEvidence` (for counting: a
   committed correct answer, `answerAccepted`, from the current visit's ended child
@@ -85,15 +85,16 @@ presentation only and never gates render confirmation or the next scene.
   transition clears the evidence and the next scene starts at `idle`. Counting
   advances on learner evidence, and semantic `acknowledgmentObserved` needs
   longer tutor quiet than the drain, so it is not required here.
-- `celebrate`: after authored completion, the garden celebration shows a duck and two
-  butterflies floating gently beside the message, above an obvious **Play again**.
+- `celebrate`: after authored completion, the garden celebration shows a duck, two
+  butterflies and four blooming flowers beside the message and **Play again**.
 
 A small Sprout cue beside the status text (`data-voice-activity`) follows the same
 session/VAD/output facts: sound waves while Sprout speaks, a glowing ear while the
-child's voice is detected, a still ear for “Your turn!”, a dimmed Sprout while
+child's voice is detected, a still ear for “Your turn to count!”, thought dots after
+the child's transcript, a star for an understood answer, a dimmed Sprout while
 waiting, and nothing before the session is live or after it ends. Nothing spins.
 Under `prefers-reduced-motion` the stage and cue have no animation or transition;
-success remains a static glow.
+success remains a static glow and numeral.
 
 1. Run `npm run dev` with the existing local configuration. GPT-Live needs
    `OPENAI_API_KEY`, and Jev needs `TYPESAFE_API_KEY`. Do not put credentials in

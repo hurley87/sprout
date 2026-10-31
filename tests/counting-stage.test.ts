@@ -103,7 +103,17 @@ describe("authored counting artwork", () => {
     expect(markup).toContain('aria-label="Lesson complete"');
     expect(markup).toContain('data-background="garden"');
     expect(markup).not.toContain("data-counting-object");
-    expect(markup).not.toContain("/counting/flower.svg");
+    expect(markup.match(/data-celebration-flower=/g)).toHaveLength(4);
     expect(markup.replace(/<[^>]*>/g, "")).not.toMatch(/\d|one|two|three|four/i);
+  });
+
+  it("renders the authored numeral only during success", () => {
+    for (const node of Object.values(COUNTING_LESSON_GRAPH)) {
+      for (const motion of ["idle", "calm", "success"] as const) {
+        const markup = renderToStaticMarkup(createElement(CountingStage, { node, motion }));
+        if (motion === "success") expect(markup).toContain(`data-success-numeral="true">${node.quantity}</div>`);
+        else expect(markup).not.toContain("data-success-numeral");
+      }
+    }
   });
 });

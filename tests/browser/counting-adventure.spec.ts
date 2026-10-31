@@ -43,13 +43,15 @@ async function setup(page: Page, verdict: () => "correct" | "incorrect" = () => 
     const record = () => {
       const stage = document.querySelector("[data-scene-id]");
       const cue = document.querySelector("[data-voice-activity]");
-      const entry = `${stage?.getAttribute("data-node-id")}:${stage?.getAttribute("data-motion")}:${cue?.getAttribute("data-voice-activity")}`;
+      const numeral = stage?.querySelector("[data-success-numeral]")?.textContent ?? "none";
+      const entry = `${stage?.getAttribute("data-node-id")}:${stage?.getAttribute("data-motion")}:${cue?.getAttribute("data-voice-activity")}:${numeral}`;
       if (seen.at(-1) !== entry) seen.push(entry);
     };
     document.addEventListener("DOMContentLoaded", () => {
       record();
       new MutationObserver(record).observe(document.body, {
         subtree: true,
+        childList: true,
         attributes: true,
         attributeFilter: ["data-node-id", "data-motion", "data-voice-activity"],
       });
@@ -75,6 +77,26 @@ async function expectCharacterMotion(page: Page, nodeId: CountingNodeId, motion:
   expect(await characterAnimations(page, nodeId)).toEqual(
     Array(node.quantity).fill(expect.stringContaining(KEYFRAMES[node.object][motion])),
   );
+}
+
+/** While the child counts, idle motion is paused and the entrance has finished (it never replays). */
+async function expectCharactersStill(page: Page, nodeId: CountingNodeId) {
+  if (await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches)) return;
+  const characters = stageFor(page, nodeId).locator("[data-counting-object]");
+  await expect
+    .poll(() =>
+      characters.evaluateAll(boxes =>
+        boxes.every(
+          box =>
+            box.getAnimations().length === 0 &&
+            box
+              .querySelector("img")!
+              .getAnimations()
+              .every(animation => animation.playState !== "running"),
+        ),
+      ),
+    )
+    .toBe(true);
 }
 
 /** The kind-specific success keyframes actually run on each answered character, or none under reduced motion. */
@@ -149,18 +171,32 @@ async function answerCurrentScene(
   });
   // Accepted learner evidence alone must not move the scene, or be praised, before the tutor acknowledges it.
   expect((await observer.read())?.snapshot.display.nodeId).toBe(nodeId);
-  await expect(stageFor(page, nodeId)).toHaveAttribute("data-motion", "idle");
-  await expect(voiceCue(page)).toHaveAttribute("data-voice-activity", "your-turn");
+  await expect(stageFor(page, nodeId)).toHaveAttribute("data-motion", "calm");
+  await expect(voiceCue(page)).toHaveAttribute("data-voice-activity", "thinking");
+  await expect(page.getByRole("status")).toHaveText("Sprout is thinking…");
+  await expect(stageFor(page, nodeId).locator("[data-success-numeral]")).toHaveCount(0);
+  await expectCharactersStill(page, nodeId);
   const acknowledged = await observer.cursor();
   await setTutorLevel(page, 0.2);
   await observer.waitForEvent("output.activity", { after: acknowledged, scope, detail: { state: "active" } });
-  await expect(voiceCue(page)).toHaveAttribute("data-voice-activity", "speaking");
+  await expect(voiceCue(page)).toHaveAttribute("data-voice-activity", correct ? "understood" : "speaking");
+  if (!correct) {
+    // Sprout's reply returns the scene from calm to idle; the characters' entrance must not replay.
+    await expect(stageFor(page, nodeId)).toHaveAttribute("data-motion", "idle");
+    expect(
+      await stageFor(page, nodeId)
+        .locator("[data-counting-object]")
+        .evaluateAll(boxes => boxes.every(box => box.getAnimations().length === 0)),
+    ).toBe(true);
+  }
   await page.evaluate(
     text => (window as unknown as LocalSessionWindow).sendTranscript("session.output_transcript.delta", text),
     correct ? `Yes! ${spoken} ${node.object}${node.quantity === 1 ? "" : "s"}.` : `Let's count them together again.`,
   );
   // The answered group stays displayed, and celebrates, while the acknowledgment is still playing.
   await expect(stageFor(page, nodeId)).toHaveAttribute("data-motion", correct ? "success" : "idle");
+  if (correct) await expect(stageFor(page, nodeId).locator("[data-success-numeral]")).toHaveText(String(node.quantity));
+  else await expect(stageFor(page, nodeId).locator("[data-success-numeral]")).toHaveCount(0);
   await expectCharacterMotion(page, nodeId, correct ? "success" : "idle");
   expect((await observer.read())?.snapshot.display.nodeId).toBe(nodeId);
   await setTutorLevel(page, 0);
@@ -183,7 +219,7 @@ test("plays all six authored scenes in order to the garden celebration", async (
   for (const nodeId of COUNTING_NODE_IDS) {
     await expectScene(page, observer, nodeId);
     // A fresh group arrives calmly; nothing celebrates on entry.
-    await expect(stageFor(page, nodeId)).toHaveAttribute("data-motion", "idle");
+    await expect(stageFor(page, nodeId)).not.toHaveAttribute("data-motion", "success");
     await expectCharacterMotion(page, nodeId, "idle");
     const from = await observer.cursor();
     await answerCurrentScene(page, observer, microphone, nodeId);
@@ -213,6 +249,7 @@ test("plays all six authored scenes in order to the garden celebration", async (
   await expect(stage).toContainText("Garden celebration!");
   await expect(stage).toHaveAttribute("data-motion", "celebrate");
   await expect(stage.locator("[data-celebration-character]")).toHaveCount(3);
+  await expect(stage.locator("[data-celebration-flower]")).toHaveCount(4);
   await expect(stage.locator("[data-counting-object]")).toHaveCount(0);
   await expect(voiceCue(page)).toHaveAttribute("data-voice-activity", "off");
   await expectProgress(
@@ -220,6 +257,19 @@ test("plays all six authored scenes in order to the garden celebration", async (
     COUNTING_NODE_IDS.map(() => "done"),
   );
   await expect(page.getByRole("button", { name: "Play again", exact: true })).toBeEnabled();
+  for (const viewport of [
+    { width: 1440, height: 1000 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    const buttonBox = await page.getByRole("button", { name: "Play again", exact: true }).boundingBox();
+    const textBox = await stage.getByText(/Garden celebration!/).boundingBox();
+    expect(
+      buttonBox &&
+        textBox &&
+        (buttonBox.y >= textBox.y + textBox.height || textBox.y >= buttonBox.y + buttonBox.height),
+    ).toBe(true);
+  }
   const report = await observer.report();
   expect(report?.runtime).toMatchObject({ phase: "complete", lessonComplete: true });
   const visited = report!.events
@@ -232,11 +282,11 @@ test("plays all six authored scenes in order to the garden celebration", async (
   const seen = (entry: string) => log.findIndex(item => item.startsWith(entry));
   for (const [index, nodeId] of COUNTING_NODE_IDS.entries()) {
     const next = COUNTING_NODE_IDS[index + 1] ?? "complete";
-    expect(seen(`${nodeId}:success:speaking`)).toBeGreaterThan(-1);
+    expect(seen(`${nodeId}:success:understood:${COUNTING_LESSON_GRAPH[nodeId].quantity}`)).toBeGreaterThan(-1);
     expect(seen(`${nodeId}:success`)).toBeLessThan(seen(`${next}:`));
-    expect(log[seen(`${next}:`)]).not.toContain(":success:");
+    expect(log[seen(`${next}:`)]).toMatch(/:none$/);
   }
-  expect(log.some(entry => entry.endsWith(":listening"))).toBe(true);
+  expect(log.some(entry => entry.includes(":listening:"))).toBe(true);
 });
 
 test("a wrong answer gets no celebration; the corrected answer does", async ({ page }) => {

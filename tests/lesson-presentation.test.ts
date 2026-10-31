@@ -10,7 +10,13 @@ const active: Snapshot = {
   status: "live",
   error: null,
   awaitingSteering: false,
-  runtime: { phase: "active", childSpeaking: false, outputActivity: "quiet" },
+  runtime: {
+    phase: "active",
+    childSpeaking: false,
+    outputActivity: "quiet",
+    hasChildTranscript: false,
+    transcriptSource: "unknown",
+  },
 };
 
 describe("counting child presentation", () => {
@@ -40,7 +46,7 @@ describe("counting child presentation", () => {
   });
 
   it("uses observed output and child speech, not transcripts, for activity", () => {
-    expect(lessonPresentation(active)).toMatchObject({ kind: "ready", message: "Your turn!" });
+    expect(lessonPresentation(active)).toMatchObject({ kind: "ready", message: "Your turn to count!" });
     expect(lessonPresentation({ ...active, runtime: { ...active.runtime!, childSpeaking: true } }).kind).toBe(
       "listening",
     );
@@ -49,6 +55,31 @@ describe("counting child presentation", () => {
     );
     expect(lessonPresentation({ ...active, awaitingSteering: true }).kind).toBe("waiting");
     expect(lessonPresentation({ ...active, runtime: { ...active.runtime!, phase: "rendering" } }).kind).toBe("waiting");
+  });
+
+  it("shows thinking only for a quiet child transcript in an active live turn", () => {
+    const thinking = {
+      ...active,
+      runtime: { ...active.runtime!, hasChildTranscript: true, transcriptSource: "child" as const },
+    };
+    expect(lessonPresentation(thinking)).toEqual({ kind: "thinking", message: "Sprout is thinking…" });
+    expect(lessonPresentation({ ...thinking, runtime: { ...thinking.runtime, childSpeaking: true } }).kind).toBe(
+      "listening",
+    );
+    expect(lessonPresentation({ ...thinking, runtime: { ...thinking.runtime, outputActivity: "active" } }).kind).toBe(
+      "speaking",
+    );
+    expect(lessonPresentation({ ...thinking, runtime: { ...thinking.runtime, transcriptSource: "tutor" } }).kind).toBe(
+      "ready",
+    );
+    expect(lessonPresentation({ ...thinking, awaitingSteering: true }).kind).toBe("waiting");
+    expect(lessonPresentation({ ...thinking, status: "connecting" }).kind).toBe("connecting");
+    expect(lessonPresentation({ ...thinking, status: "ended" }).kind).toBe("ended");
+    expect(lessonPresentation({ ...thinking, error: "error" }).kind).toBe("error");
+    expect(lessonPresentation(thinking, { quantity: 3, object: "butterfly" })).toEqual({
+      kind: "understood",
+      message: "3 butterflies!",
+    });
   });
 
   it("does not turn a stop or failure into completion", () => {

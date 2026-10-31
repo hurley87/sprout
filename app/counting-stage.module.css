@@ -31,7 +31,8 @@
 
 .background img,
 .object img,
-.friend img {
+.friend img,
+.celebrationFlower img {
   display: block;
   width: 100%;
   height: 100%;
@@ -119,13 +120,57 @@
   animation-play-state: paused;
 }
 
-/* Brief and finite; a soft glow stays as the static success state (also under reduced motion). */
 .stage[data-motion="success"] .object .character {
-  animation-duration: 1.2s;
+  animation-duration: 3.4s;
   animation-timing-function: ease-in-out;
   animation-delay: calc(var(--i, 0) * 120ms);
   animation-fill-mode: both;
+  animation-iteration-count: infinite;
   filter: drop-shadow(0 0 0.5rem #fff3a8);
+}
+
+.stage[data-motion="success"] .object[data-counting-object="duck"]::after {
+  content: "";
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  bottom: 3%;
+  height: 13%;
+  border: 3px solid #a6e6ee;
+  border-radius: 50%;
+  animation: ripple 3.4s ease-out infinite;
+}
+
+.numeral {
+  position: absolute;
+  top: 4%;
+  left: 50%;
+  translate: -50% 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: clamp(3rem, 9cqw, 6rem);
+  aspect-ratio: 1;
+  border: 4px solid white;
+  border-radius: 50%;
+  background: #fff1a9;
+  color: #315d3c;
+  box-shadow: 0 4px 16px #496d4360;
+  font-size: clamp(2rem, 6cqw, 4rem);
+  font-weight: 800;
+  animation: arrive 500ms ease-out backwards;
+}
+
+.celebrationFlower {
+  position: absolute;
+  bottom: 0;
+  width: 13%;
+  transform: translateX(-50%);
+  animation: enter 800ms ease-out calc(var(--i) * 180ms) backwards;
+}
+
+.stage[data-motion="celebrate"] .celebrationFlower .character {
+  animation: sway 4s ease-in-out calc(var(--i) * -0.5s) infinite;
 }
 
 .stage[data-motion="success"] .object[data-counting-object="duck"] .character {
@@ -199,40 +244,56 @@
 }
 
 @keyframes wiggle {
-  20%,
-  60% {
+  10%,
+  30% {
     rotate: -8deg;
   }
-  40%,
-  80% {
+  20%,
+  40% {
     rotate: 8deg;
   }
 }
 
 @keyframes flutter {
-  25%,
-  75% {
+  10%,
+  30%,
+  45% {
     translate: 0 -8%;
-    scale: 1.06 0.92;
+    scale: 0.72 1.05;
   }
-  50% {
+  20%,
+  40% {
     translate: 0 -12%;
     scale: 1;
   }
 }
 
 @keyframes bloom {
-  40% {
-    scale: 1.14;
+  20% {
+    scale: 1.25;
   }
-  70% {
+  40% {
     scale: 0.98;
+  }
+}
+
+@keyframes ripple {
+  0% {
+    opacity: 0.8;
+    scale: 0.65;
+  }
+  50%,
+  100% {
+    opacity: 0;
+    scale: 1.35;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .stage,
-  .stage * {
+  .stage *,
+  .stage *::before,
+  .stage *::after {
     animation: none !important;
     transition: none !important;
   }

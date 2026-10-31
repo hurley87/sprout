@@ -153,8 +153,11 @@ describe("counting stage motion", () => {
 
   it("moves gently before Play and between answers, and holds still while the child speaks", () => {
     expect(stageMotion(null, COUNTING_LESSON)).toBe("idle");
-    expect(stageMotion(live({}), COUNTING_LESSON)).toBe("idle");
+    expect(stageMotion(live({}), COUNTING_LESSON)).toBe("calm");
     expect(stageMotion(live({ childSpeaking: true }), COUNTING_LESSON)).toBe("calm");
+    expect(stageMotion(live({ outputActivity: "active" }), COUNTING_LESSON)).toBe("idle");
+    expect(stageMotion(live({ phase: "rendering" }), COUNTING_LESSON)).toBe("idle");
+    expect(stageMotion(live({ hasChildTranscript: true, transcriptSource: "child" }), COUNTING_LESSON)).toBe("calm");
   });
 
   it("celebrates only the runtime's authored completion", () => {
@@ -166,6 +169,7 @@ describe("counting stage motion", () => {
     const markup = renderToStaticMarkup(createElement(CountingStage, { node: null, motion: "celebrate" }));
     expect(markup).toContain('data-motion="celebrate"');
     expect(markup.match(/data-celebration-character=/g)).toHaveLength(3);
+    expect(markup.match(/data-celebration-flower=/g)).toHaveLength(4);
     expect(markup).not.toContain("data-counting-object=");
   });
 });
@@ -176,7 +180,13 @@ describe("voice activity cue", () => {
     status: "live",
     error: null,
     awaitingSteering: false,
-    runtime: { phase: "active", childSpeaking: false, outputActivity: "quiet" },
+    runtime: {
+      phase: "active",
+      childSpeaking: false,
+      outputActivity: "quiet",
+      hasChildTranscript: false,
+      transcriptSource: "unknown",
+    },
   };
   const cue = (snapshot: Snapshot | null) => voiceActivity(lessonPresentation(snapshot));
 
@@ -185,6 +195,10 @@ describe("voice activity cue", () => {
     expect(cue({ ...active, runtime: { ...active.runtime!, childSpeaking: true } })).toBe("listening");
     expect(cue({ ...active, runtime: { ...active.runtime!, outputActivity: "active" } })).toBe("speaking");
     expect(cue({ ...active, awaitingSteering: true })).toBe("waiting");
+    expect(
+      cue({ ...active, runtime: { ...active.runtime!, hasChildTranscript: true, transcriptSource: "child" } }),
+    ).toBe("thinking");
+    expect(voiceActivity(lessonPresentation(active, { quantity: 1, object: "duck" }))).toBe("understood");
     expect(cue({ ...active, runtime: { ...active.runtime!, phase: "rendering" } })).toBe("waiting");
   });
 

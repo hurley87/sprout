@@ -11,11 +11,21 @@ export function VoiceCue({ activity }: { activity: VoiceActivity }) {
         <path d="M32 31 C32 19 40 10 54 10 C54 23 45 31 32 31Z" fill="#7cc47f" />
         <ellipse cx="32" cy="58" rx="16" ry="4" fill="#c79a6b" />
       </g>
-      {activity === "speaking" && (
+      {(activity === "speaking" || activity === "understood") && (
         <g className={styles.waves} stroke="#2f6b3f" strokeWidth="4" strokeLinecap="round" fill="none">
           <path d="M66 24 Q72 32 66 40" />
           <path d="M76 17 Q86 32 76 47" />
         </g>
+      )}
+      {activity === "thinking" && (
+        <g fill="#2f6b3f">
+          <circle cx="66" cy="30" r="3" />
+          <circle cx="77" cy="24" r="3" />
+          <circle cx="88" cy="18" r="3" />
+        </g>
+      )}
+      {activity === "understood" && (
+        <path d="M84 4 L87 12 L95 15 L87 18 L84 26 L81 18 L73 15 L81 12 Z" fill="#e7ad38" />
       )}
       {(activity === "listening" || activity === "your-turn") && (
         <g className={styles.ear} stroke="#2f6b3f" strokeWidth="4" strokeLinecap="round" fill="#fbe3cf">
