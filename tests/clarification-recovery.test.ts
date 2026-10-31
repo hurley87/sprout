@@ -41,19 +41,19 @@ it.each([...review.recorded, ...review.synthetic])(
   },
 );
 it("scopes no-success/no-total to the question, permits evidence-based reaffirmation and guards unsafe replies", () => {
-  expect(SUPPORT_CLARIFICATION_INSTRUCTION).toContain("In that clarification question only");
+  expect(SUPPORT_CLARIFICATION_INSTRUCTION).toContain("In that question");
   expect(SUPPORT_CLARIFICATION_INSTRUCTION).toContain(
-    "do not supply or repeat a count, total, answer, counting method, or hint, or imply success",
+    "do not supply or repeat a count, total, answer, method, or hint, or imply success",
   );
   expect(SUPPORT_CLARIFICATION_INSTRUCTION).toContain(
-    "if their response establishes a settled correct current-scene answer",
+    "a settled correct answer or reaffirmation without renewed help or uncertainty",
   );
-  expect(SUPPORT_CLARIFICATION_INSTRUCTION).toContain(
-    "reaffirms their previous correct answer without renewed help or uncertainty",
-  );
+  expect(SUPPORT_CLARIFICATION_INSTRUCTION).toContain("needs a fresh explicit confirmation with its number and object");
   for (const instruction of [SPROUT_LIVE_CONFIG.instructions, SUPPORT_CLARIFICATION_INSTRUCTION]) {
-    expect(instruction).toMatch(/generic finished\/yes reply alone is insufficient/i);
-    expect(instruction).toMatch(/renewed help, unresolved alternatives, or unfinished\/uncertain replies/i);
+    expect(instruction).toMatch(/generic (?:finished\/yes reply|yes or finished) alone is insufficient/i);
+    expect(instruction).toMatch(
+      /renewed help, unresolved alternatives, or (?:unfinished\/uncertain replies|uncertainty)/i,
+    );
   }
   expect(SUPPORT_CLARIFICATION_INSTRUCTION).toContain("grants no completion authority");
   expect(SUPPORT_CLARIFICATION_INSTRUCTION).not.toContain("duck");

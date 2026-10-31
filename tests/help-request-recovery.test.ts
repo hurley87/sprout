@@ -176,24 +176,16 @@ describe("current support after help (mock provider, no semantic calibration)", 
 });
 
 describe("help instruction delivery (static, not GPT-Live conversational quality)", () => {
-  it.each(COUNTING_NODE_IDS)("supplies learner-led counting in the authored brief for %s", id => {
-    const brief = COUNTING_LESSON_GRAPH[id].tutorBrief;
-    expect(brief).toContain("point to");
-    expect(brief).toContain("themselves");
-    expect(brief).toContain("wait");
-    if (id === "count-1-duck") expect(brief).toContain("starting the count reveals the total");
-    else expect(brief).toContain("without starting or finishing the count or giving the total");
-  });
-
   it("delivers full hint guidance in durable session instructions", () => {
     const instruction = SPROUT_LIVE_CONFIG.instructions;
-    expect(instruction).toContain('"Point to each duck and say the counting words. What do you get?"');
-    expect(instruction).toContain("use the current object's name");
-    expect(instruction).toContain("Do not start or finish the count for the child");
-    expect(instruction).toContain("supply the total through a leading question");
-    expect(instruction).toContain('"Start with one" reveals the answer');
-    expect(instruction).toContain('"Point to the duck and count it. What do you get?"');
-    expect(instruction).toContain("If the child only echoes a number you supplied or remains unsure");
+    expect(instruction).toContain(
+      "point to each current object and count; go slowly, one at a time; start again from the first one",
+    );
+    expect(instruction).toContain("one actionable hint per turn, then wait");
+    expect(instruction).toContain("Never re-ask the same question with slightly different wording");
+    expect(instruction).toContain("Never claim to see pointing or touching");
+    expect(instruction).toContain("Never supply a counting word, start or finish the count");
+    expect(instruction).toContain('"start with one" reveals the answer');
   });
   it.each(COUNTING_NODE_IDS)("keeps the %s append compact with its current brief and support reminders", id => {
     const node = COUNTING_LESSON_GRAPH[id];
@@ -204,9 +196,8 @@ describe("help instruction delivery (static, not GPT-Live conversational quality
       tutorBrief: node.tutorBrief,
     });
     expect(instruction).toContain(node.tutorBrief);
-    expect(instruction).toContain("Follow the session counting and help guidance");
-    expect(instruction).toContain("let the child supply the count and total");
-    expect(instruction).toContain("never supply the count or total as a hint");
+    expect(instruction).toContain("Follow the counting and help guidance");
+    expect(instruction).toContain("Never supply the count or total as a hint");
     // Static text-size regression for our authored English, not a model tokenizer.
     // Current appends are separately checked with public tokenizers against 500 tokens.
     expect(new TextEncoder().encode(instruction).length).toBeLessThanOrEqual(1200);

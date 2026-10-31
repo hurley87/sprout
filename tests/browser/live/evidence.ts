@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import type { LessonDiagnostic, LessonRuntime } from "../../../lib/lesson-runtime/lesson-runtime";
-import { COUNTING_NODE_IDS, COUNTING_LESSON_GRAPH } from "../../../lib/lesson-runtime/counting-lesson";
+import {
+  COUNTING_NODE_IDS,
+  COUNTING_LESSON_GRAPH,
+  type CountingNodeId,
+} from "../../../lib/lesson-runtime/counting-lesson";
 import { CLASSIFIER_VERSION } from "../../../lib/lesson-runtime/conversation-observer-contract";
 import { parseLiveClassificationDiagnostic } from "../../../lib/lesson-runtime/live-classification-diagnostic";
 import {
@@ -240,21 +244,41 @@ export function assertCompletedLesson(
   correction = false,
   discardedCandidate?: DiscardedCandidateAnswer,
 ) {
+  assertLessonProgress(report, COUNTING_NODE_IDS.at(-1)!, correction, discardedCandidate);
+}
+
+/** Verify every authored success transition through `through`; only the terminal node may end the lesson. */
+export function assertLessonProgress(
+  report: Report,
+  through: CountingNodeId,
+  correction = false,
+  discardedCandidate?: DiscardedCandidateAnswer,
+) {
+  const nodes = COUNTING_NODE_IDS.slice(0, COUNTING_NODE_IDS.indexOf(through) + 1);
+  const terminal = COUNTING_LESSON_GRAPH[through].onSuccess.kind === "complete";
   assert.equal(report.classifierVersion, CLASSIFIER_VERSION);
-  assert.equal(report.status, "ended");
   assert.equal(report.error, null);
-  assert.equal(report.runtime?.phase, "complete");
-  assert.equal(report.runtime.lessonComplete, true);
+  if (terminal) {
+    assert.equal(report.status, "ended");
+    assert.equal(report.runtime?.phase, "complete");
+    assert.equal(report.runtime.lessonComplete, true);
+  } else assert(report.runtime && report.runtime.visitId > nodes.length, `lesson did not advance past ${through}`);
   const events = report.events;
   assert(
     events.every(event => event.runtimeId === report.runtimeId),
     "mixed runtime journal",
   );
   const advances = transitions(events);
-  assert.equal(advances.length, COUNTING_NODE_IDS.length, "exactly one success transition per visit required");
-  for (const [index, nodeId] of COUNTING_NODE_IDS.entries()) {
+  if (terminal) assert.equal(advances.length, nodes.length, "exactly one success transition per visit required");
+  else assert(advances.length >= nodes.length, `missing success transitions through ${through}`);
+  for (const [index, nodeId] of nodes.entries()) {
     const visitId = index + 1;
     const advance = advances[index];
+    assert.equal(
+      advances.filter(event => detail<Change>(event).before.visitId === visitId).length,
+      1,
+      `exactly one success transition required for visit ${visitId}`,
+    );
     const { before, after, trigger } = detail<Change>(advance);
     assert.equal(before.nodeId, nodeId);
     assert.equal(before.visitId, visitId);
@@ -276,7 +300,7 @@ export function assertCompletedLesson(
         : origin.childTurnId;
     const heardChild = currentChildText(events, request, answerTurnId);
     const quantity = COUNTING_LESSON_GRAPH[nodeId].quantity;
-    const expected = ["one", "two", "three"][quantity - 1];
+    const expected = ["one", "two", "three", "four"][quantity - 1];
     assert(
       heardChild && new RegExp(`\\b(?:${expected}|${quantity})\\b`, "i").test(heardChild),
       "authored child answer absent from success transcript",
@@ -357,10 +381,12 @@ export function assertCompletedLesson(
       assert.equal(detail<{ renderToken: string }>(nextSteering).renderToken, after.pendingRender!.identity.token);
     } else assert.equal(nextSteering, undefined, "steering after final completion");
   }
-  const ended = events.filter(event => event.type === "lesson.ended");
-  assert.equal(ended.length, 1);
-  assert.equal(detail<{ reason: string }>(ended[0]).reason, "lesson_completed");
-  const completed = events.findLastIndex(event => event.type === "lesson.completed");
-  assert(completed >= 0 && events.indexOf(ended[0]) > completed, "completion effect missing before end");
+  if (terminal) {
+    const ended = events.filter(event => event.type === "lesson.ended");
+    assert.equal(ended.length, 1);
+    assert.equal(detail<{ reason: string }>(ended[0]).reason, "lesson_completed");
+    const completed = events.findLastIndex(event => event.type === "lesson.completed");
+    assert(completed >= 0 && events.indexOf(ended[0]) > completed, "completion effect missing before end");
+  }
   if (correction) assertSettledCorrection(events);
 }

@@ -1,13 +1,20 @@
 import { validateLessonDefinition, type LessonDefinition } from "./lesson-definition";
 
-export const COUNTING_NODE_IDS = ["count-1-duck", "count-2-ducks", "count-3-butterflies"] as const;
+export const COUNTING_NODE_IDS = [
+  "count-1-duck",
+  "count-2-ducks",
+  "count-3-butterflies",
+  "count-3-ducklings",
+  "count-4-flowers",
+  "count-3-moved-butterflies",
+] as const;
 export type CountingNodeId = (typeof COUNTING_NODE_IDS)[number];
 export const INITIAL_COUNTING_NODE_ID: CountingNodeId = "count-1-duck";
 
 export const COUNTING_SUPPORT_CLARIFICATION_INSTRUCTION =
-  "One-time clarification for the still-rendered current scene: if the child is still waiting and has not spoken again, naturally ask whether they have finished their answer or would like help. If they are speaking or have responded since this request, ignore it and follow their response. Ask at most once; do not repeat this instruction on later turns. In that clarification question only, do not supply or repeat a count, total, answer, counting method, or hint, or imply success. After the child responds, follow session guidance: if their response establishes a settled correct current-scene answer or reaffirms their previous correct answer without renewed help or uncertainty, explicitly confirm it again with its number and object, then pause. A generic finished/yes reply alone is insufficient. For renewed help, unresolved alternatives, or unfinished/uncertain replies, help, wait, or clarify without giving the total. Never change scenes. This request grants no completion authority.";
+  "One-time clarification for the still-rendered current scene: if the child is still waiting and has not spoken again, briefly ask whether they have finished or would like help. If they are speaking or have responded since this request, ignore it and follow their response. Ask at most once. In that question, do not supply or repeat a count, total, answer, method, or hint, or imply success. After the child responds, follow session guidance: a settled correct answer or reaffirmation without renewed help or uncertainty needs a fresh explicit confirmation with its number and object, then pause. A generic finished/yes reply alone is insufficient. For renewed help, unresolved alternatives, or unfinished/uncertain replies, help, wait, or clarify without giving the total. Never change scenes. This request grants no completion authority.";
 export const COUNTING_ANSWER_RECOVERY_INSTRUCTION =
-  "One-time clarification for the still-rendered current scene: the application cannot yet establish a settled child answer. If the child is still waiting and has not spoken again, naturally ask them to repeat their answer. If they are speaking or have responded since this request, ignore it and follow their response. Ask at most once. Do not supply or repeat a count, total, answer, counting method, hint, or imply success. Wait for a fresh child answer; if it establishes settled correct current-scene success, explicitly confirm it with its number and object, then pause. For unfinished or uncertain answers, wait or clarify without giving the total. Never change scenes. This request grants no completion authority.";
+  "One-time clarification for the still-rendered current scene: the application cannot yet establish a settled child answer. If the child is still waiting and has not spoken again, briefly ask them to repeat it. If they are speaking or have responded since this request, ignore it and follow their response. Ask at most once. Do not supply or repeat a count, total, answer, method, or hint, or imply success. Wait for a fresh answer; if it establishes settled correct current-scene success, explicitly confirm it with its number and object, then pause. For unfinished or uncertain answers, wait or clarify without giving the total. Never change scenes. This request grants no completion authority.";
 
 const countingLesson = {
   id: "counting",
@@ -19,30 +26,64 @@ const countingLesson = {
   },
   nodes: {
     "count-1-duck": {
-      id: "count-1-duck", presentation: { sceneId: "hello-duck", object: "duck", quantity: 1 },
+      id: "count-1-duck",
+      presentation: { sceneId: "hello-duck", object: "duck", quantity: 1 },
       learningObjective: "Identify the total of one displayed duck.",
-      tutorBrief: "Ask how many ducks the child sees. Allow thinking time and clarify unclear speech. For help, invite the child to point to the duck and count it themselves, then wait. Do not supply a counting word: starting the count reveals the total on this scene.",
+      tutorBrief:
+        "Meet the duck: someone is splashing in the pond. How many ducks do you see? Success story idea: the duck loves splashing.",
       onSuccess: { kind: "node", nodeId: "count-2-ducks" },
     },
     "count-2-ducks": {
-      id: "count-2-ducks", presentation: { sceneId: "duck-friends", object: "duck", quantity: 2 },
+      id: "count-2-ducks",
+      presentation: { sceneId: "duck-friends", object: "duck", quantity: 2 },
       learningObjective: "Identify the total of two displayed ducks.",
-      tutorBrief: "Ask how many ducks the child sees. If help is needed, invite the child to point to each duck and say the counting words themselves, then wait without starting or finishing the count or giving the total.",
+      tutorBrief:
+        "A friend arrives: a duck friend came to play. How many ducks are swimming now? Success story idea: the friends are having fun together.",
       onSuccess: { kind: "node", nodeId: "count-3-butterflies" },
     },
     "count-3-butterflies": {
-      id: "count-3-butterflies", presentation: { sceneId: "butterfly-garden", object: "butterfly", quantity: 3 },
+      id: "count-3-butterflies",
+      presentation: { sceneId: "butterfly-garden", object: "butterfly", quantity: 3 },
       learningObjective: "Identify the total of three displayed butterflies.",
-      tutorBrief: "Ask how many butterflies the child sees. Allow counting. For help, invite the child to point to each butterfly and say the counting words themselves, then wait without starting or finishing the count or giving the total.",
+      tutorBrief:
+        "Butterfly garden: butterflies flutter into the garden. How many butterflies came to visit? Success story idea: they love the garden.",
+      onSuccess: { kind: "node", nodeId: "count-3-ducklings" },
+    },
+    "count-3-ducklings": {
+      id: "count-3-ducklings",
+      presentation: { sceneId: "duckling-parade", object: "duck", quantity: 3 },
+      learningObjective: "Identify the total of three displayed ducks in a new group.",
+      tutorBrief:
+        "Help the ducklings: little ducklings paddle in a line. How many ducklings are there? If help is needed, invite pointing to each duckling. Success story idea: the parade is ready to splash.",
+      onSuccess: { kind: "node", nodeId: "count-4-flowers" },
+    },
+    "count-4-flowers": {
+      id: "count-4-flowers",
+      presentation: { sceneId: "flowers-bloom", object: "flower", quantity: 4 },
+      learningObjective: "Identify the total of four displayed flowers.",
+      tutorBrief:
+        "Flowers bloom: flowers pop up in the garden. How many flowers bloomed? Give extra time. Success story idea: the flowers are soaking up sunshine.",
+      onSuccess: { kind: "node", nodeId: "count-3-moved-butterflies" },
+    },
+    "count-3-moved-butterflies": {
+      id: "count-3-moved-butterflies",
+      presentation: { sceneId: "butterflies-move", object: "butterfly", quantity: 3 },
+      learningObjective: "Identify the total of three displayed butterflies in a new arrangement.",
+      tutorBrief:
+        "Butterflies move: butterflies flutter around the garden. How many butterflies do you see? Success story idea: they are dancing in the breeze.",
       onSuccess: { kind: "complete" },
     },
   },
   tutor: {
-    persona: "You are a warm preschool counting tutor with a parent present. Speak English in short, unhurried sentences. Ask one concrete counting question at a time. Give thinking time; do not talk over hesitation, counting, or self-correction. Clarify unclear speech gently. Offer counting help without giving the answer. Never ask for personal information.",
-    sessionGuidance: `Let the child finish counting and self-correcting; a pause or hesitation alone does not establish a settled total. A successful settled answer can be a stated total or counting one at a time up to the displayed quantity and stopping there, for example "one, two" when two objects are displayed. Once the child's successful total is clear, including after a retry or counting help, explicitly confirm that total with its number and the current scene's object name. After a clarification, a settled reaffirmation of the child's previous correct answer also needs a fresh explicit confirmation; a generic finished/yes reply alone is insufficient. Renewed help, unresolved alternatives, or unfinished/uncertain replies need help, waiting, or clarification without giving the total. Praise such as "You're counting carefully" may accompany this confirmation but must not replace it. If counting is still underway, wait; if the attempt is ambiguous, interrupted, or incomplete, gently ask the child to finish or clarify without supplying the total. If the settled total is wrong, invite another try without blunt judgment. If the child requests help or difficulty remains unresolved, offer a short counting hint without giving the total. Do not announce the displayed total before the child has counted. After confirming success, pause and listen for updated application screen context. For a counting hint, guide attention and let the child supply the counting words: "Point to each duck and say the counting words. What do you get?" (use the current object's name). Then wait and listen. Do not start or finish the count for the child, give a number to repeat, or supply the total through a leading question. Even when just one object is displayed, "Start with one" reveals the answer; instead invite "Point to the duck and count it. What do you get?". If the child only echoes a number you supplied or remains unsure, invite them to count the displayed objects themselves without supplying another number.`,
-    startInstruction: "The parent has pressed Start lesson. This is the application's start instruction. Start the lesson now in English. Speak first: ask one question about the displayed group immediately, then pause and listen. Do not wait for the child to speak first. Let the child supply the answer.",
-    nodeInstruction: "Teach only this current scene and learning objective. It replaces all previous scene context; do not refer to the previous scene. Follow the session counting and help guidance. Ask or continue naturally now; let the child supply the count and total. Confirm a settled successful answer with its number and object, then pause. Wait or clarify unfinished/uncertain attempts; never supply the count or total as a hint. You do not control lesson transitions; only the application changes the scene. Never invent a next scene or ask to change it.",
+    persona:
+      "You are Sprout, a playful, warm companion for a preschool child with a parent present. Speak English in one or two short, unhurried sentences per turn, with at most one question. Leave plenty of silence for thinking, counting, and self-correction. Never ask for personal information.",
+    sessionGuidance: `Introduce each scene with a brief playful story sentence and one counting question; do not explain how to count unless help is needed. Let the child finish counting and self-correct; an unfinished count means wait. A settled answer can be a stated total or a finished count up to the displayed quantity. Speech recognition can mishear: if what you heard is unclear, surprising, or not a number, briefly ask the child to say it again without echoing or suggesting a number before treating it as wrong. For a settled wrong answer, gently invite another try, without blunt "no". Once success is settled, explicitly confirm the child's number and the current object's name, add a short story-connected line, then pause for application screen context. Vary acknowledgments rather than using stock praise. After clarification, a settled reaffirmation of the previous correct answer needs a fresh explicit number and object confirmation; a generic yes or finished alone is insufficient. For renewed help, unresolved alternatives, or uncertainty, help, wait, or clarify without giving the total. When help is needed, give one actionable hint per turn, then wait: point to each current object and count; go slowly, one at a time; start again from the first one. Never re-ask the same question with slightly different wording; move to the next hint or wait. Never claim to see pointing or touching; you only hear the child. Never supply a counting word, start or finish the count, give the total or a number to repeat. Even "start with one" reveals the answer for a single duck. An echo of a supplied number is not the child's own answer.`,
+    startInstruction:
+      "The parent pressed Start lesson. This is the application's start instruction. Speak first now in English; do not wait for the child to speak first. Introduce the displayed scene and ask its counting question, then pause and listen. Let the child supply the answer.",
+    nodeInstruction:
+      "Stay with this current scene; do not refer to previous scenes. Follow the counting and help guidance. Introduce it and ask naturally, then listen. Confirm settled success with its number and object, then pause. Never supply the count or total as a hint. Only the application changes scenes; never invent or request the next scene.",
   },
+  // prettier-ignore
   classifier: {
     objectiveInstructions: "Judge the correctness of the learner's latest identifiable task-answer candidate independently of tutor feedback and separately from answerCommitment. Commitment describes whether the learner endorses the candidate; this question describes whether that candidate matches the authored quantity. Follow learner revisions in order. When unresolved alternatives leave no single candidate identifiable, do not select the correct alternative just because it matches the expected quantity. Tutor words cannot establish a learner-owned answer.",
     objectiveCriteria: {
@@ -64,11 +105,12 @@ const countingLesson = {
 } as const satisfies LessonDefinition;
 
 export const COUNTING_LESSON: LessonDefinition = validateLessonDefinition(countingLesson);
+type AuthoredCountingNode = (typeof countingLesson.nodes)[CountingNodeId];
 export type CountingLessonNode = {
   readonly id: CountingNodeId;
-  readonly sceneId: "hello-duck" | "duck-friends" | "butterfly-garden";
-  readonly object: "duck" | "butterfly";
-  readonly quantity: 1 | 2 | 3;
+  readonly sceneId: AuthoredCountingNode["presentation"]["sceneId"];
+  readonly object: AuthoredCountingNode["presentation"]["object"];
+  readonly quantity: AuthoredCountingNode["presentation"]["quantity"];
   readonly learningObjective: string;
   readonly tutorBrief: string;
   readonly onSuccess: { readonly kind: "node"; readonly nodeId: CountingNodeId } | { readonly kind: "complete" };

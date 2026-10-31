@@ -38,7 +38,8 @@ export function countingAnswer(node: CountingNodeId | null, correct: boolean): S
   if (!node) throw new Error("No current counting node");
   const quantity = COUNTING_LESSON_GRAPH[node].quantity;
   // Wrong answers rotate among authored quantities, independent of any classifier verdict.
-  return (["one", "two", "three"] as const)[correct ? quantity - 1 : quantity % 3];
+  const words = ["one", "two", "three", "four"] as const;
+  return words[correct ? quantity - 1 : quantity % words.length];
 }
 
 /** Merge unchanged production diagnostics with companion records, using only the attempt clock. */
@@ -158,9 +159,9 @@ export class ChildScenario {
   }
 
   parentStart() {
-    return this.action("parentStart", "parent Start lesson click", async () => {
+    return this.action("parentStart", "parent Play click", async () => {
       if (this.runtimeId) throw new Error("Restart requires a separate run() so the previous report is retained first");
-      await this.page.getByRole("button", { name: "Start lesson", exact: true }).click();
+      await this.page.getByRole("button", { name: "Play", exact: true }).click();
       await this.observation();
       this.position = { after: { runtimeId: this.runtimeId!, offset: 0 }, scope: { runtimeId: this.runtimeId! } };
     });
@@ -228,7 +229,7 @@ export class ChildScenario {
     );
   }
   wrongAnswer() {
-    return this.action("wrongAnswer", "next authored quantity modulo three", async () =>
+    return this.action("wrongAnswer", "next authored quantity modulo four", async () =>
       this.speak(countingAnswer(await this.currentCountingNode(), false)),
     );
   }

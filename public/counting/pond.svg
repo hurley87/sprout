@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" role="img" aria-labelledby="title desc">
+ <title id="title">Peaceful storybook pond</title><desc id="desc">A sunny green landscape with a blue pond and lily pads, ready for ducklings.</desc>
+ <defs>
+  <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#F5FAEF"/><stop offset="1" stop-color="#D7EEDB"/></linearGradient>
+  <linearGradient id="water" x1="0" y1="0" x2="0.2" y2="1"><stop stop-color="#A4DBDB"/><stop offset="1" stop-color="#72BAC3"/></linearGradient>
+ </defs>
+ <rect width="960" height="600" fill="url(#sky)"/>
+ <circle cx="790" cy="110" r="63" fill="#FFF0AC" opacity=".75"/>
+ <g fill="white" opacity=".76"><ellipse cx="145" cy="106" rx="67" ry="23"/><ellipse cx="184" cy="99" rx="40" ry="29"/><ellipse cx="117" cy="93" rx="34" ry="30"/><ellipse cx="592" cy="129" rx="52" ry="20"/><ellipse cx="625" cy="117" rx="34" ry="27"/></g>
+ <path d="M0 270 C125 200 229 221 338 269 C476 176 616 208 719 263 C815 227 902 242 960 252 L960 600 H0Z" fill="#B9DBAE"/>
+ <path d="M0 346 C152 275 274 324 407 324 C560 253 716 280 960 341 V600 H0Z" fill="#9DCFA6"/>
+ <path d="M0 422 C151 360 316 376 462 383 C683 386 790 345 960 398 V600 H0Z" fill="#E2E8BD"/>
+ <path d="M-32 485 C97 392 301 385 490 408 C701 398 899 425 987 498 L987 650 H-32Z" fill="url(#water)" stroke="#75B5A8" stroke-width="7"/>
+ <path d="M70 490 Q110 482 150 491 M708 488 Q742 481 773 490 M614 536 Q658 528 697 537 M255 547 Q298 540 340 546" stroke="#D5F3E4" stroke-width="7" stroke-linecap="round" fill="none" opacity=".7"/>
+ <g fill="#5AAB83" stroke="#438E72" stroke-width="3">
+ <path d="M85 546 C70 525 100 510 145 516 C183 521 191 551 160 562 C124 573 97 560 85 546Z"/>
+ <path d="M779 539 C770 515 804 507 837 519 C876 531 873 560 841 566 C811 570 788 558 779 539Z"/>
+ </g>
+ <path d="M133 519 L125 542 L159 523" fill="#72BAC3"/><path d="M832 521 L819 540 L856 535" fill="#72BAC3"/>
+ <g fill="#F7F0D3"><circle cx="114" cy="529" r="6"/><circle cx="823" cy="534" r="6"/></g>
+ <g stroke="#6FAD83" stroke-width="6" stroke-linecap="round" fill="none"><path d="M43 434 Q37 396 46 365"/><path d="M60 438 Q67 403 74 375"/><path d="M913 432 Q903 392 920 355"/><path d="M933 430 Q945 391 936 369"/></g>
+ <g fill="#B38A60"><ellipse cx="46" cy="361" rx="8" ry="22" transform="rotate(12 46 361)"/><ellipse cx="918" cy="355" rx="8" ry="22" transform="rotate(13 918 355)"/></g>
+ <g fill="#F9F4CB" opacity=".65"><circle cx="280" cy="318" r="5"/><circle cx="301" cy="331" r="3"/><circle cx="838" cy="311" r="5"/></g>
+</svg>

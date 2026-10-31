@@ -97,16 +97,18 @@ describe("saved butterfly filler-confirmation evidence (provider-free)", () => {
       atMs: state.nowMs + 1,
     });
     expect(fresh.effects).toEqual([{ type: "render.requested", identity: fresh.state.pendingRender!.identity }]);
-    expect(fresh.state).toMatchObject({ phase: "rendering", lessonComplete: true });
+    // The butterfly garden is no longer terminal: its authored edge leads to the ducklings.
+    expect(fresh.state).toMatchObject({ phase: "rendering", lessonComplete: false });
+    expect(fresh.state.pendingRender!.identity).toMatchObject({ nodeId: "count-3-ducklings", sceneId: "duckling-parade" });
     const confirmed = reduceLessonRuntime(fresh.state, {
       type: "render.confirmed",
       runtimeId: state.runtimeId,
       identity: fresh.state.pendingRender!.identity,
       atMs: fresh.state.nowMs + 1,
     });
-    expect(confirmed.state.phase).toBe("complete");
+    expect(confirmed.state).toMatchObject({ phase: "active", nodeId: "count-3-ducklings" });
     expect(confirmed.effects).toHaveLength(1);
-    expect(confirmed.effects[0].type).toBe("lesson.completed");
+    expect(confirmed.effects[0]).toMatchObject({ type: "steering.ready", context: { nodeId: "count-3-ducklings" } });
   });
 });
 

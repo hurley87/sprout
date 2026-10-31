@@ -16,20 +16,105 @@ current-node context and criteria, with the same Jev request and deterministic
 mapping as `jevConversationStateClassifier` and an additional normalized mapping
 diagnostic. Counting's labels and thresholds are unchanged.
 
+## Counting adventure scenes
+
+`lib/lesson-runtime/counting-lesson.ts` authors a bounded, linear six-scene
+adventure. Every edge is fixed in the lesson definition; there is no adaptive
+branching or model-chosen scene. Each tutor brief carries the scene's story and
+task, and never states that scene's total. Sprout introduces it with a short story
+and a counting question, then leaves space for thinking and self-correction.
+Help follows a one-hint-at-a-time ladder: point and count, go slowly, or restart
+from the first object. Sprout waits after each hint and never supplies a count.
+
+| # | Node | Scene layout | Counted set | Task |
+| --- | --- | --- | --- | --- |
+| 1 | `count-1-duck` | `hello-duck` (pond) | 1 duck | Meet the duck: how many ducks? |
+| 2 | `count-2-ducks` | `duck-friends` (pond) | 2 ducks | A friend arrives: count all the ducks. |
+| 3 | `count-3-butterflies` | `butterfly-garden` (garden) | 3 butterflies | Butterfly garden: how many came to visit? |
+| 4 | `count-3-ducklings` | `duckling-parade` (pond) | 3 smaller ducks in a line | Help the ducklings: invite pointing if needed, without claiming to see it. |
+| 5 | `count-4-flowers` | `flowers-bloom` (flower-free meadow) | 4 flowers | Flowers bloom: allow extra time and offer individual hints as needed. |
+| 6 | `count-3-moved-butterflies` | `butterflies-move` (garden) | 3 butterflies, rearranged | Butterflies move: count the new arrangement afresh; the tutor must not mention earlier counts or hint the number stayed the same. |
+
+Success on scene 6 follows the existing `complete` edge. The terminal render
+shows a garden celebration with no countable objects and releases the session;
+there is no recap node or new runtime capability. A small row of leaves below the
+stage shows authored progress (done, current, upcoming). Shape and size, not only
+colour, distinguish them; it is not a score. Parent Stop keeps the current
+scene's progress and shows the gentle ended message, never completion.
+
+Each steering append stays within the existing 1,200-byte static budget
+(`tests/help-request-recovery.test.ts`). The classifier still sees only the
+current scene's object, quantity and learning objective; its labels, thresholds
+and answer acceptance are unchanged. Speech fixtures `four` and
+`answer-four-flowers` were added with the same offline `say`/FFmpeg provenance.
+
 ## Run and collect
+
+The counting artwork lives in `public/counting/`. `app/counting-scenes.ts` authors
+normalized object centers and widths on an 8:5 world; each independently rendered
+character stays separate from its background. The scene fills the whole screen:
+the background bleeds to every edge, while the 8:5 world of characters is fitted,
+never cropped, between the status pill at the top and the progress leaves and Stop
+at the bottom. Play and Play again float over the centre of the scene, or lower
+down on portrait screens so the characters stay visible. The "Sprout" heading is
+for screen readers only. Add a matching layout when authoring
+a new scene: a quantity/kind mismatch is rejected rather than silently miscounted.
+The `flowers-bloom` layout shows four standalone flowers over a simplified,
+flower-free CSS meadow (not the decorative flowers in `garden.svg`). Artwork loads eagerly into fixed aspect boxes; a picture-loading
+or recovery message covers partial artwork. Render confirmation still follows the
+committed stage's exact identity attributes, not image callbacks. Characters are
+not tap controls; voice remains authoritative.
+
+### Motion, success and voice cue
+
+The stage exposes `data-motion` (`app/lesson-presentation.ts` → `stageMotion`); it is
+presentation only and never gates render confirmation or the next scene.
+
+- `idle`: characters arrive with a short staggered entrance, then a duck bobs,
+  a butterfly drifts or a flower sways. `calm` pauses that movement while the child
+  is concentrating (your turn, listening, or thinking) and after Stop or failure.
+- `success`: a repeating wiggle and ripple (duck), rising wing flap (butterfly) or
+  bloom (flower), plus a glow and the accepted scene's numeral. `showsSuccessFeedback` requires a live, error-free, active runtime
+  whose node is the displayed one, no pending render or steering, the child not
+  speaking, the reducer's own `hasCurrentCompletionEvidence` (for counting: a
+  committed correct answer, `answerAccepted`, from the current visit's ended child
+  turn) **and** `tutorOutputObserved`, the onset of Sprout's reply to that
+  turn. Wrong, unclear, uncommitted, help, still-answering, interrupted or
+  superseded answers clear that evidence, so they never celebrate. Only the
+  reducer's audio drain remains, so the answered group is still displayed; the
+  transition clears the evidence and the next scene starts at `idle`. Counting
+  advances on learner evidence, and semantic `acknowledgmentObserved` needs
+  longer tutor quiet than the drain, so it is not required here.
+- `celebrate`: after authored completion, the garden celebration shows a duck, two
+  butterflies and four blooming flowers beside the message and **Play again**.
+
+A small Sprout cue beside the status text (`data-voice-activity`) follows the same
+session/VAD/output facts: sound waves while Sprout speaks, a glowing ear while the
+child's voice is detected, a still ear for “Your turn to count!”, thought dots after
+the child's transcript, a star for an understood answer, a dimmed Sprout while
+waiting, and nothing before the session is live or after it ends. Nothing spins.
+Under `prefers-reduced-motion` the stage and cue have no animation or transition;
+success remains a static glow and numeral.
 
 1. Run `npm run dev` with the existing local configuration. GPT-Live needs
    `OPENAI_API_KEY`, and Jev needs `TYPESAFE_API_KEY`. Do not put credentials in
    diagnostics. No database deployment or server is needed.
-2. Open <http://127.0.0.1:3000/> in a browser
+2. Open <http://127.0.0.1:3000/?debug=1> for this diagnostic walkthrough in a browser
    with microphone support. Keep this tab visible. Headphones can help separate
    microphone activity from tutor playback in the first attempt.
-3. Click **Start lesson** and allow microphone access. One duck is rendered
+   The ordinary `/` route welcomes the child with one large **Play** button,
+   one illustrated counting scene, and no transcript, gate state, events, or export.
+   Only the exact `?debug=1` flag adds developer diagnostics; the opt-in observation
+   bridge works independently on either view. During a session, **Stop** is secondary.
+3. Click **Play** and allow microphone access. One duck is rendered
    before the runtime is created and before the live connection starts. Once the
    session starts, the first steering append explicitly identifies the parent
    Start action and instructs GPT-Live to speak first immediately, then listen.
    Later node appends do not repeat this startup instruction. Wait for GPT-Live
    to ask how many ducks you see.
+   “Getting ready to play…” does not claim microphone input is live. Activity copy
+   uses session/VAD/output state, not transcript guesses. Startup failures offer a
+   grown-up-assisted retry; the technical error remains in debug diagnostics.
 4. Say **"One"** once, then pause. Expect a natural acknowledgment. Inspect the
    current-visit transcript: the tutor's acknowledgment snapshot must still
    include `Child: One`, preceded by the tutor's question.
@@ -38,14 +123,20 @@ diagnostic. Counting's labels and thresholds are unchanged.
    child turn to have ended and fresh relevant tutor output to drain. It then
    requests two ducks, receives React render confirmation, and emits the bounded
    node-2 steering context. GPT-Live should ask about the two ducks naturally.
-6. Say **"Two"**, pause, then **"Three"** for the butterfly scene. The authored
-   terminal edge renders a completion view and releases the connection; no
-   future-node or completion teaching prompt is sent.
+6. Say **"Two"**, pause, then **"Three"** for the butterflies, **"Three"** for
+   the ducklings, **"Four"** for the flowers and **"Three"** for the moved
+   butterflies. Each acknowledgment should name the current group while it is
+   still displayed; only then does the next authored scene render. After the
+   sixth scene the authored terminal edge renders the garden celebration and
+   releases the connection; no future-node or completion teaching prompt is sent.
 7. Click **Stop** if still running, then **Export diagnostics**. Save
    `sprout-lesson-<runtimeId>.json` for review. Export before
    restarting: each new attempt replaces the previous in-memory log. Refreshing
    also clears it. The export includes transcript text but no audio, credentials,
    SDP, raw Jev bodies, or durable evidence records.
+   Parent Stop shows “We’ve stopped for now,” never a completion claim. Only the
+   runtime’s authored completion shows the completed message. **Play** starts a
+   fresh attempt after stopping or failure; **Play again** follows completion.
 
 For follow-up evaluation, repeat fresh attempts for these cases:
 
@@ -56,7 +147,7 @@ For follow-up evaluation, repeat fresh attempts for these cases:
 | Unclear | Give a deliberately unfinished answer such as "It is…". | A clarification or abstention holds the node. |
 | Help | Say "I don't know; can you help me?", then count after a hint. | No progression on help alone; latest successful answer can resolve the need. |
 | Acknowledgment before Jev returns | Answer briefly and let GPT-Live acknowledge immediately. | A newer tutor snapshot cancels a pending child request; the combined snapshot can establish correctness and acknowledgment; earlier post-child audio can still count. |
-| Several scenes | Answer "One", "Two", "Three" in sequence. | Distinct visits and render tokens; transcript resets; each steering append follows exact render confirmation. |
+| Several scenes | Answer "One", "Two", "Three", "Three", "Four", "Three" in sequence. | Distinct visits and render tokens; transcript resets; each steering append follows exact render confirmation. |
 
 For each exported attempt, also note the spoken answers, whether headphones were
 used, whether anything sounded wrong or overlapped, and which visible scene held

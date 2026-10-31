@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300" role="img" aria-labelledby="title desc">
+ <title id="title">Playful sky butterfly</title>
+ <desc id="desc">A smiling butterfly with wide patterned wings.</desc>
+ <defs>
+   <linearGradient id="wing" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#D7ECFF"/><stop offset="1" stop-color="#78AEDB"/></linearGradient>
+   <linearGradient id="lower" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#A4CDF0"/><stop offset="1" stop-color="#78AEDB"/></linearGradient>
+ </defs>
+ <ellipse cx="149" cy="273" rx="67" ry="7" fill="#455B55" opacity=".08"/>
+ <path d="M142 137 C106 59 47 38 27 78 C10 111 32 157 102 169 C57 175 47 218 76 237 C108 255 141 219 150 181Z" fill="url(#wing)" stroke="#876F72" stroke-width="5" stroke-linejoin="round"/>
+ <path d="M158 137 C194 59 253 38 273 78 C290 111 268 157 198 169 C243 175 253 218 224 237 C192 255 159 219 150 181Z" fill="url(#wing)" stroke="#876F72" stroke-width="5" stroke-linejoin="round"/>
+ <path d="M104 169 C64 180 62 219 83 228 C109 240 140 215 146 183Z" fill="url(#lower)"/>
+ <path d="M196 169 C236 180 238 219 217 228 C191 240 160 215 154 183Z" fill="url(#lower)"/>
+ <path d="M120 137 C91 105 58 95 50 114 C41 137 71 149 104 151" fill="none" stroke="#FFF7D9" stroke-width="10" stroke-linecap="round" opacity=".76"/>
+ <path d="M180 137 C209 105 242 95 250 114 C259 137 229 149 196 151" fill="none" stroke="#FFF7D9" stroke-width="10" stroke-linecap="round" opacity=".76"/>
+ <ellipse cx="94" cy="181" rx="13" ry="10" fill="#FFF7E0" opacity=".83"/>
+ <ellipse cx="206" cy="181" rx="13" ry="10" fill="#FFF7E0" opacity=".83"/>
+ <circle cx="72" cy="100" r="9" fill="#FFF7E0" opacity=".83"/><circle cx="228" cy="100" r="9" fill="#FFF7E0" opacity=".83"/>
+ <path d="M145 85 Q128 55 118 66 M155 85 Q172 55 182 66" fill="none" stroke="#74635E" stroke-width="5" stroke-linecap="round"/>
+ <circle cx="118" cy="66" r="5" fill="#FFF7D9"/><circle cx="182" cy="66" r="5" fill="#FFF7D9"/>
+ <ellipse cx="150" cy="160" rx="19" ry="74" fill="#FFE2A2" stroke="#876F72" stroke-width="5"/>
+ <circle cx="150" cy="112" r="22" fill="#FFE6AD" stroke="#876F72" stroke-width="4"/>
+ <circle cx="143" cy="110" r="2.9" fill="#493B38"/><circle cx="157" cy="110" r="2.9" fill="#493B38"/>
+ <path d="M144 120 Q150 126 156 120" stroke="#98674E" stroke-width="2.7" stroke-linecap="round" fill="none"/>
+ <path d="M139 171 Q150 177 161 171 M140 196 Q150 202 160 196" stroke="#D0A260" stroke-width="3" stroke-linecap="round" fill="none"/>
+</svg>

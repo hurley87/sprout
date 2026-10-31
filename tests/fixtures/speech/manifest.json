@@ -123,6 +123,40 @@
         ]
       }
     },
+    "four": {
+      "file": "four.wav",
+      "text": "Four.",
+      "sha256": "b25bdfa16358946142ecffaddb954ff2a50482d5533523baabea157f16bc56a5",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 0.424458,
+      "purpose": "Deterministic child primitive; synthetic adult voice, not preschool speech.",
+      "provenance": {
+        "method": "Offline macOS say, Albert voice at 150 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "commands": [
+          ["/usr/bin/say", "-v", "Albert", "-r", "150", "-o", "/tmp/sprout-four.aiff", "Four."],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-four.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/four.wav"
+          ]
+        ]
+      }
+    },
     "dont-know": {
       "file": "dont-know.wav",
       "text": "I don't know.",
@@ -491,7 +525,7 @@
       "sha256": "9cca8fccef03876d9c5aa6c9e3873d8d8827a4020f9f01575536ebcbb82eec6c",
       "format": "mono 24 kHz signed 16-bit PCM WAV",
       "durationSeconds": 1.503708,
-      "purpose": "Deliberately wrong count on the two-duck scene; synthetic adult speech, not preschool speech.",
+      "purpose": "Deliberately wrong count on the two-duck scene and the correct ducklings count; synthetic adult speech, not preschool speech.",
       "provenance": {
         "method": "Offline macOS say, Samantha voice at 130 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
         "toolVersions": {
@@ -529,6 +563,54 @@
             "-map_metadata",
             "-1",
             "tests/fixtures/speech/answer-three-ducks.wav"
+          ]
+        ]
+      }
+    },
+    "answer-four-flowers": {
+      "file": "answer-four-flowers.wav",
+      "text": "I see four flowers.",
+      "sha256": "ab1404355595968025e912657dcdf568c4558c9a128c51497cbecf2b9611cde8",
+      "format": "mono 24 kHz signed 16-bit PCM WAV",
+      "durationSeconds": 1.608167,
+      "purpose": "Live counting scenario; synthetic adult speech, not preschool speech.",
+      "provenance": {
+        "method": "Offline macOS say, Samantha voice at 130 words/minute; FFmpeg loudnorm and PCM conversion. No recordings, AI service, or network synthesis.",
+        "toolVersions": {
+          "macOS": "27.0.1",
+          "ffmpeg": "8.1.2",
+          "voice": "Samantha (English (US))"
+        },
+        "commands": [
+          [
+            "/usr/bin/say",
+            "-v",
+            "Samantha (English (US))",
+            "-r",
+            "130",
+            "-o",
+            "/tmp/sprout-answer-four-flowers-samantha.aiff",
+            "I see four flowers."
+          ],
+          [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            "/tmp/sprout-answer-four-flowers-samantha.aiff",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "24000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            "-map_metadata",
+            "-1",
+            "tests/fixtures/speech/answer-four-flowers.wav"
           ]
         ]
       }

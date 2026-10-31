@@ -26,8 +26,10 @@ import { parseClassifierEndpointCode } from "./classifier-failure";
 import { DiagnosticJournal, type LessonDiagnostic, type LessonEventCursor } from "./diagnostic-journal";
 export type { LessonDiagnostic, LessonEventCursor } from "./diagnostic-journal";
 import { parseLiveClassificationDiagnostic } from "./live-classification-diagnostic";
+import { acceptsLearnerAnswerIndependently } from "./counting-answer-policy";
 import {
   classificationSource,
+  defersMicrophoneCandidate,
   hasCurrentCompletionEvidence,
   meetsAuthoredCompletionPolicy,
   createLessonRuntime,
@@ -238,7 +240,19 @@ export class LessonRuntime {
             this.scheduleClassification("missing_transcript_recheck");
             return true;
           }
-        : undefined,
+        : acceptsLearnerAnswerIndependently(this.lessonDefinition)
+          ? source => {
+              // A wordless turn cannot erase this visit's latest transcribed answer.
+              // Restore it instead of asking again; an unjudged answer is classified.
+              const before = this.state;
+              this.dispatch({ type: "textless.turn.resolved", source, atMs: this.now() });
+              if (!this.state || this.state === before) return false;
+              this.log("answer_recovery.prior_answer_restored", { answerAccepted: this.state.answerAccepted }, source);
+              // dispatch already re-synced tutor stabilization; a child snapshot needs its debounce.
+              if (this.state.transcriptSource !== "tutor") this.scheduleClassification("textless_turn_resolved");
+              return true;
+            }
+          : undefined,
       this.lessonDefinition.conversationFirst === true,
     );
     // Local VAD stop is not a provider transcript boundary. Reuse the existing
@@ -519,10 +533,11 @@ export class LessonRuntime {
         this.log(event.type);
         this.calculus?.onSpeechStarted(event.type === "microphone.speech_started");
         if (!this.state.childSpeaking) {
+          // Provisional energy does not change a deferring lesson's classification
+          // source; only confirmed speech cancels in-flight work.
           if (
             event.type === "microphone.speech_started" ||
-            !this.lessonDefinition.conversationFirst ||
-            this.lessonDefinition.nodes[this.state.nodeId].completeAfterTutorOutput
+            !defersMicrophoneCandidate(this.lessonDefinition, this.state.nodeId)
           )
             this.cancelClassification("child_turn_started");
           this.childTurnFloorMs = this.lastChildEndMs;
@@ -949,7 +964,8 @@ export class LessonRuntime {
     const source = classificationSource(this.state);
     const transcript = this.transcript;
     const speaker = this.state.transcriptSource;
-    if (!source || !transcript) return;
+    // A restored, already-judged revision would only be ignored as consumed.
+    if (!source || !transcript || this.state.consumedRevision === source.transcriptRevision) return;
     const origin = trackingOrigin(source, this.lessonDefinition, this.transport.activeSourceId);
     const key = JSON.stringify(source);
     if (this.lastClassifiedKey === key) return;

@@ -4,7 +4,7 @@ import type { LessonObservationWindow } from "../../lib/lesson-runtime/browser-o
 
 test("ordinary lesson pages expose no observation bridge", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("button", { name: "Start lesson", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Play", exact: true })).toBeEnabled();
   expect(await page.evaluate(() => (window as LessonObservationWindow).sproutLessonObservation)).toBeUndefined();
 });
 
@@ -21,9 +21,9 @@ test("opt-in observes actual React render, terminal failure, report, and restart
     throw new Error("Unexpected classifier call");
   });
   await page.goto("/");
-  await expect(page.getByRole("button", { name: "Start lesson", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Play", exact: true })).toBeEnabled();
   await expect.poll(() => observer.read()).toBeNull();
-  await page.getByRole("button", { name: "Start lesson", exact: true }).click();
+  await page.getByRole("button", { name: "Play", exact: true }).click();
   await expect.poll(async () => (await observer.read())?.snapshot.status).toBe("ended");
   const first = (await observer.read())!;
   const scope = { runtimeId: first.cursor.runtimeId, visitId: 1, nodeId: "count-1-duck" };
@@ -44,7 +44,7 @@ test("opt-in observes actual React render, terminal failure, report, and restart
     "read",
     "report",
   ]);
-  await page.getByRole("button", { name: "Start lesson", exact: true }).click();
+  await page.getByRole("button", { name: "Play", exact: true }).click();
   await expect.poll(async () => (await observer.read())?.cursor.runtimeId).not.toBe(first.cursor.runtimeId);
   await expect(observer.read(first.cursor)).rejects.toThrow(/cursor/);
   await expect.poll(async () => (await observer.read())?.snapshot.status).toBe("ended");

@@ -160,8 +160,9 @@ for (const scenario of cases) {
                 await observeUntil(
                   child,
                   harness.observer,
-                  "fresh learner recovery completes lesson",
-                  value => value.snapshot.status === "ended",
+                  "fresh learner recovery advances past the butterfly garden",
+                  value =>
+                    value.snapshot.status === "ended" || (value.snapshot.runtime?.visitId ?? 0) > landed!.state.visitId,
                   budget(),
                 );
               }
@@ -171,9 +172,12 @@ for (const scenario of cases) {
               assertButterflySafety(report, landed!, scenario.kind === "barge-in", freshAnswerRecovery);
             });
             if (!observeOnly && scenario.kind !== "barge-in") {
-              await child.assert("noise/filler must recover with exactly one legitimate final completion", async () => {
-                assertButterflyCompletion(report, landed!, freshAnswerRecovery); // Known starvation stays a failing regression, outside @baseline.
-              });
+              await child.assert(
+                "noise/filler must recover with exactly one legitimate butterfly completion",
+                async () => {
+                  assertButterflyCompletion(report, landed!, freshAnswerRecovery); // Known starvation stays a failing regression, outside @baseline.
+                },
+              );
             }
           } catch (error) {
             bodyFailed = true;

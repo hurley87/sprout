@@ -16,7 +16,12 @@ vi.mock("../../lib/lesson-runtime/lesson-runtime-reducer", async importOriginal 
     reduceLessonRuntime(...args: Parameters<typeof current.reduceLessonRuntime>) {
       const result = current.reduceLessonRuntime(...args);
       // MAE386 and its new events have no pre-instrumentation counterpart.
-      if (args[2].id === "mae386" || args[1].type === "question.observation") return result;
+      if (
+        args[2].id === "mae386" ||
+        args[1].type === "question.observation" ||
+        args[1].type === "textless.turn.resolved"
+      )
+        return result;
       // The new authored counting policy intentionally differs from the historical
       // reducer. Compare legacy gates on the same inputs; policy outcomes are tested separately.
       const legacyArgs: typeof args = [args[0], args[1], { ...args[2], answerAcceptance: undefined }];

@@ -1,0 +1,58 @@
+.cue {
+  flex: none;
+  width: 3.4rem;
+  height: 2.25rem;
+}
+
+.cue[data-voice-activity="off"] {
+  display: none;
+}
+
+/* Waiting is a calm, dimmed Sprout: nothing spins or suggests an answer is being judged. */
+.cue[data-voice-activity="waiting"] .sprout {
+  opacity: 0.55;
+}
+
+.cue[data-voice-activity="speaking"] .sprout {
+  transform-origin: 32px 58px;
+  animation: talk 900ms ease-in-out infinite;
+}
+
+.cue[data-voice-activity="speaking"] .waves path {
+  animation: wave 900ms ease-in-out infinite;
+}
+
+.cue[data-voice-activity="speaking"] .waves path + path {
+  animation-delay: 150ms;
+}
+
+/* Hearing the child: a slow glow, not a busy indicator. */
+.cue[data-voice-activity="listening"] .ear {
+  animation: glow 1.6s ease-in-out infinite;
+}
+
+@keyframes talk {
+  50% {
+    scale: 1.06;
+  }
+}
+
+@keyframes wave {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@keyframes glow {
+  50% {
+    opacity: 0.6;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cue,
+  .cue * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
