@@ -41,6 +41,9 @@ export type LessonDefinition = {
   readonly questionGroups?: readonly QuestionGroupDefinition[];
   /** Counting may accept learner answers independently of tutor confirmation. */
   readonly answerAcceptance?: "learner_evidence";
+  /** Sustained tutor-audio quiet before an accepted scene transition. It must outlast the tutor's
+   * pauses between sentences: audio that resumes during an unconfirmed render ends the attempt. */
+  readonly transitionQuietMs?: number;
   /** Concise topic labels for an accepted-evidence terminal close. No answer text. */
   readonly recapTopics?: Readonly<Record<string, string>>;
   readonly nodes: Readonly<Record<string, LessonNodeDefinition>>;
@@ -111,6 +114,11 @@ export function validateLessonDefinition(value: LessonDefinition): LessonDefinit
         throw new Error(`Lesson edge from ${id} carries a concept not authored on its target node`);
     }
   }
+  if (
+    value.transitionQuietMs !== undefined &&
+    (!Number.isSafeInteger(value.transitionQuietMs) || value.transitionQuietMs <= 0 || value.transitionQuietMs > 5_000)
+  )
+    throw new Error("Transition quiet must be a positive whole number of milliseconds up to 5000");
   if (value.questionGroups) {
     const groups = value.questionGroups;
     const ids = groups.flatMap(group => group.nodeIds);

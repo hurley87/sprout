@@ -59,6 +59,18 @@ export const LESSON_TIMING = {
   microphoneQuietMs: MICROPHONE_QUIET_MS,
 } as const;
 
+/** Quiet tutor audio required before an accepted scene transition. Conversation closure can have
+ * short gaps between audio chunks, so it uses the tutor-classification quiet boundary; a lesson may
+ * author a longer window when its tutor pauses between sentences. */
+export function transitionQuietMs(lesson: LessonDefinition) {
+  return (
+    lesson.transitionQuietMs ??
+    (lesson.conversationFirst
+      ? Math.max(LESSON_TIMING.quietDrainMs, LESSON_TIMING.tutorClassificationQuietMs)
+      : LESSON_TIMING.quietDrainMs)
+  );
+}
+
 type Speaker = "child" | "tutor" | "unknown";
 type Fragment = CalculusFragment;
 export type LessonObservation = {
@@ -368,11 +380,7 @@ export class LessonRuntime {
       return;
     if (this.status === "prepared") {
       this.state = createLessonRuntime(this.runtimeId, {
-        // Conversation closure can have short gaps between audio chunks. Use
-        // the same sustained quiet boundary as tutor classification.
-        quietDrainMs: this.lessonDefinition.conversationFirst
-          ? Math.max(LESSON_TIMING.quietDrainMs, LESSON_TIMING.tutorClassificationQuietMs)
-          : LESSON_TIMING.quietDrainMs,
+        quietDrainMs: transitionQuietMs(this.lessonDefinition),
         atMs: this.now(),
         lesson: this.lessonDefinition,
       });

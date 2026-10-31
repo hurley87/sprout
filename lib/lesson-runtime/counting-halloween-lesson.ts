@@ -14,6 +14,10 @@ export const COUNTING_HALLOWEEN_LESSON = buildCountingLesson({
   id: "counting-halloween",
   initialNodeId: COUNTING_HALLOWEEN_NODE_IDS[0],
   singleItemExample: "a single helper",
+  // Live sessions showed 300–800 ms pauses inside one tutor reply ("Yes, two helpers!" … story line).
+  // The shared 250 ms window committed the next scene mid-reply, and the resumed audio then ended
+  // the attempt during render confirmation. Wait for the whole reply before changing scenes.
+  transitionQuietMs: 1_000,
   nodes: {
     "count-1-helper": {
       id: "count-1-helper",

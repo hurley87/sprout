@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { isLessonNodeId, lessonNodeOrder } from "@/lib/lesson-runtime/lesson-definition";
 import type { CountingTheme } from "./counting-themes";
-import { LESSON_TIMING } from "@/lib/lesson-runtime/lesson-runtime";
+import { LESSON_TIMING, transitionQuietMs } from "@/lib/lesson-runtime/lesson-runtime";
 import { useVoiceDemo } from "@/components/voice-demo/use-voice-demo";
 import { VoiceDemoControls } from "@/components/voice-demo/controls";
 import { lessonPresentation, showsSuccessFeedback, stageMotion, voiceActivity } from "./lesson-presentation";
@@ -128,7 +128,7 @@ export default function Lesson({ theme, debug = false }: { theme: CountingTheme;
               Timing: child debounce {LESSON_TIMING.childSnapshotDebounceMs} ms after VAD ends · tutor transcript stable{" "}
               {LESSON_TIMING.tutorTranscriptStableMs} ms + classification quiet{" "}
               {LESSON_TIMING.tutorClassificationQuietMs} ms · VAD quiet {LESSON_TIMING.microphoneQuietMs} ms ·
-              transition audio drain {LESSON_TIMING.quietDrainMs} ms · tick {LESSON_TIMING.clockTickMs} ms
+              transition audio drain {transitionQuietMs(lessonDefinition)} ms · tick {LESSON_TIMING.clockTickMs} ms
             </p>
             <p className="text-sm">
               All gates must agree on the current revision. Abstention holds the scene. Renewed speech clears completion
