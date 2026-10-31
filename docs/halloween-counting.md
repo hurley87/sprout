@@ -29,6 +29,18 @@ Live attempt `5c98607e` showed 300–800 ms pauses inside a single tutor reply; 
 shared 250 ms window changed scenes mid-reply, and the resumed audio ended the
 attempt during render confirmation.
 
+During the conversation a small moon glow replaces the talking/listening pill. It
+breathes slowly while Sprout talks, rests warmly on the child's turn, gains a soft
+halo while the child speaks and dims while Sprout thinks. It holds the talking state
+through the brief audio gaps between words, so it does not flicker. Welcome, errors,
+stopped and complete keep their words, and the status text stays for screen readers.
+The garden keeps its pill.
+
+To have the tutor greet the child by name, set `SPROUT_CHILD_NAME` (a plain first
+name) in `.env.local`. The server adds it to the session instructions only for
+lessons that opt in (`addressLearnerByName`, currently `/halloween`). It is never
+taken from the browser or committed to the repo.
+
 Run `npm run dev` and open `/halloween`; append `?debug=1` for diagnostics.
 Provider-free `tests/browser/halloween.spec.ts` covers the full adventure,
 wrong and unclear answers, correction, Stop and restart, reduced motion,

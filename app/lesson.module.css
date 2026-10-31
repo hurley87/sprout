@@ -58,6 +58,13 @@
   margin: 0;
 }
 
+/* A bare glow during the conversation: no pill behind it. */
+.status[data-status-cue="glow"] {
+  padding: 0.25rem;
+  background: none;
+  box-shadow: none;
+}
+
 .progress {
   padding: 0.6rem 1rem;
   border-radius: 999px;

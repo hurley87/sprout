@@ -14,6 +14,7 @@ export const COUNTING_HALLOWEEN_LESSON = buildCountingLesson({
   id: "counting-halloween",
   initialNodeId: COUNTING_HALLOWEEN_NODE_IDS[0],
   singleItemExample: "a single ghost",
+  addressLearnerByName: true,
   nodes: {
     "count-1-ghost": {
       id: "count-1-ghost",

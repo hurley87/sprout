@@ -9,6 +9,7 @@ import { VoiceDemoControls } from "@/components/voice-demo/controls";
 import { lessonPresentation, showsSuccessFeedback, stageMotion, voiceActivity } from "./lesson-presentation";
 import { CountingStage } from "./counting-stage";
 import { VoiceCue } from "./voice-cue";
+import { GlowCue, useHeldVoiceActivity } from "./glow-cue";
 import styles from "./lesson.module.css";
 
 export default function Lesson({ theme, debug = false }: { theme: CountingTheme; debug?: boolean }) {
@@ -38,6 +39,15 @@ export default function Lesson({ theme, debug = false }: { theme: CountingTheme;
     theme.copy,
   );
   const completed = presentation.kind === "complete";
+  const glow = theme.statusCue === "glow";
+  // Hold "speaking" through the same quiet gaps the runtime waits out before changing scenes.
+  const activity = useHeldVoiceActivity(voiceActivity(presentation), glow ? transitionQuietMs(lessonDefinition) : 0);
+  const shown =
+    activity === "speaking" && presentation.kind !== "speaking"
+      ? { kind: "speaking", message: "Sprout is talking…" }
+      : presentation;
+  // The glow replaces the pill only while the conversation is live; other states keep their words.
+  const glowing = glow && activity !== "off";
   // Authored order of the rendered scene; the terminal render has no counting node.
   const step = node ? nodeIds.indexOf(node.id) : nodeIds.length;
 
@@ -55,9 +65,11 @@ export default function Lesson({ theme, debug = false }: { theme: CountingTheme;
         </div>
         <div className={styles.top}>
           <h1 className={styles.title}>Sprout</h1>
-          <div className={styles.status}>
-            <VoiceCue activity={voiceActivity(presentation)} />
-            <p role={presentation.kind === "error" ? "alert" : "status"}>{presentation.message}</p>
+          <div className={styles.status} data-status-cue={glowing ? "glow" : undefined}>
+            {glow ? <GlowCue activity={activity} /> : <VoiceCue activity={activity} />}
+            <p role={shown.kind === "error" ? "alert" : "status"} className={glowing ? "sr-only" : undefined}>
+              {shown.message}
+            </p>
           </div>
         </div>
         <div className={styles.bottom}>

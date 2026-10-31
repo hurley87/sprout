@@ -18,6 +18,9 @@ export type CountingTheme = {
     readonly message: string;
   };
   readonly copy: PresentationCopy;
+  /** "glow": during the conversation an abstract moon glow replaces the talking/listening pill, held
+   * through brief gaps in tutor audio; the words remain for screen readers. Default: the pill. */
+  readonly statusCue?: "glow";
   /** Tailwind classes; shape and size, not only colour, distinguish finished, current and upcoming scenes. */
   readonly progress: {
     readonly base: string;

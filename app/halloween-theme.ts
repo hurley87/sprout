@@ -94,6 +94,7 @@ export const HALLOWEEN_THEME: CountingTheme = {
     ],
     message: "Halloween party time! Thanks for counting with Sprout.",
   },
+  statusCue: "glow",
   copy: { welcome: "Come count Halloween friends with Sprout!", complete: "Our Halloween counting party is complete!" },
   progress: {
     base: "rounded-full border-2 border-orange-800",

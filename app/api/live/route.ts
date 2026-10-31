@@ -1,5 +1,5 @@
 import { isLocalRequest, readJsonBody } from "@/lib/local-request";
-import { createLiveSessionConfig } from "@/lib/lesson-runtime/live-context";
+import { configuredLearnerName, createLiveSessionConfig } from "@/lib/lesson-runtime/live-context";
 import { resolveLessonDefinition } from "@/lib/lesson-runtime/lesson-registry";
 
 export const runtime = "nodejs";
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
       method: "POST",
       headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        session: createLiveSessionConfig(lesson),
+        session: createLiveSessionConfig(lesson, configuredLearnerName(process.env.SPROUT_CHILD_NAME)),
         transport: { type: "webrtc", sdp },
       }),
       signal: AbortSignal.any([request.signal, AbortSignal.timeout(20_000)]),

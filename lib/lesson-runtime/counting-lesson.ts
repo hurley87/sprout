@@ -118,12 +118,14 @@ export function buildCountingLesson({
   nodes,
   singleItemExample,
   transitionQuietMs,
+  addressLearnerByName,
 }: {
   id: string;
   initialNodeId: string;
   nodes: LessonDefinition["nodes"];
   singleItemExample: string;
   transitionQuietMs?: number;
+  addressLearnerByName?: boolean;
 }): LessonDefinition {
   return validateLessonDefinition({
     ...countingLesson,
@@ -131,6 +133,7 @@ export function buildCountingLesson({
     initialNodeId,
     nodes,
     ...(transitionQuietMs === undefined ? {} : { transitionQuietMs }),
+    ...(addressLearnerByName ? { addressLearnerByName } : {}),
     tutor: {
       ...countingLesson.tutor,
       sessionGuidance: countingSessionGuidance(singleItemExample),

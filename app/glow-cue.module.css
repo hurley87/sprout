@@ -1,0 +1,103 @@
+/* A small moon glow in place of the talking/listening pill. Changes ease in over ~0.6 s and the
+ * only loops are slow (≥ 2.4 s), low-amplitude breaths: nothing flashes or snaps between states. */
+.cue {
+  position: relative;
+  display: block;
+  flex: none;
+  width: 2.75rem;
+  height: 2.75rem;
+}
+
+.cue[data-voice-activity="off"] {
+  display: none;
+}
+
+.orb,
+.halo {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  transition:
+    opacity 600ms ease,
+    scale 600ms ease,
+    box-shadow 600ms ease,
+    filter 600ms ease;
+}
+
+.orb {
+  inset: 18%;
+  background: radial-gradient(circle at 38% 35%, #fff7dc, #ffd98a 55%, #f4b55d);
+  box-shadow: 0 0 0.6rem 0.15rem #ffd98a80;
+  opacity: 0.85;
+}
+
+.halo {
+  border: 2px solid #fff3cf;
+  opacity: 0;
+  scale: 0.7;
+}
+
+/* Sprout talking: a slow breath. */
+.cue[data-voice-activity="speaking"] .orb {
+  opacity: 1;
+  animation: breathe 2.4s ease-in-out infinite;
+}
+
+/* The child's turn: a steady warm glow with a faint ring inviting an answer. */
+.cue[data-voice-activity="your-turn"] .orb {
+  opacity: 1;
+  box-shadow: 0 0 0.9rem 0.3rem #ffd98a99;
+}
+
+.cue[data-voice-activity="your-turn"] .halo {
+  opacity: 0.35;
+  scale: 1;
+}
+
+/* Hearing the child: the ring brightens gently. */
+.cue[data-voice-activity="listening"] .orb {
+  opacity: 1;
+  box-shadow: 0 0 1rem 0.35rem #fff1c299;
+}
+
+.cue[data-voice-activity="listening"] .halo {
+  opacity: 0.7;
+  scale: 1;
+  animation: halo 2.8s ease-in-out infinite;
+}
+
+/* Thinking or waiting for the screen: a calm, dimmed moon. */
+.cue[data-voice-activity="thinking"] .orb,
+.cue[data-voice-activity="waiting"] .orb {
+  opacity: 0.55;
+  filter: saturate(0.7);
+}
+
+/* Success: a fuller warm glow. */
+.cue[data-voice-activity="understood"] .orb {
+  opacity: 1;
+  scale: 1.08;
+  box-shadow: 0 0 1.3rem 0.5rem #ffc76b;
+}
+
+@keyframes breathe {
+  50% {
+    scale: 1.07;
+    box-shadow: 0 0 1rem 0.3rem #ffd98aa6;
+  }
+}
+
+@keyframes halo {
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cue *,
+  .cue *::before,
+  .cue *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

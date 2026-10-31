@@ -44,6 +44,8 @@ export type LessonDefinition = {
   /** Sustained tutor-audio quiet before an accepted scene transition. It must outlast the tutor's
    * pauses between sentences: audio that resumes during an unconfirmed render ends the attempt. */
   readonly transitionQuietMs?: number;
+  /** Greet the learner by the server-configured first name (SPROUT_CHILD_NAME), when one is set. */
+  readonly addressLearnerByName?: boolean;
   /** Concise topic labels for an accepted-evidence terminal close. No answer text. */
   readonly recapTopics?: Readonly<Record<string, string>>;
   readonly nodes: Readonly<Record<string, LessonNodeDefinition>>;
