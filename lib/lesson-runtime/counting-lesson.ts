@@ -23,6 +23,10 @@ const countingSessionGuidance = (singleItem: string) =>
 const countingLesson = {
   id: "counting",
   answerAcceptance: "learner_evidence",
+  // Live attempt 5c98607e showed 300–800 ms pauses inside one tutor reply (confirmation … story line).
+  // The shared 250 ms window committed the next scene mid-reply, and the resumed audio then ended
+  // the attempt during render confirmation. Wait for the whole reply before changing scenes.
+  transitionQuietMs: 1_000,
   initialNodeId: INITIAL_COUNTING_NODE_ID,
   recovery: {
     supportClarificationInstruction: COUNTING_SUPPORT_CLARIFICATION_INSTRUCTION,

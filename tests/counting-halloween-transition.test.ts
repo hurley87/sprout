@@ -5,6 +5,7 @@ import { validateLessonDefinition, type LessonDefinition } from "../lib/lesson-r
 import { LESSON_TIMING, transitionQuietMs } from "../lib/lesson-runtime/lesson-runtime";
 import { runtimeSource } from "../lib/lesson-runtime/lesson-runtime-reducer";
 import { classifierProposal } from "./helpers/runtime-classifier";
+import { SHARED_WINDOW_COUNTING_LESSON } from "./helpers/counting-runtime";
 import { createReducerHarness, prepareLearnerClassification } from "./helpers/runtime-harness";
 
 /** Replays live attempt 5c98607e: a correct answer is accepted, the tutor confirms it, pauses
@@ -30,35 +31,42 @@ function replayPausedAcknowledgment(lesson: LessonDefinition) {
   return { h, pause };
 }
 
-describe("Halloween scene transitions wait for the whole tutor reply", () => {
+describe("counting scene transitions wait for the whole tutor reply", () => {
   it("documents the live failure under the shared 250 ms window", () => {
-    const { h, pause } = replayPausedAcknowledgment(COUNTING_LESSON);
-    expect(transitionQuietMs(COUNTING_LESSON)).toBe(LESSON_TIMING.quietDrainMs);
+    const { h, pause } = replayPausedAcknowledgment(SHARED_WINDOW_COUNTING_LESSON);
+    expect(transitionQuietMs(SHARED_WINDOW_COUNTING_LESSON)).toBe(LESSON_TIMING.quietDrainMs);
     expect(pause.effects).toContainEqual(expect.objectContaining({ type: "render.requested" }));
     expect(h.state.phase).toBe("stopped");
   });
 
-  it("holds the scene through a mid-reply pause and advances after sustained quiet", () => {
-    const { h, pause } = replayPausedAcknowledgment(COUNTING_HALLOWEEN_LESSON);
-    expect(transitionQuietMs(COUNTING_HALLOWEEN_LESSON)).toBe(1_000);
-    expect(pause.effects).not.toContainEqual(expect.objectContaining({ type: "render.requested" }));
-    expect(h.state).toMatchObject({ phase: "active", nodeId: "count-1-ghost", answerAccepted: true });
+  it.each([
+    { lesson: COUNTING_HALLOWEEN_LESSON, first: "count-1-ghost", next: "count-2-bats" },
+    { lesson: COUNTING_LESSON, first: "count-1-duck", next: "count-2-ducks" },
+  ])(
+    "$lesson.id holds the scene through a mid-reply pause and advances after sustained quiet",
+    ({ lesson, first, next }) => {
+      const { h, pause } = replayPausedAcknowledgment(lesson);
+      expect(transitionQuietMs(lesson)).toBe(1_000);
+      expect(pause.effects).not.toContainEqual(expect.objectContaining({ type: "render.requested" }));
+      expect(h.state).toMatchObject({ phase: "active", nodeId: first, answerAccepted: true });
 
-    h.send({ type: "output.activity", source: runtimeSource(h.state), state: "quiet" }, 900);
-    const early = h.send({ type: "clock.tick", source: runtimeSource(h.state) }, 999);
-    expect(early.effects).not.toContainEqual(expect.objectContaining({ type: "render.requested" }));
-    const settled = h.send({ type: "clock.tick", source: runtimeSource(h.state) }, 1);
-    expect(settled.effects).toContainEqual(
-      expect.objectContaining({
-        type: "render.requested",
-        identity: expect.objectContaining({ nodeId: "count-2-bats" }),
-      }),
-    );
-    expect(h.state.phase).toBe("rendering");
-  });
+      h.send({ type: "output.activity", source: runtimeSource(h.state), state: "quiet" }, 900);
+      const early = h.send({ type: "clock.tick", source: runtimeSource(h.state) }, 999);
+      expect(early.effects).not.toContainEqual(expect.objectContaining({ type: "render.requested" }));
+      const settled = h.send({ type: "clock.tick", source: runtimeSource(h.state) }, 1);
+      expect(settled.effects).toContainEqual(
+        expect.objectContaining({
+          type: "render.requested",
+          identity: expect.objectContaining({ nodeId: next }),
+        }),
+      );
+      expect(h.state.phase).toBe("rendering");
+    },
+  );
 
-  it("keeps the garden on the shared window and rejects invalid authored windows", () => {
-    expect(COUNTING_LESSON.transitionQuietMs).toBeUndefined();
+  it("gives both counting lessons the same window and rejects invalid authored windows", () => {
+    expect(COUNTING_LESSON.transitionQuietMs).toBe(1_000);
+    expect(COUNTING_HALLOWEEN_LESSON.transitionQuietMs).toBe(1_000);
     for (const transitionQuietMs of [0, -1, 1.5, 5_001])
       expect(() => validateLessonDefinition({ ...COUNTING_HALLOWEEN_LESSON, transitionQuietMs })).toThrow(
         /Transition quiet/,

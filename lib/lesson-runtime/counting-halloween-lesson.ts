@@ -14,10 +14,6 @@ export const COUNTING_HALLOWEEN_LESSON = buildCountingLesson({
   id: "counting-halloween",
   initialNodeId: COUNTING_HALLOWEEN_NODE_IDS[0],
   singleItemExample: "a single ghost",
-  // Live attempt 5c98607e showed 300–800 ms pauses inside one tutor reply (confirmation … story line).
-  // The shared 250 ms window committed the next scene mid-reply, and the resumed audio then ended
-  // the attempt during render confirmation. Wait for the whole reply before changing scenes.
-  transitionQuietMs: 1_000,
   nodes: {
     "count-1-ghost": {
       id: "count-1-ghost",
