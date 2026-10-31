@@ -21,15 +21,18 @@ diagnostic. Counting's labels and thresholds are unchanged.
 `lib/lesson-runtime/counting-lesson.ts` authors a bounded, linear six-scene
 adventure. Every edge is fixed in the lesson definition; there is no adaptive
 branching or model-chosen scene. Each tutor brief carries the scene's story and
-task, invites learner-led counting, and never states that scene's total.
+task, and never states that scene's total. Sprout introduces it with a short story
+and a counting question, then leaves space for thinking and self-correction.
+Help follows a one-hint-at-a-time ladder: point and count, go slowly, or restart
+from the first object. Sprout waits after each hint and never supplies a count.
 
 | # | Node | Scene layout | Counted set | Task |
 | --- | --- | --- | --- | --- |
 | 1 | `count-1-duck` | `hello-duck` (pond) | 1 duck | Meet the duck: how many ducks? |
 | 2 | `count-2-ducks` | `duck-friends` (pond) | 2 ducks | A friend arrives: count all the ducks. |
 | 3 | `count-3-butterflies` | `butterfly-garden` (garden) | 3 butterflies | Butterfly garden: how many came to visit? |
-| 4 | `count-3-ducklings` | `duckling-parade` (pond) | 3 smaller ducks in a line | Help the ducklings: point to each once and count. The tutor only hears; it must never claim to have seen pointing or touch. |
-| 5 | `count-4-flowers` | `flowers-bloom` (flower-free meadow) | 4 flowers | Flowers bloom: one-step-at-a-time scaffolding (slowly left to right, touch each once, restart from the first flower), with no rushing. |
+| 4 | `count-3-ducklings` | `duckling-parade` (pond) | 3 smaller ducks in a line | Help the ducklings: invite pointing if needed, without claiming to see it. |
+| 5 | `count-4-flowers` | `flowers-bloom` (flower-free meadow) | 4 flowers | Flowers bloom: allow extra time and offer individual hints as needed. |
 | 6 | `count-3-moved-butterflies` | `butterflies-move` (garden) | 3 butterflies, rearranged | Butterflies move: count the new arrangement afresh; the tutor must not mention earlier counts or hint the number stayed the same. |
 
 Success on scene 6 follows the existing `complete` edge. The terminal render

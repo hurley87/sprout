@@ -14,7 +14,7 @@ import { JEV_MODEL } from "../lib/jev";
 import { parseConversationStateProposal } from "../lib/lesson-runtime/conversation-state-classifier";
 import { classificationSource, runtimeSource } from "../lib/lesson-runtime/lesson-runtime-reducer";
 import { parseLiveClassificationDiagnostic } from "../lib/lesson-runtime/live-classification-diagnostic";
-import { createReducerHarness } from "./helpers/runtime-harness";
+import { createReducerHarness, prepareLearnerClassification } from "./helpers/runtime-harness";
 
 const input = { lesson: COUNTING_LESSON, nodeId: "count-1-duck", transcriptRevision: 1, transcript: "Child: One." };
 const questions = conversationStateQuestions(COUNTING_LESSON, input.nodeId);
@@ -81,6 +81,7 @@ it.each([
   { text: "One or two. I have not decided.", objective: "completed", commitment: "unresolved", accept: false },
   { text: "Uh, two, uh, one", objective: "completed", commitment: "unresolved", accept: false },
   { text: "One. No, I withdraw that answer.", objective: "completed", commitment: "withdrawn", accept: false },
+  { text: "I am not sure what I said.", objective: "unclear_or_incomplete", commitment: "unresolved", accept: false },
   { text: "One, perhaps? I am still deciding.", objective: "completed", commitment: "unresolved", accept: false },
   { text: "I have no answer.", objective: "no_attempt", commitment: "no_answer", accept: false },
 ] as const)("requires commitment and correctness for $text", async ({ text, objective, commitment, accept }) => {
@@ -122,6 +123,38 @@ it.each([
   h.send({ type: "output.activity", source: runtimeSource(h.state), state: "quiet" });
   h.send({ type: "clock.tick", source: runtimeSource(h.state) }, 100);
   expect(h.state.phase).toBe(accept ? "rendering" : "active");
+});
+
+it("waits for fresh tutor output after a wrong answer is corrected", () => {
+  const h = createReducerHarness("wrong-corrected", { lesson: COUNTING_LESSON, quietDrainMs: 100 });
+  const wrong = prepareLearnerClassification(h, 1);
+  h.send({
+    type: "proposal.received",
+    source: wrong,
+    proposal: mapConversationObservation(input, normalized("incorrect")).proposal!,
+  });
+  h.send({ type: "output.activity", source: runtimeSource(h.state), state: "active" });
+  h.send({ type: "output.activity", source: runtimeSource(h.state), state: "quiet" });
+  expect(h.send({ type: "clock.tick", source: runtimeSource(h.state) }, 100).effects).not.toContainEqual(
+    expect.objectContaining({ type: "render.requested" }),
+  );
+  expect(h.state.phase).toBe("active");
+  const corrected = prepareLearnerClassification(h, 2);
+  const proposal = mapConversationObservation({ ...input, transcriptRevision: 2 }, normalized()).proposal!;
+  expect(h.send({ type: "proposal.received", source: corrected, proposal }).effects).not.toContainEqual(
+    expect.objectContaining({ type: "render.requested" }),
+  );
+  expect(h.state.answerAccepted).toBe(true);
+  expect(h.state.phase).toBe("active");
+  h.send({ type: "output.activity", source: runtimeSource(h.state), state: "active" });
+  expect(h.send({ type: "clock.tick", source: runtimeSource(h.state) }, 100).effects).not.toContainEqual(
+    expect.objectContaining({ type: "render.requested" }),
+  );
+  expect(h.state.phase).toBe("active");
+  h.send({ type: "output.activity", source: runtimeSource(h.state), state: "quiet" });
+  expect(h.send({ type: "clock.tick", source: runtimeSource(h.state) }, 100).effects).toContainEqual(
+    expect.objectContaining({ type: "render.requested" }),
+  );
 });
 
 it.each([0.6, 0.89, 0.9, 0.97])("applies unchanged confidence bands to commitment: %s", p => {

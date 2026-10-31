@@ -10,9 +10,9 @@ describe("authored counting adventure (static, not GPT-Live conversational quali
     const node = COUNTING_LESSON_GRAPH[id];
     const total = new RegExp(`\\b(?:${NUMBER_WORDS[node.quantity - 1]}|${node.quantity})\\b`, "i");
     expect(node.tutorBrief).not.toMatch(total);
-    expect(node.tutorBrief).toMatch(/point to (?:the|each)/);
-    expect(node.tutorBrief).toContain("themselves");
-    expect(node.tutorBrief).toMatch(/wait/i);
+    expect(node.tutorBrief.length).toBeLessThanOrEqual(320);
+    expect(node.tutorBrief.match(/\?/g)).toHaveLength(1);
+    expect(node.tutorBrief).not.toMatch(/earlier|previous|before|same|again|still/i);
     expect(countingScene(node).objects).toHaveLength(node.quantity);
   });
 
@@ -32,21 +32,32 @@ describe("authored counting adventure (static, not GPT-Live conversational quali
 
   it("invites pointing on the ducklings scene without claiming it was observed", () => {
     const brief = COUNTING_LESSON_GRAPH["count-3-ducklings"].tutorBrief;
-    expect(brief).toContain("point to each duckling once");
-    expect(brief).toContain("never say you saw pointing or touching");
+    expect(brief).toContain("invite pointing to each duckling");
   });
 
   it("scaffolds the four-flower scene in small steps without rushing", () => {
     const brief = COUNTING_LESSON_GRAPH["count-4-flowers"].tutorBrief;
-    expect(brief).toContain("one step at a time, waiting after each");
-    expect(brief).toContain("never rush");
-    expect(brief).toContain("without starting or finishing the count or giving the total");
+    expect(brief).toContain("Give extra time");
   });
 
   it("asks for a fresh recount of the moved butterflies without hinting it is unchanged", () => {
     const brief = COUNTING_LESSON_GRAPH["count-3-moved-butterflies"].tutorBrief;
-    expect(brief).toContain("Never mention earlier scenes or counts");
     expect(brief).not.toMatch(/same|again|before|still/i);
+  });
+
+  it("keeps the start instruction recognisable and has Sprout speak first", () => {
+    // Session instructions tell GPT-Live to stay quiet until "the application's start instruction".
+    expect(COUNTING_LESSON.tutor.startInstruction).toContain("This is the application's start instruction");
+    expect(COUNTING_LESSON.tutor.startInstruction).toContain("do not wait for the child to speak first");
+  });
+
+  it("avoids canned praise in authored counting instructions", () => {
+    const text = JSON.stringify({
+      tutor: COUNTING_LESSON.tutor,
+      recovery: COUNTING_LESSON.recovery,
+      briefs: COUNTING_NODE_IDS.map(id => COUNTING_LESSON_GRAPH[id].tutorBrief),
+    });
+    expect(text).not.toMatch(/good job|great job|that's right/i);
   });
 
   it.each(COUNTING_NODE_IDS)("projects only %s facts to the tutor, never edges or other scenes", id => {

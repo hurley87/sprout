@@ -36,39 +36,25 @@ describe("counting confirmation instruction construction (no model calls)", () =
       expect(instruction).not.toContain(other);
     }
     expect(instruction).toContain("this current scene is now rendered");
-    expect(instruction).toContain("only the application changes the scene");
-    expect(instruction).toContain("Follow the session counting and help guidance");
-    expect(instruction).toContain("Confirm a settled successful answer with its number and object, then pause");
-    expect(instruction).toContain("Wait or clarify unfinished/uncertain attempts");
+    expect(instruction).toContain("Only the application changes scenes");
+    expect(instruction).toContain("Follow the counting and help guidance");
+    expect(instruction).toContain("Confirm settled success with its number and object, then pause");
   });
 
   it.each([["session", SPROUT_LIVE_CONFIG.instructions]])(
     "supplies success and uncertainty guidance in %s instructions",
     (_name, instruction) => {
       // These assertions cover delivered instructions, not GPT-Live's interpretation.
+      expect(instruction).toContain("a stated total or a finished count up to the displayed quantity");
+      expect(instruction).toContain("explicitly confirm the child's number and the current object's name");
       expect(instruction).toContain(
-        "a stated total or counting one at a time up to the displayed quantity and stopping there",
+        "settled reaffirmation of the previous correct answer needs a fresh explicit number and object confirmation",
       );
-      expect(instruction).toContain('"one, two" when two objects are displayed');
-      expect(instruction).toContain("including after a retry or counting help");
-      expect(instruction).toContain(
-        "explicitly confirm that total with its number and the current scene's object name",
-      );
-      expect(instruction).toContain(
-        '"You\'re counting carefully" may accompany this confirmation but must not replace it',
-      );
-      expect(instruction).toContain("a pause or hesitation alone does not establish a settled total");
-      expect(instruction).toContain("If counting is still underway, wait");
-      expect(instruction).toContain("ambiguous, interrupted, or incomplete");
-      expect(instruction).toContain("finish or clarify without supplying the total");
-      expect(instruction).toContain("If the settled total is wrong, invite another try");
-      expect(instruction).toContain(
-        "difficulty remains unresolved, offer a short counting hint without giving the total",
-      );
-      expect(instruction).toContain("Do not announce the displayed total before the child has counted");
-      expect(instruction).toContain(
-        "After confirming success, pause and listen for updated application screen context",
-      );
+      expect(instruction).toContain("a generic yes or finished alone is insufficient");
+      expect(instruction).toContain("an unfinished count means wait");
+      expect(instruction).toContain("unclear, surprising, or not a number");
+      expect(instruction).toContain("ask the child to say it again without echoing or suggesting a number");
+      expect(instruction).toContain("settled wrong answer, gently invite another try");
     },
   );
 });
