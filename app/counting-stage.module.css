@@ -115,6 +115,31 @@
   animation-duration: 4s;
 }
 
+.stage:is([data-motion="idle"], [data-motion="calm"]) .object[data-counting-object="bat"] .character {
+  animation-name: halloween-flutter;
+  animation-duration: 3s;
+}
+
+.stage:is([data-motion="idle"], [data-motion="calm"]) .object[data-counting-object="ghost"] .character {
+  animation-name: halloween-float;
+  animation-duration: 4.2s;
+}
+
+.stage:is([data-motion="idle"], [data-motion="calm"]) .object[data-counting-object="lantern"] .character {
+  animation-name: halloween-glow;
+  animation-duration: 3.6s;
+}
+
+.stage:is([data-motion="idle"], [data-motion="calm"]) .object[data-counting-object="helper"] .character {
+  animation-name: halloween-bob;
+  animation-duration: 3.4s;
+}
+
+.stage:is([data-motion="idle"], [data-motion="calm"]) .object[data-counting-object="pumpkin"] .character {
+  animation-name: halloween-wobble;
+  animation-duration: 4s;
+}
+
 /* Low motion while the child is answering, and once a session has stopped. */
 .stage[data-motion="calm"] .object .character {
   animation-play-state: paused;
@@ -194,6 +219,10 @@
 
 .stage[data-motion="celebrate"] .friend .character {
   animation: float 3.4s ease-in-out calc(var(--i, 0) * -1.1s) infinite;
+}
+
+.stage:has([data-background="party-yard"]) .objects {
+  width: min(100cqw - 2rem, max(var(--room) * 1.6, 85cqw));
 }
 
 .stage[data-motion="celebrate"] .complete {
@@ -278,6 +307,45 @@
   100% {
     opacity: 0;
     scale: 1.35;
+  }
+}
+
+@keyframes halloween-flutter {
+  50% {
+    translate: 0 -2%;
+    scale: 0.97 1;
+  }
+}
+
+@keyframes halloween-float {
+  50% {
+    translate: 0 -3%;
+  }
+}
+
+@keyframes halloween-glow {
+  0%,
+  100% {
+    filter: brightness(1) drop-shadow(0 0 0.1rem #ffb45a55);
+  }
+  50% {
+    filter: brightness(1.06) drop-shadow(0 0 0.45rem #ffb45a99);
+  }
+}
+
+@keyframes halloween-bob {
+  50% {
+    translate: 0 -2%;
+    rotate: 2deg;
+  }
+}
+
+@keyframes halloween-wobble {
+  25% {
+    rotate: -2deg;
+  }
+  75% {
+    rotate: 2deg;
   }
 }
 

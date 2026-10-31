@@ -5,6 +5,7 @@ The production prototype is the realtime counting lesson at `/`, backed by
 
 | Document | Purpose |
 | --- | --- |
+| [Halloween counting](halloween-counting.md) | Interest-led counting adventure and verification limits |
 | [Calculus demo](calculus-demo.md) | Worked-steps flow, required steps per problem, tutor outcomes, diagnostics and PENDING live acceptance |
 | [Issue #80 findings](issue-80-findings.md) | Historical: renderer decision and feasibility evidence for the superseded confirmation design |
 | [Architecture](architecture.md) | Authority boundaries, current modules, lifecycle and failure behavior |

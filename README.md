@@ -22,6 +22,8 @@ The canonical counting lesson is served at `/`. `/api/live` accepts `{ sdp, less
 uses the Sprout tutor configuration; `/api/classify` returns semantic proposals
 and normalized diagnostics. Both endpoints enforce local request boundaries.
 
+The interest-led [Halloween counting adventure](docs/halloween-counting.md) is at `/halloween`.
+
 Attempts and speaker-labelled transcripts stay in page memory. **Export diagnostics**
 downloads the current attempt as JSON; restarting or refreshing clears it. The app
 has no audio recording, durable sessions, post-session analysis, or review workflow.
