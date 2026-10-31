@@ -84,6 +84,17 @@ export type LessonRuntimeState = {
     readonly hasChildTranscript: boolean;
     readonly tutorOutputObserved: boolean;
   } | null;
+  /** Counting only: this visit's latest transcribed answer, held while a confirmed
+   * turn has produced no words. Any new child text clears it; it never creates evidence. */
+  readonly textlessTurnPrior?: Pick<
+    LessonRuntimeState,
+    | "transcriptRevision"
+    | "consumedRevision"
+    | "acceptedAnswerRevision"
+    | "answerAccepted"
+    | "acknowledgmentObserved"
+    | "tutorOutputObserved"
+  > | null;
   /** Visit-local transcript/audio eligibility only; never saved mastery or navigation authority. */
   readonly interruptedExchange?: { readonly tutorOutputObserved: boolean; readonly ready: boolean } | null;
   readonly transcriptRevision: number;
@@ -187,6 +198,7 @@ export type LessonRuntimeEvent = { readonly atMs: number } & (
     }
   | { readonly type: "terminal.transcript.checked"; readonly source: RuntimeSource; readonly complete: boolean }
   | { readonly type: "terminal.learner.resolved"; readonly source: RuntimeSource }
+  | { readonly type: "textless.turn.resolved"; readonly source: ClassificationSource }
   | { readonly type: "clock.tick"; readonly source: RuntimeSource }
   | { readonly type: "render.confirmed"; readonly runtimeId: string; readonly identity: RenderIdentity }
   | { readonly type: "scene.skipped"; readonly source: RuntimeSource; readonly scope?: NavigationIntent["scope"] }
@@ -233,6 +245,32 @@ const clearedEvidence = {
 
 function clearedNavigation(state: LessonRuntimeState) {
   return state.navigationHistory ? { navigationIntent: null, navigationSource: null } : {};
+}
+
+/** Provisional microphone energy blocks progression without starting a learner
+ * exchange: the classification source is unchanged until speech is confirmed. */
+export function defersMicrophoneCandidate(lesson: LessonDefinition, nodeId: string) {
+  return (
+    (lesson.conversationFirst === true || acceptsLearnerAnswerIndependently(lesson)) &&
+    !lesson.nodes[nodeId].completeAfterTutorOutput
+  );
+}
+
+/** Only transcribed, accepted or still-unjudged answers are held across a wordless
+ * turn. A judged wrong/uncommitted answer keeps the existing missing-text recovery. */
+function heldTextlessTurnPrior(state: LessonRuntimeState): LessonRuntimeState["textlessTurnPrior"] {
+  if (!state.hasChildTranscript) return state.textlessTurnPrior ?? null;
+  if (!state.answerAccepted && state.consumedRevision === state.transcriptRevision) return null;
+  const { transcriptRevision, consumedRevision, acceptedAnswerRevision, answerAccepted } = state;
+  const { acknowledgmentObserved, tutorOutputObserved } = state;
+  return {
+    transcriptRevision,
+    consumedRevision,
+    acceptedAnswerRevision,
+    answerAccepted,
+    acknowledgmentObserved,
+    tutorOutputObserved,
+  };
 }
 
 /** The initial authored scene must already be rendered. Use a fresh runtimeId for every start/reconnect. */
@@ -484,6 +522,7 @@ function requestAuthoredTransition(
       hasChildTurn: false,
       hasChildTranscript: false,
       interruptedExchange: null,
+      ...(acceptsLearnerAnswerIndependently(lesson) ? { textlessTurnPrior: null } : {}),
       consumedRevision: null,
       phase: "rendering",
       lessonComplete: edge.kind === "complete",
@@ -689,11 +728,7 @@ export function reduceLessonRuntime(
     case "child.candidate.started":
     case "child.turn.started":
       if (event.type === "child.candidate.started" && state.childSpeaking) return ignored;
-      if (
-        event.type === "child.candidate.started" &&
-        lesson.conversationFirst &&
-        !lesson.nodes[state.nodeId].completeAfterTutorOutput
-      ) {
+      if (event.type === "child.candidate.started" && defersMicrophoneCandidate(lesson, state.nodeId)) {
         // Energy alone is not a new learner exchange. Preserve exact-source
         // classification and audio history, but block finish until resolved.
         next = {
@@ -743,6 +778,7 @@ export function reduceLessonRuntime(
               },
             }
           : {}),
+        ...(acceptsLearnerAnswerIndependently(lesson) ? { textlessTurnPrior: heldTextlessTurnPrior(state) } : {}),
         childTurnId: state.childTurnId + 1,
         hasChildTurn: true,
         hasChildTranscript: false,
@@ -753,7 +789,16 @@ export function reduceLessonRuntime(
     case "child.candidate.discarded":
       if (!state.childSpeaking || !state.childCandidate) return ignored;
       if (state.childCandidate.deferredTurn) {
-        next = { ...next, childSpeaking: false, childCandidate: null };
+        next = {
+          ...next,
+          childSpeaking: false,
+          childCandidate: null,
+          // Counting keeps its evidence and source, but still drains fresh quiet
+          // after the burst before a transition.
+          ...(acceptsLearnerAnswerIndependently(lesson)
+            ? { quietSinceMs: state.outputActivity === "quiet" ? event.atMs : null }
+            : {}),
+        };
         break;
       }
       next = {
@@ -874,6 +919,8 @@ export function reduceLessonRuntime(
           : {}),
         childCandidate: event.speaker === "tutor" ? state.childCandidate : null,
         interruptedExchange: event.speaker === "tutor" ? state.interruptedExchange : null,
+        // New learner words always supersede; tutor words do not retract counting evidence.
+        ...(acceptsLearnerAnswerIndependently(lesson) && event.speaker !== "tutor" ? { textlessTurnPrior: null } : {}),
         transcriptRevision: event.revision,
         transcriptSource: event.speaker,
         hasChildTranscript:
@@ -1218,6 +1265,37 @@ export function reduceLessonRuntime(
           quietSinceMs: next.outputActivity === "quiet" ? event.atMs : null,
         };
       break;
+    case "textless.turn.resolved": {
+      // A confirmed turn that never produced words, after the bounded missing-text
+      // window, is resolved like a discarded candidate: it cannot erase the visit's
+      // latest transcribed answer. Accepted evidence is restored as it was; an
+      // unjudged answer becomes classifiable again. No evidence is created here.
+      // Only counting ever holds a prior.
+      const prior = state.textlessTurnPrior;
+      if (
+        !prior ||
+        !state.hasChildTurn ||
+        state.hasChildTranscript ||
+        state.childSpeaking ||
+        state.childCandidate ||
+        state.outputActivity !== "quiet" ||
+        !sameClassificationSource(state, event.source)
+      )
+        return ignored;
+      const unchanged = prior.transcriptRevision === state.transcriptRevision;
+      next = {
+        ...next,
+        textlessTurnPrior: null,
+        hasChildTranscript: true,
+        answerAccepted: prior.answerAccepted,
+        acceptedAnswerRevision: prior.acceptedAnswerRevision,
+        acknowledgmentObserved: unchanged && prior.acknowledgmentObserved,
+        consumedRevision: unchanged ? prior.consumedRevision : null,
+        tutorOutputObserved: prior.tutorOutputObserved || state.tutorOutputObserved,
+        quietSinceMs: event.atMs,
+      };
+      break;
+    }
     case "terminal.learner.resolved":
       if (
         !lesson.nodes[state.nodeId].completeAfterTutorOutput ||

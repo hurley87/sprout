@@ -1,10 +1,11 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page, type Route } from "@playwright/test";
 import {
   COUNTING_LESSON_GRAPH,
   COUNTING_NODE_IDS,
   type CountingNodeId,
 } from "../../lib/lesson-runtime/counting-lesson";
 import { countingAnswer } from "../helpers/child-scenario";
+import { classifierProposal } from "../helpers/runtime-classifier";
 import { installLessonObserver, type LessonObserver } from "../helpers/lesson-observer";
 import { installLocalSession, type LocalSessionWindow } from "../helpers/local-voice-session";
 import { installSyntheticMicrophone } from "../helpers/synthetic-microphone";
@@ -12,30 +13,25 @@ import { installSyntheticMicrophone } from "../helpers/synthetic-microphone";
 type Microphone = Awaited<ReturnType<typeof installSyntheticMicrophone>>;
 const WORDS = ["One", "Two", "Three", "Four"];
 
+/** Echo the exact captured source identity; the reducer still applies every gate itself. */
+function classifierReply(route: Route, answerOutcome: "correct" | "incorrect" = "correct") {
+  return {
+    proposal: classifierProposal(route.request().postDataJSON(), {
+      answerOutcome,
+      answerCommitment: "committed",
+      tutorState: "acknowledging",
+    }),
+  };
+}
+
 /** Provider-free: local peer PCM, synthetic microphone VAD, injected transcripts and a mocked classifier.
  * `verdict` lets a test mark a learner answer wrong; every other gate is still the reducer's. */
 async function setup(page: Page, verdict: () => "correct" | "incorrect" = () => "correct") {
   const microphone = await installSyntheticMicrophone(page);
   await installLocalSession(page);
   const observer = await installLessonObserver(page);
-  // Registered after the local session default, so it takes precedence. Echo the exact captured
-  // source identity; the reducer still applies every turn, revision, audio and render gate itself.
-  await page.route("**/api/classify", route => {
-    const { nodeId, transcriptRevision } = route.request().postDataJSON();
-    return route.fulfill({
-      json: {
-        proposal: {
-          nodeId,
-          transcriptRevision,
-          childActivity: "unknown",
-          answerOutcome: verdict(),
-          answerCommitment: "committed",
-          supportState: "none",
-          tutorState: "acknowledging",
-        },
-      },
-    });
-  });
+  // Registered after the local session default, so it takes precedence.
+  await page.route("**/api/classify", route => route.fulfill({ json: classifierReply(route, verdict()) }));
   // Every stage motion and voice cue the child could have seen, in commit order.
   await page.addInitScript(() => {
     const seen: string[] = [];
@@ -375,4 +371,124 @@ test("Stop mid-adventure shows the gentle ended state, never completion", async 
   await expect(page.getByRole("button", { name: "Play", exact: true })).toBeEnabled();
   await expect(page.getByRole("button", { name: "Play again", exact: true })).toHaveCount(0);
   expect((await observer.read())?.snapshot.runtime).toMatchObject({ phase: "stopped", lessonComplete: false });
+});
+
+/** Registered after `setup`, so it takes precedence: classifier replies wait until the test releases them. */
+async function holdClassifier(page: Page) {
+  const held: (() => Promise<void>)[] = [];
+  let holding = true;
+  await page.route("**/api/classify", route => {
+    // The runtime may have aborted a superseded request; its late reply is irrelevant.
+    const reply = () => route.fulfill({ json: classifierReply(route) }).catch(() => {});
+    if (holding) held.push(reply);
+    else return reply();
+  });
+  /** Answer only the requests already in flight; later requests stay held. */
+  const answerInFlight = () => Promise.all(held.splice(0).map(reply => reply()));
+  return {
+    pending: () => held.length,
+    answerInFlight,
+    answerAll: () => {
+      holding = false;
+      return answerInFlight();
+    },
+  };
+}
+
+/** The child answers one duck (transcribed) and Sprout acknowledges it; its classification is held in flight. */
+async function acknowledgeWithHeldClassifier(
+  page: Page,
+  observer: LessonObserver,
+  microphone: Microphone,
+  classifier: Awaited<ReturnType<typeof holdClassifier>>,
+) {
+  const nodeId = "count-1-duck";
+  const fixture = countingAnswer(nodeId, true);
+  await microphone.loadSpeech(fixture);
+  const before = await observer.cursor();
+  const scope = { runtimeId: before.runtimeId, nodeId };
+  const playback = await microphone.playSpeech(fixture);
+  await observer.waitForEvent("microphone.speech_started", { after: before, scope });
+  await page.evaluate(
+    text => (window as unknown as LocalSessionWindow).sendTranscript("session.input_transcript.delta", text),
+    "One.",
+  );
+  expect(await microphone.waitForPlayback(playback.id)).toBe("ended");
+  await observer.waitForEvent("microphone.speech_stopped", { after: before, scope });
+  await setTutorLevel(page, 0.2);
+  await observer.waitForEvent("output.activity", { after: before, scope, detail: { state: "active" } });
+  await page.evaluate(
+    text => (window as unknown as LocalSessionWindow).sendTranscript("session.output_transcript.delta", text),
+    "Yes! One duck.",
+  );
+  await setTutorLevel(page, 0);
+  const quiet = await observer.waitForEvent("output.activity", { after: before, scope, detail: { state: "quiet" } });
+  await observer.waitForEvent("classifier.started", {
+    after: quiet.cursor,
+    scope,
+    detail: { trigger: "tutor_utterance_stable" },
+  });
+  await expect.poll(() => classifier.pending()).toBeGreaterThan(0);
+  return scope;
+}
+
+const reportEvents = async (observer: LessonObserver, type: string) =>
+  (await observer.report())!.events.filter(event => event.type === type);
+const renderedNodes = async (observer: LessonObserver) =>
+  (await reportEvents(observer, "render.confirmed")).map(
+    event => (event.detail as { identity: { nodeId: string } }).identity.nodeId,
+  );
+
+test("short microphone noise during the acknowledged answer's classification does not lose it", async ({ page }) => {
+  const { microphone, observer } = await setup(page);
+  const classifier = await holdClassifier(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Play", exact: true }).click();
+  await expectScene(page, observer, "count-1-duck");
+  const scope = await acknowledgeWithHeldClassifier(page, observer, microphone, classifier);
+  const burstFrom = await observer.cursor();
+  const burst = await microphone.noise({ seed: 30, durationMs: 40 });
+  expect(await microphone.waitForPlayback(burst.id)).toBe("ended");
+  await observer.waitForEvent("microphone.activity_discarded", { after: burstFrom, scope });
+  // Only the request that was in flight during the burst answers; a re-run would stay held.
+  await classifier.answerInFlight();
+  await expectScene(page, observer, "count-2-ducks");
+  const cancelled = await reportEvents(observer, "classifier.cancelled");
+  expect(cancelled.filter(event => (event.detail as { reason: string }).reason === "child_turn_started")).toEqual([]);
+  expect(await reportEvents(observer, "gpt_live.answer_recovery_append")).toEqual([]);
+  expect(await renderedNodes(observer)).toEqual(["count-1-duck", "count-2-ducks"]);
+  await classifier.answerAll();
+});
+
+test("a wordless confirmed turn after an acknowledged answer advances without asking again", async ({ page }) => {
+  test.setTimeout(45_000);
+  const { microphone, observer } = await setup(page);
+  const classifier = await holdClassifier(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Play", exact: true }).click();
+  await expectScene(page, observer, "count-1-duck");
+  const scope = await acknowledgeWithHeldClassifier(page, observer, microphone, classifier);
+  // Confirmed speech that GPT-Live never transcribes supersedes the in-flight classification.
+  await microphone.loadSpeech("counting");
+  const turnFrom = await observer.cursor();
+  const playback = await microphone.playSpeech("counting");
+  await observer.waitForEvent("classifier.cancelled", { after: turnFrom, scope });
+  expect(await microphone.waitForPlayback(playback.id)).toBe("ended");
+  await observer.waitForEvent("classifier.blocked", {
+    after: turnFrom,
+    scope,
+    detail: { reason: "missing_current_turn_child_transcript" },
+  });
+  await classifier.answerAll();
+  // The existing bounded missing-text window elapses, then the transcribed answer is restored.
+  await observer.waitForEvent("render.confirmed", {
+    after: turnFrom,
+    scope: { runtimeId: scope.runtimeId },
+    detail: { identity: { nodeId: "count-2-ducks" } },
+    timeoutMs: 10_000,
+  });
+  await expectScene(page, observer, "count-2-ducks");
+  expect(await reportEvents(observer, "answer_recovery.prior_answer_restored")).toHaveLength(1);
+  expect(await reportEvents(observer, "gpt_live.answer_recovery_append")).toEqual([]);
+  expect(await renderedNodes(observer)).toEqual(["count-1-duck", "count-2-ducks"]);
 });
