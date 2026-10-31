@@ -77,6 +77,18 @@ async function expectCharacterMotion(page: Page, nodeId: CountingNodeId, motion:
   expect(await characterAnimations(page, nodeId)).toEqual(
     Array(node.quantity).fill(expect.stringContaining(KEYFRAMES[node.object][motion])),
   );
+  const fades = await stageFor(page, nodeId)
+    .locator("[data-counting-object], [data-counting-object] img")
+    .evaluateAll(elements =>
+      elements.flatMap(element =>
+        element
+          .getAnimations()
+          .flatMap(animation =>
+            (animation.effect as KeyframeEffect).getKeyframes().filter(frame => frame.opacity !== undefined),
+          ),
+      ),
+    );
+  expect(fades).toEqual([]);
 }
 
 /** While the child counts, idle motion is paused and the entrance has finished (it never replays). */
