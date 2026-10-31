@@ -1,21 +1,26 @@
-/* A small moon glow in place of the talking/listening pill. Changes ease in over ~0.6 s and the
- * only loops are slow (≥ 2.4 s), low-amplitude breaths: nothing flashes or snaps between states. */
+/* An abstract cue inside the status pill: a moon glow and three soft sound bars. Changes ease in
+ * over ~0.6 s and the only loops are slow, low-amplitude movements: nothing flashes or snaps. */
 .cue {
-  position: relative;
-  display: block;
+  display: flex;
   flex: none;
-  width: 2.75rem;
-  height: 2.75rem;
+  align-items: center;
+  gap: 0.7rem;
+  height: 2.5rem;
 }
 
 .cue[data-voice-activity="off"] {
   display: none;
 }
 
+.light {
+  position: relative;
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
 .orb,
 .halo {
   position: absolute;
-  inset: 0;
   border-radius: 50%;
   transition:
     opacity 600ms ease,
@@ -32,52 +37,96 @@
 }
 
 .halo {
+  inset: 0;
   border: 2px solid #fff3cf;
   opacity: 0;
   scale: 0.7;
 }
 
-/* Sprout talking: a slow breath. */
+.bars {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  height: 1.6rem;
+}
+
+.bars span {
+  display: block;
+  width: 0.38rem;
+  height: 0.38rem;
+  border-radius: 999px;
+  background: #ffd98a;
+  opacity: 0.35;
+  transition:
+    height 600ms ease,
+    opacity 600ms ease;
+}
+
+/* Sprout talking: the glow breathes and the bars rise and fall, slowly and out of step. */
 .cue[data-voice-activity="speaking"] .orb {
   opacity: 1;
   animation: breathe 2.4s ease-in-out infinite;
 }
 
-/* The child's turn: a steady warm glow with a faint ring inviting an answer. */
+.cue[data-voice-activity="speaking"] .bars span {
+  height: 1rem;
+  opacity: 0.95;
+  animation: talk 1.4s ease-in-out infinite;
+}
+
+.cue[data-voice-activity="speaking"] .bars span:nth-child(2) {
+  animation-delay: -0.45s;
+}
+
+.cue[data-voice-activity="speaking"] .bars span:nth-child(3) {
+  animation-delay: -0.9s;
+}
+
+/* The child's turn: a steady warm glow with a ring inviting an answer; the bars rest. */
 .cue[data-voice-activity="your-turn"] .orb {
   opacity: 1;
   box-shadow: 0 0 0.9rem 0.3rem #ffd98a99;
 }
 
 .cue[data-voice-activity="your-turn"] .halo {
-  opacity: 0.35;
+  opacity: 0.6;
   scale: 1;
 }
 
-/* Hearing the child: the ring brightens gently. */
+/* Hearing the child: the ring pulses gently. */
 .cue[data-voice-activity="listening"] .orb {
   opacity: 1;
   box-shadow: 0 0 1rem 0.35rem #fff1c299;
 }
 
 .cue[data-voice-activity="listening"] .halo {
-  opacity: 0.7;
+  opacity: 0.9;
   scale: 1;
-  animation: halo 2.8s ease-in-out infinite;
+  animation: halo 2.4s ease-in-out infinite;
 }
 
-/* Thinking or waiting for the screen: a calm, dimmed moon. */
+/* Thinking or waiting for the screen: calm and dimmed. */
 .cue[data-voice-activity="thinking"] .orb,
 .cue[data-voice-activity="waiting"] .orb {
   opacity: 0.55;
   filter: saturate(0.7);
 }
 
-/* Success: a fuller warm glow. */
+.cue[data-voice-activity="thinking"] .bars span,
+.cue[data-voice-activity="waiting"] .bars span {
+  opacity: 0.2;
+}
+
+/* Success: a fuller warm glow and bright resting bars. */
 .cue[data-voice-activity="understood"] .orb {
   opacity: 1;
   scale: 1.08;
   box-shadow: 0 0 1.3rem 0.5rem #ffc76b;
+}
+
+.cue[data-voice-activity="understood"] .bars span {
+  height: 0.7rem;
+  opacity: 0.9;
 }
 
 @keyframes breathe {
@@ -87,9 +136,16 @@
   }
 }
 
+@keyframes talk {
+  50% {
+    height: 0.45rem;
+  }
+}
+
 @keyframes halo {
   50% {
-    opacity: 0.4;
+    opacity: 0.45;
+    scale: 1.06;
   }
 }
 

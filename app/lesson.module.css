@@ -58,11 +58,13 @@
   margin: 0;
 }
 
-/* A bare glow during the conversation: no pill behind it. */
+/* During the conversation the pill keeps its place but holds an abstract cue instead of words. */
 .status[data-status-cue="glow"] {
-  padding: 0.25rem;
-  background: none;
-  box-shadow: none;
+  padding: 0.45rem 1.1rem;
+  background: #2b1d47d9;
+  box-shadow:
+    0 3px 0 #160e27,
+    0 0 0 1px #ffd98a40;
 }
 
 .progress {

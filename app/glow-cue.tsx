@@ -29,13 +29,21 @@ export function useHeldVoiceActivity(activity: VoiceActivity, holdMs: number): V
   return holding ? "speaking" : activity;
 }
 
-/** An abstract moon glow: it breathes while Sprout talks, rests warmly on the child's turn, gains a
- * soft halo while the child speaks and dims while Sprout thinks. Words stay in the status text. */
+/** An abstract moon glow with soft sound bars: the bars rise and fall slowly while Sprout talks, the
+ * glow rests warmly with a ring on the child's turn, the ring pulses while the child speaks and
+ * everything dims while Sprout thinks. Words stay in the status text for screen readers. */
 export function GlowCue({ activity }: { activity: VoiceActivity }) {
   return (
     <span className={styles.cue} data-voice-activity={activity} aria-hidden="true">
-      <span className={styles.halo} />
-      <span className={styles.orb} />
+      <span className={styles.light}>
+        <span className={styles.halo} />
+        <span className={styles.orb} />
+      </span>
+      <span className={styles.bars}>
+        <span />
+        <span />
+        <span />
+      </span>
     </span>
   );
 }
