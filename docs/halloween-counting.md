@@ -3,7 +3,8 @@
 `/halloween` is an interest-led experiment from issue #87: a playful Halloween
 counting party using the shared counting theme and runtime, not an engine fork.
 The `counting-halloween` lesson is registered in the server allowlist. The garden
-at `/` remains unchanged.
+at `/` keeps its scenes, art and copy; both lessons share the 1,000 ms transition
+wait described below.
 
 | Node | Count | Object | Backdrop |
 | --- | ---: | --- | --- |
@@ -22,7 +23,8 @@ porch lamp. Counted pumpkins and lanterns stay in the open middle, and the tutor
 briefs for those scenes name the decorations as not part of the count. The
 party-yard background is used only for the celebration, where nothing is counted.
 
-Scene transitions wait for 1,000 ms of tutor-audio quiet (`transitionQuietMs`).
+Both counting lessons wait for 1,000 ms of tutor-audio quiet before a scene
+transition (`transitionQuietMs`, set in the shared counting lesson).
 Live attempt `5c98607e` showed 300–800 ms pauses inside a single tutor reply; the
 shared 250 ms window changed scenes mid-reply, and the resumed audio ended the
 attempt during render confirmation.
