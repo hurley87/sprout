@@ -8,8 +8,8 @@ it is neither final-answer grading nor a fixed authored path. It compares the
 proposed expression, not an LLM's or learner's assertion that it is correct.
 
 ```ts
-import { checkTransformation } from "../lib/math-audit/check";
-import { auditSequence } from "../lib/math-audit/audit";
+import { checkTransformation } from "@/lib/math-audit/check";
+import { auditSequence } from "@/lib/math-audit/audit";
 
 const result = checkTransformation({
   previous: { latex: "x(x+1)" },
