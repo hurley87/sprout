@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { checkTransformation } from "../lib/math-audit/check";
 import { equivalentExpressions } from "../lib/math-audit/equivalent";
 import { formatExpression } from "../lib/math-audit/format";
+import type { AlgebraExpression as E } from "../lib/math-audit/expression";
 import { readAlgebraLatex } from "../lib/math-audit/latex";
 
 const first = String.raw`\frac{6xy-5y^2}{4x+10y}`;
@@ -26,8 +27,8 @@ describe("defensible discrepancy localization", () => {
       path: ["factor 2", "numerator"],
       description:
         "The numerator of the reciprocal factor does not match the denominator of the divisor in the previous expression.",
-      previousPart: "((12)\\times (x))+((30)\\times (y))",
-      proposedPart: "(12)+((30)\\times (y))",
+      previousPart: "12x+30y",
+      proposedPart: "12+30y",
     });
   });
   it("localizes reciprocal denominator and swapped factors", () => {
@@ -84,5 +85,46 @@ describe("defensible discrepancy localization", () => {
     const roundtrip = readAlgebraLatex(formatExpression(parsed.expression));
     expect(roundtrip.ok).toBe(true);
     if (roundtrip.ok) expect(equivalentExpressions(parsed.expression, roundtrip.expression)).toBe(true);
+  });
+  it("renders compact LaTeX for the issue fixture", () => {
+    const parsed = readAlgebraLatex(original);
+    expect(parsed.ok && formatExpression(parsed.expression)).toBe(
+      String.raw`\frac{\frac{6xy-5y^2}{4x+10y}}{\frac{12x^2-10xy}{12x+30y}}`,
+    );
+    const negatives = readAlgebraLatex("x - -y + (-3)x^{-2}");
+    expect(negatives.ok && formatExpression(negatives.expression)).toBe("x-(-y)+(-3)x^{-2}");
+  });
+  it("round-trips generated expressions through the reader, including signs and powers", () => {
+    let seed = 7;
+    const random = (n: number) => ((seed = (seed * 1103515245 + 12345) % 2147483648), seed % n);
+    const leaf = (): E =>
+      random(3) === 0 ? { op: "number", value: random(13) - 4 } : { op: "variable", name: random(2) ? "x" : "y" };
+    const build = (depth: number): E => {
+      if (depth === 0) return leaf();
+      const child = () => build(depth - 1);
+      switch (random(7)) {
+        case 0:
+          return { op: "add", args: [child(), child(), child()].slice(0, 2 + random(2)) };
+        case 1:
+          return { op: "multiply", args: [child(), child(), child()].slice(0, 2 + random(2)) };
+        case 2:
+          return { op: "subtract", left: child(), right: child() };
+        case 3:
+          return { op: "negate", argument: child() };
+        case 4:
+          return { op: "power", base: child(), exponent: random(5) - 2 || 2 };
+        case 5:
+          return { op: "divide", left: child(), right: { op: "add", args: [child(), { op: "number", value: 7 }] } };
+        default:
+          return leaf();
+      }
+    };
+    for (let i = 0; i < 300; i++) {
+      const expression = build(3);
+      const text = formatExpression(expression);
+      const read = readAlgebraLatex(text);
+      expect(read.ok ? "ok" : `${text}: ${read.detail}`).toBe("ok");
+      if (read.ok) expect([text, equivalentExpressions(expression, read.expression)]).not.toEqual([text, false]);
+    }
   });
 });

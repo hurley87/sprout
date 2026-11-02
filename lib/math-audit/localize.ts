@@ -77,7 +77,7 @@ function structural(previous: AlgebraExpression, proposed: AlgebraExpression): P
     }
     match(0, [], undefined);
     if (!candidates.length) return;
-    const signature = (pair: Pair) => `${formatExpression(pair.previous)}|${formatExpression(pair.proposed)}`;
+    const signature = (pair: Pair) => JSON.stringify([pair.previous, pair.proposed]);
     return candidates.every(pair => signature(pair) === signature(candidates[0])) ? candidates[0] : undefined;
   }
 }
