@@ -275,6 +275,69 @@ describe("acknowledged counting answer with discarded microphone noise (export 3
   });
 });
 
+/** Scene 3 of sprout-lesson-86fd8a4f (real microphone), relative to its steering
+ * acknowledgment. The child answers, the classifier accepts the child-only snapshot,
+ * and the tutor's whole confirmation plays inside two confirmed microphone turns
+ * that never produce words (tutor echo). Tutor fragments are merged where no gate
+ * observes the split; output activity and microphone timings are kept. */
+function echoedConfirmationTimeline(): Step[] {
+  return [
+    { atMs: 1930, event: tutor("See the little ducklings paddling in a line? How many ducklings are there?", 61000) },
+    { atMs: 2150, event: output("active") },
+    { atMs: 6200, event: output("quiet") },
+    { atMs: 7270, event: { type: "microphone.activity_started" } },
+    { atMs: 7350, event: { type: "microphone.speech_started" } },
+    { atMs: 9010, event: child("Three", 67000) },
+    { atMs: 9850, event: { type: "microphone.speech_stopped", quietMs: 900 } },
+    // Energy at the tutor's onset; the classifier answers the child-only snapshot here.
+    { atMs: 10220, label: "answer-candidate", event: { type: "microphone.activity_started" } },
+    { atMs: 10340, event: tutor("Yes, three", 70200) },
+    { atMs: 10450, event: { type: "microphone.activity_discarded" } },
+    { atMs: 10470, event: { type: "microphone.activity_started" } },
+    { atMs: 10520, event: tutor(" ducklings. They're", 70600) },
+    // The tutor's own confirmation is confirmed as child speech, but never transcribed.
+    { atMs: 10540, event: { type: "microphone.speech_started" } },
+    { atMs: 10650, event: output("active") },
+    { atMs: 11150, event: output("quiet") },
+    { atMs: 11310, event: tutor(" paddling", 71200) },
+    { atMs: 11450, event: output("active") },
+    { atMs: 11850, event: output("quiet") },
+    { atMs: 11900, event: output("active") },
+    { atMs: 12150, event: output("quiet") },
+    { atMs: 12250, event: output("active") },
+    { atMs: 12310, event: tutor(" to the party.", 72000) },
+    { atMs: 12500, event: { type: "microphone.speech_stopped", quietMs: 908 } },
+    { atMs: 12550, event: { type: "microphone.activity_started" } },
+    { atMs: 12640, event: { type: "microphone.speech_started" } },
+    { atMs: 12650, event: output("quiet") },
+    { atMs: 13150, event: output("active") },
+    { atMs: 13570, event: { type: "microphone.speech_stopped", quietMs: 900 } },
+    { atMs: 14100, event: output("quiet") },
+    { atMs: 14150, event: output("active") },
+    { atMs: 14400, event: output("quiet") },
+    { atMs: 14450, event: output("active") },
+    { atMs: 14700, label: "confirmation-drained", event: output("quiet") },
+  ];
+}
+
+describe("counting answer confirmed inside wordless echo turns (export 86fd8a4f)", () => {
+  it("counts the tutor's confirmation after restoring the answer and advances once", async () => {
+    const lessonRuntime = await start();
+    await replay(lessonRuntime, echoedConfirmationTimeline(), "answer-candidate");
+    // Wordless turns suspend completion until the bounded missing-text window ends.
+    expect(events("render.requested")).toEqual([]);
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(events("answer_recovery.prior_answer_restored")).toHaveLength(1);
+    expect(events("answer_recovery.prior_answer_restored")[0].detail).toEqual({ answerAccepted: true });
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(events("render.requested")).toHaveLength(1);
+    expect(lessonRuntime.snapshot().display.nodeId).toBe("count-4-flowers");
+    expect(recoveryPrompts()).toEqual([]);
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(events("render.requested")).toHaveLength(1);
+  });
+});
+
 describe("counting reducer: deferred candidates and wordless turns", () => {
   const proposal = (state: LessonRuntimeState, overrides: Record<string, unknown> = {}) => ({
     ...classifierProposal(state, {
@@ -397,6 +460,51 @@ describe("counting reducer: deferred candidates and wordless turns", () => {
     });
     h.wordlessTurn();
     expect(h.state.textlessTurnPrior).toBeNull();
+  });
+
+  /** Child answers and the classifier accepts before any tutor output follows it. */
+  function acceptedBeforeTutorSpoke(h: ReturnType<typeof harness>) {
+    h.send({ type: "output.activity", source: runtimeSource(h.state), state: "quiet" });
+    const source = prepareLearnerClassification(h, 1);
+    h.send({ type: "proposal.received", source, proposal: proposal(h.state, { tutorState: "asking" }) });
+    expect(h.state).toMatchObject({ answerAccepted: true, tutorOutputObserved: false });
+  }
+
+  it("counts tutor output that starts during a wordless turn once the held answer is restored", () => {
+    const h = harness();
+    acceptedBeforeTutorSpoke(h);
+    h.send({ type: "child.candidate.started", source: runtimeSource(h.state) });
+    h.send({ type: "child.turn.confirmed", source: runtimeSource(h.state) });
+    // The tutor confirms while the microphone holds a turn that never gets words.
+    h.send({ type: "output.activity", source: runtimeSource(h.state), state: "active" });
+    h.send({ type: "transcript.updated", source: runtimeSource(h.state), speaker: "tutor", revision: 2 });
+    h.send({ type: "output.activity", source: runtimeSource(h.state), state: "quiet" });
+    h.send({ type: "child.turn.ended", source: runtimeSource(h.state) }, 900);
+    expect(h.state).toMatchObject({ tutorOutputObserved: false, answerAccepted: false });
+    expect(h.state.textlessTurnPrior).toMatchObject({ answerAccepted: true, tutorOutputObserved: true });
+    h.send({ type: "textless.turn.resolved", source: h.current() });
+    expect(h.state).toMatchObject({ answerAccepted: true, tutorOutputObserved: true, textlessTurnPrior: null });
+    expect(h.send({ type: "clock.tick", source: runtimeSource(h.state) }, 300).effects).toMatchObject([
+      { type: "render.requested" },
+    ]);
+  });
+
+  it("does not count output that was already active, or a wordless turn without tutor output", () => {
+    const h = harness();
+    acceptedBeforeTutorSpoke(h);
+    h.wordlessTurn();
+    h.send({ type: "textless.turn.resolved", source: h.current() });
+    expect(h.state).toMatchObject({ answerAccepted: true, tutorOutputObserved: false });
+    expect(h.send({ type: "clock.tick", source: runtimeSource(h.state) }, 2000).effects).toEqual([]);
+
+    // Output already active when the wordless turn starts is not a fresh response.
+    const g = harness();
+    acceptedBeforeTutorSpoke(g);
+    g.send({ type: "child.candidate.started", source: runtimeSource(g.state) });
+    g.send({ type: "output.activity", source: runtimeSource(g.state), state: "active" });
+    g.send({ type: "child.turn.confirmed", source: runtimeSource(g.state) });
+    g.send({ type: "output.activity", source: runtimeSource(g.state), state: "active" });
+    expect(g.state.textlessTurnPrior?.tutorOutputObserved).toBe(false);
   });
 
   it("Stop wins over a pending restoration", () => {

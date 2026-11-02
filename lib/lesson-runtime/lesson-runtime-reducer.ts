@@ -1234,6 +1234,12 @@ export function reduceLessonRuntime(
           },
         };
       }
+      if (state.textlessTurnPrior && event.state === "active" && state.outputActivity !== "active") {
+        // A fresh onset while a wordless turn holds the transcribed answer can only
+        // follow that answer (often the tutor's own confirmation picked up by the
+        // microphone). It applies only if the turn resolves without new words.
+        next = { ...next, textlessTurnPrior: { ...state.textlessTurnPrior, tutorOutputObserved: true } };
+      }
       if (event.state === "unavailable") {
         next = { ...next, tutorOutputObserved: false, quietSinceMs: null };
       } else if (event.state === "active") {
