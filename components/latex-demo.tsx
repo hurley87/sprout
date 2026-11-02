@@ -3,7 +3,16 @@
 import "katex/dist/katex.min.css";
 import { renderToString } from "katex";
 import { useDeferredValue, useMemo, useState } from "react";
-import { auditText, builtOnLine, category, discrepancyText, labels, presets, restrictions } from "./latex-demo-model";
+import {
+  auditText,
+  builtOnLine,
+  category,
+  discrepancyText,
+  labels,
+  presets,
+  restrictions,
+  verifiedText,
+} from "./latex-demo-model";
 import styles from "./latex-demo.module.css";
 
 export default function LatexDemo() {
@@ -44,7 +53,7 @@ export default function LatexDemo() {
                 ? "First issue: line 1 — Unverified"
                 : summary?.firstIssue
                   ? `First issue: line ${summary.firstIssue.index + 1} — ${labels[summary.firstIssue.category].slice(2)}`
-                  : `All ${summary?.counts.verified ?? 0} steps verified`}
+                  : verifiedText(summary?.counts.verified ?? 0)}
         </div>
         {result?.ok && (
           <>
@@ -93,6 +102,9 @@ export default function LatexDemo() {
                           {item.action} {item.restriction} — e.g. at x = {item.witness.x}, y = {item.witness.y}
                         </p>
                       ))}
+                    {transition?.domain?.unverified.map(restriction => (
+                      <p key={`unverified-${restriction}`}>Could not prove whether {restriction} is kept</p>
+                    ))}
                   </li>
                 );
               })}

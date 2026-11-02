@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { auditText, builtOnLine, category, discrepancyText, presets } from "@/components/latex-demo-model";
+import {
+  auditText,
+  builtOnLine,
+  category,
+  discrepancyText,
+  presets,
+  verifiedText,
+} from "@/components/latex-demo-model";
 
 describe("step checker playground", () => {
   it.each([
@@ -20,8 +27,16 @@ describe("step checker playground", () => {
       expect(discrepancyText(transitions[0].result)).toContain("reciprocal's numerator: 12+30y vs 12x+30y");
       expect(builtOnLine(result.summary, transitions[1].id)).toBe(2);
       expect(builtOnLine(result.summary, transitions[0].id)).toBeNull();
+      // The continuation is algebraically sound relative to the wrong line.
+      expect(transitions[1].result.verdict).toBe("equivalent");
+      expect(transitions[2].result.verdict).toBe("equivalent");
     }
     if (index === 2) expect(transitions[0].result.domain?.lost.length).toBeGreaterThan(0);
+  });
+
+  it("pluralizes the verified banner", () => {
+    expect(verifiedText(1)).toBe("All 1 step verified");
+    expect(verifiedText(3)).toBe("All 3 steps verified");
   });
 
   it("ignores blank lines", () => {

@@ -7,7 +7,16 @@ const wrong = `${first} ${String.raw`\times \frac{12+30y}{12x^2-10xy}`}`;
 const reciprocal = `${first} ${String.raw`\times \frac{12x+30y}{12x^2-10xy}`}`;
 
 export const presets = [
-  { label: "Missing x (issue #90)", lines: [original, wrong, wrong, wrong] },
+  {
+    label: "Missing x (issue #90)",
+    // Line 2 drops the x; lines 3-4 continue correctly from it, so they are "built on line 2".
+    lines: [
+      original,
+      wrong,
+      String.raw`\frac{y(6x-5y)}{2(2x+5y)} \times \frac{6(2+5y)}{2x(6x-5y)}`,
+      String.raw`\frac{6y(2+5y)}{4x(2x+5y)}`,
+    ],
+  },
   {
     label: "Valid reciprocal + factoring",
     lines: [original, reciprocal, String.raw`\frac{y(6x-5y)}{4x+10y}\times\frac{12x+30y}{12x^2-10xy}`],
@@ -28,12 +37,14 @@ export const labels: Record<Category, string> = {
   unverified: "? Unverified",
 };
 
+/** Same categories as `auditSummary`, so a row's badge always agrees with the banner. */
 export function category(result: TransformationResult): Category {
   if (result.verdict === "not-equivalent") return "invalid";
-  if (result.verdict !== "equivalent" || !result.domain || result.domain.status === "restriction-unverified")
-    return "unverified";
-  return result.domain.status === "preserved" ? "verified" : "domain-changed";
+  if (result.verdict !== "equivalent") return "unverified";
+  return result.domain?.status === "preserved" ? "verified" : "domain-changed";
 }
+
+export const verifiedText = (count: number) => `All ${count} step${count === 1 ? "" : "s"} verified`;
 
 export function discrepancyText(result: TransformationResult): string {
   if (result.verdict !== "not-equivalent" || result.discrepancy?.status !== "localized")
