@@ -1,4 +1,5 @@
-import { parseAlgebraExpression } from "./expression";
+import { parseAlgebraExpression, type AlgebraExpression } from "./expression";
+import { localizeDiscrepancy, type Discrepancy } from "./localize";
 import { readAlgebraLatex } from "./latex";
 import { reduceRational, type RationalReduction } from "./rational";
 import {
@@ -51,7 +52,12 @@ type ResultFields = {
   provenance?: Provenance;
 };
 export type TransformationResult = ResultFields &
-  ({ verdict: "equivalent" } | { verdict: "not-equivalent" } | { verdict: "unsupported" } | { verdict: "ambiguous" });
+  (
+    | { verdict: "equivalent" }
+    | { verdict: "not-equivalent"; discrepancy?: Discrepancy }
+    | { verdict: "unsupported" }
+    | { verdict: "ambiguous" }
+  );
 type Reduced = Extract<RationalReduction, { ok: true }>;
 
 function object(value: unknown, allowed: string[], required: string[] = []): value is Record<string, unknown> {
@@ -221,6 +227,7 @@ export function checkTransformation(input: TransformationInput): TransformationR
         ...echo,
       };
     const reduced: Reduced[] = [];
+    const expressions: AlgebraExpression[] = [];
     for (const which of ["previous", "proposed"] as const) {
       const source = input[which],
         parsed = "latex" in source ? readAlgebraLatex(source.latex) : parseAlgebraExpression(source.ast);
@@ -246,6 +253,7 @@ export function checkTransformation(input: TransformationInput): TransformationR
           ...echo,
         };
       reduced.push(result);
+      expressions.push(parsed.expression);
     }
     const [previous, proposed] = reduced,
       budget = polynomialBudget();
@@ -274,6 +282,7 @@ export function checkTransformation(input: TransformationInput): TransformationR
       verdict: "not-equivalent",
       reason: "exact-difference",
       detail: "Cross-multiplied difference is nonzero",
+      discrepancy: localizeDiscrepancy(expressions[0], expressions[1]),
       evidence: {
         difference: formatPolynomial(difference),
         ...(witness
