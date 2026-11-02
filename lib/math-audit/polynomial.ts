@@ -76,6 +76,24 @@ export const signature = (value: Polynomial): string =>
     .map(([key, coefficient]) => `${key}:${coefficient}`)
     .join(";");
 export const equals = (left: Polynomial, right: Polynomial): boolean => signature(left) === signature(right);
+export function formatPolynomial(value: Polynomial): string {
+  const terms = [...value].sort(([left], [right]) => compare(left, right));
+  if (!terms.length) return "0";
+  return terms
+    .map(([key, coefficient], index) => {
+      const [x, y] = degrees(key);
+      const variables = [
+        ["x", x],
+        ["y", y],
+      ]
+        .map(([name, degree]) => (degree ? `${name}${degree === 1 ? "" : `^${degree}`}` : ""))
+        .join("");
+      const magnitude = abs(coefficient);
+      const term = `${magnitude === BigInt(1) && variables ? "" : magnitude}${variables}`;
+      return `${coefficient < BigInt(0) ? (index ? " - " : "-") : index ? " + " : ""}${term}`;
+    })
+    .join("");
+}
 export function primitivePart(value: Polynomial): Polynomial {
   if (isZero(value)) return value;
   const content = [...value.values()].reduce((common, coefficient) => gcd(common, coefficient), BigInt(0));
