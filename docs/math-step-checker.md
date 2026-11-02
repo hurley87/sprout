@@ -1,5 +1,9 @@
 # Math step checker
 
+## Demo
+
+Visit `/demos/latex` for a browser-only step-audit playground with editable examples.
+
 ## What it is
 
 `lib/math-audit` is a bounded, deterministic engine for auditing algebraic

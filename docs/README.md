@@ -28,6 +28,8 @@ application lessons alongside the production counting lesson. See the
 [MAE386 route validation](mae386-demo-validation.md) for bounded UI coverage and
 remaining live acceptance work.
 
+The standalone, unregistered algebra playground is at `/demos/latex`.
+
 Sprout separates pedagogical intent from conversational realization: the authored
 lesson specifies the objective and success edge; GPT-Live realizes the conversation
 within the displayed node. Jev describes semantic state; application code validates

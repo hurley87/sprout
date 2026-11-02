@@ -1,0 +1,146 @@
+.page {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 48px 24px 80px;
+  color: #203b35;
+  font-family: Arial, sans-serif;
+}
+.page h1 {
+  font-size: clamp(2.3rem, 6vw, 3.5rem);
+  margin: 8px 0;
+  letter-spacing: -0.04em;
+}
+.page h2 {
+  margin: 0;
+  font-size: 1.3rem;
+}
+.page p {
+  line-height: 1.5;
+}
+.eyebrow {
+  color: #477a68;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+.panel {
+  margin-top: 24px;
+  padding: 24px;
+  border: 1px solid #d3e1da;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 8px 28px #203b350d;
+}
+.examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 18px 0 24px;
+}
+.examples button {
+  padding: 9px 12px;
+  border: 1px solid #bad2c4;
+  border-radius: 9px;
+  background: #f2f8f4;
+  color: #214b39;
+  cursor: pointer;
+  font-weight: 600;
+}
+.examples button:hover {
+  background: #e2f1e7;
+}
+.page label {
+  display: block;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.page textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 180px;
+  resize: vertical;
+  padding: 14px;
+  border: 1px solid #9db7a9;
+  border-radius: 10px;
+  font: 14px/1.6 monospace;
+  color: #1c342d;
+}
+.page button:focus-visible,
+.page textarea:focus-visible,
+.page summary:focus-visible {
+  outline: 3px solid #36835e;
+  outline-offset: 2px;
+}
+.summary {
+  margin-top: 16px;
+  padding: 14px;
+  background: #edf6f0;
+  border-radius: 10px;
+  font-weight: 700;
+}
+.results {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 20px;
+}
+.row {
+  padding: 20px 0;
+  border-bottom: 1px solid #e1ebe5;
+}
+.row p {
+  margin: 8px 0 0;
+}
+.rowHeader {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.badge {
+  border-radius: 99px;
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.verified {
+  color: #205d3e;
+  background: #e4f4e9;
+}
+.invalid {
+  color: #922d30;
+  background: #fdebec;
+}
+.domain-changed {
+  color: #79500a;
+  background: #fff2d4;
+}
+.unverified {
+  color: #46556e;
+  background: #edf0f6;
+}
+.math {
+  overflow-x: auto;
+  padding: 15px 0 4px;
+}
+.muted {
+  color: #536b60;
+  font-size: 0.85rem;
+}
+.page summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+.page pre {
+  overflow-x: auto;
+  padding: 16px;
+  background: #f4f7f5;
+  font-size: 0.8rem;
+}
+@media (max-width: 600px) {
+  .page {
+    padding: 28px 16px 48px;
+  }
+  .panel {
+    padding: 18px;
+  }
+}
