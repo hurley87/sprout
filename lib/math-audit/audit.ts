@@ -3,6 +3,7 @@ import { parseAlgebraExpression } from "./expression";
 import { formatExpression } from "./format";
 import { readAlgebraLatex } from "./latex";
 import { reduceRational } from "./rational";
+import { boundedArray } from "../calculus/math-expression";
 
 /** Local proofs only: verified does not grade the final answer. Later steps depend on earlier issues. */
 export const AUDIT_TRAIL_LIMIT = 200;
@@ -55,12 +56,15 @@ function copy(value: unknown, seen = new Set<object>(), depth = 0): unknown {
   )
     return value;
   if (typeof value !== "object" || depth > 100 || seen.has(value)) throw new Error("Invalid value");
+  if (Array.isArray(value) && Object.getPrototypeOf(value) !== Array.prototype) throw new Error("Invalid value");
+  if (!Array.isArray(value) && ![Object.prototype, null].includes(Object.getPrototypeOf(value)))
+    throw new Error("Invalid value");
   seen.add(value);
   const descriptors = Object.getOwnPropertyDescriptors(value);
   if (Reflect.ownKeys(value).some(key => typeof key !== "string" || !("value" in descriptors[key])))
     throw new Error("Invalid value");
   const result = Array.isArray(value)
-    ? Array.from(value, item => copy(item, seen, depth + 1))
+    ? boundedArray(value, AUDIT_TRAIL_LIMIT, 0).map(item => copy(item, seen, depth + 1))
     : Object.fromEntries(
         Object.entries(descriptors).map(([key, descriptor]) => [key, copy(descriptor.value, seen, depth + 1)]),
       );
@@ -244,6 +248,10 @@ export function auditSequence(
   options?: { ids?: readonly string[] },
 ): { ok: true; trail: AuditTrail; summary: AuditSummary } | { ok: false; reason: string; detail: string } {
   try {
+    if (!Array.isArray(expressions) || Object.getPrototypeOf(expressions) !== Array.prototype)
+      return error("malformed-input", "Invalid sequence input");
+    boundedArray(expressions, AUDIT_TRAIL_LIMIT);
+    if (options !== undefined) options = copy(options) as typeof options;
     if (
       !Array.isArray(expressions) ||
       !expressions.length ||

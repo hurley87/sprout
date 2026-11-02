@@ -3,23 +3,24 @@
 The production prototype is the realtime counting lesson at `/`, backed by
 `/api/live` for voice setup and `/api/classify` for semantic observation.
 
-| Document | Purpose |
-| --- | --- |
-| [Halloween counting](halloween-counting.md) | Interest-led counting adventure and verification limits |
-| [Calculus demo](calculus-demo.md) | Worked-steps flow, required steps per problem, tutor outcomes, diagnostics and PENDING live acceptance |
-| [Issue #80 findings](issue-80-findings.md) | Historical: renderer decision and feasibility evidence for the superseded confirmation design |
-| [Architecture](architecture.md) | Authority boundaries, current modules, lifecycle and failure behavior |
-| [Domain glossary](../CONTEXT.md) | Current lesson/runtime terms |
-| [Classifier contract](lesson-classifier.md) | Jev input projection, probabilities and deterministic mapping |
-| [Reducer contract](lesson-runtime-reducer.md) | Identity, completion gate, render and steering handoff |
-| [Evidence, feedback and delivery tracking](issue-77-tracking-contract.md) | Current lifecycle and proposed behavior-preserving observation contract for issue #77 |
-| [Issue #77 preservation replay](issue-77-tracking-replay.md) | Baseline behavior and scheduling verification, provenance and synthetic replay limits |
-| [Issue #77 findings](issue-77-findings.md) | Recorded tracking observations, reproducible analysis and deferred policy recommendation |
-| [Browser evaluation guide](lesson-browser-guide.md) | Reproduction steps, timing, diagnostic interpretation and limitations |
-| [Browser test suites](browser-tests.md) | Provider-free versus live selection, configuration and costs |
-| [Catching Unicorns demo validation](catching-unicorns-demo-validation.md) | Demo coverage, source limits, live acceptance status and removal rehearsal |
-| [Issue #42 benchmark readiness](issue-42-benchmark-readiness.md) | Evidence gaps, measurement status and a bounded next-test proposal; empirical comparison remains incomplete |
-| [Issue #76 rubric review bundle](issue-76-rubric-review.md) | Instructor-facing MAE386 reference answers, source citations, atomic criteria and labeled synthetic examples |
+| Document                                                                  | Purpose                                                                                                      |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| [Halloween counting](halloween-counting.md)                               | Interest-led counting adventure and verification limits                                                      |
+| [Calculus demo](calculus-demo.md)                                         | Worked-steps flow, required steps per problem, tutor outcomes, diagnostics and PENDING live acceptance       |
+| [Math step checker](math-step-checker.md)                                 | Exact algebraic audit contract, domain restrictions, limits and acceptance coverage                          |
+| [Issue #80 findings](issue-80-findings.md)                                | Historical: renderer decision and feasibility evidence for the superseded confirmation design                |
+| [Architecture](architecture.md)                                           | Authority boundaries, current modules, lifecycle and failure behavior                                        |
+| [Domain glossary](../CONTEXT.md)                                          | Current lesson/runtime terms                                                                                 |
+| [Classifier contract](lesson-classifier.md)                               | Jev input projection, probabilities and deterministic mapping                                                |
+| [Reducer contract](lesson-runtime-reducer.md)                             | Identity, completion gate, render and steering handoff                                                       |
+| [Evidence, feedback and delivery tracking](issue-77-tracking-contract.md) | Current lifecycle and proposed behavior-preserving observation contract for issue #77                        |
+| [Issue #77 preservation replay](issue-77-tracking-replay.md)              | Baseline behavior and scheduling verification, provenance and synthetic replay limits                        |
+| [Issue #77 findings](issue-77-findings.md)                                | Recorded tracking observations, reproducible analysis and deferred policy recommendation                     |
+| [Browser evaluation guide](lesson-browser-guide.md)                       | Reproduction steps, timing, diagnostic interpretation and limitations                                        |
+| [Browser test suites](browser-tests.md)                                   | Provider-free versus live selection, configuration and costs                                                 |
+| [Catching Unicorns demo validation](catching-unicorns-demo-validation.md) | Demo coverage, source limits, live acceptance status and removal rehearsal                                   |
+| [Issue #42 benchmark readiness](issue-42-benchmark-readiness.md)          | Evidence gaps, measurement status and a bounded next-test proposal; empirical comparison remains incomplete  |
+| [Issue #76 rubric review bundle](issue-76-rubric-review.md)               | Instructor-facing MAE386 reference answers, source citations, atomic criteria and labeled synthetic examples |
 
 The standalone adult-learning demonstrations are available at
 `/demos/catching-unicorns`, `/demos/mae386` and `/demos/calculus`. All are registered

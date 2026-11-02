@@ -1,4 +1,5 @@
 import { parseAlgebraExpression, type AlgebraExpression } from "./expression";
+import { boundedArray } from "../calculus/math-expression";
 import { localizeDiscrepancy, type Discrepancy } from "./localize";
 import { readAlgebraLatex } from "./latex";
 import { reduceRational, type RationalReduction } from "./rational";
@@ -61,11 +62,18 @@ export type TransformationResult = ResultFields &
 type Reduced = Extract<RationalReduction, { ok: true }>;
 
 function object(value: unknown, allowed: string[], required: string[] = []): value is Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    ![Object.prototype, null].includes(Object.getPrototypeOf(value))
+  )
+    return false;
   const descriptors = Object.getOwnPropertyDescriptors(value);
   return (
     Reflect.ownKeys(value).every(
-      key => typeof key === "string" && allowed.includes(key) && "value" in descriptors[key],
+      key =>
+        typeof key === "string" && allowed.includes(key) && descriptors[key].enumerable && "value" in descriptors[key],
     ) && required.every(key => Object.hasOwn(descriptors, key))
   );
 }
@@ -92,8 +100,8 @@ function validInput(value: unknown): value is TransformationInput {
       !object(provenance, ["previousId", "proposedId", "sourceIds"]) ||
       ["previousId", "proposedId"].some(key => Object.hasOwn(provenance, key) && typeof provenance[key] !== "string") ||
       (Object.hasOwn(provenance, "sourceIds") &&
-        (!Array.isArray(provenance.sourceIds) ||
-          !Array.from(provenance.sourceIds).every((id: unknown) => typeof id === "string")))
+        (Object.getPrototypeOf(provenance.sourceIds) !== Array.prototype ||
+          !boundedArray(provenance.sourceIds, 200, 0).every((id: unknown) => typeof id === "string")))
     )
       return false;
   }
