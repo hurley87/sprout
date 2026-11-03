@@ -235,6 +235,20 @@ describe("math scribe voice runtime", () => {
     expect(messages.at(-1)).toContain("say check when you're ready");
   });
 
+  it("holds a check spoken in the same breath as the change it would judge", async () => {
+    await say(
+      "flip the second fraction and check it",
+      proposal({ kind: "division-to-reciprocal", partId: part("divisor") }),
+      { intent: "request-check", quote: "check it" },
+    );
+    expect(logs.some(entry => entry.type === "math-scribe.check-deferred")).toBe(true);
+    expect(runtime.snapshot().session?.lastCheck).toBeNull();
+    expect(runtime.snapshot().session?.pending?.status).toBe("interpreted");
+    expect(messages.at(-1)).toContain("Have a look first");
+    await say("check that step", { intent: "request-check", quote: "check that step" });
+    expect(runtime.snapshot().session?.history.at(-1)?.status).toBe("verified");
+  });
+
   it("drops part references after a batch changes the line", async () => {
     await say(
       "flip and edit",

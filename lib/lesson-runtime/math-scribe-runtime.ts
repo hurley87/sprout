@@ -307,6 +307,13 @@ export class MathScribeRuntime {
             this.instruct("I might have misheard. Which part did you mean?");
             continue;
           }
+          // A check or confirmation in the same breath as a change would judge a line the learner
+          // has not yet seen; hold it so a misrecognition cannot reach mathematical feedback.
+          if (changedLine && (interpretation.intent === "request-check" || interpretation.intent === "confirm")) {
+            this.log("math-scribe.check-deferred", { requestId, intent: interpretation.intent });
+            this.instruct("I've written it on the screen. Have a look first, then say check if it's what you meant.");
+            continue;
+          }
           const before = formatExpression(
             visit.session.pending?.versions[visit.session.pending.current].expression ?? visit.session.base,
           );
