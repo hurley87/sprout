@@ -54,6 +54,7 @@
 }
 .equation {
   display: inline-block;
+  font-size: 1.5em;
   max-width: 100%;
   overflow-x: auto;
   vertical-align: middle;

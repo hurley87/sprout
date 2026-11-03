@@ -37,7 +37,12 @@ export default function MathStepsDemo({ debug = false }: { debug?: boolean }) {
     exportReport: runtime => runtime.report(),
     exportPrefix: "sprout-math-steps",
   });
-  const microphone = useMicState({ snapshot, live });
+  const calculusMic = useMicState({ snapshot, live });
+  // The shared mic states are written for the three-problem calculus demo.
+  const microphone =
+    calculusMic.kind === "before"
+      ? { ...calculusMic, line: `Tap to start · ${MATH_SCRIBE_PROBLEM_IDS.length} problems` }
+      : calculusMic;
   const nodeId = snapshot?.runtime?.nodeId ?? MATH_SCRIBE_LESSON.initialNodeId;
   const identity = snapshot?.display ?? { token: "initial", nodeId, sceneId: nodeId };
   const completed = nodeId === "recap" || snapshot?.runtime?.phase === "complete";
