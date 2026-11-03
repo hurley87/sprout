@@ -388,7 +388,7 @@ export function meetsAuthoredCompletionPolicy(state: LessonRuntimeState, lesson:
 export function hasCurrentCompletionEvidence(state: LessonRuntimeState, lesson: LessonDefinition) {
   if (lesson.nodes[state.nodeId].completeAfterTutorOutput)
     return state.tutorOutputObserved && state.terminalTranscriptComplete === true && !state.terminalLearnerPending;
-  if (lesson.calculus) return state.conversationAdvanceRequested === "learner";
+  if (lesson.calculus || lesson.mathScribe) return state.conversationAdvanceRequested === "learner";
   if (lesson.conversationFirst) return hasConversationCompletionEvidence(state);
   const learnerAnswerOnly = acceptsLearnerAnswerIndependently(lesson);
   return (
@@ -898,7 +898,7 @@ export function reduceLessonRuntime(
         ...next,
         ...(event.speaker === "tutor" ? {} : { ...clearedEvidence, ...clearedNavigation(state) }),
         tutorClosure: closure,
-        ...((lesson.questionGroups || lesson.calculus) && event.speaker !== "tutor"
+        ...((lesson.questionGroups || lesson.calculus || lesson.mathScribe) && event.speaker !== "tutor"
           ? {
               learnerUtterance:
                 event.speaker === "child" && state.hasChildTurn && event.learnerTurnText !== undefined
@@ -977,7 +977,7 @@ export function reduceLessonRuntime(
       const appCompleted = lesson.calculus && event.appCompleted;
       const intent: NavigationIntent | null = appCompleted
         ? { action: "next", scope: "subpart" }
-        : lesson.questionGroups || lesson.calculus
+        : lesson.questionGroups || lesson.calculus || lesson.mathScribe
           ? parseLearnerNavigationText(state.learnerUtterance?.text ?? "")
           : learnerNavigationIntent(event.transcriptSnapshot);
       if (
@@ -991,7 +991,7 @@ export function reduceLessonRuntime(
       next = {
         ...next,
         conversationAdvanceRequested: "learner",
-        ...(lesson.questionGroups || lesson.calculus
+        ...(lesson.questionGroups || lesson.calculus || lesson.mathScribe
           ? { navigationIntent: intent, navigationSource: appCompleted ? event.source : state.learnerUtterance!.source }
           : {}),
         quietSinceMs:
@@ -1004,7 +1004,7 @@ export function reduceLessonRuntime(
       break;
     }
     case "proposal.received": {
-      if (lesson.calculus) return ignore("calculus_uses_reviewed_math_actions");
+      if (lesson.calculus || lesson.mathScribe) return ignore("calculus_uses_reviewed_math_actions");
       const proposal = parseConversationStateProposal(event.proposal);
       const currentNode = lesson.nodes[state.nodeId];
       if (

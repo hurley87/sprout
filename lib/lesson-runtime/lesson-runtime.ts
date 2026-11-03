@@ -1,4 +1,5 @@
 import { CalculusRuntime, type CalculusFragment, type CalculusSnapshot } from "./calculus-runtime";
+import { MathScribeRuntime } from "./math-scribe-runtime";
 import { questionRecap, type QuestionOutcomeSnapshot } from "./mae386/question-outcomes";
 import type { RewriteTranscript } from "./mae386/rewrite-proposal";
 import { learnerNavigationIntent, parseLearnerNavigationText, isLearnerStopText } from "./conversation-progression";
@@ -83,6 +84,7 @@ export type LessonObservation = {
 
 export type LessonSnapshot = {
   math?: CalculusSnapshot;
+  scribe?: ReturnType<MathScribeRuntime["snapshot"]>;
   status: "prepared" | "connecting" | "live" | "ended";
   runtime: LessonRuntimeState | null;
   display: RenderIdentity;
@@ -111,7 +113,7 @@ export class LessonRuntime {
   private readonly runtimeId = crypto.randomUUID();
   private readonly createdAt = performance.now();
   private readonly transport: BrowserTransport;
-  private readonly calculus?: CalculusRuntime;
+  private readonly mathPlugin?: CalculusRuntime | MathScribeRuntime;
   private playbackOrigin?: { generation: number; origin: TrackingOrigin };
   private state: LessonRuntimeState | null = null;
   private status: LessonSnapshot["status"] = "prepared";
@@ -157,8 +159,13 @@ export class LessonRuntime {
     private readonly changed: (snapshot: LessonSnapshot) => void,
     private readonly lessonDefinition: LessonDefinition,
   ) {
-    if (lessonDefinition.calculus)
-      this.calculus = new CalculusRuntime(
+    const MathPlugin = lessonDefinition.calculus
+      ? CalculusRuntime
+      : lessonDefinition.mathScribe
+        ? MathScribeRuntime
+        : null;
+    if (MathPlugin)
+      this.mathPlugin = new MathPlugin(
         this.runtimeId,
         () => ({
           state: this.state,
@@ -346,7 +353,8 @@ export class LessonRuntime {
 
   snapshot(): LessonSnapshot {
     return {
-      math: this.calculus?.snapshot(),
+      math: this.mathPlugin instanceof CalculusRuntime ? this.mathPlugin.snapshot() : undefined,
+      ...(this.mathPlugin instanceof MathScribeRuntime ? { scribe: this.mathPlugin.snapshot() } : {}),
       status: this.status,
       runtime: this.state,
       display: this.display,
@@ -384,7 +392,7 @@ export class LessonRuntime {
         atMs: this.now(),
         lesson: this.lessonDefinition,
       });
-      this.calculus?.onStart(this.state.nodeId, this.state.visitId);
+      this.mathPlugin?.onStart(this.state.nodeId, this.state.visitId);
       this.status = "connecting";
       this.log("render.confirmed", { identity, initial: true });
       this.log("runtime.created", this.state);
@@ -447,10 +455,10 @@ export class LessonRuntime {
       this.log(effect.type, effect);
       switch (effect.type) {
         case "render.requested":
-          if (this.calculus) {
+          if (this.mathPlugin) {
             const outcome =
               event.type === "scene.skipped" || before.navigationIntent?.action === "skip" ? "skipped" : "completed";
-            this.calculus.onVisitChange(this.state.nodeId, this.state.visitId, outcome);
+            this.mathPlugin.onVisitChange(this.state.nodeId, this.state.visitId, outcome);
           }
           this.supersedeMissingAnswerCheck();
           this.cancelClassification("node_visit_changed");
@@ -468,7 +476,7 @@ export class LessonRuntime {
             this.lessonDefinition.nodes[effect.identity.nodeId].completeAfterTutorOutput
           )
             // Freeze before React can render or asynchronous assessment can settle.
-            this.terminalText ??= this.calculus?.recap() ?? evidenceRecap(this.lessonDefinition, this.state);
+            this.terminalText ??= this.mathPlugin?.recap() ?? evidenceRecap(this.lessonDefinition, this.state);
           this.display = effect.identity;
           break;
         case "steering.ready":
@@ -539,7 +547,7 @@ export class LessonRuntime {
       case "microphone.speech_started":
         if (this.status !== "live") return;
         this.log(event.type);
-        this.calculus?.onSpeechStarted(event.type === "microphone.speech_started");
+        this.mathPlugin?.onSpeechStarted(event.type === "microphone.speech_started");
         if (!this.state.childSpeaking) {
           // Provisional energy does not change a deferring lesson's classification
           // source; only confirmed speech cancels in-flight work.
@@ -601,7 +609,7 @@ export class LessonRuntime {
               this.state.terminalLearnerPending
             )
               this.terminalTranscriptRecovery.arm(this.state, !this.steering);
-            else if (!this.calculus && (!this.lessonDefinition.conversationFirst || !this.requestedNavigation()))
+            else if (!this.mathPlugin && (!this.lessonDefinition.conversationFirst || !this.requestedNavigation()))
               this.answerRecovery.arm(this.state, !this.steering);
           }
           this.scheduleClassification(event.type);
@@ -758,7 +766,7 @@ export class LessonRuntime {
       source = runtimeSource(this.state);
       fragment = { ...fragment, source };
     }
-    if (this.calculus)
+    if (this.mathPlugin)
       this.log("math.transcript_available", { delta: event.delta, order: fragment.order, speaker }, source, speaker);
     this.fragments.push(fragment);
     // Order by provider interval; late delivery must not put an earlier child answer after its acknowledgment.
@@ -824,7 +832,8 @@ export class LessonRuntime {
           : {}),
       speaker,
       transcriptSnapshot: text,
-      ...(speaker === "child" && (this.lessonDefinition.questionGroups || this.lessonDefinition.calculus)
+      ...(speaker === "child" &&
+      (this.lessonDefinition.questionGroups || this.lessonDefinition.calculus || this.lessonDefinition.mathScribe)
         ? {
             learnerTurnText: this.fragments
               .filter(item => item.event.speaker === "child" && item.source.childTurnId === source.childTurnId)
@@ -851,7 +860,7 @@ export class LessonRuntime {
   }
 
   private requestedNavigation() {
-    if (this.calculus) return parseLearnerNavigationText(this.calculus.learnerText());
+    if (this.mathPlugin) return parseLearnerNavigationText(this.mathPlugin.learnerText());
     return this.lessonDefinition.questionGroups
       ? parseLearnerNavigationText(this.state?.learnerUtterance?.text ?? "")
       : learnerNavigationIntent(this.transcript);
@@ -869,7 +878,7 @@ export class LessonRuntime {
 
   private scheduleClassification(trigger: string) {
     clearTimeout(this.stabilizationTimer);
-    if (this.calculus && this.state && this.calculus.onQuiet()) return;
+    if (this.mathPlugin && this.state && this.mathPlugin.onQuiet()) return;
     // Stop needs authenticated ended learner speech, but never waits for playback drain or Jev.
     if (
       this.lessonDefinition.questionGroups &&
@@ -940,7 +949,8 @@ export class LessonRuntime {
   }
 
   private syncTutorStabilization(trigger: string) {
-    if (this.calculus && this.state && !this.lessonDefinition.nodes[this.state.nodeId].completeAfterTutorOutput) return;
+    if (this.mathPlugin && this.state && !this.lessonDefinition.nodes[this.state.nodeId].completeAfterTutorOutput)
+      return;
     if (this.state && this.lessonDefinition.nodes[this.state.nodeId].completeAfterTutorOutput) {
       this.terminalTranscriptRecovery.observe(this.state, this.status === "live" && !this.steering);
       this.answerRecovery.cancel("terminal_close");
@@ -959,7 +969,7 @@ export class LessonRuntime {
   }
 
   private async classify(trigger: string) {
-    if (this.calculus) return;
+    if (this.mathPlugin) return;
     if (
       !this.state ||
       this.status !== "live" ||
@@ -1198,7 +1208,7 @@ export class LessonRuntime {
     if (terminal) {
       this.terminalText ??= this.state.questionOutcomes
         ? questionRecap(this.state.questionOutcomes).spoken
-        : (this.calculus?.recap() ?? evidenceRecap(this.lessonDefinition, this.state));
+        : (this.mathPlugin?.recap() ?? evidenceRecap(this.lessonDefinition, this.state));
       this.terminalTimer = setTimeout(
         () =>
           this.fail(
@@ -1214,7 +1224,7 @@ export class LessonRuntime {
           this.lessonDefinition,
           startLesson,
           this.terminalText,
-          this.calculus?.previousCompleted(),
+          this.mathPlugin instanceof CalculusRuntime ? this.mathPlugin.previousCompleted() : undefined,
         );
     const source = runtimeSource(this.state);
     this.steering = {
@@ -1252,7 +1262,7 @@ export class LessonRuntime {
   private performSupport(request: "help" | "repeat", spoken = false) {
     if (
       !this.state ||
-      (!this.lessonDefinition.questionGroups && !this.calculus) ||
+      (!this.lessonDefinition.questionGroups && !this.mathPlugin) ||
       this.state.conversationAdvanceRequested ||
       !this.isQuietActive() ||
       this.lessonDefinition.nodes[this.state.nodeId].completeAfterTutorOutput ||
@@ -1265,14 +1275,14 @@ export class LessonRuntime {
     this.cancelClassification("learner_support_requested");
     this.answerRecovery.cancel("learner_support_requested");
     this.log("learner.support_requested", { request });
-    this.calculus?.cancelCheck();
+    this.mathPlugin?.cancelCheck();
     const sent = this.appendSteering(
       currentNodeContext(this.lessonDefinition, this.state.nodeId),
       this.display.token,
       false,
       request,
     );
-    if (sent) this.calculus?.recordSupport(request);
+    if (sent) this.mathPlugin?.recordSupport(request);
     this.publish();
   }
 
@@ -1289,7 +1299,7 @@ export class LessonRuntime {
       this.now() - this.state.quietSinceMs < this.state.quietDrainMs
     )
       return;
-    this.calculus?.cancelCheck();
+    this.mathPlugin?.cancelCheck();
     const source = runtimeSource(this.state);
     const edge = this.lessonDefinition.nodes[this.state.nodeId].onSuccess;
     const drainFinalObservation =
@@ -1363,7 +1373,7 @@ export class LessonRuntime {
 
   stop(reason = "parent_stop", disconnected = false) {
     if (this.status === "ended") return;
-    this.calculus?.onStop();
+    this.mathPlugin?.onStop();
     this.missingAnswerCheck = undefined;
     this.cancelClassification(reason);
     this.answerRecovery.cancel(reason);
@@ -1437,9 +1447,14 @@ export class LessonRuntime {
     return true;
   }
 
+  scribeAction(action: "confirm" | "undo" | "check" | "continue") {
+    if (this.mathPlugin instanceof MathScribeRuntime) this.mathPlugin.ui(action);
+  }
+
   report() {
     const report = {
-      ...(this.calculus ? { math: this.calculus.snapshot() } : {}),
+      ...(this.mathPlugin instanceof CalculusRuntime ? { math: this.mathPlugin.snapshot() } : {}),
+      ...(this.mathPlugin instanceof MathScribeRuntime ? { scribe: this.mathPlugin.report() } : {}),
       ...this.journal.report({
         timing: LESSON_TIMING,
         runtime: this.state,
