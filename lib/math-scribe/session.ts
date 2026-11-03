@@ -8,6 +8,8 @@ import { applyOperation, type OperationResult, type ScribeOperation } from "./op
 /** Base is the last accepted line; pending versions compose on the working line.
  * Checks alone verify; corrections before a check fix recognition, afterwards edit math.
  * A correction without a pending line requires clarification, never a new proposal.
+ * The revision advances only when state changes, so stale or no-op events never strand
+ * an interpretation requested against the current state.
  * Withdrawals and retries remain in the append-only log and audit trail.
  */
 export type Interpretation =
@@ -289,7 +291,11 @@ export function reduceSession(
     }
   } else if (["describe-strategy", "request-help", "request-repeat"].includes(intent))
     notice = { kind: "logged", intent };
-  const revision = state.revision + 1;
+  // Only state changes advance the revision: a stale drop, no-op or logged-only event must
+  // not invalidate interpretations requested against the unchanged state.
+  const revision = ["stale", "nothing-changed", "logged", "limit"].includes(notice.kind)
+    ? state.revision
+    : state.revision + 1;
   next.revision = revision;
   next.log = [
     ...state.log,

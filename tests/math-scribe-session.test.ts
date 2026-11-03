@@ -174,6 +174,19 @@ describe("scribe session", () => {
     expect(state.audit.entries.map(entry => entry.kind)).toEqual(["start", "step", "correction"]);
     expect(sessionMetrics(state)).toMatchObject({ staleDrops: 1, undos: 3 });
   });
+  it("keeps the revision when an event changes nothing, so a later valid response still applies", () => {
+    let state = propose(start("x+x"), "2x");
+    const requested = state.revision;
+    const late = say(state, { intent: "confirm", quote: "yes" }, 9, requested - 1);
+    expect(late.notice.kind).toBe("stale");
+    expect(late.state.revision).toBe(requested);
+    const help = say(late.state, { intent: "request-help", quote: "help" }, 10, requested);
+    expect(help.notice).toEqual({ kind: "logged", intent: "request-help" });
+    expect(help.state.revision).toBe(requested);
+    state = say(help.state, { intent: "confirm", quote: "yes" }, 11, requested).state;
+    expect(state.pending?.confirmed).toBe(true);
+    expect(state.revision).toBe(requested + 1);
+  });
   it("can continue after an unsupported check", () => {
     let state = propose(start("x"), "x^{12}x^{12}x^{12}");
     const checked = ui(state, "check");
