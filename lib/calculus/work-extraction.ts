@@ -1,4 +1,5 @@
 import { readJsonBody } from "../local-request";
+import { speechMatcher } from "../speech-quotes";
 import { boundedArray, exactObject, parseMathExpression, type MathExpression } from "./math-expression";
 import { getCalculusProblem, isCalculusProblemId, type CalculusMethod, type CalculusProblemId } from "./problems";
 
@@ -72,17 +73,6 @@ export function parseWorkExtractionInput(value: unknown): WorkExtractionInput {
   return { problemId: v.problemId, learnerTurns: turns(v.learnerTurns, 1), tutorTurns: turns(v.tutorTurns, 0) };
 }
 
-const FILLERS = new Set(["uh", "um"]);
-/** Speech as its spoken words: bracketed noises (closed or cut off), punctuation and
- * fillers removed, padded so that matches fall on word boundaries. */
-const words = (text: string) =>
-  ` ${text
-    .replace(/\[[^\]]*(\]|$)/g, " ")
-    .toLowerCase()
-    .split(/[^\p{L}\p{N}]+/u)
-    .filter(word => word && !FILLERS.has(word))
-    .join(" ")} `;
-
 /** Structure is strict; individual items whose quote is not learner speech, or whose
  * step or expression is invalid, are dropped rather than trusted. */
 export function parseWorkExtraction(value: unknown, input: WorkExtractionInput): WorkExtraction {
@@ -102,16 +92,7 @@ export function parseWorkExtractionWithDrops(
   // Learners pause mid-expression, so one answer can span several turns: a quote may run
   // across consecutive turns. The model punctuates those joins and fillers inconsistently,
   // so they are compared as words; the words and their order must still be the learner's.
-  const speech = input.learnerTurns
-    .map(turn => words(turn.text))
-    .join("")
-    .replace(/ +/g, " ");
-  const spoken = (quote: unknown): quote is string =>
-    typeof quote === "string" &&
-    quote.trim().length > 0 &&
-    quote.length <= EXTRACTION_LIMITS.text &&
-    (input.learnerTurns.some(turn => turn.text.toLowerCase().includes(quote.toLowerCase())) ||
-      (words(quote).trim().length > 0 && speech.includes(words(quote))));
+  const spoken = speechMatcher(input.learnerTurns, EXTRACTION_LIMITS.text);
   const steps = boundedArray(v.steps, 16, 0).flatMap(raw => {
     const s = exactObject(raw, ["stepId", "expression", "quote"]);
     const step = problem.steps.find(candidate => candidate.id === s.stepId);
