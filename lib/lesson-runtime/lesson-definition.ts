@@ -33,6 +33,7 @@ export type LessonDefinition = {
   readonly initialNodeId: string;
   /** Mathematical actions use a separate reviewed path; generic closure cannot advance. */
   readonly calculus?: true;
+  readonly mathScribe?: true;
   /** Hold accepted scene transitions until the application confirms the reveal was reviewed. */
   readonly requirePresentationConfirmation?: boolean;
   /** Conversational closure advances independently of assessment/mastery. */
