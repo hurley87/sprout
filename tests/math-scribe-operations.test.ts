@@ -100,6 +100,31 @@ describe("deterministic scribe operations", () => {
       args: [{ op: "negate", argument: read("x") }, read("y")],
     });
   });
+  it("asks for a non-unique result as a direct question naming the part for a learner", () => {
+    const question = (latex: string, name: string, description?: string) => {
+      const current = read(latex);
+      const partId = description && listParts(current).find(item => item.description === description)!.id;
+      const result = applyOperation(current, { kind: "non-unique", name, ...(partId ? { partId } : {}) });
+      return result.ok ? null : result.detail;
+    };
+    const line = String.raw`\frac{6xy-5y^2}{4x+10y}\cdot \frac{12x+30y}{12x^2-10xy}`;
+    expect(question(line, "factor", "denominator of factor 2")).toBe(
+      "What does the denominator of the second fraction look like after factoring?",
+    );
+    expect(question(line, "cancel")).toBe("What does the line look like after cancelling?");
+    expect(question(line, "simplify", "factor 1")).toBe("What does the first fraction look like after simplifying?");
+    expect(question(line, "expand", "term 1 of numerator of factor 1")).toBe(
+      "What does that part look like after expanding?",
+    );
+    expect(question("(2+3x^2)^3(x^2+2x)^{-2}", "combine", "factor 2")).toBe(
+      "What does the second factor look like after combining?",
+    );
+    expect(question("x+y", "other")).toBe("What does the line become?");
+    for (const name of ["factor", "expand", "simplify", "cancel", "combine", "other"])
+      expect(question(line, name, "exponent of factor 2 of term 2 of numerator of factor 1")).not.toMatch(
+        /factor \d|term \d|^Ask/,
+      );
+  });
   it("rejects unsupported actions and malformed objects without throwing", () => {
     const current = read("x+y");
     for (const name of ["factor", "expand", "simplify", "cancel", "combine", "other"] as const)

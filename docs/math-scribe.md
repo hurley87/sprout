@@ -15,6 +15,7 @@ The runtime frames messages as application instructions to the tutor, asking it 
 - Spoken expression: “It's on the screen. Is that what you meant?”; mechanical operation: “Okay, it's on the screen — say check when you're ready.”
 - Confirm: “Okay, I've recorded that as what you meant.” Undo: “Okay, I've undone that.” Continue: “Okay, we'll continue without verifying that step.”
 - Equivalent: “That step follows. What would you like to do next?” Unsupported: “I couldn't check that expression. You can rephrase it or continue.”
+- If an equivalent step changes the domain, the spoken message says the allowed values changed and points to the screen; if the domain is unverified, it says the values could not be verified and points to the screen.
 - Invalid: “I checked the expression you told me (not your paper) and it doesn't follow from the previous line.” This is followed by “Please look at [area] again.” or “Please look at it again.”
 - Strategy alone: “What would you like to change?” Provider retry exhaustion: “I might have misheard. Please say that again.” A stale part asks: “I might have misheard. Which part did you mean?” Clarifications relay their question.
 

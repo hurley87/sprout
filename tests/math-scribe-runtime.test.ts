@@ -19,6 +19,7 @@ describe("math scribe voice runtime", () => {
   let messages: string[];
   let logs: { type: string; detail: unknown }[];
   let fetcher: ReturnType<typeof vi.fn>;
+  let publish: ReturnType<typeof vi.fn>;
   let runtime: MathScribeRuntime;
   let turn: number;
 
@@ -30,10 +31,11 @@ describe("math scribe voice runtime", () => {
     turn = 0;
     state = { childTurnId: 0, visitId: 1, hasChildTranscript: true } as LessonRuntimeState;
     fetcher = vi.fn();
+    publish = vi.fn();
     runtime = new MathScribeRuntime(
       "runtime",
       () => ({ state, fragments, quiet: true, steering: false }),
-      vi.fn(),
+      publish as () => void,
       (type, detail) => logs.push({ type, detail }),
       (_id, text) => messages.push(text),
       vi.fn(),
@@ -259,6 +261,140 @@ describe("math scribe voice runtime", () => {
     expect(messages.at(-1)).toContain("Which part");
   });
 
+  it("applies edits to separate parts named in one breath", async () => {
+    await say("flip", proposal({ kind: "division-to-reciprocal", partId: part("divisor") }));
+    await say("check", { intent: "request-check", quote: "check" });
+    const numerator = part("numerator of factor 1");
+    const denominator = part("denominator of factor 2");
+    messages.length = 0;
+    await say(
+      "the first numerator is y times six x minus five y and the second denominator is two x times six x minus five y",
+      proposal({ kind: "replace-part", partId: numerator, expression: expression("y(6x-5y)") }, "report"),
+      proposal({ kind: "replace-part", partId: denominator, expression: expression("2x(6x-5y)") }, "report"),
+    );
+    expect(logs.some(entry => entry.type === "math-scribe.stale-part")).toBe(false);
+    expect(runtime.snapshot().session?.workingLine.latex).toBe(
+      String.raw`\frac{y(6x-5y)}{4x+10y}\cdot \frac{12x+30y}{2x(6x-5y)}`,
+    );
+    expect(messages).toHaveLength(1);
+  });
+
+  it("still refuses a part inside one the same breath already changed", async () => {
+    await say("flip", proposal({ kind: "division-to-reciprocal", partId: part("divisor") }));
+    await say("check", { intent: "request-check", quote: "check" });
+    const numerator = part("numerator of factor 1");
+    const inner = listParts(runtime.snapshot().session!.workingLine.expression).find(
+      item => item.latex === "6xy" && item.path.length > 2,
+    )!.id;
+    await say(
+      "numerator then its first term",
+      proposal({ kind: "replace-part", partId: numerator, expression: expression("y(6x-5y)") }, "report"),
+      proposal({ kind: "replace-part", partId: inner, expression: expression("6yx") }, "report"),
+    );
+    expect(logs.some(entry => entry.type === "math-scribe.stale-part")).toBe(true);
+  });
+
+  it("refuses a part whose ancestor the same breath replaced, even if its text survived", async () => {
+    await say("flip", proposal({ kind: "division-to-reciprocal", partId: part("divisor") }));
+    await say("check", { intent: "request-check", quote: "check" });
+    const numerator = part("numerator of factor 1");
+    const term = part("term 1 of numerator of factor 1");
+    await say(
+      "numerator is six x y minus five y, and change its first term",
+      proposal({ kind: "replace-part", partId: numerator, expression: expression("6xy-5y") }, "report"),
+      proposal({ kind: "replace-part", partId: term, expression: expression("7xy") }, "report"),
+    );
+    expect(logs.some(entry => entry.type === "math-scribe.stale-part")).toBe(true);
+    expect(runtime.snapshot().session?.workingLine.latex).toContain("6xy-5y");
+  });
+
+  it("refuses later parts after a whole-line or restructuring change in the same breath", async () => {
+    const divisor = part("divisor");
+    const dividend = part("dividend");
+    await say(
+      "flip the second fraction and change the first",
+      proposal({ kind: "division-to-reciprocal", partId: divisor }),
+      proposal({ kind: "replace-part", partId: dividend, expression: expression("3y/(2x)") }, "report"),
+    );
+    expect(logs.filter(entry => entry.type === "math-scribe.stale-part")).toHaveLength(1);
+    await say("check", { intent: "request-check", quote: "check" });
+    const numerator = part("numerator of factor 1");
+    await say(
+      "the line is three y over two x, numerator is y",
+      proposal({ kind: "replace-line", expression: expression("3y/(2x)") }, "report"),
+      proposal({ kind: "replace-part", partId: numerator, expression: expression("y") }, "report"),
+    );
+    expect(logs.filter(entry => entry.type === "math-scribe.stale-part")).toHaveLength(2);
+  });
+
+  it("speaks once per utterance: a check replaces the confirmation before it", async () => {
+    await say(
+      "y times six x minus five y",
+      proposal({ kind: "replace-line", expression: expression("3y/(2x)") }, "report"),
+    );
+    messages.length = 0;
+    await say("yes, verify", { intent: "confirm", quote: "yes" }, { intent: "request-check", quote: "verify" });
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).not.toContain("recorded");
+    expect(messages[0]).toMatch(/That step follows|doesn't follow|couldn't check/);
+  });
+
+  it("does not ask for a result the learner gives in the same breath", async () => {
+    await say("flip", proposal({ kind: "division-to-reciprocal", partId: part("divisor") }));
+    await say("check", { intent: "request-check", quote: "check" });
+    messages.length = 0;
+    await say(
+      "it cancels, so the first numerator is just y",
+      {
+        intent: "propose",
+        source: "instruction",
+        quote: "it cancels",
+        operation: { kind: "non-unique", name: "cancel" },
+      },
+      proposal({ kind: "replace-part", partId: part("numerator of factor 1"), expression: expression("y") }, "report"),
+    );
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).not.toContain("Ask what");
+    expect(messages[0]).toContain("Is that what you meant");
+  });
+
+  it("still asks for a result about a part the same breath did not change", async () => {
+    await say("flip", proposal({ kind: "division-to-reciprocal", partId: part("divisor") }));
+    await say("check", { intent: "request-check", quote: "check" });
+    messages.length = 0;
+    await say(
+      "factor the second denominator, and the first numerator is y times six x minus five y",
+      {
+        intent: "propose",
+        source: "instruction",
+        quote: "factor the second denominator",
+        operation: { kind: "non-unique", name: "factor", partId: part("denominator of factor 2") },
+      },
+      proposal(
+        { kind: "replace-part", partId: part("numerator of factor 1"), expression: expression("y(6x-5y)") },
+        "report",
+      ),
+    );
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toContain("What does the denominator of the second fraction look like after factoring?");
+    expect(messages[0]).toContain("Is that what you meant");
+  });
+
+  it("drops a batch's updates when the visit changes while it is being read", async () => {
+    publish.mockImplementation(() => {
+      if (runtime.snapshot().session?.pending) runtime.onVisitChange("negative-exponent", 2, "skipped");
+    });
+    messages.length = 0;
+    await say("flip", proposal({ kind: "division-to-reciprocal", partId: part("divisor") }));
+    expect(messages).toHaveLength(0);
+  });
+
+  it("times a spoken check once, when its update is delivered", async () => {
+    await say("flip", proposal({ kind: "division-to-reciprocal", partId: part("divisor") }));
+    await say("yes, check", { intent: "confirm", quote: "yes" }, { intent: "request-check", quote: "check" });
+    expect(runtime.report().visits[0].checkRequestToInstructionMs).toHaveLength(1);
+  });
+
   it("ignores an in-flight response after changing visits", async () => {
     let resolve!: (value: unknown) => void;
     fetcher.mockImplementationOnce(
@@ -299,6 +435,28 @@ describe("math scribe voice runtime", () => {
     await vi.advanceTimersByTimeAsync(100);
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect(messages.at(-1)).toContain("say that again");
+  });
+
+  it("mentions changed or unverified domains without giving mathematics", () => {
+    for (const domainStatus of ["restriction-lost", "restriction-added"] as const) {
+      expect(scribeInstruction({ kind: "checked", verdict: "equivalent", reason: "", domainStatus })).toBe(
+        "That step follows, but it changes which values are allowed — the screen shows the detail. What would you like to do next?",
+      );
+    }
+    expect(
+      scribeInstruction({ kind: "checked", verdict: "equivalent", reason: "", domainStatus: "restriction-unverified" }),
+    ).toBe(
+      "That step follows, but I couldn't verify which values are allowed — the screen shows the detail. What would you like to do next?",
+    );
+  });
+
+  it("keeps the usual equivalent message for preserved or absent domain status", () => {
+    expect(scribeInstruction({ kind: "checked", verdict: "equivalent", reason: "", domainStatus: "preserved" })).toBe(
+      "That step follows. What would you like to do next?",
+    );
+    expect(scribeInstruction({ kind: "checked", verdict: "equivalent", reason: "" })).toBe(
+      "That step follows. What would you like to do next?",
+    );
   });
 
   it("never exposes discrepancy expressions in instructions", () => {

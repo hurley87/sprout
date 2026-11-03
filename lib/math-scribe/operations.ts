@@ -1,7 +1,7 @@
 import { exactObject } from "../calculus/math-expression";
 import { parseAlgebraExpression, type AlgebraExpression } from "../math-audit/expression";
 import { formatExpression } from "../math-audit/format";
-import { getPart, listParts, replacePart, type PathStep } from "./parts";
+import { getPart, listParts, replacePart, type Part, type PathStep } from "./parts";
 
 /** Replace parts or lines, flip division, move powers, or set signs; never repair or choose a strategy. */
 export type ScribeOperation =
@@ -98,6 +98,25 @@ export function describeOperation(operation: ScribeOperation): string {
   }
 }
 
+const ORDINALS = ["first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth"];
+const samePath = (a: readonly PathStep[], b: readonly PathStep[]) => JSON.stringify(a) === JSON.stringify(b);
+/** A learner-facing name for a part, never an internal label like "factor 1 of term 2 of …":
+ * a named fraction, its numerator or denominator, a top-level factor or term, or "that part". */
+export function spokenName(parts: readonly Part[], part: Part | undefined): string {
+  if (!part || part.path.length === 0) return "the line";
+  if (part.aliases[0]) return part.aliases[0];
+  const last = part.path[part.path.length - 1];
+  const parent = parts.find(item => samePath(item.path, part.path.slice(0, -1)));
+  if (parent?.aliases[0] && parent.op === "divide" && (last.child === "left" || last.child === "right"))
+    return `the ${last.child === "left" ? "numerator" : "denominator"} of ${parent.aliases[0]}`;
+  if (part.path.length === 1 && part.kind === "expression") {
+    if (last.child === "args" && ORDINALS[last.index] && (parent?.op === "multiply" || parent?.op === "add"))
+      return `the ${ORDINALS[last.index]} ${parent.op === "multiply" ? "factor" : "term"}`;
+    if (parent?.op === "divide") return `the ${last.child === "left" ? "numerator" : "denominator"}`;
+  }
+  return "that part";
+}
+
 export function applyOperation(current: AlgebraExpression, input: unknown): OperationResult {
   try {
     const operation = validate(input);
@@ -105,21 +124,27 @@ export function applyOperation(current: AlgebraExpression, input: unknown): Oper
     if (!parsed.ok)
       return failure(parsed.reason === "limit" ? "limit" : "invalid-operation", "Invalid current expression");
     const expression = parsed.expression;
+    const parts = listParts(expression);
     const part =
       "partId" in operation && operation.partId !== undefined
-        ? listParts(expression).find(item => item.id === operation.partId)
+        ? parts.find(item => item.id === operation.partId)
         : undefined;
     if (operation.kind === "non-unique") {
-      const label = part ? ` ${part.description}` : " expression";
-      const verb = {
-        factor: "factored",
-        expand: "expanded",
-        simplify: "simplified",
-        cancel: "result after cancelling",
-        combine: "combined",
-        other: "resulting",
-      }[operation.name];
-      return failure("needs-result", `Ask what the ${verb}${label} is.`);
+      // Shown on the clarify card and spoken by the tutor as is, so it is a direct question.
+      const name = spokenName(parts, part);
+      const question =
+        operation.name === "other"
+          ? `What does ${name} become?`
+          : `What does ${name} look like after ${
+              {
+                factor: "factoring",
+                expand: "expanding",
+                simplify: "simplifying",
+                cancel: "cancelling",
+                combine: "combining",
+              }[operation.name]
+            }?`;
+      return failure("needs-result", question);
     }
     if (operation.kind !== "replace-line" && !part) return failure("unknown-part", "The selected part was not found");
     const selectedPath: PathStep[] = part?.path ?? [];

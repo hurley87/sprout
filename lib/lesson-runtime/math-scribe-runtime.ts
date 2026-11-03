@@ -1,5 +1,7 @@
+import type { AlgebraExpression } from "../math-audit/expression";
 import { formatExpression } from "../math-audit/format";
 import { SCRIBE_LIMITS, type ScribeInput } from "../math-scribe/interpretation";
+import { listParts, type PathStep } from "../math-scribe/parts";
 import { getMathScribeProblem, isMathScribeProblemId, type MathScribeProblem } from "../math-scribe/problems";
 import {
   createSession,
@@ -45,7 +47,13 @@ export function scribeInstruction(
     case "clarify":
       return notice.question;
     case "checked": {
-      if (notice.verdict === "equivalent") return "That step follows. What would you like to do next?";
+      if (notice.verdict === "equivalent") {
+        if (notice.domainStatus === "restriction-unverified")
+          return "That step follows, but I couldn't verify which values are allowed — the screen shows the detail. What would you like to do next?";
+        if (notice.domainStatus && notice.domainStatus !== "preserved")
+          return "That step follows, but it changes which values are allowed — the screen shows the detail. What would you like to do next?";
+        return "That step follows. What would you like to do next?";
+      }
       if (notice.verdict !== "not-equivalent")
         return "I couldn't check that expression. You can rephrase it or continue.";
       const role = notice.discrepancy?.status === "localized" ? notice.discrepancy.role : undefined;
@@ -68,6 +76,31 @@ export function scribeInstruction(
     default:
       return null;
   }
+}
+
+/** One tutor update produced while reading one utterance. `scope` is the line position a
+ * request for a result asks about, or that a proposal changed ([] means the whole line). */
+type Queued = { kind: string; content: string; scope?: PathStep[] };
+const overlaps = (a: readonly PathStep[], b: readonly PathStep[]) =>
+  a.length <= b.length ? samePath(a, b.slice(0, a.length)) : samePath(a.slice(0, b.length), b);
+const workingExpression = (session: SessionState) =>
+  session.pending?.versions[session.pending.current].expression ?? session.base;
+const samePath = (a: readonly PathStep[], b: readonly PathStep[]) => JSON.stringify(a) === JSON.stringify(b);
+/** A part named against the batch's starting line, found again after earlier edits in the same
+ * batch: only when no edit touched it or anything containing it (identical text at the same
+ * position inside a replaced subtree is not the same part), and the position still holds it. */
+function carryPart(
+  start: AlgebraExpression,
+  now: AlgebraExpression,
+  partId: string,
+  changes: readonly PathStep[][],
+): string | null {
+  const named = listParts(start).find(part => part.id === partId);
+  if (!named || changes.some(change => overlaps(change, named.path))) return null;
+  const found = listParts(now).find(
+    part => part.kind === named.kind && part.latex === named.latex && samePath(part.path, named.path),
+  );
+  return found?.id ?? null;
 }
 
 type Context = {
@@ -295,45 +328,71 @@ export class MathScribeRuntime {
         this.log("math-scribe.request", record);
         let changedLine = false;
         let applied = false;
-        for (const interpretation of body.interpretations) {
-          if (this.stopped || this.active !== visit || this.request !== abort) break;
-          if (
-            changedLine &&
-            "operation" in interpretation &&
-            "partId" in interpretation.operation &&
-            interpretation.operation.partId
-          ) {
-            this.log("math-scribe.stale-part", { requestId, reason: "stale-part" });
-            this.instruct("I might have misheard. Which part did you mean?");
-            continue;
+        // Part IDs in this batch name parts of the line the model read; one batch speaks once.
+        const start = workingExpression(visit.session);
+        const batch: Queued[] = [];
+        const changes: PathStep[][] = [];
+        try {
+          for (const read of body.interpretations) {
+            if (this.stopped || this.active !== visit || this.request !== abort) break;
+            let interpretation = read;
+            const operation = "operation" in read ? read.operation : undefined;
+            const partId = operation && "partId" in operation ? operation.partId : undefined;
+            if (changedLine && operation && partId) {
+              const carried = carryPart(start, workingExpression(visit.session), partId, changes);
+              if (!carried) {
+                this.log("math-scribe.stale-part", { requestId, reason: "stale-part" });
+                batch.push({ kind: "stale-part", content: "I might have misheard. Which part did you mean?" });
+                continue;
+              }
+              interpretation = { ...read, operation: { ...operation, partId: carried } } as Interpretation;
+            }
+            // A check or confirmation in the same breath as a change would judge a line the learner
+            // has not yet seen; hold it so a misrecognition cannot reach mathematical feedback.
+            if (changedLine && (interpretation.intent === "request-check" || interpretation.intent === "confirm")) {
+              this.log("math-scribe.check-deferred", { requestId, intent: interpretation.intent });
+              batch.push({
+                kind: "check-deferred",
+                content: "I've written it on the screen. Have a look first, then say check if it's what you meant.",
+              });
+              continue;
+            }
+            const line = workingExpression(visit.session);
+            // Compare trees, not text: different groupings can format identically.
+            const before = JSON.stringify(line);
+            const pathOf = (id: string | null | undefined) =>
+              id ? listParts(line).find(part => part.id === id)?.path : [];
+            this.checking = interpretation.intent === "request-check";
+            if (this.checking) this.publish();
+            const result = reduceSession(visit.session, {
+              type: "interpretation",
+              requestId,
+              basedOnRevision: applied ? visit.session.revision : revision,
+              interpretation,
+              at: Date.now(),
+            });
+            visit.session = result.state;
+            applied = result.notice.kind !== "stale" || applied;
+            const after = JSON.stringify(workingExpression(visit.session));
+            changedLine ||= before !== after;
+            const used = "operation" in interpretation ? interpretation.operation : undefined;
+            // Only a part replacement is confined to its part; other operations restructure around
+            // it (a reciprocal turns the division into a product), so they count as the whole line.
+            const scope =
+              result.notice.kind === "proposed"
+                ? used?.kind === "replace-part"
+                  ? (pathOf(result.notice.changed.partId) ?? [])
+                  : []
+                : result.notice.kind === "clarify" && used?.kind === "non-unique"
+                  ? (pathOf(used.partId) ?? [])
+                  : undefined;
+            if (before !== after) changes.push(scope ?? []);
+            this.brief(visit, result.notice, started, { batch, scope });
+            this.checking = false;
           }
-          // A check or confirmation in the same breath as a change would judge a line the learner
-          // has not yet seen; hold it so a misrecognition cannot reach mathematical feedback.
-          if (changedLine && (interpretation.intent === "request-check" || interpretation.intent === "confirm")) {
-            this.log("math-scribe.check-deferred", { requestId, intent: interpretation.intent });
-            this.instruct("I've written it on the screen. Have a look first, then say check if it's what you meant.");
-            continue;
-          }
-          const before = formatExpression(
-            visit.session.pending?.versions[visit.session.pending.current].expression ?? visit.session.base,
-          );
-          this.checking = interpretation.intent === "request-check";
-          if (this.checking) this.publish();
-          const result = reduceSession(visit.session, {
-            type: "interpretation",
-            requestId,
-            basedOnRevision: applied ? visit.session.revision : revision,
-            interpretation,
-            at: Date.now(),
-          });
-          visit.session = result.state;
-          applied = result.notice.kind !== "stale" || applied;
-          const after = formatExpression(
-            visit.session.pending?.versions[visit.session.pending.current].expression ?? visit.session.base,
-          );
-          changedLine ||= before !== after;
-          this.brief(visit, result.notice, started);
-          this.checking = false;
+        } finally {
+          // A batch whose visit or request was replaced meanwhile must not speak into the new one.
+          if (!this.stopped && this.active === visit && this.request === abort) this.flush(batch, visit, started);
         }
         if (applied) {
           for (const group of learner) for (const order of group.orders) this.consumed.add(order);
@@ -374,7 +433,35 @@ export class MathScribeRuntime {
     this.log("math-scribe.instruction", { eventId, content });
   }
 
-  private brief(visit: Visit, notice: SessionNotice, started: number) {
+  /** Several separate updates from one utterance were spoken over each other or dropped, so a
+   * batch becomes one message: a check supersedes the confirmation before it, a held check
+   * already says the change is on screen, and a request for a result is not asked when a later
+   * proposal in the same breath changed that position (or an open "what would you like to change"
+   * was answered by one). */
+  private flush(queued: readonly Queued[], visit: Visit, started: number) {
+    const checked = queued.some(item => item.kind === "checked");
+    const deferred = queued.some(item => item.kind === "check-deferred");
+    const kept = queued.filter(
+      (item, index) =>
+        !(checked && item.kind === "confirmed") &&
+        !(deferred && item.kind === "proposed") &&
+        !queued
+          .slice(index + 1)
+          .some(
+            later =>
+              later.kind === "proposed" &&
+              (item.kind === "logged" ||
+                (item.kind === "clarify" && item.scope && later.scope && overlaps(item.scope, later.scope))),
+          ),
+    );
+    const content = [...new Set(kept.map(item => item.content))].join(" ");
+    if (!content) return;
+    this.instruct(content);
+    if (kept.some(item => item.kind === "checked")) visit.checkTimings.push(Math.max(0, Date.now() - started));
+  }
+
+  /** Within a batch the update is queued for `flush`; otherwise (UI actions) it is spoken now. */
+  private brief(visit: Visit, notice: SessionNotice, started: number, queue?: { batch: Queued[]; scope?: PathStep[] }) {
     if (notice.kind === "proposed") visit.proposalTimings.push(Math.max(0, Date.now() - this.speechEndedAt));
     if (notice.kind === "logged" && (notice.intent === "request-help" || notice.intent === "request-repeat")) {
       this.support(notice.intent === "request-help" ? "help" : "repeat");
@@ -383,8 +470,13 @@ export class MathScribeRuntime {
     const origin = visit.session.pending?.versions[visit.session.pending.current].origin;
     const instruction = scribeInstruction(notice, { origin });
     this.publish();
-    if (instruction) this.instruct(instruction);
-    if (notice.kind === "checked" && instruction) visit.checkTimings.push(Math.max(0, Date.now() - started));
+    if (!instruction) return;
+    if (queue) {
+      queue.batch.push({ kind: notice.kind, content: instruction, ...(queue.scope ? { scope: queue.scope } : {}) });
+      return;
+    }
+    this.instruct(instruction);
+    if (notice.kind === "checked") visit.checkTimings.push(Math.max(0, Date.now() - started));
   }
 
   ui(action: "confirm" | "undo" | "check" | "continue") {
