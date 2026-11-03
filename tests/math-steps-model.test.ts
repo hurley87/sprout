@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { discrepancyArea, historyRows, proposalLabel } from "../components/math-steps-model";
+import { discrepancyArea, earlierVersionLabel, historyRows, proposalLabel } from "../components/math-steps-model";
 import { createSession, snapshot } from "../lib/math-scribe/session";
 
 describe("math steps view model", () => {
@@ -30,5 +30,14 @@ describe("math steps view model", () => {
       { badge: "⚠ Domain changed" },
       { badge: "? Continued unverified", withdrawn: true },
     ]);
+  });
+
+  it("labels earlier versions by what replaced them, not always as a correction", () => {
+    const edit = { parent: 0, cause: "edit" as const };
+    const fix = { parent: 0, cause: "recognition-correction" as const };
+    const start = { parent: null, cause: "edit" as const };
+    expect(earlierVersionLabel([start, edit], 0)).toBe("Earlier version:");
+    expect(earlierVersionLabel([start, fix], 0)).toBe("You corrected:");
+    expect(earlierVersionLabel([start, edit, { parent: 0, cause: "edit" as const }], 1)).toBe("Undone:");
   });
 });

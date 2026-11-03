@@ -10,7 +10,7 @@ import { MicButton } from "./calculus/mic-button";
 import { useMicState } from "./calculus/use-mic-state";
 import { useVoiceDemo } from "./voice-demo/use-voice-demo";
 import { scrubSecrets } from "./voice-demo/diagnostics";
-import { historyRows, proposalLabel } from "./math-steps-model";
+import { earlierVersionLabel, historyRows, proposalLabel } from "./math-steps-model";
 import theme from "./calculus/calculus-theme.module.css";
 import styles from "./math-steps-demo.module.css";
 
@@ -101,8 +101,8 @@ export default function MathStepsDemo({ debug = false }: { debug?: boolean }) {
                           (version, index) =>
                             index !== row.current && (
                               <p className={styles.earlier} key={index}>
-                                You corrected: <Equation latex={formatExpression(version.expression)} />{" "}
-                                <span>“{version.quote}”</span>
+                                {earlierVersionLabel(row.versions, index)}{" "}
+                                <Equation latex={formatExpression(version.expression)} /> <span>“{version.quote}”</span>
                               </p>
                             ),
                         )}
@@ -127,7 +127,8 @@ export default function MathStepsDemo({ debug = false }: { debug?: boolean }) {
                     (version, index) =>
                       index !== pending.current && (
                         <p className={styles.earlier} key={index}>
-                          You corrected: <Equation latex={version.latex} /> <span>“{version.quote}”</span>
+                          {earlierVersionLabel(pending.versions, index)} <Equation latex={version.latex} />{" "}
+                          <span>“{version.quote}”</span>
                         </p>
                       ),
                   )}

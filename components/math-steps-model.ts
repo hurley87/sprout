@@ -34,6 +34,17 @@ export function proposalLabel(status: LineStatus, role?: string): string {
   }
 }
 
+/** Label for a pending version that is no longer current, from what happened to it next: a
+ * learner fix of something misheard, an ordinary further edit, or an undo back past it. */
+export function earlierVersionLabel(
+  versions: readonly { parent: number | null; cause: "edit" | "recognition-correction" }[],
+  index: number,
+): string {
+  const next = versions.filter(version => version.parent === index);
+  if (next.some(version => version.cause === "recognition-correction")) return "You corrected:";
+  return next.length ? "Earlier version:" : "Undone:";
+}
+
 export function historyRows(session: Session) {
   return session.history.map((line, index) => ({
     id: line.id,
