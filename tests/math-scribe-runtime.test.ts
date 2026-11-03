@@ -206,6 +206,35 @@ describe("math scribe voice runtime", () => {
     expect(messages).toHaveLength(count);
   });
 
+  it("re-reads speech whose response went stale after a UI undo", async () => {
+    await say("flip", proposal({ kind: "division-to-reciprocal", partId: part("divisor") }));
+    let resolve!: (value: unknown) => void;
+    fetcher.mockImplementationOnce(
+      () =>
+        new Promise(done => {
+          resolve = done;
+        }),
+    );
+    fragment("check that step");
+    runtime.onQuiet();
+    await vi.advanceTimersByTimeAsync(100);
+    runtime.ui("undo");
+    resolve({ json: async () => ({ status: "ok", interpretations: [{ intent: "request-check", quote: "check" }] }) });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(runtime.report().visits[0].requests.at(-1)?.status).toBe("stale");
+    respond({ intent: "describe-strategy", quote: "check that step" });
+    await vi.advanceTimersByTimeAsync(100);
+    const resent = JSON.parse(fetcher.mock.calls.at(-1)![1].body);
+    expect(resent.learnerTurns.map((t: { text: string }) => t.text)).toEqual(["check that step"]);
+    expect(resent.pendingStatus).toBe("none");
+  });
+
+  it("frames tutor messages as application instructions", async () => {
+    await say("flip", proposal({ kind: "division-to-reciprocal", partId: part("divisor") }));
+    expect(messages.at(-1)).toMatch(/^Application update from the scribe\. Say only this/);
+    expect(messages.at(-1)).toContain("say check when you're ready");
+  });
+
   it("drops part references after a batch changes the line", async () => {
     await say(
       "flip and edit",

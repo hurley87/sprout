@@ -284,8 +284,10 @@ export class MathScribeRuntime {
       }
       if (status === "ok" && body.interpretations) {
         if (visit.session.revision !== revision) {
+          // A UI action changed the line meanwhile: re-read the same speech against it.
           record.status = "stale";
           this.log("math-scribe.request", record);
+          this.reinterpretSoon(visit);
           break;
         }
         this.log("math-scribe.request", record);
@@ -326,11 +328,7 @@ export class MathScribeRuntime {
         }
         if (applied) {
           for (const group of learner) for (const order of group.orders) this.consumed.add(order);
-          if (this.groups().some(group => group.speaker === "child" && substance(group.text))) {
-            this.timer = setTimeout(() => {
-              if (this.active === visit && this.context().quiet && !this.stopped) void this.interpret();
-            }, this.debounceMs);
-          }
+          this.reinterpretSoon(visit);
         }
         break;
       }
@@ -346,10 +344,24 @@ export class MathScribeRuntime {
     }
   }
 
+  /** Framed as an application instruction, like calculus checks, so the tutor relays it
+   * briefly instead of treating it as conversation or adding mathematics of its own. */
+  /** Speech left unconsumed is read again after the current request settles. */
+  private reinterpretSoon(visit: Visit) {
+    if (!this.groups().some(group => group.speaker === "child" && substance(group.text))) return;
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => {
+      if (this.active === visit && this.context().quiet && !this.stopped && !this.request) void this.interpret();
+    }, this.debounceMs);
+  }
+
   private instruct(content: string) {
     if (this.stopped) return;
     const eventId = `${this.runtimeId}:math-scribe:${crypto.randomUUID()}`;
-    this.send(eventId, content);
+    this.send(
+      eventId,
+      `Application update from the scribe. Say only this, briefly and in your own words, and add no mathematics: "${content}"`,
+    );
     this.log("math-scribe.instruction", { eventId, content });
   }
 
