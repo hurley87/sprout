@@ -1,0 +1,166 @@
+.page {
+  min-height: 100dvh;
+}
+.header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 22px clamp(20px, 5vw, 64px);
+  border-bottom: 1px solid var(--line);
+  color: var(--ink2);
+  font-size: 14px;
+}
+.header a {
+  color: var(--primary);
+  font-size: 20px;
+  font-weight: 800;
+  text-decoration: none;
+}
+.main {
+  width: min(780px, 100%);
+  margin: auto;
+  padding: 42px 20px 70px;
+}
+.main h1 {
+  margin: 0;
+  font-size: clamp(36px, 6vw, 54px);
+  letter-spacing: -0.03em;
+}
+.lead,
+.note {
+  color: var(--ink2);
+}
+.lead {
+  margin: 8px 0 28px;
+}
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 24px;
+  margin: 16px 0;
+  min-width: 0;
+}
+.card h2 {
+  font-size: 18px;
+  margin: 0 0 16px;
+}
+.eyebrow {
+  color: var(--ink2);
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.equation {
+  display: inline-block;
+  max-width: 100%;
+  overflow-x: auto;
+  vertical-align: middle;
+}
+.history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.history li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+.withdrawn {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+.badge {
+  display: inline-block;
+  white-space: nowrap;
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: var(--okBg);
+  color: var(--ok);
+  font-size: 12px;
+  font-weight: 700;
+}
+.status {
+  font-weight: 700;
+  color: var(--primary);
+}
+.earlier {
+  color: var(--ink2);
+  font-size: 13px;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 20px;
+}
+.actions button,
+.next,
+.debug button {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 10px 16px;
+  background: var(--surface);
+  color: var(--primary);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.actions button:disabled,
+.next:disabled,
+.debug button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.clarification {
+  background: var(--lookBg);
+  border-color: var(--lookLine);
+}
+.mic {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  margin: 32px 0;
+  text-align: center;
+}
+.mic > p {
+  margin: 0;
+  min-height: 1.5em;
+  color: var(--ink2);
+}
+.note {
+  text-align: center;
+  font-size: 13px;
+}
+.debug {
+  margin-top: 32px;
+  color: var(--ink2);
+}
+.debug pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 540px) {
+  .header {
+    align-items: center;
+  }
+  .header span {
+    text-align: right;
+  }
+  .main {
+    padding-top: 28px;
+  }
+  .card {
+    padding: 18px;
+  }
+  .history li {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

@@ -110,6 +110,10 @@ export function useVoiceDemo({
     runtime.current?.skipScene(scope);
   }
 
+  function scribeAction(action: "confirm" | "undo" | "check" | "continue") {
+    runtime.current?.scribeAction(action);
+  }
+
   return {
     supportReady,
     audio,
@@ -121,6 +125,7 @@ export function useVoiceDemo({
     download,
     support,
     skip,
+    scribeAction,
   };
 }
 

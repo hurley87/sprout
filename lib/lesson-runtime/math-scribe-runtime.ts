@@ -117,7 +117,7 @@ export class MathScribeRuntime {
     _complete: () => boolean,
     _nextIsTerminal: () => boolean,
     private readonly debounceMs: number,
-    private readonly fetcher: typeof fetch = fetch,
+    private readonly fetcher: typeof fetch = (input, init) => fetch(input, init),
   ) {}
 
   snapshot() {
@@ -127,6 +127,8 @@ export class MathScribeRuntime {
       interpreting: !!this.request,
       checking: this.checking,
       metrics: visit ? sessionMetrics(visit.session) : null,
+      speechEndToProposalMs: visit?.proposalTimings ?? [],
+      checkRequestToInstructionMs: visit?.checkTimings ?? [],
       problem: visit?.problem ?? null,
     });
   }

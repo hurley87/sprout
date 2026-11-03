@@ -29,6 +29,7 @@ application lessons alongside the production counting lesson. See the
 remaining live acceptance work.
 
 The standalone, unregistered algebra playground is at `/demos/latex`.
+The voice-first math scribe demonstration is at `/demos/math-steps`.
 
 Sprout separates pedagogical intent from conversational realization: the authored
 lesson specifies the objective and success edge; GPT-Live realizes the conversation
