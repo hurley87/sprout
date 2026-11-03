@@ -45,6 +45,22 @@ export function earlierVersionLabel(
   return next.length ? "Earlier version:" : "Undone:";
 }
 
+const DOMAIN_BADGES: Record<string, string> = {
+  "restriction-lost": "✓ Valid · allows more values",
+  "restriction-added": "✓ Valid · allows fewer values",
+  "restriction-unverified": "✓ Valid · allowed values unchecked",
+};
+
+/** The restrictions behind a domain badge, as KaTeX, so the learner sees which rule changed. */
+export function domainNotes(changes: { lost: string[]; added: string[]; unverified: string[] } | undefined) {
+  const latex = (restriction: string) => restriction.replace("≠", String.raw`\neq`);
+  return [
+    ...(changes?.lost ?? []).map(item => ({ label: "Dropped the rule", latex: latex(item) })),
+    ...(changes?.added ?? []).map(item => ({ label: "Added the rule", latex: latex(item) })),
+    ...(changes?.unverified ?? []).map(item => ({ label: "Couldn't confirm the rule", latex: latex(item) })),
+  ];
+}
+
 export function historyRows(session: Session) {
   return session.history.map((line, index) => ({
     id: line.id,
@@ -52,13 +68,14 @@ export function historyRows(session: Session) {
     withdrawn: !!line.withdrawn,
     versions: line.pending?.versions ?? [],
     current: line.pending?.current,
+    domainNotes: domainNotes(line.domainChanges),
     badge:
       index === 0
         ? "Problem"
         : line.status === "unverified"
           ? "? Continued unverified"
-          : line.domainStatus && line.domainStatus !== "preserved"
-            ? "⚠ Domain changed"
+          : line.domainStatus && DOMAIN_BADGES[line.domainStatus]
+            ? DOMAIN_BADGES[line.domainStatus]
             : "✓ Verified",
   }));
 }

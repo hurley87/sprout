@@ -56,6 +56,8 @@ export type AcceptedLine = {
   expression: AlgebraExpression;
   status: "verified" | "unverified";
   domainStatus?: NonNullable<TransformationResult["domain"]>["status"];
+  /** Restrictions (e.g. "2x ≠ 0") this step dropped, added, or could not confirm; set only when changed. */
+  domainChanges?: { lost: string[]; added: string[]; unverified: string[] };
   pending?: Pending;
   withdrawn?: boolean;
 };
@@ -259,6 +261,15 @@ export function reduceSession(
               expression: next.base,
               status: "verified",
               ...(checked.domain ? { domainStatus: checked.domain.status } : {}),
+              ...(checked.domain && checked.domain.status !== "preserved"
+                ? {
+                    domainChanges: {
+                      lost: checked.domain.lost.map(item => item.restriction),
+                      added: checked.domain.added.map(item => item.restriction),
+                      unverified: [...checked.domain.unverified],
+                    },
+                  }
+                : {}),
               pending: updated,
             },
           ];

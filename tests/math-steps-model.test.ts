@@ -21,13 +21,21 @@ describe("math steps view model", () => {
         ...session,
         history: [
           start,
-          { ...start, id: "verified", domainStatus: "restriction-lost" },
+          {
+            ...start,
+            id: "verified",
+            domainStatus: "restriction-lost",
+            domainChanges: { lost: ["12x^2 - 10xy ≠ 0"], added: [], unverified: [] },
+          },
           { ...start, id: "continued", status: "unverified", withdrawn: true },
         ],
       }),
     ).toMatchObject([
       { badge: "Problem" },
-      { badge: "⚠ Domain changed" },
+      {
+        badge: "✓ Valid · allows more values",
+        domainNotes: [{ label: "Dropped the rule", latex: String.raw`12x^2 - 10xy \neq 0` }],
+      },
       { badge: "? Continued unverified", withdrawn: true },
     ]);
   });

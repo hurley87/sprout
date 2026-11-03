@@ -106,6 +106,11 @@ export default function MathStepsDemo({ debug = false }: { debug?: boolean }) {
                               </p>
                             ),
                         )}
+                        {row.domainNotes.map(note => (
+                          <p className={styles.earlier} key={`${note.label}:${note.latex}`}>
+                            {note.label} <Equation latex={note.latex} />
+                          </p>
+                        ))}
                       </div>
                       <span className={styles.badge}>
                         {row.badge}

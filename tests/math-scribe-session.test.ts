@@ -126,6 +126,21 @@ describe("scribe session", () => {
       domainStatus: "preserved",
     });
   });
+  it("records which restrictions a cancelling step dropped", () => {
+    let state = start(String.raw`\frac{3y(6x-5y)}{2x(6x-5y)}`);
+    state = say(state, {
+      intent: "propose",
+      operation: { kind: "replace-line", expression: read(String.raw`\frac{3y}{2x}`) },
+      source: "report",
+      quote: "three y over two x",
+    }).state;
+    state = ui(state, "check").state;
+    expect(state.history.at(-1)).toMatchObject({
+      domainStatus: "restriction-lost",
+      domainChanges: { lost: ["12x^2 - 10xy ≠ 0"], added: [], unverified: [] },
+    });
+    expect(state.history[0].domainChanges).toBeUndefined();
+  });
   it("clarifies, logs strategy, and distinguishes recognition corrections", () => {
     let state = start("x+x");
     const before = state.base;
