@@ -7,6 +7,7 @@ The production prototype is the realtime counting lesson at `/`, backed by
 | --- | --- |
 | [Halloween counting](halloween-counting.md) | Interest-led counting adventure and verification limits |
 | [Calculus demo](calculus-demo.md) | Worked-steps flow, required steps per problem, tutor outcomes, diagnostics and PENDING live acceptance |
+| [Math step checker](math-step-checker.md) | Exact algebraic audit contract, domain restrictions, limits and acceptance coverage |
 | [Issue #80 findings](issue-80-findings.md) | Historical: renderer decision and feasibility evidence for the superseded confirmation design |
 | [Architecture](architecture.md) | Authority boundaries, current modules, lifecycle and failure behavior |
 | [Domain glossary](../CONTEXT.md) | Current lesson/runtime terms |
@@ -26,6 +27,8 @@ The standalone adult-learning demonstrations are available at
 application lessons alongside the production counting lesson. See the
 [MAE386 route validation](mae386-demo-validation.md) for bounded UI coverage and
 remaining live acceptance work.
+
+The standalone, unregistered algebra playground is at `/demos/latex`.
 
 Sprout separates pedagogical intent from conversational realization: the authored
 lesson specifies the objective and success edge; GPT-Live realizes the conversation
