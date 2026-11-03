@@ -2,7 +2,6 @@
 
 import "katex/dist/katex.min.css";
 import katex from "katex";
-import Link from "next/link";
 import { Figtree } from "next/font/google";
 import { formatExpression } from "@/lib/math-audit/format";
 import { MATH_SCRIBE_LESSON } from "@/lib/lesson-runtime/math-scribe-lesson";
@@ -54,15 +53,12 @@ export default function MathStepsDemo({ debug = false }: { debug?: boolean }) {
   const role = discrepancy?.status === "localized" ? discrepancy.role : undefined;
   const current = pending?.versions[pending.current];
   const active = live && snapshot?.status === "live";
+  // The problem card already shows the starting line; history lists only the steps after it.
+  const steps = session ? historyRows(session).slice(1) : [];
 
   return (
     <div className={`${styles.page} ${theme.theme} ${figtree.variable}`}>
-      <header className={styles.header}>
-        <Link href="/">Sprout</Link>
-        <span>Spoken practice · {MATH_SCRIBE_PROBLEM_IDS.length} problems</span>
-      </header>
       <main className={styles.main}>
-        <h1>Math steps</h1>
         <p className={styles.lead}>
           Tell Sprout what to change; it writes the line and checks it when you say &apos;check&apos;.
         </p>
@@ -93,11 +89,11 @@ export default function MathStepsDemo({ debug = false }: { debug?: boolean }) {
         </section>
         {!completed && (
           <>
-            <section className={styles.card} aria-label="Working history">
-              <h2>Working history</h2>
-              {session ? (
+            {steps.length > 0 && (
+              <section className={styles.card} aria-label="Working history">
+                <h2>Working history</h2>
                 <ol className={styles.history}>
-                  {historyRows(session).map(row => (
+                  {steps.map(row => (
                     <li key={row.id} className={row.withdrawn ? styles.withdrawn : ""}>
                       <div>
                         <Equation latex={row.latex} />
@@ -118,14 +114,8 @@ export default function MathStepsDemo({ debug = false }: { debug?: boolean }) {
                     </li>
                   ))}
                 </ol>
-              ) : (
-                problem && (
-                  <div className={styles.history}>
-                    <Equation latex={problem.latex} /> <span className={styles.badge}>Problem</span>
-                  </div>
-                )
-              )}
-            </section>
+              </section>
+            )}
             <section className={styles.card} aria-label="What I heard" aria-live="polite">
               <h2>What I heard</h2>
               {pending && current ? (

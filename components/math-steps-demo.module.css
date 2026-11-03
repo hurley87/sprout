@@ -1,37 +1,17 @@
 .page {
   min-height: 100dvh;
 }
-.header {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 22px clamp(20px, 5vw, 64px);
-  border-bottom: 1px solid var(--line);
-  color: var(--ink2);
-  font-size: 14px;
-}
-.header a {
-  color: var(--primary);
-  font-size: 20px;
-  font-weight: 800;
-  text-decoration: none;
-}
 .main {
   width: min(780px, 100%);
   margin: auto;
   padding: 42px 20px 70px;
-}
-.main h1 {
-  margin: 0;
-  font-size: clamp(36px, 6vw, 54px);
-  letter-spacing: -0.03em;
 }
 .lead,
 .note {
   color: var(--ink2);
 }
 .lead {
-  margin: 8px 0 28px;
+  margin: 0 0 28px;
 }
 .card {
   background: var(--surface);
@@ -148,12 +128,6 @@
   overflow-wrap: anywhere;
 }
 @media (max-width: 540px) {
-  .header {
-    align-items: center;
-  }
-  .header span {
-    text-align: right;
-  }
   .main {
     padding-top: 28px;
   }
