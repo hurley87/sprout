@@ -24,6 +24,27 @@ const substance = (text: string) =>
     .trim();
 /** Debounce multiples to wait for a late transcript before reading earlier speech anyway. */
 const MISSING_TRANSCRIPT_WAIT = 5;
+/** Debounce multiples after an unfinished phrase ("open bracket", "plus", "factor out"):
+ * ~2.1 s at the 300 ms production debounce, covering most mid-sentence pauses seen live
+ * (up to ~1.4 s beyond the microphone's own quiet window) without slowing finished speech. */
+const UNFINISHED_PHRASE_WAIT = 7;
+const TRAILING_FILLER = /\b(?:u+m+|u+h+|e+r+m*|h+m+)\b/g;
+const UNFINISHED_ENDING =
+  /\b(?:plus|minus|times|over|divided by|to the|squared|and|so|then|it would be|would be|is|equals|of|the|in|factor out|by)$/;
+const unfinishedPhrase = (text: string) => {
+  const words = text
+    .toLowerCase()
+    .replace(/\[[^\]]*\]/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  const withoutFiller = words.replace(TRAILING_FILLER, " ").replace(/\s+/g, " ").trim();
+  if (!withoutFiller) return !!words;
+  let openBrackets = 0;
+  for (const match of withoutFiller.matchAll(/\b(open|close) (?:bracket|parenthesis|parentheses)\b/g)) {
+    openBrackets = Math.max(0, openBrackets + (match[1] === "open" ? 1 : -1));
+  }
+  return openBrackets > 0 || UNFINISHED_ENDING.test(withoutFiller);
+};
 const RETRYABLE = new Set(["timeout", "provider-failure", "malformed"]);
 const areas: Record<string, string> = {
   "reciprocal-numerator": "the numerator of the second fraction",
@@ -260,9 +281,16 @@ export class MathScribeRuntime {
     if (this.request && this.newLearnerWords()) this.cancelCheck();
     this.speechEndedAt = Date.now();
     const visit = this.active;
-    this.timer = setTimeout(() => {
-      if (this.active === visit && this.context().quiet && !this.stopped) void this.interpret();
-    }, this.debounceMs);
+    const learnerGroups = this.groups().filter(group => group.speaker === "child");
+    const unconsumedText = learnerGroups.map(group => group.text).join(" ");
+    const latestText = learnerGroups.at(-1)?.text ?? "";
+    const unfinished = unfinishedPhrase(unconsumedText) || (!substance(latestText) && unfinishedPhrase(latestText));
+    this.timer = setTimeout(
+      () => {
+        if (this.active === visit && this.context().quiet && !this.stopped) void this.interpret();
+      },
+      this.debounceMs * (unfinished ? UNFINISHED_PHRASE_WAIT : 1),
+    );
     return true;
   }
 

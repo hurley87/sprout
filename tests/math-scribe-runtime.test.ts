@@ -141,6 +141,66 @@ describe("math scribe voice runtime", () => {
     ]);
   });
 
+  it.each([
+    "six times open bracket",
+    "six times open bracket two x plus five close bracket and",
+    "two x plus, um [cough]",
+    "factor out",
+    "change it to the",
+    "it would be",
+    "divided by",
+    "two plus um, uh",
+  ])("waits longer but eventually reads unfinished speech: %s", async text => {
+    respond();
+    fragment(text);
+    runtime.onQuiet();
+    await vi.advanceTimersByTimeAsync(699);
+    expect(fetcher).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["close bracket", "open bracket two plus five close bracket", "check that step", "yes", "check, um"])(
+    "reads finished speech at the normal debounce: %s",
+    async text => {
+      respond();
+      fragment(text);
+      runtime.onQuiet();
+      await vi.advanceTimersByTimeAsync(99);
+      expect(fetcher).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("merges speech arriving during the longer wait into one read", async () => {
+    respond();
+    fragment("six times open bracket");
+    runtime.onQuiet();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(fetcher).not.toHaveBeenCalled();
+    runtime.onSpeechStarted(true);
+    fragment("two x plus five close bracket");
+    runtime.onQuiet();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(fetcher.mock.calls[0][1].body).learnerTurns.map((item: { text: string }) => item.text)).toEqual([
+      "six times open bracket",
+      "two x plus five close bracket",
+    ]);
+  });
+
+  it("waits for a filler-only latest turn before reading earlier speech", async () => {
+    respond();
+    fragment("change the numerator");
+    fragment("um, uh");
+    runtime.onQuiet();
+    await vi.advanceTimersByTimeAsync(699);
+    expect(fetcher).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
   it("aborts interrupted requests and resends both learner turns", async () => {
     let resolve!: (value: unknown) => void;
     fetcher.mockImplementationOnce(
@@ -230,7 +290,7 @@ describe("math scribe voice runtime", () => {
     );
     fragment("y times open bracket six x minus five y");
     runtime.onQuiet();
-    await vi.advanceTimersByTimeAsync(100);
+    await vi.advanceTimersByTimeAsync(700);
     fragment("close bracket");
     resolve({
       json: async () => ({
