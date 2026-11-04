@@ -1,5 +1,50 @@
 [
   {
+    "name": "factor self correction uses last factor",
+    "workingLatex": "12x^2-10xy", "baseLatex": "12x^2-10xy", "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "factor out six x or 2x" }], "tutorTurns": [],
+    "expected": [{ "intent": "propose", "source": "instruction", "quote": "factor out six x or 2x", "operation": { "kind": "factor-out", "partId": "p0", "factor": { "op": "multiply", "args": [{ "op": "number", "value": 2 }, { "op": "variable", "name": "x" }] } } }]
+  },
+  {
+    "name": "factor with dictated result uses stated result",
+    "workingLatex": "12x+30y", "baseLatex": "12x+30y", "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "take out six, that is six times x plus five y" }], "tutorTurns": [],
+    "expected": [{ "intent": "propose", "source": "instruction", "quote": "take out six, that is six times x plus five y", "operation": { "kind": "replace-part", "partId": "p0", "expression": { "op": "multiply", "args": [{ "op": "number", "value": 6 }, { "op": "add", "args": [{ "op": "variable", "name": "x" }, { "op": "multiply", "args": [{ "op": "number", "value": 5 }, { "op": "variable", "name": "y" }] }] }] } } }]
+  },
+  {
+    "name": "factor 2x from second denominator",
+    "workingLatex": "\\frac{x}{y}\\frac{12x+30y}{12x^2-10xy}",
+    "baseLatex": "\\frac{x}{y}\\frac{12x+30y}{12x^2-10xy}",
+    "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "factor 2x out of the denominator of the second fraction" }],
+    "tutorTurns": [],
+    "expected": [{ "intent": "propose", "source": "instruction", "quote": "factor 2x out of the denominator of the second fraction", "operation": { "kind": "factor-out", "partId": "p12", "factor": { "op": "multiply", "args": [{ "op": "number", "value": 2 }, { "op": "variable", "name": "x" }] } } }]
+  },
+  {
+    "name": "take six from second numerator",
+    "workingLatex": "\\frac{x}{y}\\frac{12x+30y}{x}", "baseLatex": "\\frac{x}{y}\\frac{12x+30y}{x}", "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "take out a 6 from the second numerator" }], "tutorTurns": [],
+    "expected": [{ "intent": "propose", "source": "instruction", "quote": "take out a 6 from the second numerator", "operation": { "kind": "factor-out", "partId": "p5", "factor": 6 } }]
+  },
+  {
+    "name": "pull y from first numerator",
+    "workingLatex": "\\frac{6xy-5y^2}{x}", "baseLatex": "\\frac{6xy-5y^2}{x}", "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "pull out y from the first numerator" }], "tutorTurns": [],
+    "expected": [{ "intent": "propose", "source": "instruction", "quote": "pull out y from the first numerator", "operation": { "kind": "factor-out", "partId": "p1", "factor": { "op": "variable", "name": "y" } } }]
+  },
+  {
+    "name": "cancel named common factor",
+    "workingLatex": "\\frac{6x-5y}{6x-5y}", "baseLatex": "\\frac{6x-5y}{6x-5y}", "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "cancel the 6x minus 5y" }], "tutorTurns": [],
+    "expected": [{ "intent": "propose", "source": "instruction", "quote": "cancel the 6x minus 5y", "operation": { "kind": "cancel-common-factor", "factor": { "op": "subtract", "left": { "op": "multiply", "args": [{ "op": "number", "value": 6 }, { "op": "variable", "name": "x" }] }, "right": { "op": "multiply", "args": [{ "op": "number", "value": 5 }, { "op": "variable", "name": "y" }] } } } }]
+  },
+  {
+    "name": "cancel named sum top and bottom",
+    "workingLatex": "\\frac{2x+5y}{2x+5y}", "baseLatex": "\\frac{2x+5y}{2x+5y}", "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "cancel the 2x plus 5y from top and bottom" }], "tutorTurns": [],
+    "expected": [{ "intent": "propose", "source": "instruction", "quote": "cancel the 2x plus 5y from top and bottom", "operation": { "kind": "cancel-common-factor", "factor": { "op": "add", "args": [{ "op": "multiply", "args": [{ "op": "number", "value": 2 }, { "op": "variable", "name": "x" }] }, { "op": "multiply", "args": [{ "op": "number", "value": 5 }, { "op": "variable", "name": "y" }] }] } } }]
+  },
+  {
     "name": "answer factor clarification with inner expression",
     "workingLatex": "\\frac{x}{y}\\frac{12x+30y}{x}",
     "baseLatex": "\\frac{x}{y}\\frac{12x+30y}{x}",

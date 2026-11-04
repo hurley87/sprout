@@ -32,6 +32,8 @@ The runtime frames messages as application instructions to the tutor, asking it 
 | `negative-power-to-denominator` | Move a selected negative power into a denominator. | scribed-operation |
 | `denominator-to-negative-power` | Rewrite a selected denominator as a negative power. | scribed-operation |
 | `set-sign` | Set the sign of a selected term. | scribed-operation |
+| `factor-out` | Factor a named factor from the selected polynomial using exact bounded division. | scribed-operation |
+| `cancel-common-factor` | Remove one literally matching factor from a numerator and denominator in the selected product or line. | scribed-operation |
 | `non-unique` | Ask for the result of factor, expand, simplify, cancel, combine or other work; no rewrite. | no proposal |
 
 Never repair a learner's mathematics or choose their strategy. A mere goal is logged as strategy; a non-unique action needs the learner's result. Even a uniquely determined rewrite is a provisional scribed operation, not independent evidence of handwriting.
@@ -39,6 +41,8 @@ Never repair a learner's mathematics or choose their strategy. A mere goal is lo
 ## Optional speech conventions
 
 Learners need not memorize a grammar. Helpful optional conventions include “open bracket … close bracket,” “all over,” “to the power of,” “squared”/“cubed,” “times,” and “negative two.” Corrections such as “no, I meant …” can revise a proposal. If exponent attachment or fraction scope is ambiguous, request clarification and, when available, present candidate readings—for example `(x^2+2x)^{-2}` versus `x^2+(2x)^{-2}`—rather than guessing.
+
+“Factor 2x out of the denominator of the second fraction,” “take out a 6 from the second numerator,” and “pull out y from the first numerator” name both the factor and its part. “Cancel 6x minus 5y” names a literal factor shared by numerator and denominator. If factoring cannot be done exactly with whole-number coefficients inside the brackets (taking 4 out of 12x+30y would need 15/2) or within limits, or the cancellation cannot be located, the scribe asks for the learner's result instead. If the complete result is dictated, it takes precedence over the operation. A follow-up answer uses the open question as context, but its quote must come from the current learner turn.
 
 ## Debug export and metrics
 

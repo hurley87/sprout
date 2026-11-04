@@ -188,6 +188,9 @@ export function reduceSession(
           prompt: interpretation.quote,
           ...(part ? { part: { id: part.id, description: part.description, latex: part.latex } } : {}),
           ...(operation.kind === "non-unique" ? { operation: operation.name } : {}),
+          ...(operation.kind === "factor-out" || operation.kind === "cancel-common-factor"
+            ? { operation: operation.kind }
+            : {}),
         };
         notice = { kind: "clarify", question: result.detail };
       } else {

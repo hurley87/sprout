@@ -31,6 +31,64 @@ const audit = (previous: AlgebraExpression, proposed: AlgebraExpression) =>
   checkTransformation({ previous: { ast: previous }, proposed: { ast: proposed } });
 
 describe("deterministic scribe operations", () => {
+  it.each([
+    [reciprocal, "denominator of factor 2", "2x", "2x(6x-5y)"],
+    [reciprocal, "numerator of factor 1", "y", "y(6x-5y)"],
+    [reciprocal, "numerator of factor 2", "6", "6(2x+5y)"],
+    ["(2+3x^2)^3(x^2+2x)^{-2}", "base of factor 2", "x", "x(x+2)"],
+    ["6xy-5y^2", "whole line", "-y", "-y(-6x+5y)"],
+    ["6x", "whole line", "6x", "6x\\cdot 1"],
+  ])("factors %s at %s", (latex, description, factor, expected) => {
+    const current = read(latex);
+    const partId = description === "whole line" ? "p0" : part(current, description);
+    const result = apply(current, { kind: "factor-out", partId, factor: read(factor) });
+    expect(result.changed.after).toBe(expected);
+    expect(result.origin).toBe("scribed-operation");
+    expect(audit(current, result.expression).verdict).toBe("equivalent");
+  });
+  it("asks for the result rather than write fractional brackets", () => {
+    for (const [latex, factor] of [
+      ["x+y", "2"],
+      ["12x+30y", "4"],
+    ])
+      expect(applyOperation(read(latex), { kind: "factor-out", partId: "p0", factor: read(factor) })).toMatchObject({
+        ok: false,
+        reason: "needs-result",
+      });
+  });
+  it("asks for the result when factoring cannot be safely completed", () => {
+    for (const factor of [read("3x"), 0, 1])
+      expect(applyOperation(read("x+y"), { kind: "factor-out", partId: "p0", factor })).toMatchObject({
+        reason: "needs-result",
+      });
+    expect(
+      applyOperation(read(String.raw`\frac{x}{y}`), { kind: "factor-out", partId: "p0", factor: read("x") }),
+    ).toMatchObject({ reason: "needs-result" });
+  });
+  it("cancels literal factors across and within fractions in reading order", () => {
+    const current = read(String.raw`\frac{y(6x-5y)}{2(2x+5y)}\cdot\frac{6(2x+5y)}{2x(6x-5y)}`);
+    const result = apply(current, { kind: "cancel-common-factor", factor: read("6x-5y") });
+    expect(audit(current, result.expression)).toMatchObject({ verdict: "equivalent" });
+    expect(result.changed.after).toBe(String.raw`\frac{y}{2(2x+5y)}\cdot \frac{6(2x+5y)}{2x}`);
+    expect(audit(current, result.expression)).toMatchObject({ domain: { status: "restriction-lost" } });
+    const same = read(String.raw`\frac{(x+y)x}{y(x+y)}\frac{x+y}{x+y}`);
+    const within = apply(same, { kind: "cancel-common-factor", factor: read("y+x") });
+    expect(within.changed.after).toBe(String.raw`\frac{x}{y}\cdot \frac{x+y}{x+y}`);
+    const preferred = read(String.raw`\frac{x+y}{x}\cdot\frac{(x+y)y}{x+y}`);
+    expect(apply(preferred, { kind: "cancel-common-factor", factor: read("x+y") }).changed.after).toBe(
+      String.raw`\frac{x+y}{x}y`,
+    );
+    const notLiteral = read(String.raw`\frac{x+x}{2x}`);
+    expect(applyOperation(notLiteral, { kind: "cancel-common-factor", factor: read("2x") })).toMatchObject({
+      reason: "needs-result",
+    });
+    expect(applyOperation(current, { kind: "cancel-common-factor", factor: read("x+y") })).toMatchObject({
+      reason: "needs-result",
+    });
+    expect(applyOperation(read("x+y"), { kind: "cancel-common-factor", factor: read("x") })).toMatchObject({
+      reason: "needs-result",
+    });
+  });
   it("flips the selected divisor without repairing dictated corrections", () => {
     const current = read(original);
     freeze(current);

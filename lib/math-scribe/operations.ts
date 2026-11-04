@@ -2,6 +2,7 @@ import { exactObject } from "../calculus/math-expression";
 import { parseAlgebraExpression, type AlgebraExpression } from "../math-audit/expression";
 import { formatExpression } from "../math-audit/format";
 import { getPart, listParts, replacePart, type Part, type PathStep } from "./parts";
+import { cancelFactor, factorOut } from "./factor-operations";
 
 /** Replace parts or lines, flip division, move powers, or set signs; never repair or choose a strategy. */
 export type ScribeOperation =
@@ -11,6 +12,8 @@ export type ScribeOperation =
   | { kind: "negative-power-to-denominator"; partId: string }
   | { kind: "denominator-to-negative-power"; partId: string }
   | { kind: "set-sign"; partId: string; sign: "plus" | "minus" }
+  | { kind: "factor-out"; partId: string; factor: AlgebraExpression | number }
+  | { kind: "cancel-common-factor"; factor: AlgebraExpression | number; partId?: string }
   | { kind: "non-unique"; name: "factor" | "expand" | "simplify" | "cancel" | "combine" | "other"; partId?: string };
 
 export type OperationResult =
@@ -54,6 +57,12 @@ function validate(value: unknown): ScribeOperation {
     case "set-sign":
       keys = ["kind", "partId", "sign"];
       break;
+    case "factor-out":
+      keys = ["kind", "partId", "factor"];
+      break;
+    case "cancel-common-factor":
+      keys = ["kind", "factor", ...(Object.hasOwn(value, "partId") ? ["partId"] : [])];
+      break;
     case "non-unique":
       keys = Object.prototype.hasOwnProperty.call(value, "partId") ? ["kind", "name", "partId"] : ["kind", "name"];
       break;
@@ -63,6 +72,14 @@ function validate(value: unknown): ScribeOperation {
   const object = exactObject(value, keys);
   if (keys.includes("partId") && typeof object.partId !== "string") throw new Error();
   if (kind === "set-sign" && object.sign !== "plus" && object.sign !== "minus") throw new Error();
+  if (kind === "factor-out" || kind === "cancel-common-factor") {
+    if (typeof object.factor === "number") {
+      if (!Number.isSafeInteger(object.factor)) throw new Error();
+    } else {
+      const parsed = parseAlgebraExpression(object.factor);
+      if (!parsed.ok && parsed.reason !== "limit") throw new Error();
+    }
+  }
   if (
     kind === "non-unique" &&
     !["factor", "expand", "simplify", "cancel", "combine", "other"].includes(object.name as string)
@@ -93,6 +110,10 @@ export function describeOperation(operation: ScribeOperation): string {
       return "Rewrote the denominator as a negative power";
     case "set-sign":
       return `Set the sign to ${operation.sign}`;
+    case "factor-out":
+      return "Factored out the selected factor";
+    case "cancel-common-factor":
+      return "Cancelled the common factor";
     case "non-unique":
       return "Asked for the student's result";
   }
@@ -146,7 +167,12 @@ export function applyOperation(current: AlgebraExpression, input: unknown): Oper
             }?`;
       return failure("needs-result", question);
     }
-    if (operation.kind !== "replace-line" && !part) return failure("unknown-part", "The selected part was not found");
+    if (
+      operation.kind !== "replace-line" &&
+      !(operation.kind === "cancel-common-factor" && operation.partId === undefined) &&
+      !part
+    )
+      return failure("unknown-part", "The selected part was not found");
     const selectedPath: PathStep[] = part?.path ?? [];
     let path = selectedPath;
     let replacement: AlgebraExpression | number;
@@ -155,7 +181,25 @@ export function applyOperation(current: AlgebraExpression, input: unknown): Oper
     const parent = path.length ? getPart(expression, parentPath) : null;
     const last = path.at(-1);
     if (operation.kind === "replace-line" || operation.kind === "replace-part") replacement = operation.expression;
-    else if (operation.kind === "division-to-reciprocal" || operation.kind === "denominator-to-negative-power") {
+    else if (operation.kind === "factor-out" || operation.kind === "cancel-common-factor") {
+      const factor =
+        typeof operation.factor === "number" ? { op: "number" as const, value: operation.factor } : operation.factor;
+      const question =
+        operation.kind === "factor-out"
+          ? `What is left inside the brackets after taking out ${text(factor)} from ${spokenName(parts, part)}?`
+          : `What does ${spokenName(parts, part)} look like after cancelling?`;
+      const parsedFactor = parseAlgebraExpression(factor);
+      const computed =
+        typeof selected === "number" || !parsedFactor.ok
+          ? null
+          : operation.kind === "factor-out"
+            ? factorOut(selected, parsedFactor.expression)
+            : cancelFactor(selected, parsedFactor.expression);
+      if (!computed) return failure("needs-result", question);
+      const valid = replacePart(expression, path, computed);
+      if (!valid.ok) return failure("needs-result", question);
+      replacement = computed;
+    } else if (operation.kind === "division-to-reciprocal" || operation.kind === "denominator-to-negative-power") {
       const division =
         last?.child === "right" && parent && typeof parent !== "number" && parent.op === "divide"
           ? ((path = parentPath), parent)

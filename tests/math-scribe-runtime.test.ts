@@ -80,6 +80,40 @@ describe("math scribe voice runtime", () => {
     source: "instruction" | "report" = "instruction",
   ): Interpretation => ({ intent: "propose", operation, source, quote: "said" });
 
+  it("factors the second denominator and verifies the proposal", async () => {
+    await say("flip", proposal({ kind: "division-to-reciprocal", partId: part("divisor") }));
+    const quote = "factor 2x out of the denominator of the second fraction";
+    await say(quote, {
+      intent: "propose",
+      source: "instruction",
+      quote,
+      operation: { kind: "factor-out", partId: part("denominator of factor 2"), factor: expression("2x") },
+    });
+    expect(runtime.snapshot().session?.workingLine.latex).toContain("2x(6x-5y)");
+    expect(messages.at(-1)).toContain("Got it");
+    runtime.ui("check");
+    expect(runtime.snapshot().metrics?.checks.equivalent).toBe(1);
+  });
+
+  it("retains factor-out clarification context for a short answer", async () => {
+    const quote = "factor 3x out of the first numerator";
+    const partId = part("numerator of dividend");
+    await say(quote, {
+      intent: "propose",
+      source: "instruction",
+      quote,
+      operation: { kind: "factor-out", partId, factor: expression("3x") },
+    });
+    await say("six x minus five y", {
+      intent: "propose",
+      source: "report",
+      quote: "six x minus five y",
+      operation: { kind: "replace-part", partId, expression: expression("3x(6x-5y)") },
+    });
+    const request = JSON.parse(fetcher.mock.calls.at(-1)![1].body);
+    expect(request.openQuestion).toMatchObject({ operation: "factor-out", prompt: quote, part: { id: partId } });
+  });
+
   it("passes an open factor clarification into the next read", async () => {
     await say("flip", proposal({ kind: "division-to-reciprocal", partId: part("divisor") }));
     const partId = part("numerator of factor 2");
