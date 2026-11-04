@@ -26,6 +26,7 @@ export const MATH_SCRIBE_LESSON = validateLessonDefinition({
   id: "math-scribe",
   initialNodeId: MATH_SCRIBE_PROBLEM_IDS[0],
   mathScribe: true,
+  gateTutorAudio: true,
   conversationFirst: true,
   nodes,
   recovery: {

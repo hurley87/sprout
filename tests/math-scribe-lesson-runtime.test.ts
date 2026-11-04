@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { CLOSE_AFTER_QUIET_MS } from "../lib/lesson-runtime/tutor-audio-gate";
 import type { ClientCommand, ProviderEvent } from "../lib/events";
 import { LessonRuntime } from "../lib/lesson-runtime/lesson-runtime";
 import { MATH_SCRIBE_LESSON } from "../lib/lesson-runtime/math-scribe-lesson";
@@ -10,6 +11,7 @@ const transport = vi.hoisted(() => ({
   send: vi.fn<(command: ClientCommand) => void>(),
   close: vi.fn(),
   start: vi.fn<(lessonId: string) => void>(),
+  setOutputAudible: vi.fn<(audible: boolean) => void>(),
 }));
 vi.mock("../lib/browser-transport", async () => {
   const { mockBrowserTransport } = await import("./helpers/runtime-harness");
@@ -17,7 +19,7 @@ vi.mock("../lib/browser-transport", async () => {
 });
 
 let runtime: LessonRuntime;
-let requests: { signal: AbortSignal; resolve: (body: unknown) => void }[];
+let requests: { signal: AbortSignal; body: { tutorTurns: { text: string }[] }; resolve: (body: unknown) => void }[];
 const emit = (event: ProviderEvent) => transport.receive!(event);
 const events = providerEvents(emit);
 const instructions = () =>
@@ -34,13 +36,50 @@ beforeEach(() => {
     vi.fn((url: string, init: RequestInit) => {
       expect(url).toBe("/api/math-scribe");
       return new Promise<Response>(resolve =>
-        requests.push({ signal: init.signal!, resolve: body => resolve(Response.json(body)) }),
+        requests.push({
+          signal: init.signal!,
+          body: JSON.parse(init.body as string),
+          resolve: body => resolve(Response.json(body)),
+        }),
       );
     }),
   );
   runtime = new LessonRuntime({} as HTMLAudioElement, () => {}, MATH_SCRIBE_LESSON);
   runtime.confirmRendered(runtime.snapshot().display);
   events.acknowledgeSteering(transport.send.mock.calls.at(-1)![0].event_id, 0);
+});
+
+it("mutes improvisation and excludes it from scribe context until the next instruction", async () => {
+  events.tutorTurn("Welcome!", 10);
+  await vi.advanceTimersByTimeAsync(CLOSE_AFTER_QUIET_MS);
+  expect(transport.setOutputAudible).toHaveBeenLastCalledWith(false);
+  events.tutorTurn("I already wrote it.", 200);
+  events.childTurn("flip the divisor", 400);
+  await vi.advanceTimersByTimeAsync(301);
+  expect(requests).toHaveLength(1);
+  expect(requests[0].body.tutorTurns.map(turn => turn.text).join(" ")).toContain("Welcome!");
+  expect(requests[0].body.tutorTurns.map(turn => turn.text).join(" ")).not.toContain("I already wrote it.");
+  expect(runtime.snapshot().diagnostics).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        type: "math.transcript_available",
+        detail: expect.objectContaining({ unheard: true }),
+      }),
+    ]),
+  );
+  requests[0].resolve({ status: "ok", interpretations: [{ intent: "describe-strategy", quote: "flip" }] });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(transport.setOutputAudible).toHaveBeenLastCalledWith(true);
+});
+
+it("does not gate a lesson without the opt-in", async () => {
+  runtime.stop();
+  runtime = new LessonRuntime({} as HTMLAudioElement, () => {}, { ...MATH_SCRIBE_LESSON, gateTutorAudio: undefined });
+  runtime.confirmRendered(runtime.snapshot().display);
+  emit({ type: "output.activity", state: "active" });
+  emit({ type: "output.activity", state: "quiet" });
+  await vi.advanceTimersByTimeAsync(21000);
+  expect(transport.setOutputAudible).not.toHaveBeenCalledWith(false);
 });
 afterEach(() => {
   runtime.stop();

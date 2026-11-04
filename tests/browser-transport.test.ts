@@ -6,6 +6,18 @@ import { BrowserTransport, microphoneTrackSettings } from "../lib/browser-transp
 afterEach(() => {
   vi.unstubAllGlobals();
 });
+it("preserves output audibility when remote audio attaches", async () => {
+  const { peer, remoteTrack } = liveConnection();
+  const audio = audioElement();
+  const transport = new BrowserTransport(audio as unknown as HTMLAudioElement);
+  transport.setOutputAudible(false);
+  await transport.start(vi.fn(), vi.fn());
+  peer.ontrack?.({ track: remoteTrack });
+  expect(audio.muted).toBe(true);
+  transport.setOutputAudible(true);
+  expect(audio.muted).toBe(false);
+  transport.close();
+});
 it("exports only useful microphone settings and excludes device identifiers", () => {
   const track = {
     getSettings: () => ({

@@ -1,5 +1,6 @@
 import { CalculusRuntime, type CalculusFragment, type CalculusSnapshot } from "./calculus-runtime";
 import { MathScribeRuntime } from "./math-scribe-runtime";
+import { TutorAudioGate } from "./tutor-audio-gate";
 import { questionRecap, type QuestionOutcomeSnapshot } from "./mae386/question-outcomes";
 import type { RewriteTranscript } from "./mae386/rewrite-proposal";
 import { learnerNavigationIntent, parseLearnerNavigationText, isLearnerStopText } from "./conversation-progression";
@@ -8,7 +9,7 @@ import { terminalRecapComplete } from "./terminal-recap";
 import { evidenceRecap } from "./evidence-recap";
 import { normalizeAssessment, type ConversationAssessment, type ConversationVisit } from "./conversation-assessment";
 import { BrowserTransport } from "../browser-transport";
-import type { ProviderEvent } from "../events";
+import type { ClientCommand, ProviderEvent } from "../events";
 import { MICROPHONE_ONSET_MS, MICROPHONE_ONSET_QUIET_MS, MICROPHONE_QUIET_MS } from "../microphone-turn";
 import { parseConversationStateProposal } from "./conversation-state-classifier";
 import { currentNodeContext, type LessonDefinition } from "./lesson-definition";
@@ -113,6 +114,10 @@ export class LessonRuntime {
   private readonly runtimeId = crypto.randomUUID();
   private readonly createdAt = performance.now();
   private readonly transport: BrowserTransport;
+  private tutorAudioGate?: TutorAudioGate;
+  private tutorAudioTimer?: ReturnType<typeof setTimeout>;
+  private tutorAudioAudible = true;
+  private tutorOutputActivity: "active" | "quiet" | "unavailable" = "unavailable";
   private readonly mathPlugin?: CalculusRuntime | MathScribeRuntime;
   private playbackOrigin?: { generation: number; origin: TrackingOrigin };
   private state: LessonRuntimeState | null = null;
@@ -177,7 +182,12 @@ export class LessonRuntime {
         () => this.publish(),
         (type, detail) => this.log(type, detail),
         (eventId, content) =>
-          this.transport.send({ type: "session.instructions.append", event_id: eventId, delegation_id: null, content }),
+          this.sendInstruction({
+            type: "session.instructions.append",
+            event_id: eventId,
+            delegation_id: null,
+            content,
+          }),
         () => this.stop("learner_stop"),
         request => this.performSupport(request, true),
         () => this.scheduleClassification("spoken_support_quiet"),
@@ -216,7 +226,7 @@ export class LessonRuntime {
         const eventId = `${this.runtimeId}:clarify:${source.visitId}:${source.childTurnId}:${source.transcriptRevision}`;
         this.clarificationRequest = { eventId, source };
         try {
-          this.transport.send({
+          this.sendInstruction({
             type: "session.instructions.append",
             event_id: eventId,
             delegation_id: null,
@@ -342,6 +352,30 @@ export class LessonRuntime {
 
   private now() {
     return performance.now() - this.createdAt;
+  }
+
+  private updateTutorAudio() {
+    const gate = this.tutorAudioGate;
+    if (!gate) return;
+    clearTimeout(this.tutorAudioTimer);
+    const now = this.now();
+    const audible = gate.audible(now);
+    if (audible !== this.tutorAudioAudible) {
+      this.tutorAudioAudible = audible;
+      // Muted playback cannot echo into the learner's microphone; turn handling is unchanged.
+      this.transport.setOutputAudible(audible);
+      this.log(audible ? "tutor_audio.unmuted" : "tutor_audio.muted", { reason: gate.reason() });
+    }
+    const deadline = gate.nextDeadline();
+    if (deadline !== undefined)
+      this.tutorAudioTimer = setTimeout(() => this.updateTutorAudio(), Math.max(0, deadline - now));
+  }
+
+  private sendInstruction(command: Extract<ClientCommand, { type: "session.instructions.append" }>) {
+    this.transport.send(command);
+    this.tutorAudioGate?.instructionSent(this.now());
+    if (this.tutorOutputActivity === "active") this.tutorAudioGate?.outputActivity("active", this.now());
+    this.updateTutorAudio();
   }
   private log(type: string, detail: unknown = null, source?: ClassificationSource | RuntimeSource, speaker?: Speaker) {
     return this.journal.append(type, detail, { state: this.state, revision: this.revision, source, speaker });
@@ -538,6 +572,11 @@ export class LessonRuntime {
         clearTimeout(this.startupTimer);
         this.status = "live";
         this.log("session.started", { sourceId: event.sourceId });
+        if (this.lessonDefinition.gateTutorAudio) {
+          this.tutorAudioGate = new TutorAudioGate(this.now());
+          this.log("tutor_audio.unmuted", { reason: "instruction" });
+          this.updateTutorAudio();
+        }
         if (!this.appendSteering(initialTeachingContext(this.lessonDefinition), this.display.token, true)) return;
         if (!this.transport.openInput(() => this.log("microphone.input_opened")))
           this.fail("Could not open GPT-Live microphone input.");
@@ -617,6 +656,9 @@ export class LessonRuntime {
         return;
       }
       case "output.activity":
+        this.tutorOutputActivity = event.state;
+        this.tutorAudioGate?.outputActivity(event.state, this.now());
+        this.updateTutorAudio();
         this.journal.trackDelivery(
           {
             origin: trackingOrigin(
@@ -643,7 +685,13 @@ export class LessonRuntime {
         this.dispatch({ type: "output.activity", source, state: event.state, atMs: this.now() });
         return;
       case "transcript": {
-        const fragment = { event, source, order: ++this.order };
+        this.updateTutorAudio();
+        const fragment: Fragment = {
+          event,
+          source,
+          order: ++this.order,
+          ...(event.speaker === "sprout" && !this.tutorAudioAudible ? { unheard: true } : {}),
+        };
         if (this.steering && this.state.phase === "active" && !(this.steering.support && event.speaker === "child")) {
           // New-scene transcripts wait for their timeline boundary. Same-node
           // support never blocks authenticated learner speech (especially Stop).
@@ -767,7 +815,12 @@ export class LessonRuntime {
       fragment = { ...fragment, source };
     }
     if (this.mathPlugin)
-      this.log("math.transcript_available", { delta: event.delta, order: fragment.order, speaker }, source, speaker);
+      this.log(
+        "math.transcript_available",
+        { delta: event.delta, order: fragment.order, speaker, ...(fragment.unheard ? { unheard: true } : {}) },
+        source,
+        speaker,
+      );
     this.fragments.push(fragment);
     // Order by provider interval; late delivery must not put an earlier child answer after its acknowledgment.
     this.fragments.sort((a, b) => a.event.startMs - b.event.startMs || a.order - b.order);
@@ -799,7 +852,13 @@ export class LessonRuntime {
     this.revision++;
     this.log(
       "transcript.snapshot",
-      { speaker, transcript: text, startMs: event.startMs, endMs: event.endMs },
+      {
+        speaker,
+        transcript: text,
+        startMs: event.startMs,
+        endMs: event.endMs,
+        ...(fragment.unheard ? { unheard: true } : {}),
+      },
       source,
       speaker,
     );
@@ -1151,7 +1210,7 @@ export class LessonRuntime {
         ? answerRecoveryInstruction(this.lessonDefinition, this.state)
         : this.lessonDefinition.recovery.answerRecoveryInstruction;
     try {
-      this.transport.send({
+      this.sendInstruction({
         type: "session.instructions.append",
         event_id: eventId,
         delegation_id: null,
@@ -1173,7 +1232,7 @@ export class LessonRuntime {
     const eventId = `${check.eventId}:expired`;
     const content = supersedeAnswerCheckInstruction(check.eventId);
     try {
-      this.transport.send({ type: "session.instructions.append", event_id: eventId, delegation_id: null, content });
+      this.sendInstruction({ type: "session.instructions.append", event_id: eventId, delegation_id: null, content });
       this.log(
         "gpt_live.answer_recovery_superseded",
         { eventId, supersededEventId: check.eventId, content },
@@ -1238,7 +1297,7 @@ export class LessonRuntime {
       ),
     };
     try {
-      this.transport.send({ type: "session.instructions.append", event_id: eventId, delegation_id: null, content });
+      this.sendInstruction({ type: "session.instructions.append", event_id: eventId, delegation_id: null, content });
       this.log("gpt_live.steering_append", { eventId, renderToken, context, content }, source);
       return true;
     } catch {
@@ -1410,6 +1469,7 @@ export class LessonRuntime {
       };
     }
     this.status = "ended";
+    clearTimeout(this.tutorAudioTimer);
     this.log("lesson.ended", { reason, runtime: this.state });
     // Request provider close when possible, then release all local resources immediately.
     try {
