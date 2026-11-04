@@ -108,6 +108,7 @@ export function historyRows(session: Session) {
         latex: item.replace("≠", String.raw`\neq`),
       })),
     ],
+    retained: (line.problemDomainRetained ?? []).map(item => item.replace("≠", String.raw`\neq`)),
     badge:
       index === 0
         ? "Problem"

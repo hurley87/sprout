@@ -23,10 +23,16 @@ const figtree = Figtree({
   variable: "--font-figtree",
 });
 
-function Equation({ latex }: { latex: string }) {
+function Equation({ latex, display = false }: { latex: string; display?: boolean }) {
   let html: string;
   try {
-    html = katex.renderToString(latex, { trust: false, throwOnError: true, maxExpand: 100, maxSize: 20 });
+    html = katex.renderToString(latex, {
+      trust: false,
+      throwOnError: true,
+      maxExpand: 100,
+      maxSize: 20,
+      displayMode: display,
+    });
   } catch {
     return <span>{latex}</span>;
   }
@@ -137,7 +143,12 @@ export default function MathStepsDemo({
                   )}
                 </div>
                 {problem.statement && <p>{problem.statement}</p>}
-                <Equation latex={problem.latex} />
+                <Equation latex={problem.latex} display={problem.id === "difference-quotient"} />
+                {problem.id === "difference-quotient" && (
+                  <p className={styles.restrictions}>
+                    Required: <Equation latex={String.raw`x\neq-1,\quad x+h\neq-1,\quad h\neq0`} /> (h ≠ 0 given)
+                  </p>
+                )}
               </>
             )
           )}
@@ -147,7 +158,9 @@ export default function MathStepsDemo({
             <h2 className={styles.sectionLabel}>Your working</h2>
             {!steps.length && !pending && (
               <p className={styles.empty}>
-                Tap the mic and tell Sprout your first step — for example, &apos;flip the second fraction&apos;.
+                {problem?.id === "difference-quotient"
+                  ? "Tap the mic and tell Sprout your first step."
+                  : "Tap the mic and tell Sprout your first step — for example, 'flip the second fraction'."}
               </p>
             )}
             <ol className={styles.history}>
@@ -160,7 +173,7 @@ export default function MathStepsDemo({
                     <summary>
                       <span className={styles.mathLine}>
                         <span aria-hidden="true">=</span>
-                        <Equation latex={row.latex} />
+                        <Equation latex={row.latex} display={problem?.id === "difference-quotient"} />
                       </span>
                       <span
                         className={styles.badge}
@@ -179,6 +192,11 @@ export default function MathStepsDemo({
                       ))}
                     </div>
                   </details>
+                  {row.retained.map(item => (
+                    <p className={styles.retained} key={item}>
+                      <Equation latex={item} /> still required (given)
+                    </p>
+                  ))}
                 </li>
               ))}
               {pending && current && (
@@ -190,7 +208,7 @@ export default function MathStepsDemo({
                   </p>
                   <div className={styles.mathLine}>
                     <span aria-hidden="true">=</span>
-                    <Equation latex={session!.workingLine.latex} />
+                    <Equation latex={session!.workingLine.latex} display={problem?.id === "difference-quotient"} />
                   </div>
                   {trail?.misheard.map((version, index) => (
                     <p className={styles.detailsText} key={index}>
