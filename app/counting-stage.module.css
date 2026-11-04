@@ -135,6 +135,73 @@
   animation-duration: 4s;
 }
 
+.stage:is([data-motion="idle"], [data-motion="calm"])
+  .object:is([data-counting-object="microphone"], [data-counting-object="guitar"], [data-counting-object="bracelet"])
+  .character {
+  animation-name: concert-sway;
+  animation-duration: 4s;
+}
+
+.stage:is([data-motion="idle"], [data-motion="calm"])
+  .object:is([data-counting-object="star"], [data-counting-object="light"])
+  .character {
+  animation-name: concert-glow;
+  animation-duration: 4s;
+}
+
+.stage:is([data-motion="idle"], [data-motion="calm"])
+  .object:is([data-counting-object="bead"], [data-counting-object="concert-butterfly"])
+  .character {
+  animation-name: concert-bob;
+  animation-duration: 3.8s;
+}
+
+.confetti {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.confetti span {
+  position: absolute;
+  left: calc(4% + var(--i) * 8%);
+  top: -3%;
+  width: 0.6rem;
+  height: 0.4rem;
+  border-radius: 0.15rem;
+  background: #e68daf;
+  animation: concert-fall 12s linear calc(var(--i) * -1s) infinite;
+}
+.confetti span:nth-child(3n) {
+  background: #c5a1ee;
+}
+.confetti span:nth-child(3n + 1) {
+  background: #fcd28b;
+}
+
+@keyframes concert-sway {
+  50% {
+    rotate: 2deg;
+  }
+}
+@keyframes concert-glow {
+  50% {
+    filter: brightness(1.05) drop-shadow(0 0 0.35rem #f4c9ed);
+  }
+}
+@keyframes concert-bob {
+  50% {
+    translate: 0 -3%;
+    rotate: 2deg;
+  }
+}
+@keyframes concert-fall {
+  to {
+    translate: 1rem 100vh;
+    rotate: 180deg;
+  }
+}
+
 /* Low motion while the child is answering, and once a session has stopped. */
 .stage[data-motion="calm"] .object .character {
   animation-play-state: paused;
@@ -216,8 +283,23 @@
   animation: float 3.4s ease-in-out calc(var(--i, 0) * -1.1s) infinite;
 }
 
-.stage:has([data-background="party-yard"]) .objects {
+.stage:has([data-background="party-yard"]) .objects,
+.stage:has([data-background="concert-finale"]) .objects {
   width: min(100cqw - 2rem, max(var(--room) * 1.6, 85cqw));
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .stage:has([data-background="concert-finale"]) .complete {
+    top: 16%;
+    font-size: 18px;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .stage:has([data-background="concert-finale"]) .complete {
+    top: 16%;
+    font-size: 18px;
+  }
 }
 
 .stage[data-motion="celebrate"] .complete {
@@ -338,6 +420,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .confetti {
+    display: none;
+  }
   .stage,
   .stage *,
   .stage *::before,

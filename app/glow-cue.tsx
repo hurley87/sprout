@@ -32,9 +32,9 @@ export function useHeldVoiceActivity(activity: VoiceActivity, holdMs: number): V
 /** An abstract moon glow with soft sound bars: the bars rise and fall slowly while Sprout talks, the
  * glow rests warmly with a ring on the child's turn, the ring pulses while the child speaks and
  * everything dims while Sprout thinks. Words stay in the status text for screen readers. */
-export function GlowCue({ activity }: { activity: VoiceActivity }) {
+export function GlowCue({ activity, palette }: { activity: VoiceActivity; palette?: "night" | "pastel" }) {
   return (
-    <span className={styles.cue} data-voice-activity={activity} aria-hidden="true">
+    <span className={styles.cue} data-voice-activity={activity} data-palette={palette} aria-hidden="true">
       <span className={styles.light}>
         <span className={styles.halo} />
         <span className={styles.orb} />

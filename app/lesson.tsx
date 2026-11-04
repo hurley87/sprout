@@ -66,7 +66,7 @@ export default function Lesson({ theme, debug = false }: { theme: CountingTheme;
         <div className={styles.top}>
           <h1 className={styles.title}>Sprout</h1>
           <div className={styles.status} data-status-cue={glowing ? "glow" : undefined}>
-            {glow ? <GlowCue activity={activity} /> : <VoiceCue activity={activity} />}
+            {glow ? <GlowCue activity={activity} palette={theme.palette} /> : <VoiceCue activity={activity} />}
             <p role={shown.kind === "error" ? "alert" : "status"} className={glowing ? "sr-only" : undefined}>
               {shown.message}
             </p>

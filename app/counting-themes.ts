@@ -16,6 +16,7 @@ export type CountingTheme = {
     readonly decorations: readonly { readonly asset: string; readonly left: number }[];
     readonly friends: readonly CountingPlacement[];
     readonly message: string;
+    readonly confetti?: boolean;
   };
   readonly copy: PresentationCopy;
   /** "glow": during the conversation an abstract moon glow replaces the talking/listening pill, held

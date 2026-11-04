@@ -81,6 +81,7 @@ export const CONCERT_THEME: CountingTheme = {
     ]),
   },
   celebration: {
+    confetti: true,
     background: "concert-finale",
     decorations: [],
     friends: [

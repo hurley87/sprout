@@ -62,6 +62,18 @@
     opacity 600ms ease;
 }
 
+.cue[data-palette="pastel"] .bars span {
+  background: #713665;
+}
+
+.cue[data-palette="pastel"] .halo {
+  border-color: #713665;
+}
+
+.cue[data-palette="pastel"] .orb {
+  background: radial-gradient(circle at 38% 35%, #f9d3eb, #c778ba 55%, #713665);
+}
+
 /* Sprout talking: the glow breathes and the bars rise and fall, slowly and out of step. */
 .cue[data-voice-activity="speaking"] .orb {
   opacity: 1;

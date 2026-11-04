@@ -68,10 +68,10 @@
 }
 
 .screen[data-palette="pastel"] .status[data-status-cue="glow"] {
-  background: #6a2b67;
+  background: #fff1fa;
   box-shadow:
-    0 3px 0 #482047,
-    0 0 0 1px #f7c9e5;
+    0 3px 0 #b57aad,
+    0 0 0 1px #6a2b67;
 }
 
 .screen[data-palette="pastel"] .stop {
