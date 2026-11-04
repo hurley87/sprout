@@ -27,12 +27,12 @@ export function factorOut(value: AlgebraExpression, factor: AlgebraExpression): 
       divisor = polynomial(factor);
     if (!dividend || !divisor || isZero(divisor) || constantValue(divisor) === BigInt(1)) return null;
     const order = (left: string, right: string) => {
-      const [lx, ly] = left.split(",").map(Number),
-        [rx, ry] = right.split(",").map(Number);
-      return rx - lx || ry - ly;
+      const [lx, ly, lh] = left.split(",").map(Number),
+        [rx, ry, rh] = right.split(",").map(Number);
+      return rx - lx || ry - ly || rh - lh;
     };
     const leading = [...divisor.keys()].sort(order)[0];
-    const [dx, dy] = leading.split(",").map(Number);
+    const [dx, dy, dh] = leading.split(",").map(Number);
     const coefficient = divisor.get(leading)!;
     let remainder = dividend;
     let remainderDenominator = BigInt(1);
@@ -42,9 +42,9 @@ export function factorOut(value: AlgebraExpression, factor: AlgebraExpression): 
       right === BigInt(0) ? (left < BigInt(0) ? -left : left) : gcd(right, left % right);
     while (!isZero(remainder)) {
       const key = [...remainder.keys()].sort(order)[0];
-      const [rx, ry] = key.split(",").map(Number);
+      const [rx, ry, rh] = key.split(",").map(Number);
       const value = remainder.get(key)!;
-      if (rx < dx || ry < dy) return null;
+      if (rx < dx || ry < dy || rh < dh) return null;
       let numerator = value,
         denominator = remainderDenominator * coefficient;
       if (denominator < BigInt(0)) {
@@ -54,8 +54,8 @@ export function factorOut(value: AlgebraExpression, factor: AlgebraExpression): 
       const common = gcd(numerator, denominator);
       numerator /= common;
       denominator /= common;
-      quotient.set(`${rx - dx},${ry - dy}`, { numerator, denominator });
-      const term = new Map([[`${rx - dx},${ry - dy}`, value]]);
+      quotient.set(`${rx - dx},${ry - dy},${rh - dh}`, { numerator, denominator });
+      const term = new Map([[`${rx - dx},${ry - dy},${rh - dh}`, value]]);
       remainder = subtract(multiply(remainder, constant(coefficient), budget), multiply(divisor, term, budget));
       remainderDenominator *= coefficient;
       const divisorGcd = [...remainder.values()].reduce(
@@ -75,15 +75,16 @@ export function factorOut(value: AlgebraExpression, factor: AlgebraExpression): 
     if (terms.some(([, value]) => value.denominator !== BigInt(1))) return null;
     let result: AlgebraExpression | undefined;
     for (const [key, coefficient] of terms) {
-      const [xDegree, yDegree] = key.split(",").map(Number);
+      const [xDegree, yDegree, hDegree] = key.split(",").map(Number);
       const magnitude = coefficient.numerator < BigInt(0) ? -coefficient.numerator : coefficient.numerator;
       const factors: AlgebraExpression[] = [];
       if (coefficient.denominator !== BigInt(1))
         factors.push({ op: "divide", left: number(Number(magnitude)), right: number(Number(coefficient.denominator)) });
-      else if (magnitude !== BigInt(1) || (!xDegree && !yDegree)) factors.push(number(Number(magnitude)));
+      else if (magnitude !== BigInt(1) || (!xDegree && !yDegree && !hDegree)) factors.push(number(Number(magnitude)));
       for (const [name, degree] of [
         ["x", xDegree],
         ["y", yDegree],
+        ["h", hDegree],
       ] as const) {
         if (degree)
           factors.push(

@@ -78,6 +78,11 @@ export function reduceRational(expression: AlgebraExpression): RationalReduction
         const left = reduce(node.left),
           right = reduce(node.right);
         requireNonzero(right.numerator);
+        if (node.right.op === "multiply") {
+          for (const factor of node.right.args) {
+            if (factor.op === "variable" && factor.name === "h") requireNonzero(variable(factor.name));
+          }
+        }
         return {
           numerator: product(left.numerator, right.denominator),
           denominator: product(left.denominator, right.numerator),
@@ -106,9 +111,9 @@ export function reduceRational(expression: AlgebraExpression): RationalReduction
   try {
     let { numerator, denominator } = reduce(expression);
     const leading = [...denominator.entries()].sort(([left], [right]) => {
-      const [lx, ly] = left.split(",").map(Number),
-        [rx, ry] = right.split(",").map(Number);
-      return rx - lx || ry - ly;
+      const [lx, ly, lh] = left.split(",").map(Number),
+        [rx, ry, rh] = right.split(",").map(Number);
+      return rx - lx || ry - ly || rh - lh;
     })[0];
     if (leading && leading[1] < BigInt(0)) {
       numerator = negate(numerator);

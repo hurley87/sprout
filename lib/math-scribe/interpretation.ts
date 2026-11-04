@@ -118,7 +118,7 @@ const string = { type: "string" };
 const expression = {
   anyOf: [
     object({ op: literal("number"), value: { type: "integer" } }),
-    object({ op: literal("variable"), name: { type: "string", enum: ["x", "y"] } }),
+    object({ op: literal("variable"), name: { type: "string", enum: ["x", "y", "h"] } }),
     ...["add", "multiply"].map(op => object({ op: literal(op), args: { type: "array", items: expr } })),
     ...["subtract", "divide"].map(op => object({ op: literal(op), left: expr, right: expr })),
     object({ op: literal("negate"), argument: expr }),
