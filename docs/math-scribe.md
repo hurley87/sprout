@@ -2,6 +2,8 @@
 
 `/demos/math-steps` is a voice-first scribe: the learner directs, Sprout renders, and the independent [#90 math checker](math-step-checker.md) checks a transition only on request. The interpretation model parses speech into typed interpretations supported by verbatim learner quotes; it does not apply operations or solve. The application applies only its fixed operations. Sprout cannot see paper: it checks **what you tell it**, not what you wrote. There is no handwriting recognition, OCR, upload, or typed math editor in this flow.
 
+`/demos/math-steps/difference-quotient` presents “Simplify the following expression, where h ≠ 0” with `\frac{\frac{x}{x+1}-\frac{x+h}{x+h+1}}{h}`. The session keeps the original expression's restrictions as its problem domain, including the given `h ≠ 0`, even after a valid cancellation removes that restriction from a displayed line.
+
 ## Pipeline and trust boundaries
 
 Speech fragments are grouped by speaker and learner turn. Once output is quiet, a debounce sends unconsumed substantive learner speech to `POST /api/math-scribe`. Unfinished phrase endings use a bounded longer debounce to allow a learner to finish. New transcribed learner words supersede a read in flight (it is cancelled or its result discarded, then everything is re-read); speech onset without words (noise, the tutor's echo) does not. If the latest turn never gets a transcript, earlier unconsumed speech is read after a longer wait. The input contains working and base LaTeX, pending status, learner turns and tutor turns. The server validates bounds and LaTeX, derives addressable parts (IDs, descriptions, aliases and LaTeX) from the working line, and requests the strict `SCRIBE_SCHEMA` from the Responses provider. At most three interpretations are admitted. The validator drops invalid shapes, expressions, unknown parts and unquoted/non-learner evidence; malformed envelopes and provider failures are separate statuses. Tutor speech is context, never evidence.
@@ -43,9 +45,13 @@ The runtime frames messages as application instructions to the tutor, asking it 
 
 Never repair a learner's mathematics or choose their strategy. A mere goal is logged as strategy; a non-unique action needs the learner's result. Even a uniquely determined rewrite is a provisional scribed operation, not independent evidence of handwriting.
 
+Requests for a limit or derivative are recognized as `non-unique` calculus drift: the tutor redirects to simplification without proposing a line. Concept hints depend on the current expression and suggest a rule or concept, not the next expression.
+
 ## Optional speech conventions
 
 Learners need not memorize a grammar. Helpful optional conventions include “open bracket … close bracket,” “all over,” “to the power of,” “squared”/“cubed,” “times,” and “negative two.” Corrections such as “no, I meant …” can revise a proposal. If exponent attachment or fraction scope is ambiguous, request clarification and, when available, present candidate readings—for example `(x^2+2x)^{-2}` versus `x^2+(2x)^{-2}`—rather than guessing.
+
+For the nested fraction, “the top” addresses the outer numerator, “the outside denominator” addresses `h`, and “the second fraction on top” identifies the second inner fraction. “Bring the h down” can direct a flattening operation; ambiguous references such as “cancel the denominator” need clarification rather than a guessed target.
 
 “Factor 2x out of the denominator of the second fraction,” “take out a 6 from the second numerator,” and “pull out y from the first numerator” name both the factor and its part. “Cancel 6x minus 5y” names a literal factor shared by numerator and denominator. If factoring cannot be done exactly with whole-number coefficients inside the brackets (taking 4 out of 12x+30y would need 15/2) or within limits, or the cancellation cannot be located, the scribe asks for the learner's result instead. If the complete result is dictated, it takes precedence over the operation. A follow-up answer uses the open question as context, but its quote must come from the current learner turn.
 
@@ -55,7 +61,7 @@ With `?debug=1`, **Session details** displays the active visit's metrics and arr
 
 ## Limits and deferred work
 
-V1 handles the two authored problems and the bounded algebra AST and operations supported by the checker, not arbitrary mathematics. A deterministic rewrite may be wrong as mathematics or differ from paper; unsupported and domain-sensitive checks are not proof of a complete solution. Recognition and tutor behavior remain probabilistic, and fixtures do not establish real-microphone accuracy. The current terminal recap is “Thanks for practicing.” Non-leading hints and richer feedback, a recap of checked/corrected transitions, and the voice-interface go/no-go belong to [#92](https://github.com/hurley87/sprout/issues/92), alongside instructor and learner evaluation. No fallback modality is scoped here.
+V1 handles the authored problems and the bounded algebra AST and operations supported by the checker, not arbitrary mathematics. A deterministic rewrite may be wrong as mathematics or differ from paper; unsupported and domain-sensitive checks are not proof of a complete solution. Recognition and tutor behavior remain probabilistic, and fixtures do not establish real-microphone accuracy. The current terminal recap is “Thanks for practicing.” Richer feedback, a recap of checked/corrected transitions, and the voice-interface go/no-go belong to [#92](https://github.com/hurley87/sprout/issues/92), alongside instructor and learner evaluation. No fallback modality is scoped here.
 
 ## Fixture benchmark
 
@@ -109,6 +115,26 @@ Tests below are deterministic or mocked; they do not establish live-provider or 
 | Describe change without repeating expression | `tests/math-scribe-interpretation.test.ts` — fixture “negative exponent rewrite”; live (reciprocal problem): describing changes worked; naming the factor (session 7) removed repetition. Negative-exponent live use pending. |
 | Misrecognition separated from math error | `tests/math-scribe-session.test.ts` — “clarifies, logs strategy, and distinguishes recognition corrections”; `tests/math-scribe-runtime.test.ts` — “holds a check spoken in the same breath as the change it would judge” (a line is checked only after it was displayed). Live: a dictation slip (`6x^2-5y`, session 1) was caught by the check and then corrected; whether learners notice misrecognitions on screen before saying check is untested. |
 | Findings state where voice is too cumbersome | Findings above (pilot): full-expression dictation; resolved by naming moves (`factor-out`, `cancel-common-factor`). |
+## Issue #99 acceptance mapping
+
+| Acceptance criterion | Evidence or remaining work |
+| --- | --- |
+| Dedicated route and nested notation | `tests/browser/math-steps.spec.ts` — “difference quotient shows the original nested expression” at desktop and mobile widths. |
+| Voice and workspace without repeated full dictation | `tests/math-scribe-difference-quotient.test.ts` — “verifies contextual reference path and retains the given domain”; real voice use remains pending. |
+| Reference path and given domain | “verifies contextual reference path and retains the given domain” checks each step and retained `h ≠ 0`. |
+| Alternate valid route | “accepts flattening first by multiplying by the reciprocal” checks a distinct first step; “accepts expanded numerator and reordered factors without checkpoints” checks equivalent expansion and reordered factors. An entire alternate route to completion remains untested. |
+| Failure cases | “rejects an inner sign error without leaking an expression”, “preserves a dropped term in the invalid attempted numerator”, “clarifies premature cancellation before and after combining”, “rejects a dictated premature cancellation”, “clarifies ambiguous speech”, “records recognition correction before verifying minus h”, and “recognizes calculus drift without proposing a step”. Validator rejection of guessed ambiguous parts and localized dropped-term feedback still need dedicated coverage. |
+| Undo, correction, clarification, check, hint and Stop | “keeps verified state through hint, check and undo” and the correction and clarification tests above; `tests/math-scribe-runtime.test.ts` — “ignores late responses after stop or a revision-changing undo” covers generic Stop behavior, not the difference-quotient lesson. |
+| Tutor does not pre-solve or claim to see paper | Sign-error and reference-path instruction assertions; exhaustive instruction coverage across all scenarios remains untested. |
+| Real microphone metrics | **Pending — requires a real microphone session.** |
+| Demo recording and voice suitability findings | **Pending — requires a real microphone session.** |
+
+Pilot row template (no results recorded):
+
+| Session | Speech-end → proposal latency | Check → feedback latency | Transcription corrections | Unnecessary clarifications | Invalid-check rate | Full-expression dictation frequency | Recording and limitations |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+|  |  |  |  |  |  |  |  |
+
 # Experimental tutor audio gate
 
 The math-scribe lesson gates playback to application-instructed responses because [GPT-Live decides when to speak](https://developers.openai.com/api/docs/guides/live-migration); the documented alternative is to [control playback at the client or media relay](https://developers.openai.com/api/docs/guides/voice-server-controls). This can mute harmless acknowledgements, and unheard speech remains in the model's own context even though the scribe interpreter excludes it. Transcript delivery timing is only a best-effort indication of what was heard. Timings (`lib/lesson-runtime/tutor-audio-gate.ts`): close after 2.2 s of quiet, close if no reply starts within 6.5 s, never stay open beyond 20 s; speech already playing when an instruction arrives does not count as its reply. A replay of four live sessions estimated these settings mute about three quarters of improvised false claims and clip about 8 s of instructed speech; an instruction arriving mid-improvisation still lets that sentence's tail through, so the gate is a mitigation, not a guarantee.
