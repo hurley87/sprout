@@ -19,6 +19,7 @@ for (const fixture of fixtures)
       pendingStatus: fixture.pendingStatus,
       learnerTurns: fixture.learnerTurns,
       tutorTurns: fixture.tutorTurns,
+      ...("openQuestion" in fixture ? { openQuestion: fixture.openQuestion } : {}),
     });
     const result = await interpretSpeech(input, { generate: async () => ({ interpretations: fixture.expected }) });
     expect(result).toMatchObject({ status: "ok", interpretations: fixture.expected, diagnostics: { dropped: [] } });
@@ -95,6 +96,17 @@ it("drops invalid or non-learner evidence and rejects malformed envelopes", () =
   expect(() => parseScribeInput({ ...input, workingLatex: "?" })).toThrow();
   expect(() => parseScribeInput({ ...input, tutorTurns: input.learnerTurns })).toThrow();
   expect(() => parseScribeInput({ ...input, extra: true })).toThrow();
+  const openQuestion = { question: "Inside?", prompt: "six times", operation: "factor" };
+  const withQuestion = parseScribeInput({ ...input, openQuestion });
+  expect(withQuestion.openQuestion).toEqual(openQuestion);
+  expect(
+    parseScribeWithDrops({ interpretations: [{ intent: "confirm", quote: "six times" }] }, withQuestion).dropped[0]
+      .reason,
+  ).toBe("unquoted");
+  expect(() =>
+    parseScribeInput({ ...input, openQuestion: { ...openQuestion, question: "a".repeat(SCRIBE_LIMITS.question + 1) } }),
+  ).toThrow();
+  expect(() => parseScribeInput({ ...input, openQuestion: { ...openQuestion, extra: true } })).toThrow();
 });
 
 it("uses server-derived parts, the shared model, and bounded provider responses", async () => {

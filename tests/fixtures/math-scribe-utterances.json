@@ -1,5 +1,31 @@
 [
   {
+    "name": "answer factor clarification with inner expression",
+    "workingLatex": "\\frac{x}{y}\\frac{12x+30y}{x}",
+    "baseLatex": "\\frac{x}{y}\\frac{12x+30y}{x}",
+    "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "It would be 2x plus 5 y" }],
+    "tutorTurns": [],
+    "openQuestion": {
+      "question": "What should be inside the brackets after six times?",
+      "prompt": "six times open bracket- open bracket 2 x plus 5 y close bracket",
+      "part": { "id": "p5", "description": "numerator of factor 2", "latex": "12x+30y" },
+      "operation": "factor"
+    },
+    "expected": [{
+      "intent": "propose", "source": "report", "quote": "It would be 2x plus 5 y",
+      "operation": { "kind": "replace-part", "partId": "p5", "expression": {
+        "op": "multiply", "args": [
+          { "op": "number", "value": 6 },
+          { "op": "add", "args": [
+            { "op": "multiply", "args": [{ "op": "number", "value": 2 }, { "op": "variable", "name": "x" }] },
+            { "op": "multiply", "args": [{ "op": "number", "value": 5 }, { "op": "variable", "name": "y" }] }
+          ] }
+        ]
+      } }
+    }]
+  },
+  {
     "name": "flip second fraction",
     "workingLatex": "\\frac{x}{y} \\div \\frac{y}{x}",
     "baseLatex": "\\frac{x}{y} \\div \\frac{y}{x}",

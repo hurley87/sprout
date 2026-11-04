@@ -55,6 +55,51 @@ function propose(state: SessionState, latex: string) {
 }
 
 describe("scribe session", () => {
+  it("retains clarification context and clears it on resolution", () => {
+    const initial = start(String.raw`\frac{x}{y}\frac{12x+30y}{x}`);
+    const partId = part(initial, "numerator of factor 2");
+    const event = { type: "interpretation" as const, requestId: "same", basedOnRevision: 0, at: 1 };
+    const first = reduceSession(initial, {
+      ...event,
+      interpretation: {
+        intent: "propose",
+        source: "instruction",
+        quote: "factor six out",
+        operation: { kind: "non-unique", name: "factor", partId },
+      },
+    }).state;
+    const open = reduceSession(first, {
+      ...event,
+      basedOnRevision: first.revision,
+      interpretation: { intent: "clarify", question: "Inside the brackets?", quote: "six times open bracket" },
+    }).state;
+    expect(initial.clarification).toBeNull();
+    expect(open.clarification).toMatchObject({
+      question: "Inside the brackets?",
+      prompt: "six times open bracket",
+      operation: "factor",
+      part: { id: partId, description: "numerator of factor 2", latex: "12x+30y" },
+    });
+    const followup = say(open, { intent: "clarify", question: "Which expression?", quote: "it would be" }).state;
+    expect(followup.clarification?.prompt).toBe("six times open bracket");
+    const resolved = say(open, {
+      intent: "propose",
+      source: "report",
+      quote: "2x plus 5y",
+      operation: { kind: "replace-part", partId, expression: read("6(2x+5y)") },
+    }).state;
+    expect(resolved.clarification).toBeNull();
+    expect(ui(open, "undo").state.clarification).toBeNull();
+    expect(ui(open, "check").state.clarification).toBeNull();
+    expect(
+      say(open, {
+        intent: "propose",
+        source: "instruction",
+        quote: "factor denominator",
+        operation: { kind: "non-unique", name: "factor", partId: part(open, "denominator of factor 2") },
+      }).state.clarification?.part?.description,
+    ).toBe("denominator of factor 2");
+  });
   it("keeps the incorrect reciprocal and audits the correction", () => {
     let state = start();
     state = say(

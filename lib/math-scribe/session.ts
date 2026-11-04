@@ -4,6 +4,7 @@ import type { AlgebraExpression } from "../math-audit/expression";
 import { formatExpression } from "../math-audit/format";
 import { readAlgebraLatex } from "../math-audit/latex";
 import { applyOperation, type OperationResult, type ScribeOperation } from "./operations";
+import { listParts } from "./parts";
 
 /** Base is the last accepted line; pending versions compose on the working line.
  * Checks alone verify; corrections before a check fix recognition, afterwards edit math.
@@ -61,7 +62,13 @@ export type AcceptedLine = {
   pending?: Pending;
   withdrawn?: boolean;
 };
-export type Clarification = { question: string; readings?: AlgebraExpression[] };
+export type Clarification = {
+  question: string;
+  prompt?: string;
+  part?: { id: string; description: string; latex: string };
+  operation?: string;
+  readings?: AlgebraExpression[];
+};
 type SafeDiscrepancy = { [key: string]: unknown };
 export type SessionNotice =
   | { kind: "proposed"; latex: string; changed: Changed }
@@ -160,7 +167,7 @@ export function reduceSession(
   else if (event.type === "interpretation" && (intent === "propose" || intent === "correct")) {
     const interpretation = event.interpretation as Extract<Interpretation, { intent: "propose" | "correct" }>;
     if (intent === "correct" && !state.pending) {
-      next.clarification = { question: "What would you like to change?" };
+      next.clarification = { question: "What would you like to change?", prompt: interpretation.quote };
       notice = { kind: "clarify", question: next.clarification.question };
     } else if (state.pending && state.pending.versions.length >= SESSION_LIMITS.versions) notice = { kind: "limit" };
     else {
@@ -169,7 +176,19 @@ export function reduceSession(
         interpretation.operation,
       );
       if (!result.ok) {
-        next.clarification = { question: result.detail };
+        const operation = interpretation.operation;
+        const part =
+          "partId" in operation
+            ? listParts(state.pending?.versions[state.pending.current].expression ?? state.base).find(
+                item => item.id === operation.partId,
+              )
+            : undefined;
+        next.clarification = {
+          question: result.detail,
+          prompt: interpretation.quote,
+          ...(part ? { part: { id: part.id, description: part.description, latex: part.latex } } : {}),
+          ...(operation.kind === "non-unique" ? { operation: operation.name } : {}),
+        };
         notice = { kind: "clarify", question: result.detail };
       } else {
         version = {
@@ -195,8 +214,14 @@ export function reduceSession(
       }
     }
   } else if (event.type === "interpretation" && event.interpretation.intent === "clarify") {
+    const sameRequest = state.log.at(-1)?.requestId === event.requestId;
     next.clarification = copy({
+      ...(state.clarification ?? {}),
       question: event.interpretation.question,
+      ...((sameRequest || !state.clarification?.prompt) && event.interpretation.quote
+        ? { prompt: event.interpretation.quote }
+        : {}),
+      readings: undefined,
       ...(event.interpretation.readings ? { readings: event.interpretation.readings } : {}),
     });
     notice = { kind: "clarify", question: next.clarification.question };
@@ -208,6 +233,7 @@ export function reduceSession(
     };
     notice = { kind: "confirmed" };
   } else if (intent === "undo") {
+    next.clarification = null;
     if (state.pending) {
       const pending = state.pending;
       const parent = pending.versions[pending.current].parent;
@@ -227,6 +253,7 @@ export function reduceSession(
       }
     }
   } else if (intent === "request-check" && state.pending) {
+    next.clarification = null;
     if (state.history.length >= SESSION_LIMITS.acceptedLines && state.pending.status !== "invalid")
       notice = { kind: "limit" };
     else {
@@ -304,9 +331,11 @@ export function reduceSession(
     notice = { kind: "logged", intent };
   // Only state changes advance the revision: a stale drop, no-op or logged-only event must
   // not invalidate interpretations requested against the unchanged state.
-  const revision = ["stale", "nothing-changed", "logged", "limit"].includes(notice.kind)
-    ? state.revision
-    : state.revision + 1;
+  if (!stale && intent === "request-check") next.clarification = null;
+  const revision =
+    ["stale", "nothing-changed", "logged", "limit"].includes(notice.kind) && next.clarification === state.clarification
+      ? state.revision
+      : state.revision + 1;
   next.revision = revision;
   next.log = [
     ...state.log,
