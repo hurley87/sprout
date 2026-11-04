@@ -88,7 +88,7 @@ export function IceCreamStage({
           );
         })}
       </div>
-      {!node && <p className={styles.complete}>The ice cream shop is ready! Great work!</p>}
+      {!node && <p className={styles.complete}>Every order is done. Great work, little helper!</p>}
       {(pending || unavailable) && (
         <div className={styles.loading} aria-hidden="true" data-artwork-state={unavailable ? "error" : "loading"}>
           {unavailable ? "The picture couldn’t load. Ask a grown-up to reload." : "Getting the picture ready…"}

@@ -127,12 +127,19 @@
   .stage[data-scene-id="complete"] .objects {
     width: min(95cqw, var(--room) * 2.5);
   }
+  .stage[data-scene-id="complete"] .object:is(:nth-child(1), :nth-child(2), :nth-child(3), :nth-child(8)) {
+    translate: clamp(-9rem, -12cqw, -5rem) 0;
+  }
+  .stage[data-scene-id="complete"]
+    .object:is(:nth-child(4), :nth-child(5), :nth-child(6), :nth-child(7), :nth-child(9)) {
+    translate: clamp(5rem, 12cqw, 9rem) 0;
+  }
 }
 @media (max-height: 500px) and (orientation: landscape) {
   .complete {
-    left: 17%;
-    top: 37%;
-    max-width: 28%;
-    width: auto;
+    left: 50%;
+    top: 72%;
+    max-width: 90%;
+    width: max-content;
   }
 }
