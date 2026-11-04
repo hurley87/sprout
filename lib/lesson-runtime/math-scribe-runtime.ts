@@ -22,6 +22,8 @@ const substance = (text: string) =>
     .replace(/\[[^\]]*\]/g, " ")
     .replace(FILLER, " ")
     .trim();
+/** Debounce multiples to wait for a late transcript before reading earlier speech anyway. */
+const MISSING_TRANSCRIPT_WAIT = 5;
 const RETRYABLE = new Set(["timeout", "provider-failure", "malformed"]);
 const areas: Record<string, string> = {
   "reciprocal-numerator": "the numerator of the second fraction",
@@ -215,16 +217,37 @@ export class MathScribeRuntime {
       .join("");
   }
 
+  /** Speech onset alone no longer cancels a read in flight: echo of the tutor's own voice and
+   * room noise start "speech" that never produces words, and cancelling on it lost whole
+   * instructions. New learner words supersede a read instead (`onQuiet`, `newLearnerWords`). */
   onSpeechStarted(confirmed: boolean) {
     if (!confirmed) return;
     clearTimeout(this.timer);
-    this.cancelCheck();
+  }
+
+  private newLearnerWords() {
+    return this.groups().some(
+      group =>
+        group.speaker === "child" &&
+        group.orders.some(order => !this.requestOrders.has(order)) &&
+        substance(group.text),
+    );
   }
 
   onQuiet(): boolean {
     clearTimeout(this.timer);
     const current = this.context();
-    if (!this.active || this.stopped || !current.quiet || !current.state?.hasChildTranscript) return true;
+    if (!this.active || this.stopped || !current.quiet) return true;
+    if (!current.state?.hasChildTranscript) {
+      // The latest turn has no words (yet). A late transcript re-enters here and reschedules;
+      // if none comes (noise, echo), still read the speech left unprocessed from earlier turns.
+      const visit = this.active;
+      if (!this.request && this.groups().some(group => group.speaker === "child" && substance(group.text)))
+        this.timer = setTimeout(() => {
+          if (this.active === visit && this.context().quiet && !this.stopped && !this.request) void this.interpret();
+        }, this.debounceMs * MISSING_TRANSCRIPT_WAIT);
+      return true;
+    }
     const text = this.learnerText();
     if (isLearnerStopText(text)) {
       this.stop();
@@ -234,16 +257,7 @@ export class MathScribeRuntime {
       this.cancelCheck();
       return false;
     }
-    if (
-      this.request &&
-      this.groups().some(
-        group =>
-          group.speaker === "child" &&
-          group.orders.some(order => !this.requestOrders.has(order)) &&
-          substance(group.text),
-      )
-    )
-      this.cancelCheck();
+    if (this.request && this.newLearnerWords()) this.cancelCheck();
     this.speechEndedAt = Date.now();
     const visit = this.active;
     this.timer = setTimeout(() => {
@@ -318,6 +332,13 @@ export class MathScribeRuntime {
         return;
       }
       if (status === "ok" && body.interpretations) {
+        if (this.newLearnerWords()) {
+          // The learner kept talking while this was read: re-read everything together.
+          record.status = "superseded";
+          this.log("math-scribe.request", record);
+          this.reinterpretSoon(visit);
+          break;
+        }
         if (visit.session.revision !== revision) {
           // A UI action changed the line meanwhile: re-read the same speech against it.
           record.status = "stale";

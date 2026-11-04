@@ -154,10 +154,11 @@ describe("math scribe voice runtime", () => {
     await vi.advanceTimersByTimeAsync(100);
     const signal = fetcher.mock.calls[0][1].signal as AbortSignal;
     runtime.onSpeechStarted(true);
-    expect(signal.aborted).toBe(true);
+    expect(signal.aborted).toBe(false);
     respond({ intent: "describe-strategy", quote: "second" });
     fragment("second");
     runtime.onQuiet();
+    expect(signal.aborted).toBe(true);
     await vi.advanceTimersByTimeAsync(100);
     expect(JSON.parse(fetcher.mock.calls[1][1].body).learnerTurns).toHaveLength(2);
     resolve({
@@ -166,6 +167,80 @@ describe("math scribe voice runtime", () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(messages).toHaveLength(1);
+  });
+
+  it("keeps a read when speech starts but no words follow (noise or the tutor's echo)", async () => {
+    let resolve!: (value: unknown) => void;
+    fetcher.mockImplementationOnce(
+      () =>
+        new Promise(done => {
+          resolve = done;
+        }),
+    );
+    fragment("flip the second fraction");
+    runtime.onQuiet();
+    await vi.advanceTimersByTimeAsync(100);
+    runtime.onSpeechStarted(true);
+    state = { ...state, childTurnId: ++turn, hasChildTranscript: false };
+    runtime.onQuiet();
+    resolve({
+      json: async () => ({
+        status: "ok",
+        interpretations: [proposal({ kind: "division-to-reciprocal", partId: part("divisor") })],
+      }),
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(runtime.snapshot().session?.pending?.status).toBe("interpreted");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-reads earlier speech when the latest turn never gets a transcript", async () => {
+    let resolve!: (value: unknown) => void;
+    fetcher.mockImplementationOnce(
+      () =>
+        new Promise(done => {
+          resolve = done;
+        }),
+    );
+    fragment("factor out y");
+    runtime.onQuiet();
+    await vi.advanceTimersByTimeAsync(100);
+    runtime.cancelCheck();
+    resolve({ json: async () => ({ status: "ok", interpretations: [] }) });
+    await vi.advanceTimersByTimeAsync(0);
+    state = { ...state, childTurnId: ++turn, hasChildTranscript: false };
+    respond({ intent: "describe-strategy", quote: "factor out y" });
+    runtime.onQuiet();
+    await vi.advanceTimersByTimeAsync(499);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(fetcher.mock.calls[1][1].body).learnerTurns.map((t: { text: string }) => t.text)).toEqual([
+      "factor out y",
+    ]);
+  });
+
+  it("discards a read that finishes after the learner said more", async () => {
+    let resolve!: (value: unknown) => void;
+    fetcher.mockImplementationOnce(
+      () =>
+        new Promise(done => {
+          resolve = done;
+        }),
+    );
+    fragment("y times open bracket six x minus five y");
+    runtime.onQuiet();
+    await vi.advanceTimersByTimeAsync(100);
+    fragment("close bracket");
+    resolve({
+      json: async () => ({
+        status: "ok",
+        interpretations: [proposal({ kind: "replace-line", expression: expression("y") }, "report")],
+      }),
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(runtime.report().visits[0].requests[0].status).toBe("superseded");
+    expect(runtime.snapshot().session?.pending).toBeNull();
   });
 
   it("ignores late responses after stop or a revision-changing undo", async () => {
