@@ -170,7 +170,8 @@
   height: 0.4rem;
   border-radius: 0.15rem;
   background: #e68daf;
-  animation: concert-fall 12s linear calc(var(--i) * -1s) infinite;
+  /* Scattered start times and speeds, so the pieces drift independently rather than in a line. */
+  animation: concert-fall calc(11s + var(--i) * 0.25s) linear calc(var(--i) * -5.3s) infinite;
 }
 .confetti span:nth-child(3n) {
   background: #c5a1ee;
@@ -286,13 +287,6 @@
 .stage:has([data-background="party-yard"]) .objects,
 .stage:has([data-background="concert-finale"]) .objects {
   width: min(100cqw - 2rem, max(var(--room) * 1.6, 85cqw));
-}
-
-@media (orientation: landscape) and (max-height: 500px) {
-  .stage:has([data-background="concert-finale"]) .complete {
-    top: 16%;
-    font-size: 18px;
-  }
 }
 
 @media (orientation: landscape) and (max-height: 500px) {

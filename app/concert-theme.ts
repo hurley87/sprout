@@ -64,12 +64,13 @@ export const CONCERT_THEME: CountingTheme = {
       placement("stage-light-blue", 0.6, 0.37, 0.17),
       placement("stage-light-yellow", 0.8, 0.37, 0.17),
     ]),
+    // Two rows (3 + 2) keep each bead large on a narrow phone.
     "count-5-beads": scene("bead", [
-      placement("bead-pink", 0.13, 0.5, 0.16),
-      placement("bead-lavender", 0.315, 0.5, 0.16),
-      placement("bead-blue", 0.5, 0.5, 0.16),
-      placement("bead-yellow", 0.685, 0.5, 0.16),
-      placement("bead-mint", 0.87, 0.5, 0.16),
+      placement("bead-pink", 0.22, 0.32, 0.22),
+      placement("bead-lavender", 0.5, 0.32, 0.22),
+      placement("bead-blue", 0.78, 0.32, 0.22),
+      placement("bead-yellow", 0.36, 0.7, 0.22),
+      placement("bead-mint", 0.64, 0.7, 0.22),
     ]),
     "count-6-butterflies": scene("concert-butterfly", [
       placement("butterfly-pink", 0.22, 0.3, 0.2),

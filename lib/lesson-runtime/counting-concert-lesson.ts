@@ -15,7 +15,7 @@ const rounds = [
     object: "microphone",
     quantity: 1,
     prompt:
-      "A microphone is ready for the show. How many microphones do you see? Success story idea: the show is getting ready.",
+      "Something sparkly is waiting on the stage for the show. How many microphones do you see? Success story idea: the show is getting ready.",
   },
   {
     object: "guitar",

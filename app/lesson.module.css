@@ -74,6 +74,20 @@
     0 0 0 1px #6a2b67;
 }
 
+.screen[data-palette="pastel"] .play {
+  border-color: #fff1fa;
+  background: #8a3f84;
+  box-shadow:
+    0 8px 0 #5c2558,
+    0 16px 32px #48204740;
+}
+
+.screen[data-palette="pastel"] .play:active {
+  box-shadow:
+    0 4px 0 #5c2558,
+    0 8px 16px #48204740;
+}
+
 .screen[data-palette="pastel"] .stop {
   border-color: #6a2b67;
   background: #fff1fa;
