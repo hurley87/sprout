@@ -24,7 +24,7 @@ export const GARDEN_COPY: PresentationCopy = {
 
 export function lessonPresentation(
   snapshot: PresentationSnapshot | null,
-  successNode?: { quantity: number; object: string } | null,
+  successNode?: { quantity: number; object: string } | { label: string } | null,
   copy: PresentationCopy = GARDEN_COPY,
 ) {
   if (snapshot?.error)
@@ -40,7 +40,10 @@ export function lessonPresentation(
   if (successNode)
     return {
       kind: "understood",
-      message: `${successNode.quantity} ${successNode.quantity === 1 ? successNode.object : (copy.plurals?.[successNode.object] ?? `${successNode.object}s`)}!`,
+      message:
+        "label" in successNode
+          ? successNode.label
+          : `${successNode.quantity} ${successNode.quantity === 1 ? successNode.object : (copy.plurals?.[successNode.object] ?? `${successNode.object}s`)}!`,
     };
   if (snapshot.runtime?.outputActivity === "active") return { kind: "speaking", message: "Sprout is talking…" };
   if (snapshot.runtime?.childSpeaking) return { kind: "listening", message: "Sprout is listening…" };
