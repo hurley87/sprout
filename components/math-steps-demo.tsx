@@ -10,7 +10,8 @@ import { MicButton } from "./calculus/mic-button";
 import { useMicState } from "./calculus/use-mic-state";
 import { useVoiceDemo } from "./voice-demo/use-voice-demo";
 import { scrubSecrets } from "./voice-demo/diagnostics";
-import { earlierVersionLabel, historyRows, proposalLabel } from "./math-steps-model";
+import { historyRows, proposalLabel, spokenTrail } from "./math-steps-model";
+import type { PendingVersion } from "@/lib/math-scribe/session";
 import theme from "./calculus/calculus-theme.module.css";
 import styles from "./math-steps-demo.module.css";
 
@@ -28,6 +29,26 @@ function Equation({ latex }: { latex: string }) {
     return <span>{latex}</span>;
   }
   return <span className={styles.equation} dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
+function SpokenTrail({ versions, current }: { versions: readonly PendingVersion[]; current: number | undefined }) {
+  const trail = spokenTrail(versions, current);
+  if (!trail.quotes.length) return null;
+  return (
+    <div className={styles.earlier}>
+      <p>You said:</p>
+      <ol className={styles.spokenTrail}>
+        {trail.quotes.map((quote, index) => (
+          <li key={index}>“{quote}”</li>
+        ))}
+      </ol>
+      {trail.misheard.map((version, index) => (
+        <p key={index}>
+          Misheard: <Equation latex={formatExpression(version.expression)} /> “{version.quote}”
+        </p>
+      ))}
+    </div>
+  );
 }
 
 export default function MathStepsDemo({ debug = false }: { debug?: boolean }) {
@@ -97,15 +118,7 @@ export default function MathStepsDemo({ debug = false }: { debug?: boolean }) {
                     <li key={row.id} className={row.withdrawn ? styles.withdrawn : ""}>
                       <div>
                         <Equation latex={row.latex} />
-                        {row.versions.map(
-                          (version, index) =>
-                            index !== row.current && (
-                              <p className={styles.earlier} key={index}>
-                                {earlierVersionLabel(row.versions, index)}{" "}
-                                <Equation latex={formatExpression(version.expression)} /> <span>“{version.quote}”</span>
-                              </p>
-                            ),
-                        )}
+                        <SpokenTrail versions={row.versions} current={row.current} />
                         {row.domainNotes.map(note => (
                           <p className={styles.earlier} key={`${note.label}:${note.latex}`}>
                             {note.label} <Equation latex={note.latex} />
@@ -127,16 +140,7 @@ export default function MathStepsDemo({ debug = false }: { debug?: boolean }) {
                 <>
                   <Equation latex={session!.workingLine.latex} />
                   <p className={styles.status}>{proposalLabel(pending.status, role)}</p>
-                  <p>“{current.quote}”</p>
-                  {pending.versions.map(
-                    (version, index) =>
-                      index !== pending.current && (
-                        <p className={styles.earlier} key={index}>
-                          {earlierVersionLabel(pending.versions, index)} <Equation latex={version.latex} />{" "}
-                          <span>“{version.quote}”</span>
-                        </p>
-                      ),
-                  )}
+                  <SpokenTrail versions={pending.versions} current={pending.current} />
                 </>
               ) : (
                 <p>Tell Sprout what you want to change.</p>

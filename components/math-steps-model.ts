@@ -34,15 +34,22 @@ export function proposalLabel(status: LineStatus, role?: string): string {
   }
 }
 
-/** Label for a pending version that is no longer current, from what happened to it next: a
- * learner fix of something misheard, an ordinary further edit, or an undo back past it. */
-export function earlierVersionLabel(
-  versions: readonly { parent: number | null; cause: "edit" | "recognition-correction" }[],
-  index: number,
-): string {
-  const next = versions.filter(version => version.parent === index);
-  if (next.some(version => version.cause === "recognition-correction")) return "You corrected:";
-  return next.length ? "Earlier version:" : "Undone:";
+export function spokenTrail<
+  T extends { parent: number | null; cause: "edit" | "recognition-correction"; quote: string },
+>(versions: readonly T[], current: number | undefined): { quotes: string[]; misheard: T[] } {
+  const chain: T[] = [];
+  const visited = new Set<number>();
+  while (current !== undefined && current !== null && versions[current] && !visited.has(current)) {
+    visited.add(current);
+    const version: T = versions[current];
+    chain.push(version);
+    current = version.parent ?? undefined;
+  }
+  chain.reverse();
+  return {
+    quotes: chain.map(version => version.quote),
+    misheard: chain.filter((_, index) => chain[index + 1]?.cause === "recognition-correction"),
+  };
 }
 
 const DOMAIN_BADGES: Record<string, string> = {
