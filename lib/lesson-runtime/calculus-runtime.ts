@@ -64,7 +64,7 @@ export function calculusRecap(visits: readonly CalculusVisit[]): string {
   return sentences.join(" ");
 }
 
-export type CalculusFragment = { event: TranscriptEvent; source: RuntimeSource; order: number };
+export type CalculusFragment = { event: TranscriptEvent; source: RuntimeSource; order: number; unheard?: boolean };
 type Context = {
   state: LessonRuntimeState | null;
   fragments: readonly CalculusFragment[];

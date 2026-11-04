@@ -41,7 +41,8 @@ export function formatExpression(expression: AlgebraExpression): string {
         })
         .join("");
     case "negate":
-      return `-${wrap(expression.argument, 3)}`;
+      // "-6x" and "-y(6x-5y)" read back as the same negated product; powers stay unwrapped.
+      return `-${wrap(expression.argument, PRODUCT)}`;
     case "divide":
       return String.raw`\frac{${formatExpression(expression.left)}}{${formatExpression(expression.right)}}`;
     case "power": {

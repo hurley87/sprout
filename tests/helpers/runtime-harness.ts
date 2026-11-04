@@ -15,7 +15,9 @@ type UntimedEvent<Event = LessonRuntimeEvent> = Event extends LessonRuntimeEvent
 export function createReducerHarness(runtimeId: string, options: Parameters<typeof createLessonRuntime>[1]) {
   let state = createLessonRuntime(runtimeId, options);
   return {
-    get state() { return state; },
+    get state() {
+      return state;
+    },
     send(event: UntimedEvent, deltaMs = 1) {
       const result = reduceLessonRuntime(state, { ...event, atMs: state.nowMs + deltaMs }, options.lesson);
       state = result.state;
@@ -26,10 +28,7 @@ export function createReducerHarness(runtimeId: string, options: Parameters<type
 
 /** An ordinary complete learner turn, not a substitute for stale-source or VAD tests.
  * Revision is explicit; every event still passes through the reducer. */
-export function prepareLearnerClassification(
-  harness: ReturnType<typeof createReducerHarness>,
-  revision: number,
-) {
+export function prepareLearnerClassification(harness: ReturnType<typeof createReducerHarness>, revision: number) {
   harness.send({ type: "child.turn.started", source: runtimeSource(harness.state) });
   harness.send({ type: "transcript.updated", source: runtimeSource(harness.state), speaker: "child", revision });
   harness.send({ type: "child.turn.ended", source: runtimeSource(harness.state) });
@@ -43,6 +42,7 @@ type RuntimeTransport = {
   send: (command: ClientCommand) => void;
   close: () => void;
   start?: (lessonId: string) => void;
+  setOutputAudible?: (audible: boolean) => void;
 };
 
 // Keep each test file's hoisted mocks local; send/close retain their mock APIs.
@@ -67,6 +67,7 @@ export function mockBrowserTransport(transport: RuntimeTransport, options: { req
       return true;
     }
     send = transport.send;
+    setOutputAudible = (audible: boolean) => transport.setOutputAudible?.(audible);
     close = transport.close;
   };
 }

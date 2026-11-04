@@ -71,6 +71,19 @@ export function learnerRequestedNext(transcript: string, authored = false) {
 }
 
 /** Parse one authenticated turn. Quoted, reported, conditional or extended speech is not Stop. */
+/** The math scribe's spoken finish ("I'm done", "that's my answer"); scribe lessons only. */
+export function isScribeFinishText(turnText: string) {
+  const text = turnText
+    .trim()
+    .replace(/[’]/gu, "'")
+    .replace(/^(?:(?:um+|uh+|erm+|okay|ok|well|so)[,\s-]+)+/iu, "")
+    .replace(/^(?:(?:i'm|i am)[\s]*[-,][\s]*)+/iu, "")
+    .replace(/\s+/gu, " ");
+  return /^(?:(?:i'm|i am) (?:done|finished)(?: with this problem)?|done|finished|that's (?:my answer|the answer|the solution))[.!?]*$/iu.test(
+    text,
+  );
+}
+
 export function isLearnerStopText(turnText: string) {
   return /^(?:please[ ,]+)?stop(?: (?:the |this )?(?:session|practice))?(?:,? please)?[.!]*$/iu.test(turnText.trim());
 }

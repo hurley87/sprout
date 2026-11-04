@@ -1,0 +1,488 @@
+[
+  {
+    "name": "factor self correction uses last factor",
+    "workingLatex": "12x^2-10xy", "baseLatex": "12x^2-10xy", "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "factor out six x or 2x" }], "tutorTurns": [],
+    "expected": [{ "intent": "propose", "source": "instruction", "quote": "factor out six x or 2x", "operation": { "kind": "factor-out", "partId": "p0", "factor": { "op": "multiply", "args": [{ "op": "number", "value": 2 }, { "op": "variable", "name": "x" }] } } }]
+  },
+  {
+    "name": "factor with dictated result uses stated result",
+    "workingLatex": "12x+30y", "baseLatex": "12x+30y", "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "take out six, that is six times x plus five y" }], "tutorTurns": [],
+    "expected": [{ "intent": "propose", "source": "instruction", "quote": "take out six, that is six times x plus five y", "operation": { "kind": "replace-part", "partId": "p0", "expression": { "op": "multiply", "args": [{ "op": "number", "value": 6 }, { "op": "add", "args": [{ "op": "variable", "name": "x" }, { "op": "multiply", "args": [{ "op": "number", "value": 5 }, { "op": "variable", "name": "y" }] }] }] } } }]
+  },
+  {
+    "name": "factor 2x from second denominator",
+    "workingLatex": "\\frac{x}{y}\\frac{12x+30y}{12x^2-10xy}",
+    "baseLatex": "\\frac{x}{y}\\frac{12x+30y}{12x^2-10xy}",
+    "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "factor 2x out of the denominator of the second fraction" }],
+    "tutorTurns": [],
+    "expected": [{ "intent": "propose", "source": "instruction", "quote": "factor 2x out of the denominator of the second fraction", "operation": { "kind": "factor-out", "partId": "p12", "factor": { "op": "multiply", "args": [{ "op": "number", "value": 2 }, { "op": "variable", "name": "x" }] } } }]
+  },
+  {
+    "name": "take six from second numerator",
+    "workingLatex": "\\frac{x}{y}\\frac{12x+30y}{x}", "baseLatex": "\\frac{x}{y}\\frac{12x+30y}{x}", "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "take out a 6 from the second numerator" }], "tutorTurns": [],
+    "expected": [{ "intent": "propose", "source": "instruction", "quote": "take out a 6 from the second numerator", "operation": { "kind": "factor-out", "partId": "p5", "factor": 6 } }]
+  },
+  {
+    "name": "pull y from first numerator",
+    "workingLatex": "\\frac{6xy-5y^2}{x}", "baseLatex": "\\frac{6xy-5y^2}{x}", "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "pull out y from the first numerator" }], "tutorTurns": [],
+    "expected": [{ "intent": "propose", "source": "instruction", "quote": "pull out y from the first numerator", "operation": { "kind": "factor-out", "partId": "p1", "factor": { "op": "variable", "name": "y" } } }]
+  },
+  {
+    "name": "cancel named common factor",
+    "workingLatex": "\\frac{6x-5y}{6x-5y}", "baseLatex": "\\frac{6x-5y}{6x-5y}", "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "cancel the 6x minus 5y" }], "tutorTurns": [],
+    "expected": [{ "intent": "propose", "source": "instruction", "quote": "cancel the 6x minus 5y", "operation": { "kind": "cancel-common-factor", "factor": { "op": "subtract", "left": { "op": "multiply", "args": [{ "op": "number", "value": 6 }, { "op": "variable", "name": "x" }] }, "right": { "op": "multiply", "args": [{ "op": "number", "value": 5 }, { "op": "variable", "name": "y" }] } } } }]
+  },
+  {
+    "name": "cancel named sum top and bottom",
+    "workingLatex": "\\frac{2x+5y}{2x+5y}", "baseLatex": "\\frac{2x+5y}{2x+5y}", "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "cancel the 2x plus 5y from top and bottom" }], "tutorTurns": [],
+    "expected": [{ "intent": "propose", "source": "instruction", "quote": "cancel the 2x plus 5y from top and bottom", "operation": { "kind": "cancel-common-factor", "factor": { "op": "add", "args": [{ "op": "multiply", "args": [{ "op": "number", "value": 2 }, { "op": "variable", "name": "x" }] }, { "op": "multiply", "args": [{ "op": "number", "value": 5 }, { "op": "variable", "name": "y" }] }] } } }]
+  },
+  {
+    "name": "answer factor clarification with inner expression",
+    "workingLatex": "\\frac{x}{y}\\frac{12x+30y}{x}",
+    "baseLatex": "\\frac{x}{y}\\frac{12x+30y}{x}",
+    "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "It would be 2x plus 5 y" }],
+    "tutorTurns": [],
+    "openQuestion": {
+      "question": "What should be inside the brackets after six times?",
+      "prompt": "six times open bracket- open bracket 2 x plus 5 y close bracket",
+      "part": { "id": "p5", "description": "numerator of factor 2", "latex": "12x+30y" },
+      "operation": "factor"
+    },
+    "expected": [{
+      "intent": "propose", "source": "report", "quote": "It would be 2x plus 5 y",
+      "operation": { "kind": "replace-part", "partId": "p5", "expression": {
+        "op": "multiply", "args": [
+          { "op": "number", "value": 6 },
+          { "op": "add", "args": [
+            { "op": "multiply", "args": [{ "op": "number", "value": 2 }, { "op": "variable", "name": "x" }] },
+            { "op": "multiply", "args": [{ "op": "number", "value": 5 }, { "op": "variable", "name": "y" }] }
+          ] }
+        ]
+      } }
+    }]
+  },
+  {
+    "name": "flip second fraction",
+    "workingLatex": "\\frac{x}{y} \\div \\frac{y}{x}",
+    "baseLatex": "\\frac{x}{y} \\div \\frac{y}{x}",
+    "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "I'll change the division to multiplication and flip the second fraction" }],
+    "tutorTurns": [],
+    "expected": [
+      {
+        "intent": "propose",
+        "source": "instruction",
+        "operation": { "kind": "division-to-reciprocal", "partId": "p0" },
+        "quote": "I'll change the division to multiplication and flip the second fraction"
+      }
+    ]
+  },
+  {
+    "name": "faithful wrong numerator",
+    "workingLatex": "\\frac{12x+30y}{x}",
+    "baseLatex": "\\frac{12x+30y}{x}",
+    "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "the new numerator is twelve plus thirty y" }],
+    "tutorTurns": [],
+    "expected": [
+      {
+        "intent": "propose",
+        "source": "report",
+        "operation": {
+          "kind": "replace-part",
+          "partId": "p1",
+          "expression": {
+            "op": "add",
+            "args": [
+              { "op": "number", "value": 12 },
+              {
+                "op": "multiply",
+                "args": [
+                  { "op": "number", "value": 30 },
+                  { "op": "variable", "name": "y" }
+                ]
+              }
+            ]
+          }
+        },
+        "quote": "the new numerator is twelve plus thirty y"
+      }
+    ]
+  },
+  {
+    "name": "correct numerator",
+    "workingLatex": "\\frac{12+30y}{x}",
+    "baseLatex": "\\frac{12x+30y}{x}",
+    "pendingStatus": "interpreted",
+    "learnerTurns": [{ "id": "l1", "text": "sorry, I meant twelve x plus thirty y" }],
+    "tutorTurns": [],
+    "expected": [
+      {
+        "intent": "correct",
+        "operation": {
+          "kind": "replace-part",
+          "partId": "p1",
+          "expression": {
+            "op": "add",
+            "args": [
+              {
+                "op": "multiply",
+                "args": [
+                  { "op": "number", "value": 12 },
+                  { "op": "variable", "name": "x" }
+                ]
+              },
+              {
+                "op": "multiply",
+                "args": [
+                  { "op": "number", "value": 30 },
+                  { "op": "variable", "name": "y" }
+                ]
+              }
+            ]
+          }
+        },
+        "quote": "sorry, I meant twelve x plus thirty y"
+      }
+    ]
+  },
+  {
+    "name": "strategy",
+    "workingLatex": "x+1",
+    "baseLatex": "x+1",
+    "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "I'll simplify it" }],
+    "tutorTurns": [],
+    "expected": [{ "intent": "describe-strategy", "quote": "I'll simplify it" }]
+  },
+  {
+    "name": "fraction across pauses",
+    "workingLatex": "x",
+    "baseLatex": "x",
+    "pendingStatus": "none",
+    "learnerTurns": [
+      { "id": "l1", "text": "my next line is x" },
+      { "id": "l2", "text": "all over y" }
+    ],
+    "tutorTurns": [],
+    "expected": [
+      {
+        "intent": "propose",
+        "source": "report",
+        "operation": {
+          "kind": "replace-line",
+          "expression": {
+            "op": "divide",
+            "left": { "op": "variable", "name": "x" },
+            "right": { "op": "variable", "name": "y" }
+          }
+        },
+        "quote": "my next line is x all over y"
+      }
+    ]
+  },
+  {
+    "name": "half fraction",
+    "workingLatex": "x",
+    "baseLatex": "x",
+    "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "x over" }],
+    "tutorTurns": [],
+    "expected": [{ "intent": "clarify", "question": "What is the denominator?" }]
+  },
+  {
+    "name": "check step",
+    "workingLatex": "x",
+    "baseLatex": "x",
+    "pendingStatus": "interpreted",
+    "learnerTurns": [{ "id": "l1", "text": "check that step" }],
+    "tutorTurns": [],
+    "expected": [{ "intent": "request-check", "quote": "check that step" }]
+  },
+  {
+    "name": "done line",
+    "workingLatex": "x",
+    "baseLatex": "x",
+    "pendingStatus": "interpreted",
+    "learnerTurns": [{ "id": "l1", "text": "I'm done with this line" }],
+    "tutorTurns": [],
+    "expected": [{ "intent": "request-check", "quote": "I'm done with this line" }]
+  },
+  {
+    "name": "undo",
+    "workingLatex": "x",
+    "baseLatex": "x",
+    "pendingStatus": "interpreted",
+    "learnerTurns": [{ "id": "l1", "text": "undo that" }],
+    "tutorTurns": [],
+    "expected": [{ "intent": "undo", "quote": "undo that" }]
+  },
+  {
+    "name": "negative exponent rewrite",
+    "workingLatex": "(2+3x^2)^3(x^2+2x)^{-2}",
+    "baseLatex": "(2+3x^2)^3(x^2+2x)^{-2}",
+    "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "rewrite the negative exponent as a denominator squared" }],
+    "tutorTurns": [],
+    "expected": [
+      {
+        "intent": "propose",
+        "source": "instruction",
+        "operation": { "kind": "negative-power-to-denominator", "partId": "p10" },
+        "quote": "rewrite the negative exponent as a denominator squared"
+      }
+    ]
+  },
+  {
+    "name": "full bracket dictation",
+    "workingLatex": "x",
+    "baseLatex": "x",
+    "pendingStatus": "none",
+    "learnerTurns": [
+      {
+        "id": "l1",
+        "text": "open bracket two plus three x squared close bracket cubed times open bracket x squared plus two x close bracket to the minus two"
+      }
+    ],
+    "tutorTurns": [],
+    "expected": [
+      {
+        "intent": "propose",
+        "source": "report",
+        "operation": {
+          "kind": "replace-line",
+          "expression": {
+            "op": "multiply",
+            "args": [
+              {
+                "op": "power",
+                "base": {
+                  "op": "add",
+                  "args": [
+                    { "op": "number", "value": 2 },
+                    {
+                      "op": "multiply",
+                      "args": [
+                        { "op": "number", "value": 3 },
+                        { "op": "power", "base": { "op": "variable", "name": "x" }, "exponent": 2 }
+                      ]
+                    }
+                  ]
+                },
+                "exponent": 3
+              },
+              {
+                "op": "power",
+                "base": {
+                  "op": "add",
+                  "args": [
+                    { "op": "power", "base": { "op": "variable", "name": "x" }, "exponent": 2 },
+                    {
+                      "op": "multiply",
+                      "args": [
+                        { "op": "number", "value": 2 },
+                        { "op": "variable", "name": "x" }
+                      ]
+                    }
+                  ]
+                },
+                "exponent": -2
+              }
+            ]
+          }
+        },
+        "quote": "open bracket two plus three x squared close bracket cubed times open bracket x squared plus two x close bracket to the minus two"
+      }
+    ]
+  },
+  {
+    "name": "ambiguous exponent",
+    "workingLatex": "x",
+    "baseLatex": "x",
+    "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "x squared plus two x to the minus two" }],
+    "tutorTurns": [],
+    "expected": [
+      {
+        "intent": "clarify",
+        "question": "Does minus two apply to the whole sum or only two x?",
+        "readings": [
+          {
+            "op": "power",
+            "base": {
+              "op": "add",
+              "args": [
+                { "op": "power", "base": { "op": "variable", "name": "x" }, "exponent": 2 },
+                {
+                  "op": "multiply",
+                  "args": [
+                    { "op": "number", "value": 2 },
+                    { "op": "variable", "name": "x" }
+                  ]
+                }
+              ]
+            },
+            "exponent": -2
+          },
+          {
+            "op": "add",
+            "args": [
+              { "op": "power", "base": { "op": "variable", "name": "x" }, "exponent": 2 },
+              {
+                "op": "power",
+                "base": {
+                  "op": "multiply",
+                  "args": [
+                    { "op": "number", "value": 2 },
+                    { "op": "variable", "name": "x" }
+                  ]
+                },
+                "exponent": -2
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "second factor",
+    "workingLatex": "x(y+1)",
+    "baseLatex": "x(y+1)",
+    "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "factor the second factor" }],
+    "tutorTurns": [],
+    "expected": [
+      {
+        "intent": "propose",
+        "source": "instruction",
+        "operation": { "kind": "non-unique", "name": "factor", "partId": "p2" },
+        "quote": "factor the second factor"
+      }
+    ]
+  },
+  {
+    "name": "ambiguous denominator",
+    "workingLatex": "\\frac{x}{y} \\div \\frac{y}{x}",
+    "baseLatex": "\\frac{x}{y} \\div \\frac{y}{x}",
+    "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "change its denominator" }],
+    "tutorTurns": [],
+    "expected": [{ "intent": "clarify", "question": "The denominator of the first or second fraction?" }]
+  },
+  {
+    "name": "factor denominator",
+    "workingLatex": "\\frac{x}{y+1}",
+    "baseLatex": "\\frac{x}{y+1}",
+    "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "factor the denominator" }],
+    "tutorTurns": [],
+    "expected": [
+      {
+        "intent": "propose",
+        "source": "instruction",
+        "operation": { "kind": "non-unique", "name": "factor", "partId": "p2" },
+        "quote": "factor the denominator"
+      }
+    ]
+  },
+  {
+    "name": "combined instruction and check",
+    "workingLatex": "\\frac{x}{y} \\div \\frac{y}{x}",
+    "baseLatex": "\\frac{x}{y} \\div \\frac{y}{x}",
+    "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "flip the second fraction and check it" }],
+    "tutorTurns": [],
+    "expected": [
+      {
+        "intent": "propose",
+        "source": "instruction",
+        "operation": { "kind": "division-to-reciprocal", "partId": "p0" },
+        "quote": "flip the second fraction"
+      },
+      { "intent": "request-check", "quote": "check it" }
+    ]
+  },
+  {
+    "name": "spoken numerator across pauses",
+    "workingLatex": "x",
+    "baseLatex": "x",
+    "pendingStatus": "none",
+    "learnerTurns": [
+      { "id": "l1", "text": "I got twelve x squared minus" },
+      { "id": "l2", "text": "ten x y" }
+    ],
+    "tutorTurns": [],
+    "expected": [
+      {
+        "intent": "propose",
+        "source": "report",
+        "operation": {
+          "kind": "replace-line",
+          "expression": {
+            "op": "subtract",
+            "left": {
+              "op": "multiply",
+              "args": [
+                { "op": "number", "value": 12 },
+                { "op": "power", "base": { "op": "variable", "name": "x" }, "exponent": 2 }
+              ]
+            },
+            "right": {
+              "op": "multiply",
+              "args": [
+                { "op": "number", "value": 10 },
+                { "op": "variable", "name": "x" },
+                { "op": "variable", "name": "y" }
+              ]
+            }
+          }
+        },
+        "quote": "I got twelve x squared minus ten x y"
+      }
+    ]
+  },
+  {
+    "name": "change second sign",
+    "workingLatex": "x-y",
+    "baseLatex": "x-y",
+    "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "change the second sign to plus" }],
+    "tutorTurns": [],
+    "expected": [
+      {
+        "intent": "propose",
+        "source": "instruction",
+        "operation": { "kind": "set-sign", "partId": "p2", "sign": "plus" },
+        "quote": "change the second sign to plus"
+      }
+    ]
+  },
+  {
+    "name": "confirm line",
+    "workingLatex": "x",
+    "baseLatex": "x",
+    "pendingStatus": "interpreted",
+    "learnerTurns": [{ "id": "l1", "text": "that's right" }],
+    "tutorTurns": [],
+    "expected": [{ "intent": "confirm", "quote": "that's right" }]
+  },
+  {
+    "name": "tutor only",
+    "workingLatex": "x",
+    "baseLatex": "x",
+    "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "um" }],
+    "tutorTurns": [{ "id": "t1", "text": "replace x with y" }],
+    "expected": []
+  }
+]

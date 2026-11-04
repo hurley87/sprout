@@ -75,6 +75,12 @@ export class BrowserTransport {
   private current?: LiveSource;
   private nextAttachmentGeneration = 0;
   private playbackSink?: (event: PlaybackDiagnostic) => void;
+  private outputAudible = true;
+
+  setOutputAudible(audible: boolean) {
+    this.outputAudible = audible;
+    this.audio.muted = !audible;
+  }
 
   setPlaybackDiagnosticSink(sink: (event: PlaybackDiagnostic) => void) {
     if (!this.cancelled) this.playbackSink = sink;
@@ -252,7 +258,7 @@ export class BrowserTransport {
   private attachPlayback(source: LiveSource) {
     const remote = source.remote;
     if (!remote || !this.authoritative(source)) return;
-    this.audio.muted = false;
+    this.audio.muted = !this.outputAudible;
     this.audio.srcObject = remote;
     const generation = source.attachmentGeneration!;
     const attachedAt = performance.now();

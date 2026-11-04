@@ -2,7 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { POST } from "../app/api/live/route";
 import { SPROUT_LIVE_CONFIG } from "./helpers/counting-live-context";
 
-const request = (body: unknown = { sdp: "v=0\r\n", lessonId: "counting" }, origin = "http://localhost:3000", host = "localhost:3000") =>
+const request = (
+  body: unknown = { sdp: "v=0\r\n", lessonId: "counting" },
+  origin = "http://localhost:3000",
+  host = "localhost:3000",
+) =>
   new Request("http://localhost:3000/api/live", {
     method: "POST",
     headers: { "Content-Type": "application/json", origin, host },
@@ -48,6 +52,13 @@ describe("local Live session endpoint", () => {
     for (const lessonId of ["test-patterns", "toString", "constructor", "__proto__"])
       expect((await POST(request({ sdp: "v=0", lessonId }))).status).toBe(400);
     expect(fetch).not.toHaveBeenCalled();
+  });
+  it("creates a live session for the registered math scribe lesson", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "synthetic-test-key");
+    const fetch = vi.fn(async () => Response.json({ session: { id: "live_scribe" }, transport: { sdp: "answer" } }));
+    vi.stubGlobal("fetch", fetch);
+    expect((await POST(request({ sdp: "v=0", lessonId: "math-scribe" }))).status).toBe(201);
+    expect(fetch).toHaveBeenCalledOnce();
   });
   it("limits request size including bodies with no content-length", async () => {
     expect((await POST(request({ sdp: "v=0" + "x".repeat(70_000) }))).status).toBe(413);

@@ -1,0 +1,251 @@
+.page {
+  min-height: 100dvh;
+}
+.main {
+  width: min(780px, 100%);
+  margin: auto;
+  padding: 28px 20px 240px;
+}
+.problem {
+  position: sticky;
+  top: 12px;
+  z-index: 2;
+  padding: 18px 24px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  box-shadow: 0 8px 24px -18px rgb(0 0 0 / 25%);
+}
+.problemHeading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--ink2);
+}
+.problemHeading h1,
+.sectionLabel {
+  margin: 0 0 12px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.problemHeading span {
+  font-size: 12px;
+}
+.problem > .equation {
+  font-size: 1.4em;
+}
+.equation {
+  display: inline-block;
+  max-width: 100%;
+  overflow-x: auto;
+  vertical-align: middle;
+}
+.working {
+  padding: 30px 0;
+  min-width: 0;
+}
+.sectionLabel {
+  color: var(--ink2);
+}
+.empty,
+.hint,
+.detailsText {
+  color: var(--ink2);
+}
+.empty {
+  line-height: 1.6;
+}
+.history {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.historyRow {
+  color: var(--ink2);
+  border-bottom: 1px solid var(--line);
+}
+.historyRow summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 0;
+  cursor: pointer;
+  list-style: none;
+}
+.historyRow summary::-webkit-details-marker {
+  display: none;
+}
+.historyRow summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
+}
+.mathLine {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  font-size: 1.2rem;
+}
+.latest {
+  color: var(--ink);
+}
+.latest .mathLine,
+.pending .mathLine {
+  font-size: 1.55rem;
+}
+.withdrawn {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+.badge {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  color: var(--ok);
+  background: var(--okBg);
+  font-size: 15px;
+  font-weight: 700;
+}
+.detailsText {
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.detailsText p {
+  margin: 8px 0;
+}
+.detailsText ol {
+  margin: 0;
+  padding-left: 1.5em;
+}
+.historyRow .detailsText {
+  padding-bottom: 8px;
+}
+.pending {
+  margin-top: 18px;
+  padding: 16px;
+  border: 1.5px dashed var(--primary);
+  border-radius: 16px;
+}
+.pendingLabel {
+  margin: 0 0 14px;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+.actions button,
+.skip,
+.debug button {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 16px;
+  background: var(--surface);
+  color: var(--primary);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.actions button:first-child {
+  color: var(--surface);
+  background: var(--primary);
+}
+.actions button:disabled,
+.skip:disabled,
+.debug button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.hint {
+  margin-top: 24px;
+  font-size: 14px;
+}
+.clarification {
+  margin-top: 20px;
+  padding: 12px 16px;
+  background: var(--lookBg);
+  border: 1px solid var(--lookLine);
+  border-radius: 12px;
+}
+.scrollTarget {
+  scroll-margin-bottom: 220px;
+}
+.bottomBar {
+  position: fixed;
+  z-index: 3;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 16px max(12px, env(safe-area-inset-bottom));
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+}
+.caption {
+  height: 22px;
+  max-width: min(100%, 600px);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--ink2);
+  font-size: 13px;
+}
+.caption span {
+  display: block;
+  animation: caption-fade 4s forwards;
+}
+@keyframes caption-fade {
+  0%,
+  55% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.skip {
+  position: absolute;
+  right: max(16px, calc((100% - 740px) / 2));
+  bottom: 24px;
+  font-size: 12px;
+}
+.debug {
+  margin-top: 24px;
+  color: var(--ink2);
+}
+.debug pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 540px) {
+  .main {
+    padding-top: 12px;
+  }
+  .mathLine {
+    gap: 10px;
+  }
+  .latest .mathLine,
+  .pending .mathLine {
+    font-size: 1.25rem;
+  }
+  .skip {
+    bottom: 12px;
+    right: 8px;
+    padding: 6px 9px;
+  }
+}
