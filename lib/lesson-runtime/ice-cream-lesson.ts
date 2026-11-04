@@ -26,7 +26,8 @@ export const ICE_CREAM_LESSON: LessonDefinition = validateLessonDefinition({
       id: "count-cones",
       presentation: { sceneId: "open-shop", answerKind: "count", answer: 2, object: "cone", quantity: 2 },
       learningObjective: "Identify the number of empty cones.",
-      tutorBrief: "The shop is opening and empty cones are on the counter. How many cones do you see?",
+      tutorBrief:
+        "The shop is opening, and a friendly customer arrives at the counter. How many cones do you see? Success story idea: the customer is happy the shop is opening.",
       onSuccess: { kind: "node", nodeId: "name-pink" },
     },
     "name-pink": {
@@ -34,7 +35,7 @@ export const ICE_CREAM_LESSON: LessonDefinition = validateLessonDefinition({
       presentation: { sceneId: "pink-scoop", answerKind: "colour", answer: "pink", choices: "pink or yellow" },
       learningObjective: "Name the colour of the displayed scoop.",
       tutorBrief:
-        "A big strawberry-motif scoop is shown on its own. Is this scoop pink or yellow? Strawberry alone is not a colour answer; gently ask what colour it is.",
+        "The customer admires a big strawberry-motif scoop. Is this scoop pink or yellow? Strawberry alone is not a colour answer; gently ask what colour it is. Success story idea: the customer likes the cheerful scoop.",
       onSuccess: { kind: "node", nodeId: "count-pink" },
     },
     "count-pink": {
@@ -49,7 +50,7 @@ export const ICE_CREAM_LESSON: LessonDefinition = validateLessonDefinition({
       },
       learningObjective: "Count the pink scoops without counting the yellow distractor.",
       tutorBrief:
-        "Loose pink scoops and a yellow scoop are on display. How many pink scoops do you see? If the child counts the yellow scoop, gently remind them to count only the pink ones.",
+        "The customer looks at the scoops on display. How many pink scoops do you see? If the child counts the yellow scoop, gently remind them to count only the pink ones. Success story idea: the display looks welcoming.",
       onSuccess: { kind: "node", nodeId: "order-first" },
     },
     "order-first": {
@@ -64,7 +65,7 @@ export const ICE_CREAM_LESSON: LessonDefinition = validateLessonDefinition({
       },
       learningObjective: "Recall the first colour in the order.",
       tutorBrief:
-        "An empty cone and pink and yellow tubs are shown. Say: Let's make one with pink first, then yellow. Which colour goes on first?",
+        "The customer is ready to order; an empty cone and pink and yellow tubs are shown. Say: Let's make one with pink first, then yellow. Which colour goes on first? Success story idea: the order is underway. Never claim a scoop has been added before the application shows it.",
       onSuccess: { kind: "node", nodeId: "order-second" },
     },
     "order-second": {
@@ -79,7 +80,7 @@ export const ICE_CREAM_LESSON: LessonDefinition = validateLessonDefinition({
       },
       learningObjective: "Recall the next colour in the order.",
       tutorBrief:
-        "The cone has a pink scoop, with pink and yellow tubs to the side. Which colour goes on next? Restate the order only if help is needed; pink again is not the next step.",
+        "The customer is looking forward to the next part of the order. Which colour goes on next? Restate the order only if help is needed; pink again is not the next step. Success story idea: the customer is excited to see the order. Never claim a scoop has been added before the application shows it.",
       onSuccess: { kind: "node", nodeId: "count-scoops" },
     },
     "count-scoops": {
@@ -87,7 +88,7 @@ export const ICE_CREAM_LESSON: LessonDefinition = validateLessonDefinition({
       presentation: { sceneId: "tall-cone", answerKind: "count", answer: 3, object: "scoop", quantity: 3 },
       learningObjective: "Count the scoops on the completed cone.",
       tutorBrief:
-        "A tall ice cream has pink, yellow and chocolate scoops stacked on a cone. How many scoops are on this ice cream?",
+        "The customer spots a tall ice cream on the counter. How many scoops are on this ice cream? Success story idea: the customer is delighted with the shop.",
       onSuccess: { kind: "complete" },
     },
   },

@@ -55,6 +55,9 @@
 .stage[data-motion="success"]:not([data-answer-kind="order_step"]) .object:not(.tub):not(.landing) img {
   animation: react 700ms ease-in-out;
 }
+.stage[data-scene-id="complete"] .object img {
+  animation: celebrate 1200ms ease-out both;
+}
 .complete,
 .loading {
   position: absolute;
@@ -93,6 +96,14 @@
 @keyframes react {
   50% {
     transform: translateY(-4%);
+  }
+}
+@keyframes celebrate {
+  from {
+    transform: translateY(4%);
+  }
+  to {
+    transform: translateY(0);
   }
 }
 @media (prefers-reduced-motion: reduce) {
