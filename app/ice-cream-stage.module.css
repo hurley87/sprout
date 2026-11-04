@@ -100,6 +100,23 @@
     animation: none !important;
   }
 }
+@media (orientation: portrait) {
+  .stage:not([data-scene-id="complete"]) .objects {
+    width: min(110cqw, var(--room) * 1.6);
+  }
+  .stage[data-scene-id="open-shop"] .objects,
+  .stage[data-scene-id="pink-scoop"] .objects {
+    width: min(130cqw, var(--room) * 1.6);
+  }
+  .stage[data-scene-id="tall-cone"] .objects {
+    width: min(155cqw, var(--room) * 1.6);
+  }
+}
+@media (orientation: landscape) {
+  .stage[data-scene-id="complete"] .objects {
+    width: min(95cqw, var(--room) * 2.5);
+  }
+}
 @media (max-height: 500px) and (orientation: landscape) {
   .complete {
     left: 17%;
