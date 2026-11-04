@@ -64,13 +64,13 @@ const areas: Record<string, string> = {
 
 export function scribeInstruction(
   notice: SessionNotice,
-  context: { origin?: "spoken-expression" | "scribed-operation" } = {},
+  context: { origin?: "spoken-expression" | "scribed-operation"; firstProposal?: boolean } = {},
 ): string | null {
   switch (notice.kind) {
+    // The new line is on screen, marked "Not checked yet"; asking "is that what you meant?"
+    // after every edit wore on testers. Learners correct by voice or say check.
     case "proposed":
-      return context.origin === "scribed-operation"
-        ? "Okay, it's on the screen — say check when you're ready."
-        : "It's on the screen. Is that what you meant?";
+      return context.firstProposal ? "Got it — say check when you're ready." : "Got it.";
     case "clarify":
       return notice.question;
     case "checked": {
@@ -93,7 +93,7 @@ export function scribeInstruction(
     case "logged":
       return notice.intent === "describe-strategy" ? "What would you like to change?" : null;
     case "confirmed":
-      return "Okay, I've recorded that as what you meant.";
+      return "Okay.";
     case "undone":
       return "Okay, I've undone that.";
     case "continued":
@@ -214,6 +214,7 @@ export class MathScribeRuntime {
   private groups() {
     const groups: { speaker: string; turnId: number; order: number; text: string; orders: number[] }[] = [];
     for (const fragment of this.context().fragments) {
+      if (fragment.event.speaker !== "child" && fragment.unheard) continue;
       if (fragment.event.speaker === "child" && this.consumed.has(fragment.order)) continue;
       const previous = groups.at(-1);
       if (
@@ -533,7 +534,7 @@ export class MathScribeRuntime {
       return;
     }
     const origin = visit.session.pending?.versions[visit.session.pending.current].origin;
-    const instruction = scribeInstruction(notice, { origin });
+    const instruction = scribeInstruction(notice, { origin, firstProposal: visit.proposalTimings.length === 1 });
     this.publish();
     if (!instruction) return;
     if (queue) {

@@ -12,8 +12,8 @@ These are distinct states: an **interpreted proposal** is provisional; a **stude
 
 The runtime frames messages as application instructions to the tutor, asking it to add no mathematics. Exact instruction texts include:
 
-- Spoken expression: “It's on the screen. Is that what you meant?”; mechanical operation: “Okay, it's on the screen — say check when you're ready.”
-- Confirm: “Okay, I've recorded that as what you meant.” Undo: “Okay, I've undone that.” Continue: “Okay, we'll continue without verifying that step.”
+- Proposal: “Got it — say check when you're ready.” the first time in a problem, then just “Got it.” (the line is on screen marked “Not checked yet”; asking “Is that what you meant?” after every edit wore on testers).
+- Confirm: “Okay.” Undo: “Okay, I've undone that.” Continue: “Okay, we'll continue without verifying that step.”
 - Equivalent: “That step follows. What would you like to do next?” Unsupported: “I couldn't check that expression. You can rephrase it or continue.”
 - If an equivalent step changes the domain, the spoken message says the allowed values changed and points to the screen; if the domain is unverified, it says the values could not be verified and points to the screen.
 - Invalid: “I checked the expression you told me (not your paper) and it doesn't follow from the previous line.” This is followed by “Please look at [area] again.” or “Please look at it again.”
@@ -85,3 +85,6 @@ Tests below are deterministic or mocked; they do not establish live-provider or 
 | Describe change without repeating expression | `tests/math-scribe-interpretation.test.ts` — fixture “negative exponent rewrite”; actual usability **PENDING live session**. |
 | Misrecognition separated from math error | `tests/math-scribe-session.test.ts` — “clarifies, logs strategy, and distinguishes recognition corrections”; `tests/math-scribe-runtime.test.ts` — “holds a check spoken in the same breath as the change it would judge” (a line is checked only after it was displayed). Whether learners notice on-screen misrecognitions before saying check is **PENDING live session**. |
 | Findings state where voice is too cumbersome | **PENDING live session.** |
+# Experimental tutor audio gate
+
+The math-scribe lesson gates playback to application-instructed responses because [GPT-Live decides when to speak](https://developers.openai.com/api/docs/guides/live-migration); the documented alternative is to [control playback at the client or media relay](https://developers.openai.com/api/docs/guides/voice-server-controls). This can mute harmless acknowledgements, and unheard speech remains in the model's own context even though the scribe interpreter excludes it. Transcript delivery timing is only a best-effort indication of what was heard. Timings (`lib/lesson-runtime/tutor-audio-gate.ts`): close after 2.2 s of quiet, close if no reply starts within 6.5 s, never stay open beyond 20 s; speech already playing when an instruction arrives does not count as its reply. A replay of four live sessions estimated these settings mute about three quarters of improvised false claims and clip about 8 s of instructed speech; an instruction arriving mid-improvisation still lets that sentence's tail through, so the gate is a mitigation, not a guarantee.

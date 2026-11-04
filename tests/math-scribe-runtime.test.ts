@@ -505,6 +505,19 @@ describe("math scribe voice runtime", () => {
     expect(messages[0]).toContain("That step follows");
   });
 
+  it("acknowledges edits briefly instead of asking 'is that what you meant?' each time", async () => {
+    await say("flip", proposal({ kind: "division-to-reciprocal", partId: part("divisor") }));
+    expect(messages.at(-1)).toContain("Got it — say check when you're ready.");
+    await say(
+      "numerator is y",
+      proposal({ kind: "replace-part", partId: part("numerator of factor 1"), expression: expression("y") }, "report"),
+    );
+    expect(messages.at(-1)).toMatch(/"Got it\."$/);
+    await say("yes", { intent: "confirm", quote: "yes" });
+    expect(messages.at(-1)).toMatch(/"Okay\."$/);
+    expect(messages.join(" ")).not.toContain("Is that what you meant");
+  });
+
   it("speaks once per utterance: a check replaces the confirmation before it", async () => {
     await say(
       "y times six x minus five y",
@@ -533,7 +546,7 @@ describe("math scribe voice runtime", () => {
     );
     expect(messages).toHaveLength(1);
     expect(messages[0]).not.toContain("Ask what");
-    expect(messages[0]).toContain("Is that what you meant");
+    expect(messages[0]).toContain("Got it");
   });
 
   it("still asks for a result about a part the same breath did not change", async () => {
@@ -555,7 +568,7 @@ describe("math scribe voice runtime", () => {
     );
     expect(messages).toHaveLength(1);
     expect(messages[0]).toContain("What does the denominator of the second fraction look like after factoring?");
-    expect(messages[0]).toContain("Is that what you meant");
+    expect(messages[0]).toContain("Got it");
   });
 
   it("drops a batch's updates when the visit changes while it is being read", async () => {
