@@ -136,6 +136,7 @@ export default function MathStepsDemo({
                     </span>
                   )}
                 </div>
+                {problem.statement && <p>{problem.statement}</p>}
                 <Equation latex={problem.latex} />
               </>
             )

@@ -19,7 +19,7 @@ import {
   type RationalPoint,
 } from "./polynomial";
 
-/** Exact bounded rational algebra in x,y; no calculus or rule validation.
+/** Exact bounded rational algebra in x,y,h; no calculus or rule validation.
  * Domains require every recorded restriction to be nonzero. Equivalence means
  * equality on the intersection, even when the domain report is not preserved.
  */
@@ -177,6 +177,21 @@ function implied(restriction: Polynomial, others: Polynomial[]): boolean {
     if (!(error instanceof PolynomialLimitError)) throw error;
   }
   return false;
+}
+
+export function restrictionsImpliedByProblem(
+  previous: AlgebraExpression,
+  problem: AlgebraExpression,
+  labels: readonly string[],
+): string[] {
+  const prior = reduceRational(previous);
+  const original = reduceRational(problem);
+  if (!prior.ok || !original.ok) return [];
+  return labels.filter(label =>
+    prior.restrictions.some(
+      restriction => `${formatPolynomial(restriction)} ≠ 0` === label && implied(restriction, original.restrictions),
+    ),
+  );
 }
 function domain(previous: Polynomial[], proposed: Polynomial[]): DomainReport {
   const lost: DomainReport["lost"] = [],

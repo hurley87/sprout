@@ -1,6 +1,6 @@
 import { ALGEBRA_EXPRESSION_LIMITS, parseAlgebraExpression, type AlgebraExpression } from "./expression";
 
-/** Integers, x/y, +/-, products, slash/div, frac variants, groups and integer powers.
+/** Integers, x/y/h, +/-, products, slash/div, frac variants, groups and integer powers.
  * Slash/div chains or ungrouped right-hand juxtaposition, div followed by a product,
  * mixed numbers, separated digits and stacked powers are ambiguous. Flat sums and
  * products over eight operands return limit. Fractions and div are binary divide;

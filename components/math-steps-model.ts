@@ -101,7 +101,13 @@ export function historyRows(session: Session) {
     withdrawn: !!line.withdrawn,
     versions: line.pending?.versions ?? [],
     current: line.pending?.current,
-    domainNotes: domainNotes(line.domainChanges),
+    domainNotes: [
+      ...domainNotes(line.domainChanges),
+      ...(line.problemDomainRetained ?? []).map(item => ({
+        label: "Still required by the problem",
+        latex: item.replace("≠", String.raw`\neq`),
+      })),
+    ],
     badge:
       index === 0
         ? "Problem"

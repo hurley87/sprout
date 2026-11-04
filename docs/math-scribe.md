@@ -19,6 +19,7 @@ The runtime frames messages as application instructions to the tutor, asking it 
 - Finish: “I'm done” is intended to move to the next problem or recap (navigation is not yet wired through the reducer); if a line is pending, the tutor says “Say check first, then I'm done.”
 - Equivalent: “That step follows. What would you like to do next?” Unsupported: “I couldn't check that expression. You can rephrase it or continue.”
 - If an equivalent step changes the domain, the spoken message says the allowed values changed and points to the screen; if the domain is unverified, it says the values could not be verified and points to the screen.
+- Each session retains the original expression's restrictions as its problem domain. When a lost line restriction is deterministically implied by that domain, the step is presented as preserving the problem domain, with the retained restriction available in the history; added and unverified restrictions still receive warnings. The audit trail retains the raw line-to-line comparison.
 - Invalid: “I checked the expression you told me (not your paper) and it doesn't follow from the previous line.” This is followed by “Please look at [area] again.” or “Please look at it again.”
 - Strategy alone: “What would you like to change?” Provider retry exhaustion: “I might have misheard. Please say that again.” A stale part asks: “I might have misheard. Which part did you mean?” Clarifications relay their question.
 

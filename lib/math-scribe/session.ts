@@ -1,8 +1,10 @@
 import { appendCorrection, appendStep, auditSummary, createAuditTrail, type AuditTrail } from "../math-audit/audit";
-import type { TransformationResult } from "../math-audit/check";
+import { restrictionsImpliedByProblem, type TransformationResult } from "../math-audit/check";
 import type { AlgebraExpression } from "../math-audit/expression";
 import { formatExpression } from "../math-audit/format";
 import { readAlgebraLatex } from "../math-audit/latex";
+import { reduceRational } from "../math-audit/rational";
+import { formatPolynomial } from "../math-audit/polynomial";
 import { applyOperation, type OperationResult, type ScribeOperation } from "./operations";
 import { listParts } from "./parts";
 
@@ -59,6 +61,7 @@ export type AcceptedLine = {
   domainStatus?: NonNullable<TransformationResult["domain"]>["status"];
   /** Restrictions (e.g. "2x ≠ 0") this step dropped, added, or could not confirm; set only when changed. */
   domainChanges?: { lost: string[]; added: string[]; unverified: string[] };
+  problemDomainRetained?: string[];
   pending?: Pending;
   withdrawn?: boolean;
 };
@@ -77,6 +80,7 @@ export type SessionNotice =
       verdict: TransformationResult["verdict"];
       reason: string;
       domainStatus?: NonNullable<TransformationResult["domain"]>["status"];
+      problemDomainRetained?: string[];
       discrepancy?: SafeDiscrepancy;
     }
   | { kind: "clarify"; question: string }
@@ -96,6 +100,7 @@ export type SessionLogEntry = {
 };
 export type SessionState = {
   problemId: string;
+  problemDomain: { expression: AlgebraExpression; restrictions: string[] };
   revision: number;
   base: AlgebraExpression;
   history: readonly AcceptedLine[];
@@ -126,12 +131,17 @@ export function createSession(input: {
   if (!input.problemId) return { ok: false, reason: "invalid-problem-id" };
   const parsed = readAlgebraLatex(input.latex);
   if (!parsed.ok) return { ok: false, reason: parsed.reason };
+  const original = reduceRational(parsed.expression);
   const audit = createAuditTrail({ id: "start", expression: { ast: parsed.expression } });
   if (!audit.ok) return { ok: false, reason: audit.reason };
   return {
     ok: true,
     state: freeze({
       problemId: input.problemId,
+      problemDomain: {
+        expression: parsed.expression,
+        restrictions: original.ok ? original.restrictions.map(item => `${formatPolynomial(item)} ≠ 0`) : [],
+      },
       revision: 0,
       base: parsed.expression,
       history: [{ id: "start", expression: parsed.expression, status: "verified" }],
@@ -271,6 +281,27 @@ export function reduceSession(
         const entry = result.trail.entries.at(-1)!;
         if (entry.kind === "start") throw new Error("Unexpected audit start");
         checked = entry.result;
+        let problemDomainRetained: string[] = [];
+        if (checked.verdict === "equivalent" && checked.domain?.lost.length) {
+          problemDomainRetained = restrictionsImpliedByProblem(
+            state.base,
+            state.problemDomain.expression,
+            checked.domain.lost.map(item => item.restriction),
+          );
+          const lost = checked.domain.lost.filter(item => !problemDomainRetained.includes(item.restriction));
+          const domain = {
+            ...checked.domain,
+            lost,
+            status: lost.length
+              ? ("restriction-lost" as const)
+              : checked.domain.unverified.length
+                ? ("restriction-unverified" as const)
+                : checked.domain.added.length
+                  ? ("restriction-added" as const)
+                  : ("preserved" as const),
+          };
+          checked = { ...checked, domain };
+        }
         duration = Math.max(0, event.at - pending.firstProposedAt);
         const lineStatus =
           checked.verdict === "equivalent"
@@ -291,6 +322,7 @@ export function reduceSession(
               expression: next.base,
               status: "verified",
               ...(checked.domain ? { domainStatus: checked.domain.status } : {}),
+              ...(problemDomainRetained.length ? { problemDomainRetained } : {}),
               ...(checked.domain && checked.domain.status !== "preserved"
                 ? {
                     domainChanges: {
@@ -314,6 +346,7 @@ export function reduceSession(
           verdict: checked.verdict,
           reason: checked.reason,
           ...(checked.domain ? { domainStatus: checked.domain.status } : {}),
+          ...(problemDomainRetained.length ? { problemDomainRetained } : {}),
           ...(discrepancy ? { discrepancy } : {}),
         };
       }
@@ -361,6 +394,7 @@ export function reduceSession(
 export function snapshot(state: SessionState) {
   const render = (expression: AlgebraExpression) => ({ expression, latex: formatExpression(expression) });
   return freeze({
+    problemDomain: state.problemDomain,
     base: render(state.base),
     history: state.history.map(line => ({ ...line, latex: formatExpression(line.expression) })),
     pending: state.pending

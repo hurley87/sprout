@@ -14,7 +14,7 @@ import {
   type Polynomial,
 } from "./polynomial";
 
-/** Exact rational functions in x,y without cancellation, bounded by polynomial budgets.
+/** Exact rational functions in x,y,h without cancellation, bounded by polynomial budgets.
  * Restrictions record divisor and negative-power numerators up to scalar and sign.
  */
 export type RationalReduction =

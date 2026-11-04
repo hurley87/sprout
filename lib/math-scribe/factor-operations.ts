@@ -150,7 +150,8 @@ function structuralKey(expression: AlgebraExpression): string {
 
 export function cancelFactor(value: AlgebraExpression, factor: AlgebraExpression): AlgebraExpression | null {
   const fractions = value.op === "multiply" ? [...value.args] : [value];
-  const factors = (node: AlgebraExpression) => (node.op === "multiply" ? [...node.args] : [node]);
+  const factors = (node: AlgebraExpression): AlgebraExpression[] =>
+    node.op === "negate" ? [number(-1), ...factors(node.argument)] : node.op === "multiply" ? [...node.args] : [node];
   const key = structuralKey(factor);
   const numerators: { fraction: number; index: number }[] = [];
   const denominators: { fraction: number; index: number }[] = [];
@@ -174,9 +175,12 @@ export function cancelFactor(value: AlgebraExpression, factor: AlgebraExpression
       bottom = factors(node.right);
     if (index === numerator.fraction) top.splice(numerator.index, 1);
     if (index === denominator.fraction) bottom.splice(denominator.index, 1);
+    const negative = top[0]?.op === "number" && top[0].value === -1;
+    if (negative) top.shift();
     const left = product(top),
       right = product(bottom);
-    fractions[index] = right.op === "number" && right.value === 1 ? left : { op: "divide", left, right };
+    const result: AlgebraExpression = right.op === "number" && right.value === 1 ? left : { op: "divide", left, right };
+    fractions[index] = negative ? { op: "negate", argument: result } : result;
   }
   return product(fractions);
 }

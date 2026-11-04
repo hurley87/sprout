@@ -31,6 +31,19 @@ const audit = (previous: AlgebraExpression, proposed: AlgebraExpression) =>
   checkTransformation({ previous: { ast: previous }, proposed: { ast: proposed } });
 
 describe("deterministic scribe operations", () => {
+  it("cancels a negative h only when h is a whole numerator factor", () => {
+    const factor = read("h");
+    const result = apply(read(String.raw`\frac{-h}{h(x+1)(x+h+1)}`), { kind: "cancel-common-factor", factor });
+    expect(result.changed.after).toBe(String.raw`-\frac{1}{(x+1)(x+h+1)}`);
+    for (const latex of [
+      String.raw`\frac{\frac{x}{x+1}-\frac{x+h}{x+h+1}}{h}`,
+      String.raw`\frac{x(x+h+1)-(x+h)(x+1)}{h(x+1)(x+h+1)}`,
+    ])
+      expect(applyOperation(read(latex), { kind: "cancel-common-factor", factor })).toMatchObject({
+        ok: false,
+        reason: "needs-result",
+      });
+  });
   it.each([
     [reciprocal, "denominator of factor 2", "2x", "2x(6x-5y)"],
     [reciprocal, "numerator of factor 1", "y", "y(6x-5y)"],

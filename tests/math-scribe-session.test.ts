@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { readAlgebraLatex } from "../lib/math-audit/latex";
 import { listParts } from "../lib/math-scribe/parts";
+import { historyRows } from "../components/math-steps-model";
+import { scribeInstruction } from "../lib/lesson-runtime/math-scribe-runtime";
 import {
   createSession,
   reduceSession,
@@ -171,7 +173,7 @@ describe("scribe session", () => {
       domainStatus: "preserved",
     });
   });
-  it("records which restrictions a cancelling step dropped", () => {
+  it("retains cancelled restrictions from the original problem", () => {
     let state = start(String.raw`\frac{3y(6x-5y)}{2x(6x-5y)}`);
     state = say(state, {
       intent: "propose",
@@ -181,10 +183,34 @@ describe("scribe session", () => {
     }).state;
     state = ui(state, "check").state;
     expect(state.history.at(-1)).toMatchObject({
-      domainStatus: "restriction-lost",
-      domainChanges: { lost: ["12x^2 - 10xy ≠ 0"], added: [], unverified: [] },
+      domainStatus: "preserved",
+      problemDomainRetained: ["12x^2 - 10xy ≠ 0"],
     });
     expect(state.history[0].domainChanges).toBeUndefined();
+  });
+  it("preserves the difference quotient problem domain across the reference path", () => {
+    let state = start(String.raw`\frac{\frac{x}{x+1}-\frac{x+h}{x+h+1}}{h}`);
+    for (const line of [
+      String.raw`\frac{x(x+h+1)-(x+h)(x+1)}{h(x+1)(x+h+1)}`,
+      String.raw`\frac{-h}{h(x+1)(x+h+1)}`,
+      String.raw`-\frac{1}{(x+1)(x+h+1)}`,
+    ]) {
+      state = propose(state, line);
+      const checked = ui(state, "check");
+      expect(checked.notice).toMatchObject({ verdict: "equivalent", domainStatus: "preserved" });
+      expect(scribeInstruction(checked.notice)).toBe("That step follows. What would you like to do next?");
+      state = checked.state;
+    }
+    expect(state.problemDomain.restrictions).toContain("h ≠ 0");
+    expect(state.history.at(-1)?.problemDomainRetained).toContain("h ≠ 0");
+    expect(snapshot(state).history.at(-1)?.domainChanges).toBeUndefined();
+    const row = historyRows(snapshot(state)).at(-1)!;
+    expect(row.badge).toBe("✓ Verified");
+    expect(row.domainNotes).toContainEqual({ label: "Still required by the problem", latex: String.raw`h \neq 0` });
+  });
+  it("still reports a newly added restriction", () => {
+    const state = propose(start("x"), String.raw`\frac{x^2}{x}`);
+    expect(ui(state, "check").notice).toMatchObject({ verdict: "equivalent", domainStatus: "restriction-added" });
   });
   it("clarifies, logs strategy, and distinguishes recognition corrections", () => {
     let state = start("x+x");
