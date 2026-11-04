@@ -3,6 +3,7 @@ import { CLOSE_AFTER_QUIET_MS } from "../lib/lesson-runtime/tutor-audio-gate";
 import type { ClientCommand, ProviderEvent } from "../lib/events";
 import { LessonRuntime } from "../lib/lesson-runtime/lesson-runtime";
 import { MATH_SCRIBE_LESSON } from "../lib/lesson-runtime/math-scribe-lesson";
+import { MATH_SCRIBE_RECIPROCAL_LESSON } from "../lib/lesson-runtime/math-scribe-reciprocal-lesson";
 import { listParts } from "../lib/math-scribe/parts";
 import { providerEvents, useRuntimeFakeTimers } from "./helpers/runtime-harness";
 
@@ -158,4 +159,18 @@ it("uses the scribe recap after the learner navigates through both problems", as
     type: "session.instructions.append",
     content: expect.stringContaining("Thanks for practicing."),
   });
+});
+
+it("advances the one-problem lesson to recap on a finish phrase", async () => {
+  runtime.stop();
+  runtime = new LessonRuntime({} as HTMLAudioElement, () => {}, MATH_SCRIBE_RECIPROCAL_LESSON);
+  runtime.confirmRendered(runtime.snapshot().display);
+  events.acknowledgeSteering(transport.send.mock.calls.at(-1)![0].event_id, 0);
+  events.childTurn("um, I'm- I'm done", 100);
+  emit({ type: "output.activity", state: "quiet" });
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(runtime.snapshot().runtime!.nodeId).toBe("recap");
+  expect(requests).toHaveLength(0);
+  runtime.confirmRendered(runtime.snapshot().display);
+  expect(runtime.snapshot().recapText).toBe("Thanks for practicing.");
 });

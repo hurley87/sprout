@@ -1,5 +1,5 @@
 import { CalculusRuntime, type CalculusFragment, type CalculusSnapshot } from "./calculus-runtime";
-import { MathScribeRuntime } from "./math-scribe-runtime";
+import { isScribeFinishText, MathScribeRuntime } from "./math-scribe-runtime";
 import { TutorAudioGate } from "./tutor-audio-gate";
 import { questionRecap, type QuestionOutcomeSnapshot } from "./mae386/question-outcomes";
 import type { RewriteTranscript } from "./mae386/rewrite-proposal";
@@ -919,7 +919,12 @@ export class LessonRuntime {
   }
 
   private requestedNavigation() {
-    if (this.mathPlugin) return parseLearnerNavigationText(this.mathPlugin.learnerText());
+    if (this.mathPlugin) {
+      const text = this.mathPlugin.learnerText();
+      return this.mathPlugin instanceof MathScribeRuntime && isScribeFinishText(text)
+        ? ({ action: "next", scope: "question" } as const)
+        : parseLearnerNavigationText(text);
+    }
     return this.lessonDefinition.questionGroups
       ? parseLearnerNavigationText(this.state?.learnerUtterance?.text ?? "")
       : learnerNavigationIntent(this.transcript);

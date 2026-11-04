@@ -20,6 +20,7 @@ import {
   learnerNavigationIntent,
   parseLearnerNavigationText,
   isLearnerStopText,
+  isScribeFinishText,
   type NavigationIntent,
   closingTutorExchange,
   matchesTutorClosure,
@@ -977,9 +978,11 @@ export function reduceLessonRuntime(
       const appCompleted = lesson.calculus && event.appCompleted;
       const intent: NavigationIntent | null = appCompleted
         ? { action: "next", scope: "subpart" }
-        : lesson.questionGroups || lesson.calculus || lesson.mathScribe
-          ? parseLearnerNavigationText(state.learnerUtterance?.text ?? "")
-          : learnerNavigationIntent(event.transcriptSnapshot);
+        : lesson.mathScribe && isScribeFinishText(state.learnerUtterance?.text ?? "")
+          ? { action: "next", scope: "question" }
+          : lesson.questionGroups || lesson.calculus || lesson.mathScribe
+            ? parseLearnerNavigationText(state.learnerUtterance?.text ?? "")
+            : learnerNavigationIntent(event.transcriptSnapshot);
       if (
         !lesson.conversationFirst ||
         !sameClassificationSource(state, event.source) ||

@@ -80,6 +80,78 @@ describe("math scribe voice runtime", () => {
     source: "instruction" | "report" = "instruction",
   ): Interpretation => ({ intent: "propose", operation, source, quote: "said" });
 
+  it("passes an open factor clarification into the next read", async () => {
+    await say("flip", proposal({ kind: "division-to-reciprocal", partId: part("divisor") }));
+    const partId = part("numerator of factor 2");
+    const prompt = "six times open bracket- open bracket 2 x plus 5 y close bracket";
+    await say(
+      `factor six out ${prompt}`,
+      {
+        intent: "propose",
+        source: "instruction",
+        quote: "factor six out",
+        operation: { kind: "non-unique", name: "factor", partId },
+      },
+      { intent: "clarify", question: "What is inside the brackets?", quote: prompt },
+    );
+    await vi.advanceTimersByTimeAsync(2000);
+    await say("It would be 2x plus 5 y", {
+      intent: "propose",
+      source: "report",
+      quote: "It would be 2x plus 5 y",
+      operation: { kind: "replace-part", partId, expression: expression("6(2x+5y)") },
+    });
+    const request = JSON.parse(fetcher.mock.calls.at(-1)![1].body);
+    expect(request.openQuestion).toMatchObject({
+      question: "What is inside the brackets?",
+      prompt,
+      operation: "factor",
+      part: { id: partId, description: "numerator of factor 2", latex: "12x+30y" },
+    });
+    expect(runtime.snapshot().session?.workingLine.latex).toContain("6(2x+5y)");
+    expect(runtime.snapshot().session?.clarification).toBeNull();
+  });
+
+  it.each([
+    "I'm done",
+    "I am done",
+    "I'm finished",
+    "done",
+    "finished",
+    "that's my answer",
+    "that's the answer",
+    "that's the solution",
+    "I'm done with this problem",
+    "I'm- I'm done",
+    "um, I'm done",
+    "okay I'm done",
+  ])("navigates without interpreting finish phrase %s", async text => {
+    fragment(text);
+    expect(runtime.onQuiet()).toBe(false);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("requires checking a pending line and consumes the finish phrase", async () => {
+    await say("flip", proposal({ kind: "division-to-reciprocal", partId: part("divisor") }));
+    fragment("I'm- I'm done");
+    expect(runtime.onQuiet()).toBe(true);
+    expect(messages.at(-1)).toContain("Say check first, then I'm done.");
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(runtime.snapshot().session?.pending).not.toBeNull();
+    await say("explain", { intent: "describe-strategy", quote: "explain" });
+    expect(JSON.stringify(fetcher.mock.calls[1])).not.toContain("I'm- I'm done");
+  });
+
+  it("interprets mathematical sentences containing done", async () => {
+    await say("when we're done factoring the numerator is y", {
+      intent: "describe-strategy",
+      quote: "factoring",
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
   it("preserves the missing x, localizes the failed check, and verifies a correction", async () => {
     await say("flip", proposal({ kind: "division-to-reciprocal", partId: part("divisor") }));
     await say(

@@ -13,7 +13,7 @@ import {
   type SessionState,
 } from "../math-scribe/session";
 import type { CalculusFragment } from "./calculus-runtime";
-import { isLearnerStopText, parseLearnerNavigationText } from "./conversation-progression";
+import { isLearnerStopText, isScribeFinishText, parseLearnerNavigationText } from "./conversation-progression";
 import type { LessonRuntimeState } from "./lesson-runtime-reducer";
 
 const FILLER = /\[[^\]]*\]|\b(?:u+m+|u+h+|e+r+m*|h+m+|m+-?h*m+|and|so|then|okay|ok|right|well)\b|[^a-z0-9]+/gi;
@@ -154,6 +154,8 @@ type Visit = {
   checkTimings: number[];
 };
 
+export { isScribeFinishText };
+
 export class MathScribeRuntime {
   private visits: Visit[] = [];
   private active?: Visit;
@@ -279,6 +281,16 @@ export class MathScribeRuntime {
       this.stop();
       return true;
     }
+    if (isScribeFinishText(text)) {
+      this.cancelCheck();
+      if (!this.active.session.pending) return false;
+      for (const group of this.groups()) {
+        if (group.speaker === "child" && group.turnId === current.state.childTurnId)
+          for (const order of group.orders) this.consumed.add(order);
+      }
+      this.instruct("Say check first, then I'm done.");
+      return true;
+    }
     if (parseLearnerNavigationText(text)) {
       this.cancelCheck();
       return false;
@@ -319,6 +331,16 @@ export class MathScribeRuntime {
       ),
       baseLatex: formatExpression(visit.session.base),
       pendingStatus: visit.session.pending?.status ?? "none",
+      ...(visit.session.clarification
+        ? {
+            openQuestion: {
+              question: visit.session.clarification.question,
+              prompt: visit.session.clarification.prompt ?? "",
+              ...(visit.session.clarification.part ? { part: visit.session.clarification.part } : {}),
+              ...(visit.session.clarification.operation ? { operation: visit.session.clarification.operation } : {}),
+            },
+          }
+        : {}),
       learnerTurns: learner.map(group => turn(group, "learner")),
       tutorTurns: groups
         .filter(group => group.speaker !== "child")
