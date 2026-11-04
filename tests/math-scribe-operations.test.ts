@@ -31,6 +31,29 @@ const audit = (previous: AlgebraExpression, proposed: AlgebraExpression) =>
   checkTransformation({ previous: { ast: previous }, proposed: { ast: proposed } });
 
 describe("deterministic scribe operations", () => {
+  it("combines, scales and flattens fractions without expansion", () => {
+    const top = read(String.raw`\frac{x}{x+1}-\frac{x+h}{x+h+1}`);
+    expect(apply(top, { kind: "combine-fractions", partId: "p0" }).changed.after).toBe(
+      String.raw`\frac{x(x+h+1)-(x+h)(x+1)}{(x+1)(x+h+1)}`,
+    );
+    expect(
+      apply(read(String.raw`\frac{x}{x+1}+\frac{h}{1+x}`), { kind: "combine-fractions", partId: "p0" }).changed.after,
+    ).toBe(String.raw`\frac{x+h}{x+1}`);
+    expect(
+      apply(read(String.raw`\frac{x}{x+1}+\frac{h}{x+h+1}`), { kind: "combine-fractions", partId: "p0" }).changed.after,
+    ).toBe(String.raw`\frac{x(x+h+1)+h(x+1)}{(x+1)(x+h+1)}`);
+    expect(
+      apply(read(String.raw`\frac{x}{h}`), { kind: "scale-fraction", partId: "p0", factor: read("x+1") }).changed.after,
+    ).toBe(String.raw`\frac{x(x+1)}{h(x+1)}`);
+    expect(apply(read("x"), { kind: "multiply-part", partId: "p0", factor: read("x+1") }).changed.after).toBe("x(x+1)");
+    expect(
+      apply(read(String.raw`\frac{x}{\frac{h}{x+1}}`), { kind: "flatten-nested-fraction", partId: "p0" }).changed.after,
+    ).toBe(String.raw`\frac{x(x+1)}{h}`);
+    expect(applyOperation(read("x+y"), { kind: "combine-fractions", partId: "p0" })).toMatchObject({
+      ok: false,
+      reason: "needs-result",
+    });
+  });
   it("cancels a negative h only when h is a whole numerator factor", () => {
     const factor = read("h");
     const result = apply(read(String.raw`\frac{-h}{h(x+1)(x+h+1)}`), { kind: "cancel-common-factor", factor });

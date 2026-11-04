@@ -118,7 +118,7 @@ export function factorOut(value: AlgebraExpression, factor: AlgebraExpression): 
   }
 }
 
-function structuralKey(expression: AlgebraExpression): string {
+export function structuralKey(expression: AlgebraExpression): string {
   if (expression.op === "add" || expression.op === "subtract") {
     const terms: string[] = [];
     const collect = (node: AlgebraExpression, negative: boolean) => {

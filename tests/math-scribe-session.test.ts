@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { readAlgebraLatex } from "../lib/math-audit/latex";
 import { listParts } from "../lib/math-scribe/parts";
+import { formatExpression } from "../lib/math-audit/format";
+import type { ScribeOperation } from "../lib/math-scribe/operations";
 import { historyRows } from "../components/math-steps-model";
 import { scribeInstruction } from "../lib/lesson-runtime/math-scribe-runtime";
 import {
@@ -57,6 +59,54 @@ function propose(state: SessionState, latex: string) {
 }
 
 describe("scribe session", () => {
+  it("clarifies when a requested combination has the wrong shape", () => {
+    const result = say(start("x+y"), {
+      intent: "propose",
+      source: "instruction",
+      quote: "combine the fractions",
+      operation: { kind: "combine-fractions", partId: "p0" },
+    });
+    expect(result.notice.kind).toBe("clarify");
+    expect(result.state.pending).toBeNull();
+  });
+  it("checks each contextual step of the difference quotient reference path", () => {
+    let state = start(String.raw`\frac{\frac{x}{x+1}-\frac{x+h}{x+h+1}}{h}`);
+    const step = (operation: ScribeOperation, quote: string) => {
+      state = say(state, { intent: "propose", source: "instruction", operation, quote }).state;
+      expect(state.pending?.versions[state.pending.current].origin).toBe(
+        operation.kind === "replace-part" ? "spoken-expression" : "scribed-operation",
+      );
+      const checked = ui(state, "check");
+      expect(checked.notice).toMatchObject({ verdict: "equivalent", domainStatus: "preserved" });
+      state = checked.state;
+    };
+    step({ kind: "combine-fractions", partId: part(state, "numerator") }, "combine the fractions on top");
+    step({ kind: "flatten-nested-fraction", partId: "p0" }, "bring h down");
+    step(
+      { kind: "replace-part", partId: part(state, "numerator"), expression: read("-h") },
+      "that numerator should be negative h",
+    );
+    step({ kind: "cancel-common-factor", factor: read("h") }, "cancel h");
+    expect(formatExpression(state.base)).toBe(String.raw`-\frac{1}{(x+1)(x+h+1)}`);
+    expect(state.history.at(-1)?.domainChanges).toBeUndefined();
+  });
+  it("keeps an incorrect multiply-part proposal pending", () => {
+    let state = start(String.raw`\frac{\frac{x}{x+1}-\frac{x+h}{x+h+1}}{h}`);
+    state = say(state, {
+      intent: "propose",
+      source: "instruction",
+      quote: "multiply the first numerator by x plus h plus one",
+      operation: {
+        kind: "multiply-part",
+        partId: part(state, "numerator of the first fraction on top"),
+        factor: read("x+h+1"),
+      },
+    }).state;
+    const result = ui(state, "check");
+    expect(result.notice).toMatchObject({ verdict: "not-equivalent" });
+    expect(result.state.pending?.status).toBe("invalid");
+    expect(result.state.history).toHaveLength(1);
+  });
   it("retains clarification context and clears it on resolution", () => {
     const initial = start(String.raw`\frac{x}{y}\frac{12x+30y}{x}`);
     const partId = part(initial, "numerator of factor 2");

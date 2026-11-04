@@ -93,6 +93,32 @@ export function listParts(expression: AlgebraExpression, options?: { limit?: num
   fractions.forEach((part, index) => {
     if (ordinals[index]) part.aliases.push(`the ${ordinals[index]} fraction`);
   });
+  if (expression.op === "divide" && (expression.left.op === "subtract" || expression.left.op === "add")) {
+    const top = candidates.find(part => JSON.stringify(part.path) === JSON.stringify([{ child: "left" }]));
+    const bottom = candidates.find(part => JSON.stringify(part.path) === JSON.stringify([{ child: "right" }]));
+    const topFractions = fractions.filter(part => part.path.length === 2 && part.path[0].child === "left");
+    if (topFractions.length === 2) {
+      const outer = candidates.find(part => part.path.length === 0);
+      if (outer) outer.aliases = [];
+      top?.aliases.push("the top", "the big numerator", "the outer numerator");
+      bottom?.aliases.push("the outside denominator", "the bottom", "the outer denominator");
+      topFractions.forEach((fraction, index) => {
+        const name = `the ${ordinals[index]} fraction on top`;
+        fraction.aliases = [name, `the ${ordinals[index]} fraction`];
+        fraction.description = `${ordinals[index]} fraction on top`;
+        for (const child of candidates) {
+          if (
+            child.path.length !== fraction.path.length + 1 ||
+            JSON.stringify(child.path.slice(0, -1)) !== JSON.stringify(fraction.path)
+          )
+            continue;
+          const step = child.path.at(-1);
+          if (step?.child === "left" || step?.child === "right")
+            child.description = `${step.child === "left" ? "numerator" : "denominator"} of ${name}`;
+        }
+      });
+    }
+  }
   const selected =
     candidates.length <= limit
       ? candidates

@@ -34,6 +34,10 @@ The runtime frames messages as application instructions to the tutor, asking it 
 | `denominator-to-negative-power` | Rewrite a selected denominator as a negative power. | scribed-operation |
 | `set-sign` | Set the sign of a selected term. | scribed-operation |
 | `factor-out` | Factor a named factor from the selected polynomial using exact bounded division. | scribed-operation |
+| `combine-fractions` | Combine exactly two selected fractions without expanding, retaining their sign. | scribed-operation |
+| `scale-fraction` | Multiply both numerator and denominator by the named factor. | scribed-operation |
+| `multiply-part` | Multiply only the selected part by the named factor. | scribed-operation |
+| `flatten-nested-fraction` | Flatten one nested division; for `(a/b)/c`, place `c` before the factors of `b`. | scribed-operation |
 | `cancel-common-factor` | Remove one literally matching factor from a numerator and denominator in the selected product or line. | scribed-operation |
 | `non-unique` | Ask for the result of factor, expand, simplify, cancel, combine or other work; no rewrite. | no proposal |
 

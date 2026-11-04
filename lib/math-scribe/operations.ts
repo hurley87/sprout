@@ -2,7 +2,7 @@ import { exactObject } from "../calculus/math-expression";
 import { parseAlgebraExpression, type AlgebraExpression } from "../math-audit/expression";
 import { formatExpression } from "../math-audit/format";
 import { getPart, listParts, replacePart, type Part, type PathStep } from "./parts";
-import { cancelFactor, factorOut } from "./factor-operations";
+import { cancelFactor, factorOut, structuralKey } from "./factor-operations";
 
 /** Replace parts or lines, flip division, move powers, or set signs; never repair or choose a strategy. */
 export type ScribeOperation =
@@ -13,6 +13,10 @@ export type ScribeOperation =
   | { kind: "denominator-to-negative-power"; partId: string }
   | { kind: "set-sign"; partId: string; sign: "plus" | "minus" }
   | { kind: "factor-out"; partId: string; factor: AlgebraExpression | number }
+  | { kind: "combine-fractions"; partId: string }
+  | { kind: "flatten-nested-fraction"; partId: string }
+  | { kind: "scale-fraction"; partId: string; factor: AlgebraExpression | number }
+  | { kind: "multiply-part"; partId: string; factor: AlgebraExpression | number }
   | { kind: "cancel-common-factor"; factor: AlgebraExpression | number; partId?: string }
   | { kind: "non-unique"; name: "factor" | "expand" | "simplify" | "cancel" | "combine" | "other"; partId?: string };
 
@@ -52,12 +56,16 @@ function validate(value: unknown): ScribeOperation {
     case "division-to-reciprocal":
     case "negative-power-to-denominator":
     case "denominator-to-negative-power":
+    case "combine-fractions":
+    case "flatten-nested-fraction":
       keys = ["kind", "partId"];
       break;
     case "set-sign":
       keys = ["kind", "partId", "sign"];
       break;
     case "factor-out":
+    case "scale-fraction":
+    case "multiply-part":
       keys = ["kind", "partId", "factor"];
       break;
     case "cancel-common-factor":
@@ -72,7 +80,12 @@ function validate(value: unknown): ScribeOperation {
   const object = exactObject(value, keys);
   if (keys.includes("partId") && typeof object.partId !== "string") throw new Error();
   if (kind === "set-sign" && object.sign !== "plus" && object.sign !== "minus") throw new Error();
-  if (kind === "factor-out" || kind === "cancel-common-factor") {
+  if (
+    kind === "factor-out" ||
+    kind === "cancel-common-factor" ||
+    kind === "scale-fraction" ||
+    kind === "multiply-part"
+  ) {
     if (typeof object.factor === "number") {
       if (!Number.isSafeInteger(object.factor)) throw new Error();
     } else {
@@ -112,6 +125,14 @@ export function describeOperation(operation: ScribeOperation): string {
       return `Set the sign to ${operation.sign}`;
     case "factor-out":
       return "Factored out the selected factor";
+    case "combine-fractions":
+      return "Combined the selected fractions";
+    case "flatten-nested-fraction":
+      return "Flattened the nested fraction";
+    case "scale-fraction":
+      return "Scaled the selected fraction";
+    case "multiply-part":
+      return "Multiplied the selected part";
     case "cancel-common-factor":
       return "Cancelled the common factor";
     case "non-unique":
@@ -181,7 +202,61 @@ export function applyOperation(current: AlgebraExpression, input: unknown): Oper
     const parent = path.length ? getPart(expression, parentPath) : null;
     const last = path.at(-1);
     if (operation.kind === "replace-line" || operation.kind === "replace-part") replacement = operation.expression;
-    else if (operation.kind === "factor-out" || operation.kind === "cancel-common-factor") {
+    else if (
+      operation.kind === "combine-fractions" ||
+      operation.kind === "flatten-nested-fraction" ||
+      operation.kind === "scale-fraction" ||
+      operation.kind === "multiply-part"
+    ) {
+      const product = (...nodes: AlgebraExpression[]): AlgebraExpression => ({
+        op: "multiply",
+        args: nodes.flatMap(node => (node.op === "multiply" ? node.args : [node])),
+      });
+      const question = `What should ${spokenName(parts, part)} become? Which fractions or factors do you mean?`;
+      if (typeof selected === "number") return failure("needs-result", question);
+      if (operation.kind === "combine-fractions") {
+        const operands =
+          selected.op === "subtract"
+            ? [selected.left, selected.right]
+            : selected.op === "add" && selected.args.length === 2
+              ? selected.args
+              : [];
+        const [first, second] = operands;
+        if (!first || !second || first.op !== "divide" || second.op !== "divide")
+          return failure("needs-result", question);
+        const same = structuralKey(first.right) === structuralKey(second.right);
+        const left = same ? first.left : product(first.left, second.right);
+        const right = same ? second.left : product(second.left, first.right);
+        replacement = {
+          op: "divide",
+          left: selected.op === "subtract" ? { op: "subtract", left, right } : { op: "add", args: [left, right] },
+          right: same ? first.right : product(first.right, second.right),
+        };
+      } else if (operation.kind === "flatten-nested-fraction") {
+        if (selected.op !== "divide") return failure("needs-result", question);
+        if (selected.left.op === "divide")
+          replacement = { op: "divide", left: selected.left.left, right: product(selected.right, selected.left.right) };
+        else if (selected.right.op === "divide")
+          replacement = {
+            op: "divide",
+            left: product(selected.left, selected.right.right),
+            right: selected.right.left,
+          };
+        else return failure("needs-result", question);
+      } else if (operation.kind === "scale-fraction" || operation.kind === "multiply-part") {
+        const raw = typeof operation.factor === "number" ? { op: "number", value: operation.factor } : operation.factor;
+        const factor = parseAlgebraExpression(raw);
+        if (!factor.ok) return failure("needs-result", question);
+        if (operation.kind === "multiply-part") replacement = product(selected, factor.expression);
+        else if (selected.op === "divide")
+          replacement = {
+            op: "divide",
+            left: product(selected.left, factor.expression),
+            right: product(selected.right, factor.expression),
+          };
+        else return failure("needs-result", question);
+      } else return failure("invalid-operation", question);
+    } else if (operation.kind === "factor-out" || operation.kind === "cancel-common-factor") {
       const factor =
         typeof operation.factor === "number" ? { op: "number" as const, value: operation.factor } : operation.factor;
       const question =

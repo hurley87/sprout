@@ -11,6 +11,29 @@ import { createSession, reduceSession } from "../lib/math-scribe/session";
 import { listParts } from "../lib/math-scribe/parts";
 import { readAlgebraLatex } from "../lib/math-audit/latex";
 
+it("validates the new operation shapes and their parts", () => {
+  const input = parseScribeInput({
+    workingLatex: "x",
+    baseLatex: "x",
+    pendingStatus: "none",
+    learnerTurns: [{ id: "l", text: "do it" }],
+    tutorTurns: [],
+  });
+  const parse = (operation: object) =>
+    parseScribeWithDrops(
+      { interpretations: [{ intent: "propose", source: "instruction", quote: "do it", operation }] },
+      input,
+    );
+  for (const kind of ["combine-fractions", "flatten-nested-fraction"])
+    expect(parse({ kind, partId: "p0" }).interpretations).toHaveLength(1);
+  for (const kind of ["scale-fraction", "multiply-part"]) {
+    expect(parse({ kind, partId: "p0", factor: 2 }).interpretations).toHaveLength(1);
+    expect(parse({ kind, partId: "p0", factor: { op: "bogus" } }).interpretations).toHaveLength(0);
+    expect(parse({ kind, partId: "p999", factor: 2 }).interpretations).toHaveLength(0);
+    expect(parse({ kind, partId: "p0" }).interpretations).toHaveLength(0);
+  }
+});
+
 for (const fixture of fixtures)
   it(`accepts fixture: ${fixture.name}`, async () => {
     const input = parseScribeInput({
