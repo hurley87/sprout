@@ -80,6 +80,22 @@ describe("math scribe voice runtime", () => {
     source: "instruction" | "report" = "instruction",
   ): Interpretation => ({ intent: "propose", operation, source, quote: "said" });
 
+  it("routes hints and calculus drift through application instructions", async () => {
+    runtime.onStart("difference-quotient", 1);
+    await say("give me a hint", { intent: "request-help", quote: "give me a hint" });
+    expect(messages.at(-1)).toContain("common denominator");
+    expect(runtime.report().visits.at(-1)?.log.at(-1)?.hint).toContain("common denominator");
+    await say("take the derivative", {
+      intent: "propose",
+      source: "instruction",
+      quote: "take the derivative",
+      operation: { kind: "non-unique", name: "calculus" },
+    });
+    expect(messages.at(-1)).toContain("not take a limit or derivative");
+    expect(runtime.snapshot().session?.pending).toBeNull();
+    expect(runtime.snapshot().metrics?.proposals).toBe(0);
+  });
+
   it("factors the second denominator and verifies the proposal", async () => {
     await say("flip", proposal({ kind: "division-to-reciprocal", partId: part("divisor") }));
     const quote = "factor 2x out of the denominator of the second fraction";

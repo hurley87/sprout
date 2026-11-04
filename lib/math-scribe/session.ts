@@ -7,6 +7,7 @@ import { reduceRational } from "../math-audit/rational";
 import { formatPolynomial } from "../math-audit/polynomial";
 import { applyOperation, type OperationResult, type ScribeOperation } from "./operations";
 import { listParts } from "./parts";
+import { conceptHint } from "./hints";
 
 /** Base is the last accepted line; pending versions compose on the working line.
  * Checks alone verify; corrections before a check fix recognition, afterwards edit math.
@@ -15,9 +16,10 @@ import { listParts } from "./parts";
  * an interpretation requested against the current state.
  * Withdrawals and retries remain in the append-only log and audit trail.
  */
+type InterpretedOperation = ScribeOperation | { kind: "non-unique"; name: "calculus"; partId?: string };
 export type Interpretation =
-  | { intent: "propose"; operation: ScribeOperation; source: "instruction" | "report"; quote: string }
-  | { intent: "correct"; operation: ScribeOperation; quote: string }
+  | { intent: "propose"; operation: InterpretedOperation; source: "instruction" | "report"; quote: string }
+  | { intent: "correct"; operation: InterpretedOperation; quote: string }
   | {
       intent:
         | "confirm"
@@ -85,7 +87,7 @@ export type SessionNotice =
     }
   | { kind: "clarify"; question: string }
   | { kind: "stale" | "nothing-changed" | "confirmed" | "undone" | "continued" | "limit" }
-  | { kind: "logged"; intent: string };
+  | { kind: "logged"; intent: string; hint?: string };
 export type SessionLogEntry = {
   at: number;
   revision: number;
@@ -97,6 +99,7 @@ export type SessionLogEntry = {
   version?: PendingVersion;
   check?: TransformationResult;
   duration?: number;
+  hint?: string;
 };
 export type SessionState = {
   problemId: string;
@@ -176,7 +179,9 @@ export function reduceSession(
   if (stale) notice = { kind: "stale" };
   else if (event.type === "interpretation" && (intent === "propose" || intent === "correct")) {
     const interpretation = event.interpretation as Extract<Interpretation, { intent: "propose" | "correct" }>;
-    if (intent === "correct" && !state.pending) {
+    if (interpretation.operation.kind === "non-unique" && interpretation.operation.name === "calculus") {
+      notice = { kind: "logged", intent: "calculus" };
+    } else if (intent === "correct" && !state.pending) {
       next.clarification = { question: "What would you like to change?", prompt: interpretation.quote };
       notice = { kind: "clarify", question: next.clarification.question };
     } else if (state.pending && state.pending.versions.length >= SESSION_LIMITS.versions) notice = { kind: "limit" };
@@ -364,7 +369,18 @@ export function reduceSession(
       notice = { kind: "continued" };
     }
   } else if (["describe-strategy", "request-help", "request-repeat"].includes(intent))
-    notice = { kind: "logged", intent };
+    notice = {
+      kind: "logged",
+      intent,
+      ...(intent === "request-help"
+        ? {
+            hint: conceptHint(
+              state.history.filter(line => !line.withdrawn && line.status === "verified").at(-1)?.expression ??
+                state.problemDomain.expression,
+            ),
+          }
+        : {}),
+    };
   // Only state changes advance the revision: a stale drop, no-op or logged-only event must
   // not invalidate interpretations requested against the unchanged state.
   if (!stale && intent === "request-check") next.clarification = null;
@@ -383,6 +399,7 @@ export function reduceSession(
       ...(event.type === "interpretation" ? { requestId: event.requestId } : {}),
       status: status(next),
       outcome: notice.kind,
+      ...(notice.kind === "logged" && notice.hint ? { hint: notice.hint } : {}),
       ...(version ? { version } : {}),
       ...(checked ? { check: checked } : {}),
       ...(duration !== undefined ? { duration } : {}),
@@ -420,6 +437,7 @@ export function sessionMetrics(state: SessionState) {
       entry => entry.version?.cause === "recognition-correction" && entry.outcome === "proposed",
     ).length,
     clarifications: state.log.filter(entry => entry.outcome === "clarify").length,
+    hints: state.log.filter(entry => entry.hint).length,
     checks,
     undos: state.log.filter(entry => entry.outcome === "undone").length,
     staleDrops: state.log.filter(entry => entry.outcome === "stale").length,

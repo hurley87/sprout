@@ -147,7 +147,7 @@ const operations = [
   ...[false, true].map(withPart =>
     object({
       kind: literal("non-unique"),
-      name: { type: "string", enum: ["factor", "expand", "simplify", "cancel", "combine", "other"] },
+      name: { type: "string", enum: ["factor", "expand", "simplify", "cancel", "combine", "other", "calculus"] },
       ...(withPart ? { partId: string } : {}),
     }),
   ),
@@ -196,7 +196,8 @@ An openQuestion is prior clarification context, not current evidence. If current
 Refer to the displayed line and supplied parts for references such as the second fraction, its denominator, or the negative exponent. If a reference is ambiguous, clarify with a short question naming the options. For a complex fraction, "top" refers to the outer numerator only when unambiguous; if "the denominator" or "change the top" has multiple possible targets, clarify by naming the options and never guess.
 Map flip the second fraction or multiply by the reciprocal to division-to-reciprocal; rewrite a negative exponent as a denominator to negative-power-to-denominator; change a sign to set-sign; a dictated numerator to replace-part; a whole dictated line to replace-line. Use factor-out when a learner names the factor to factor, take, or pull out of a part; use cancel-common-factor when they name what cancels. For factor or cancel without a named factor use non-unique. Simplify, expand, or combine without a stated result is non-unique. If the learner also dictates the complete result, use replace-part or replace-line with exactly their stated result rather than applying an operation. For self-corrections such as "factor out six x or 2x", use the last stated factor. A mere goal or plan such as I'll simplify it or I'm going to use the reciprocal is describe-strategy, not a proposal. As exceptions for uniquely addressed mechanical instructions, use combine-fractions for two fractions, flatten-nested-fraction for a named complex fraction, scale-fraction for multiplying both top and bottom by a named factor, and multiply-part for multiplying only the named part by a named factor; never expand or collect terms.
 I wrote, I got, or my next line is means source report; direct instructions to Sprout mean instruction. A correction of what Sprout wrote is correct. Check that step or I'm done with this line is request-check; yes or that's right about the line is confirm; undo that or go back is undo.
-Brackets, all over, to the power of, squared and cubed are optional dictation conventions. If grouping, exponent attachment, fraction extent, or incomplete speech is ambiguous, clarify with candidate readings rather than choosing. Never invent missing mathematics.`;
+Brackets, all over, to the power of, squared and cubed are optional dictation conventions. If grouping, exponent attachment, fraction extent, or incomplete speech is ambiguous, clarify with candidate readings rather than choosing. Never invent missing mathematics.
+Use non-unique with name calculus for requests to take a limit or derivative, not simplify or a proposed result.`;
 
 export function parseScribeWithDrops(
   value: unknown,
@@ -298,7 +299,9 @@ export function parseScribeWithDrops(
           }
           if (
             kind === "non-unique" &&
-            !["factor", "expand", "simplify", "cancel", "combine", "other"].includes(operation.name as string)
+            !["factor", "expand", "simplify", "cancel", "combine", "other", "calculus"].includes(
+              operation.name as string,
+            )
           )
             throw new Error("invalid-shape");
           if (kind === "replace-part" || kind === "replace-line") {

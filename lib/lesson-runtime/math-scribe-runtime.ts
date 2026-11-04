@@ -91,6 +91,9 @@ export function scribeInstruction(
       );
     }
     case "logged":
+      if (notice.intent === "calculus")
+        return "This question asks you to simplify the expression, not take a limit or derivative. What would you like to do next?";
+      if (notice.intent === "request-help") return notice.hint ?? null;
       return notice.intent === "describe-strategy" ? "What would you like to change?" : null;
     case "confirmed":
       return "Okay.";
@@ -534,7 +537,7 @@ export class MathScribeRuntime {
         !queued.slice(index + 1).some(
           later =>
             // "What would you like to change?" is moot once the same breath did anything else.
-            item.kind === "logged" ||
+            (item.kind === "logged" && item.content === "What would you like to change?") ||
             (later.kind === "proposed" &&
               item.kind === "clarify" &&
               item.scope &&
@@ -551,8 +554,8 @@ export class MathScribeRuntime {
   /** Within a batch the update is queued for `flush`; otherwise (UI actions) it is spoken now. */
   private brief(visit: Visit, notice: SessionNotice, started: number, queue?: { batch: Queued[]; scope?: PathStep[] }) {
     if (notice.kind === "proposed") visit.proposalTimings.push(Math.max(0, Date.now() - this.speechEndedAt));
-    if (notice.kind === "logged" && (notice.intent === "request-help" || notice.intent === "request-repeat")) {
-      this.support(notice.intent === "request-help" ? "help" : "repeat");
+    if (notice.kind === "logged" && notice.intent === "request-repeat") {
+      this.support("repeat");
       return;
     }
     const origin = visit.session.pending?.versions[visit.session.pending.current].origin;

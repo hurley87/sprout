@@ -317,7 +317,7 @@ describe("scribe session", () => {
     expect(late.notice.kind).toBe("stale");
     expect(late.state.revision).toBe(requested);
     const help = say(late.state, { intent: "request-help", quote: "help" }, 10, requested);
-    expect(help.notice).toEqual({ kind: "logged", intent: "request-help" });
+    expect(help.notice).toMatchObject({ kind: "logged", intent: "request-help", hint: expect.any(String) });
     expect(help.state.revision).toBe(requested);
     state = say(help.state, { intent: "confirm", quote: "yes" }, 11, requested).state;
     expect(state.pending?.confirmed).toBe(true);
