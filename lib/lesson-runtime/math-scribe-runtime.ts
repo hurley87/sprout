@@ -45,6 +45,10 @@ const unfinishedPhrase = (text: string) => {
   }
   return openBrackets > 0 || UNFINISHED_ENDING.test(withoutFiller);
 };
+const rejectedCount = (diagnostics: unknown) => {
+  const dropped = (diagnostics as { dropped?: unknown } | undefined)?.dropped;
+  return Array.isArray(dropped) ? dropped.length : 0;
+};
 const RETRYABLE = new Set(["timeout", "provider-failure", "malformed"]);
 const areas: Record<string, string> = {
   "reciprocal-numerator": "the numerator of the second fraction",
@@ -359,6 +363,16 @@ export class MathScribeRuntime {
         this.log("math-scribe.request", record);
         return;
       }
+      if (status === "ok" && body.interpretations?.length === 0 && rejectedCount(body.diagnostics) > 0) {
+        // Every reading failed validation (e.g. a misquoted learner phrase): ask again at once
+        // rather than leave the learner in silence; after a second failure, ask them to repeat.
+        record.status = "rejected";
+        this.log("math-scribe.request", record);
+        if (attempt === 0) continue;
+        for (const group of learner) for (const order of group.orders) this.consumed.add(order);
+        this.instruct("I might have misheard. Please say that again.");
+        break;
+      }
       if (status === "ok" && body.interpretations) {
         if (this.newLearnerWords()) {
           // The learner kept talking while this was read: re-read everything together.
@@ -485,8 +499,8 @@ export class MathScribeRuntime {
   /** Several separate updates from one utterance were spoken over each other or dropped, so a
    * batch becomes one message: a check supersedes the confirmation before it, a held check
    * already says the change is on screen, and a request for a result is not asked when a later
-   * proposal in the same breath changed that position (or an open "what would you like to change"
-   * was answered by one). */
+   * proposal in the same breath changed that position. An open "what would you like to change"
+   * is dropped whenever anything follows it. */
   private flush(queued: readonly Queued[], visit: Visit, started: number) {
     const checked = queued.some(item => item.kind === "checked");
     const deferred = queued.some(item => item.kind === "check-deferred");
@@ -494,14 +508,16 @@ export class MathScribeRuntime {
       (item, index) =>
         !(checked && item.kind === "confirmed") &&
         !(deferred && item.kind === "proposed") &&
-        !queued
-          .slice(index + 1)
-          .some(
-            later =>
-              later.kind === "proposed" &&
-              (item.kind === "logged" ||
-                (item.kind === "clarify" && item.scope && later.scope && overlaps(item.scope, later.scope))),
-          ),
+        !queued.slice(index + 1).some(
+          later =>
+            // "What would you like to change?" is moot once the same breath did anything else.
+            item.kind === "logged" ||
+            (later.kind === "proposed" &&
+              item.kind === "clarify" &&
+              item.scope &&
+              later.scope &&
+              overlaps(item.scope, later.scope)),
+        ),
     );
     const content = [...new Set(kept.map(item => item.content))].join(" ");
     if (!content) return;

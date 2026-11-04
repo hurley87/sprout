@@ -462,6 +462,49 @@ describe("math scribe voice runtime", () => {
     expect(logs.filter(entry => entry.type === "math-scribe.stale-part")).toHaveLength(2);
   });
 
+  it("asks again at once when every reading is rejected, then asks the learner to repeat", async () => {
+    const rejected = () =>
+      fetcher.mockResolvedValueOnce({
+        json: async () => ({
+          status: "ok",
+          interpretations: [],
+          diagnostics: { dropped: [{ reason: "unquoted", value: {} }] },
+        }),
+      });
+    rejected();
+    respond(proposal({ kind: "division-to-reciprocal", partId: part("divisor") }));
+    await say("flip the second fraction");
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(runtime.snapshot().session?.pending?.status).toBe("interpreted");
+    expect(runtime.report().visits[0].requests.map(request => request.status)).toEqual(["rejected", "ok"]);
+
+    fetcher.mockReset();
+    rejected();
+    rejected();
+    messages.length = 0;
+    fragment("two times two uh two times open bracket two x plus five y close bracket");
+    runtime.onQuiet();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(messages.at(-1)).toContain("Please say that again");
+    runtime.onQuiet();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not ask what to change when the same breath also asks for a check", async () => {
+    await say("flip", proposal({ kind: "division-to-reciprocal", partId: part("divisor") }));
+    messages.length = 0;
+    await say(
+      "let's reduce this now, let's verify this",
+      { intent: "describe-strategy", quote: "let's reduce this now" },
+      { intent: "request-check", quote: "let's verify this" },
+    );
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).not.toContain("What would you like to change");
+    expect(messages[0]).toContain("That step follows");
+  });
+
   it("speaks once per utterance: a check replaces the confirmation before it", async () => {
     await say(
       "y times six x minus five y",
