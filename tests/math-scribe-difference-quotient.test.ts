@@ -100,6 +100,39 @@ describe("difference quotient session", () => {
     expect(state.history.at(-1)?.status).toBe("verified");
   });
 
+  it("accepts a complete alternate route that scales each fraction first", () => {
+    let state = start();
+    state = verified(
+      state,
+      { kind: "scale-fraction", partId: part(state, "first fraction on top"), factor: read("x+h+1") },
+      "multiply the first fraction top and bottom by x plus h plus one",
+    );
+    state = verified(
+      state,
+      { kind: "scale-fraction", partId: part(state, "second fraction on top"), factor: read("x+1") },
+      "multiply the second fraction top and bottom by x plus one",
+    );
+    state = verified(state, { kind: "combine-fractions", partId: part(state, "numerator") }, "combine them");
+    state = verified(state, { kind: "flatten-nested-fraction", partId: "p0" }, "bring the h down");
+    state = verified(
+      state,
+      { kind: "replace-part", partId: part(state, "numerator"), expression: read("-h") },
+      "the top is negative h",
+    );
+    state = verified(state, { kind: "cancel-common-factor", factor: read("h") }, "cancel the h");
+    expect(state.history).toHaveLength(7);
+    expect(formatExpression(state.base)).toBe(answer);
+  });
+
+  it("names the top fraction once the fractions on top are combined", () => {
+    const parts = listParts(combined().base);
+    expect(parts.find(item => item.path.length === 0)?.aliases).toEqual([]);
+    expect(parts.find(item => item.description === "top fraction")?.aliases).toContain("the top fraction");
+    expect(parts.find(item => item.description === "denominator")?.aliases).toContain("the outside denominator");
+    expect(parts.some(item => item.description === "numerator of the top fraction")).toBe(true);
+    expect(parts.flatMap(item => item.aliases)).not.toContain("the first fraction");
+  });
+
   it("accepts flattening first by multiplying by the reciprocal", () => {
     const state = start();
     const next = verified(state, { kind: "division-to-reciprocal", partId: "p0" }, "multiply by one over h");
@@ -192,6 +225,8 @@ describe("difference quotient session", () => {
       ).state.pending?.versions.at(-1)?.expression,
     );
     expect(result.state.base).toEqual(state.base);
+    expect(scribeInstruction(result.notice)).toContain("Please look at the numerator again.");
+    expect(scribeInstruction(result.notice)).not.toMatch(/\\|\^|xh/);
   });
 
   it("rejects a dictated premature cancellation", () => {

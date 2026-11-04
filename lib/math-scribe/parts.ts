@@ -118,6 +118,22 @@ export function listParts(expression: AlgebraExpression, options?: { limit?: num
         }
       });
     }
+  } else if (expression.op === "divide" && expression.left.op === "divide" && expression.right.op !== "divide") {
+    // A single fraction over an outside denominator, e.g. after combining the fractions on
+    // top: name it as the top fraction rather than numbering the whole line a fraction.
+    const at = (path: PathStep[]) => candidates.find(part => JSON.stringify(part.path) === JSON.stringify(path));
+    const outer = at([]);
+    if (outer) outer.aliases = [];
+    const top = at([{ child: "left" }]);
+    if (top) {
+      top.description = "top fraction";
+      top.aliases = ["the top fraction", "the big numerator", "the outer numerator"];
+    }
+    at([{ child: "right" }])?.aliases.push("the outside denominator", "the bottom", "the outer denominator");
+    for (const side of ["left", "right"] as const) {
+      const child = at([{ child: "left" }, { child: side }]);
+      if (child) child.description = `${side === "left" ? "numerator" : "denominator"} of the top fraction`;
+    }
   }
   const selected =
     candidates.length <= limit
