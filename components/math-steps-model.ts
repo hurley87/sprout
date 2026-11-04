@@ -1,7 +1,33 @@
 import type { LineStatus } from "@/lib/math-scribe/session";
 import type { snapshot } from "@/lib/math-scribe/session";
+import type { AlgebraExpression } from "@/lib/math-audit/expression";
 
 type Session = ReturnType<typeof snapshot>;
+
+export function showDoneHint(session: Session): boolean {
+  const latest = session.history.filter(line => !line.withdrawn).at(-1);
+  if (!latest || latest.id === "start" || latest.status !== "verified" || session.pending) return false;
+  const hasOnlyFactors = (expression: AlgebraExpression): boolean => {
+    switch (expression.op) {
+      case "number":
+      case "variable":
+        return true;
+      case "multiply":
+        return expression.args.every(hasOnlyFactors);
+      case "negate":
+        return hasOnlyFactors(expression.argument);
+      case "power":
+        return hasOnlyFactors(expression.base);
+      default:
+        return false;
+    }
+  };
+  return (
+    latest.expression.op === "divide" &&
+    hasOnlyFactors(latest.expression.left) &&
+    hasOnlyFactors(latest.expression.right)
+  );
+}
 
 export function discrepancyArea(role: string | undefined): string {
   const areas: Record<string, string> = {

@@ -1,8 +1,25 @@
 import { describe, expect, it } from "vitest";
-import { discrepancyArea, historyRows, proposalLabel, spokenTrail } from "../components/math-steps-model";
+import { discrepancyArea, historyRows, proposalLabel, showDoneHint, spokenTrail } from "../components/math-steps-model";
 import { createSession, snapshot } from "../lib/math-scribe/session";
+import { readAlgebraLatex } from "../lib/math-audit/latex";
 
 describe("math steps view model", () => {
+  it("suggests finishing only for a verified single fraction without sums", () => {
+    const result = createSession({ problemId: "example", latex: "x" });
+    if (!result.ok) throw new Error(result.reason);
+    const session = snapshot(result.state);
+    const fraction = readAlgebraLatex(String.raw`\frac{2x}{3y}`);
+    const sum = readAlgebraLatex(String.raw`\frac{x+1}{y}`);
+    if (!fraction.ok || !sum.ok) throw new Error("invalid test expression");
+    const line = { ...session.history[0], id: "step", expression: fraction.expression };
+    expect(showDoneHint(session)).toBe(false);
+    expect(showDoneHint({ ...session, history: [session.history[0], line] })).toBe(true);
+    expect(showDoneHint({ ...session, history: [session.history[0], { ...line, status: "unverified" }] })).toBe(false);
+    expect(showDoneHint({ ...session, history: [session.history[0], { ...line, expression: sum.expression }] })).toBe(
+      false,
+    );
+    expect(showDoneHint({ ...session, history: [session.history[0], { ...line, withdrawn: true }] })).toBe(false);
+  });
   it("labels each proposal without revealing a correction", () => {
     expect(proposalLabel("interpreted")).toBe("Is this what you meant?");
     expect(proposalLabel("confirmed")).toBe("Confirmed");

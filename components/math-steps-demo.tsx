@@ -3,14 +3,16 @@
 import "katex/dist/katex.min.css";
 import katex from "katex";
 import { Figtree } from "next/font/google";
+import { useEffect, useRef } from "react";
 import { formatExpression } from "@/lib/math-audit/format";
 import { MATH_SCRIBE_LESSON } from "@/lib/lesson-runtime/math-scribe-lesson";
-import { getMathScribeProblem, isMathScribeProblemId, MATH_SCRIBE_PROBLEM_IDS } from "@/lib/math-scribe/problems";
+import type { LessonDefinition } from "@/lib/lesson-runtime/lesson-definition";
+import { getMathScribeProblem, isMathScribeProblemId, type MathScribeProblemId } from "@/lib/math-scribe/problems";
 import { MicButton } from "./calculus/mic-button";
 import { useMicState } from "./calculus/use-mic-state";
 import { useVoiceDemo } from "./voice-demo/use-voice-demo";
 import { scrubSecrets } from "./voice-demo/diagnostics";
-import { historyRows, proposalLabel, spokenTrail } from "./math-steps-model";
+import { historyRows, proposalLabel, showDoneHint, spokenTrail } from "./math-steps-model";
 import type { PendingVersion } from "@/lib/math-scribe/session";
 import theme from "./calculus/calculus-theme.module.css";
 import styles from "./math-steps-demo.module.css";
@@ -35,38 +37,52 @@ function SpokenTrail({ versions, current }: { versions: readonly PendingVersion[
   const trail = spokenTrail(versions, current);
   if (!trail.quotes.length) return null;
   return (
-    <div className={styles.earlier}>
+    <div className={styles.detailsText}>
       <p>You said:</p>
-      <ol className={styles.spokenTrail}>
+      <ol>
         {trail.quotes.map((quote, index) => (
           <li key={index}>“{quote}”</li>
         ))}
       </ol>
       {trail.misheard.map((version, index) => (
         <p key={index}>
-          Misheard: <Equation latex={formatExpression(version.expression)} /> “{version.quote}”
+          Misheard as <Equation latex={formatExpression(version.expression)} /> “{version.quote}”
         </p>
       ))}
     </div>
   );
 }
 
-export default function MathStepsDemo({ debug = false }: { debug?: boolean }) {
+function problemIds(lesson: LessonDefinition): MathScribeProblemId[] {
+  const ids: MathScribeProblemId[] = [];
+  let nodeId: string = lesson.initialNodeId;
+  while (isMathScribeProblemId(nodeId) && !ids.includes(nodeId)) {
+    ids.push(nodeId);
+    const next = lesson.nodes[nodeId]?.onSuccess;
+    if (!next || next.kind !== "node") break;
+    nodeId = next.nodeId;
+  }
+  return ids;
+}
+
+export default function MathStepsDemo({
+  debug = false,
+  lesson = MATH_SCRIBE_LESSON,
+}: {
+  debug?: boolean;
+  lesson?: LessonDefinition;
+}) {
   const { audio, sceneRef, snapshot, live, start, stop, download, skip, supportReady, scribeAction } = useVoiceDemo({
-    lesson: MATH_SCRIBE_LESSON,
+    lesson,
     exportReport: runtime => runtime.report(),
     exportPrefix: "sprout-math-steps",
   });
-  const calculusMic = useMicState({ snapshot, live });
-  // The shared mic states are written for the three-problem calculus demo.
-  const microphone =
-    calculusMic.kind === "before"
-      ? { ...calculusMic, line: `Tap to start · ${MATH_SCRIBE_PROBLEM_IDS.length} problems` }
-      : calculusMic;
-  const nodeId = snapshot?.runtime?.nodeId ?? MATH_SCRIBE_LESSON.initialNodeId;
+  const mic = useMicState({ snapshot, live });
+  const nodeId = snapshot?.runtime?.nodeId ?? lesson.initialNodeId;
   const identity = snapshot?.display ?? { token: "initial", nodeId, sceneId: nodeId };
-  const completed = nodeId === "recap" || snapshot?.runtime?.phase === "complete";
+  const completed = snapshot?.runtime?.phase === "complete" || !isMathScribeProblemId(nodeId);
   const problem = isMathScribeProblemId(nodeId) ? getMathScribeProblem(nodeId) : null;
+  const ids = problemIds(lesson);
   const scribe = snapshot?.scribe;
   const session = scribe?.session;
   const pending = session?.pending;
@@ -74,17 +90,30 @@ export default function MathStepsDemo({ debug = false }: { debug?: boolean }) {
   const role = discrepancy?.status === "localized" ? discrepancy.role : undefined;
   const current = pending?.versions[pending.current];
   const active = live && snapshot?.status === "live";
-  // The problem card already shows the starting line; history lists only the steps after it.
   const steps = session ? historyRows(session).slice(1) : [];
+  const endRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [nodeId, current?.at, session?.history.length]);
+  const line = scribe?.checking
+    ? "Checking…"
+    : scribe?.interpreting
+      ? "Writing it down…"
+      : mic.kind === "before"
+        ? "Tap to start"
+        : mic.kind === "tutor"
+          ? "Sprout is talking"
+          : mic.kind === "listening" || mic.kind === "your-turn"
+            ? "Listening…"
+            : mic.line;
+  const microphone = { ...mic, line };
+  const trail = pending ? spokenTrail(pending.versions, pending.current) : null;
 
   return (
     <div className={`${styles.page} ${theme.theme} ${figtree.variable}`}>
       <main className={styles.main}>
-        <p className={styles.lead}>
-          Tell Sprout what to change; it writes the line and checks it when you say &apos;check&apos;.
-        </p>
         <section
-          className={styles.card}
+          className={styles.problem}
           aria-label="Current problem"
           ref={sceneRef}
           data-render-token={identity.token}
@@ -93,107 +122,112 @@ export default function MathStepsDemo({ debug = false }: { debug?: boolean }) {
         >
           {completed ? (
             <>
-              <h2>Practice done</h2>
-              <p>
-                Thanks for practicing. Problems:{" "}
-                {MATH_SCRIBE_PROBLEM_IDS.map(id => getMathScribeProblem(id).recapName).join(" and ")}.
-              </p>
+              <h1>Practice done</h1>
+              <p>Thanks for practicing. Problems: {ids.map(id => getMathScribeProblem(id).recapName).join(" and ")}.</p>
             </>
-          ) : problem ? (
-            <>
-              <p className={styles.eyebrow}>
-                Problem {MATH_SCRIBE_PROBLEM_IDS.indexOf(problem.id) + 1} of {MATH_SCRIBE_PROBLEM_IDS.length}
-              </p>
-              <Equation latex={problem.latex} />
-            </>
-          ) : null}
+          ) : (
+            problem && (
+              <>
+                <div className={styles.problemHeading}>
+                  <h1>Simplify</h1>
+                  {ids.length > 1 && (
+                    <span>
+                      Problem {ids.indexOf(problem.id) + 1} of {ids.length}
+                    </span>
+                  )}
+                </div>
+                <Equation latex={problem.latex} />
+              </>
+            )
+          )}
         </section>
         {!completed && (
-          <>
-            {steps.length > 0 && (
-              <section className={styles.card} aria-label="Working history">
-                <h2>Working history</h2>
-                <ol className={styles.history}>
-                  {steps.map(row => (
-                    <li key={row.id} className={row.withdrawn ? styles.withdrawn : ""}>
-                      <div>
-                        <Equation latex={row.latex} />
-                        <SpokenTrail versions={row.versions} current={row.current} />
-                        {row.domainNotes.map(note => (
-                          <p className={styles.earlier} key={`${note.label}:${note.latex}`}>
-                            {note.label} <Equation latex={note.latex} />
-                          </p>
-                        ))}
-                      </div>
-                      <span className={styles.badge}>
-                        {row.badge}
-                        {row.withdrawn ? " · Withdrawn" : ""}
-                      </span>
-                    </li>
-                  ))}
-                </ol>
-              </section>
-            )}
-            <section className={styles.card} aria-label="What I heard" aria-live="polite">
-              <h2>What I heard</h2>
-              {pending && current ? (
-                <>
-                  <Equation latex={session!.workingLine.latex} />
-                  <p className={styles.status}>{proposalLabel(pending.status, role)}</p>
-                  <SpokenTrail versions={pending.versions} current={pending.current} />
-                </>
-              ) : (
-                <p>Tell Sprout what you want to change.</p>
-              )}
-              <div className={styles.actions}>
-                <button onClick={() => scribeAction("confirm")} disabled={!active || !pending || pending.confirmed}>
-                  Confirm
-                </button>
-                <button onClick={() => scribeAction("undo")} disabled={!active || !session}>
-                  Undo
-                </button>
-                <button onClick={() => scribeAction("check")} disabled={!active || !pending || !!scribe?.checking}>
-                  Check step
-                </button>
-                {pending?.status === "unverified" && (
-                  <button onClick={() => scribeAction("continue")} disabled={!active}>
-                    Continue anyway
-                  </button>
-                )}
-              </div>
-            </section>
-            <div aria-live="polite">
-              {session?.clarification && (
-                <section className={`${styles.card} ${styles.clarification}`} aria-label="Clarification">
-                  <h2>Let&apos;s clarify</h2>
-                  <p>{session.clarification.question}</p>
-                  {session.clarification.readings?.map((reading, index) => (
-                    <div key={index}>
-                      <Equation latex={formatExpression(reading)} />
-                    </div>
-                  ))}
-                </section>
-              )}
-            </div>
-            <div className={styles.mic}>
-              <p aria-live="polite">
-                {scribe?.checking ? "Checking…" : scribe?.interpreting ? "Interpreting…" : live ? "Listening" : ""}
+          <section className={styles.working} aria-label="Working" aria-live="polite">
+            <h2 className={styles.sectionLabel}>Your working</h2>
+            {!steps.length && !pending && (
+              <p className={styles.empty}>
+                Tap the mic and tell Sprout your first step — for example, &apos;flip the second fraction&apos;.
               </p>
-              <MicButton state={microphone} onStart={start} onStop={stop} onAction={start} />
-              {active && (
-                <button className={styles.next} onClick={() => skip("question")} disabled={!supportReady}>
-                  Next problem
-                </button>
+            )}
+            <ol className={styles.history}>
+              {steps.map((row, index) => (
+                <li
+                  key={row.id}
+                  className={`${styles.historyRow} ${index === steps.length - 1 && !pending ? styles.latest : ""} ${row.withdrawn ? styles.withdrawn : ""}`}
+                >
+                  <details open={debug || undefined}>
+                    <summary>
+                      <span className={styles.mathLine}>
+                        <span aria-hidden="true">=</span>
+                        <Equation latex={row.latex} />
+                      </span>
+                      <span
+                        className={styles.badge}
+                        title={`${row.badge}${row.withdrawn ? " · Withdrawn" : ""}`}
+                        aria-label={`${row.badge}${row.withdrawn ? " · Withdrawn" : ""}`}
+                      >
+                        {row.badge.startsWith("?") ? "?" : row.badge.includes("Valid ·") ? "⚠" : "✓"}
+                      </span>
+                    </summary>
+                    <div className={styles.detailsText}>
+                      <SpokenTrail versions={row.versions} current={row.current} />
+                      {row.domainNotes.map(note => (
+                        <p key={`${note.label}:${note.latex}`}>
+                          {note.label} <Equation latex={note.latex} />
+                        </p>
+                      ))}
+                    </div>
+                  </details>
+                </li>
+              ))}
+              {pending && current && (
+                <li className={styles.pending}>
+                  <p className={styles.pendingLabel}>
+                    {pending.status === "invalid" || pending.status === "unverified"
+                      ? proposalLabel(pending.status, role)
+                      : "Not checked yet"}
+                  </p>
+                  <div className={styles.mathLine}>
+                    <span aria-hidden="true">=</span>
+                    <Equation latex={session!.workingLine.latex} />
+                  </div>
+                  {trail?.misheard.map((version, index) => (
+                    <p className={styles.detailsText} key={index}>
+                      Misheard as <Equation latex={formatExpression(version.expression)} /> “{version.quote}”
+                    </p>
+                  ))}
+                  <div className={styles.actions}>
+                    <button onClick={() => scribeAction("check")} disabled={!active || !!scribe?.checking}>
+                      Check
+                    </button>
+                    <button onClick={() => scribeAction("undo")} disabled={!active}>
+                      Undo
+                    </button>
+                    {pending.status === "unverified" && (
+                      <button onClick={() => scribeAction("continue")} disabled={!active}>
+                        Continue anyway
+                      </button>
+                    )}
+                  </div>
+                </li>
               )}
-            </div>
-          </>
+            </ol>
+            {session && showDoneHint(session) && (
+              <p className={styles.hint}>Say &apos;I&apos;m done&apos; to finish.</p>
+            )}
+            {session?.clarification && (
+              <div className={styles.clarification} aria-label="Clarification">
+                <p>{session.clarification.question}</p>
+                {session.clarification.readings?.map((reading, index) => (
+                  <div key={index}>
+                    <Equation latex={formatExpression(reading)} />
+                  </div>
+                ))}
+              </div>
+            )}
+            <div ref={endRef} className={styles.scrollTarget} />
+          </section>
         )}
-        {completed && (
-          <button className={styles.next} onClick={start} disabled={live}>
-            Practise again
-          </button>
-        )}
-        <p className={styles.note}>Sprout checks what you tell it, not your paper.</p>
         {snapshot?.error && <p role="alert">{snapshot.error}</p>}
         {debug && (
           <details className={styles.debug}>
@@ -216,6 +250,17 @@ export default function MathStepsDemo({ debug = false }: { debug?: boolean }) {
           </details>
         )}
       </main>
+      <div className={styles.bottomBar} aria-label="Voice controls">
+        <div className={styles.caption} aria-live="polite">
+          {current?.quote && <span key={`${nodeId}:${pending?.current}:${current.at}`}>“{current.quote}”</span>}
+        </div>
+        <MicButton state={microphone} onStart={start} onStop={stop} onAction={start} />
+        {active && !completed && ids.length > 1 && (
+          <button className={styles.skip} onClick={() => skip("question")} disabled={!supportReady}>
+            Next problem
+          </button>
+        )}
+      </div>
       <audio ref={audio} />
     </div>
   );

@@ -52,16 +52,15 @@ test("voice proposal, localized check, actions and microphone stop on a narrow s
     ),
   );
   await microphone.waitForPlayback(playback.id);
-  const proposal = page.getByRole("region", { name: "What I heard" });
-  await expect(proposal).toContainText("Is this what you meant?");
-  await expect(proposal).toContainText("flip with twelve plus thirty y");
-  await page.getByRole("button", { name: "Confirm", exact: true }).click();
-  await expect(proposal).toContainText("Confirmed");
-  await page.getByRole("button", { name: "Check step" }).click();
+  const proposal = page.getByRole("region", { name: "Working" });
+  await expect(proposal).toContainText("Not checked yet");
+  await expect(page.getByLabel("Voice controls")).toContainText("flip with twelve plus thirty y");
+  await expect(page.getByRole("button", { name: "Confirm", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Check", exact: true }).click();
   await expect(proposal).toContainText("Doesn't follow — look at the reciprocal numerator");
   await expect(proposal).not.toContainText("12x+30y");
   await page.getByRole("button", { name: "Undo", exact: true }).click();
-  await expect(proposal).toContainText("Tell Sprout what you want to change.");
+  await expect(proposal).toContainText("Tap the mic and tell Sprout your first step");
   await page.getByText("Session details").click();
   await expect(page.getByText("Session metrics")).toBeVisible();
   const downloadEvent = page.waitForEvent("download");
