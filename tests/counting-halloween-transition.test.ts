@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { COUNTING_HALLOWEEN_LESSON } from "../lib/lesson-runtime/counting-halloween-lesson";
+import { COUNTING_CONCERT_LESSON } from "../lib/lesson-runtime/counting-concert-lesson";
 import { COUNTING_LESSON } from "../lib/lesson-runtime/counting-lesson";
 import { validateLessonDefinition, type LessonDefinition } from "../lib/lesson-runtime/lesson-definition";
 import { LESSON_TIMING, transitionQuietMs } from "../lib/lesson-runtime/lesson-runtime";
@@ -41,6 +42,7 @@ describe("counting scene transitions wait for the whole tutor reply", () => {
 
   it.each([
     { lesson: COUNTING_HALLOWEEN_LESSON, first: "count-1-ghost", next: "count-2-bats" },
+    { lesson: COUNTING_CONCERT_LESSON, first: "count-1-microphone", next: "count-2-guitars" },
     { lesson: COUNTING_LESSON, first: "count-1-duck", next: "count-2-ducks" },
   ])(
     "$lesson.id holds the scene through a mid-reply pause and advances after sustained quiet",

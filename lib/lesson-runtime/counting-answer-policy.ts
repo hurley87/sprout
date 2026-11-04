@@ -4,7 +4,7 @@ export const ANSWER_COMMITMENTS = ["committed", "unresolved", "withdrawn", "no_a
 export type AnswerCommitment = (typeof ANSWER_COMMITMENTS)[number];
 
 /** Application-owned counting adventures; any other lesson keeps its confirmation gates. */
-const COUNTING_LESSON_IDS: ReadonlySet<string> = new Set(["counting", "counting-halloween"]);
+const COUNTING_LESSON_IDS: ReadonlySet<string> = new Set(["counting", "counting-halloween", "counting-concert"]);
 
 /** Counting accepts learner evidence separately from the latest tutor feedback. */
 export function acceptsLearnerAnswerIndependently(lesson?: LessonDefinition) {
