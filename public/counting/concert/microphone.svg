@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" role="img" aria-label="One sparkly pink handheld microphone">
+<defs>
+  <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#FFF2BC"/><stop offset="0.5" stop-color="#F9BF58"/><stop offset="1" stop-color="#E79B45"/></linearGradient>
+  <linearGradient id="cream" x1="0" y1="0" x2="0.95" y2="1"><stop stop-color="#FFFCF2"/><stop offset="1" stop-color="#FCEBD9"/></linearGradient>
+  <radialGradient id="shine" cx="0.28" cy="0.16" r="0.8"><stop stop-color="#FFFFFF" stop-opacity=".88"/><stop offset="0.20" stop-color="#FFFFFF" stop-opacity=".2"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/></radialGradient>
+  <filter id="shadow" x="-40%" y="-40%" width="180%" height="195%"><feGaussianBlur in="SourceAlpha" stdDeviation="5"/><feOffset dy="5"/><feComponentTransfer><feFuncA type="linear" slope="0.20"/></feComponentTransfer><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  <filter id="softGlow" x="-70%" y="-70%" width="240%" height="240%"><feGaussianBlur stdDeviation="11" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+</defs><g filter="url(#shadow)" transform="rotate(-26 160 168)">
+<path d="M138 129 L182 129 178 280 Q160 299 142 280Z" fill="#A88CEC" stroke="#7555B6" stroke-width="6" stroke-linejoin="round"/>
+<path d="M142 146 H178 L176 276 Q160 291 144 276Z" fill="#F59CBE" opacity=".96"/>
+<path d="M146 165 L149 268" stroke="#FFFFFF" stroke-width="7" opacity=".45" stroke-linecap="round"/>
+<rect x="139" y="114" width="42" height="33" rx="12" fill="url(#gold)" stroke="#C98C52" stroke-width="5"/>
+<ellipse cx="160" cy="90" rx="49" ry="61" fill="#D5C8F8" stroke="#765BAF" stroke-width="6"/>
+<ellipse cx="157" cy="80" rx="37" ry="44" fill="#F2E9FF" opacity=".72"/>
+<path d="M121 65 Q160 44 200 65 M117 92 Q160 74 204 92 M120 114 Q160 97 200 114 M138 35 Q121 87 142 137 M164 31 Q153 84 165 144 M185 37 Q199 86 181 139" fill="none" stroke="#8E75C4" stroke-width="4" opacity=".75"/>
+<path d="M149 201 L155 211 167 211 158 219 161 230 150 223 140 230 143 219 134 211 146 211Z" fill="#FFE8A2"/>
+</g></svg>

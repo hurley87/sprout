@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" role="img" aria-label="Lavender acoustic guitar">
+<defs>
+  <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#FFF2BC"/><stop offset="0.5" stop-color="#F9BF58"/><stop offset="1" stop-color="#E79B45"/></linearGradient>
+  <linearGradient id="cream" x1="0" y1="0" x2="0.95" y2="1"><stop stop-color="#FFFCF2"/><stop offset="1" stop-color="#FCEBD9"/></linearGradient>
+  <radialGradient id="shine" cx="0.28" cy="0.16" r="0.8"><stop stop-color="#FFFFFF" stop-opacity=".88"/><stop offset="0.20" stop-color="#FFFFFF" stop-opacity=".2"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/></radialGradient>
+  <filter id="shadow" x="-40%" y="-40%" width="180%" height="195%"><feGaussianBlur in="SourceAlpha" stdDeviation="5"/><feOffset dy="5"/><feComponentTransfer><feFuncA type="linear" slope="0.20"/></feComponentTransfer><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  <filter id="softGlow" x="-70%" y="-70%" width="240%" height="240%"><feGaussianBlur stdDeviation="11" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+</defs><g filter="url(#shadow)">
+    <path d="M150 36 Q160 25 170 36 L171 155 Q188 156 197 170 C231 170 254 195 250 231 C244 278 209 293 160 294 C111 293 76 278 70 231 C66 195 89 170 123 170 Q132 156 149 155Z" fill="#B5A2EE" stroke="#7558B5" stroke-width="7" stroke-linejoin="round"/>
+    <path d="M117 193 Q92 222 109 254" fill="none" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round" opacity=".24"/>
+    <path d="M152 38 L168 38 167 167 153 167Z" fill="#F6D5AA" stroke="#8D6588" stroke-width="3"/>
+    <path d="M155 43V166 M161 43V166 M166 43V166" stroke="#9F7B70" stroke-width="2"/>
+    <rect x="143" y="29" width="34" height="45" rx="9" fill="#F8CDA9" stroke="#7558B5" stroke-width="5"/>
+    <path d="M142 41 L128 39 M142 53 L128 57 M177 41 L191 39 M177 53 L191 57" stroke="#7558B5" stroke-width="6" stroke-linecap="round"/>
+    <circle cx="160" cy="206" r="27" fill="#80507D" stroke="#F9D8AB" stroke-width="7"/>
+    <circle cx="160" cy="206" r="18" fill="#493552"/>
+    <path d="M154 50V256 M158 50V256 M162 50V256 M166 50V256" stroke="#F9F3E7" stroke-width="1.8" opacity=".9"/>
+    <rect x="139" y="248" width="42" height="9" rx="3" fill="#644660"/>
+    <path d="M100 224 Q100 245 116 254" stroke="#FFE5F4" stroke-width="6" opacity=".35" fill="none"/>
+    <path d="M213 215 l4 10 12 0 -9 7 4 11 -11 -7 -10 7 4 -11 -9 -7 12 0Z" fill="#FFF0AE"/>
+    </g></svg>

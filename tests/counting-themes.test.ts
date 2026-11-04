@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { CountingStage } from "../app/counting-stage";
 import { countingScene } from "../app/counting-scenes";
 import { GARDEN_THEME } from "../app/counting-themes";
+import { CONCERT_THEME } from "../app/concert-theme";
 import { acceptsLearnerAnswerIndependently } from "../lib/lesson-runtime/counting-answer-policy";
 import { buildCountingLesson, COUNTING_LESSON, COUNTING_NODE_IDS } from "../lib/lesson-runtime/counting-lesson";
 import { lessonNodeOrder } from "../lib/lesson-runtime/lesson-definition";
@@ -22,6 +23,11 @@ describe("counting theme contracts", () => {
 
   it("is plain data a server page can pass to the client lesson", () => {
     expect(JSON.parse(JSON.stringify(GARDEN_THEME))).toEqual(GARDEN_THEME);
+    expect(JSON.parse(JSON.stringify(CONCERT_THEME))).toEqual(CONCERT_THEME);
+    for (const node of Object.values(CONCERT_THEME.lesson.nodes)) {
+      const presentation = node.presentation as { sceneId: string; object: string; quantity: number };
+      expect(countingScene(presentation, CONCERT_THEME.scenes).objects).toHaveLength(presentation.quantity);
+    }
   });
 
   it("validates scenes against a theme and draws its raster artwork", () => {

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" role="img" aria-label="One large golden sparkly star">
+<defs>
+  <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#FFF2BC"/><stop offset="0.5" stop-color="#F9BF58"/><stop offset="1" stop-color="#E79B45"/></linearGradient>
+  <linearGradient id="cream" x1="0" y1="0" x2="0.95" y2="1"><stop stop-color="#FFFCF2"/><stop offset="1" stop-color="#FCEBD9"/></linearGradient>
+  <radialGradient id="shine" cx="0.28" cy="0.16" r="0.8"><stop stop-color="#FFFFFF" stop-opacity=".88"/><stop offset="0.20" stop-color="#FFFFFF" stop-opacity=".2"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/></radialGradient>
+  <filter id="shadow" x="-40%" y="-40%" width="180%" height="195%"><feGaussianBlur in="SourceAlpha" stdDeviation="5"/><feOffset dy="5"/><feComponentTransfer><feFuncA type="linear" slope="0.20"/></feComponentTransfer><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  <filter id="softGlow" x="-70%" y="-70%" width="240%" height="240%"><feGaussianBlur stdDeviation="11" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+</defs><g filter="url(#shadow)"><polygon points="160.0,39.0 192.9,109.7 270.3,119.2 213.3,172.3 228.2,248.8 160.0,211.0 91.8,248.8 106.7,172.3 49.7,119.2 127.1,109.7" fill="url(#gold)" stroke="#E7A344" stroke-width="8" stroke-linejoin="round"/><polygon points="160.0,64.0 185.3,120.2 246.5,126.9 200.9,168.3 213.5,228.6 160.0,198.0 106.5,228.6 119.1,168.3 73.5,126.9 134.7,120.2" fill="#FFF3B1" opacity=".7"/><path d="M127 130L145 86" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round" opacity=".65"/></g></svg>
