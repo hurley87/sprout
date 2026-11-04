@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" role="img" aria-label="One yellow ice cream scoop">
+<defs>
+  <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#FFF2BC"/><stop offset="0.5" stop-color="#F9BF58"/><stop offset="1" stop-color="#E79B45"/></linearGradient>
+  <linearGradient id="cream" x1="0" y1="0" x2="0.95" y2="1"><stop stop-color="#FFFCF2"/><stop offset="1" stop-color="#FCEBD9"/></linearGradient>
+  <radialGradient id="shine" cx="0.28" cy="0.16" r="0.8"><stop stop-color="#FFFFFF" stop-opacity=".88"/><stop offset="0.20" stop-color="#FFFFFF" stop-opacity=".2"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/></radialGradient>
+  <filter id="shadow" x="-40%" y="-40%" width="180%" height="195%"><feGaussianBlur in="SourceAlpha" stdDeviation="5"/><feOffset dy="5"/><feComponentTransfer><feFuncA type="linear" slope="0.20"/></feComponentTransfer><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  <filter id="softGlow" x="-70%" y="-70%" width="240%" height="240%"><feGaussianBlur stdDeviation="11" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+</defs><g filter="url(#shadow)">
+<path d="M65 184 C65 110 100 66 160 65 C220 66 255 110 255 184 C265 197 257 213 242 218 C229 239 215 226 205 233 C192 246 181 237 170 242 C156 253 144 239 131 242 C119 248 109 232 97 232 C80 237 70 223 66 215 C52 206 54 194 65 184Z" fill="#FFD981" stroke="#DEA54A" stroke-width="7" stroke-linejoin="round"/>
+<ellipse cx="121" cy="108" rx="36" ry="15" fill="#FFFFFF" opacity=".28" transform="rotate(-30 121 108)"/>
+<path d="M97 156Q82 181 96 201 M222 160Q239 187 221 202" stroke="#FFFFFF" stroke-width="7" opacity=".24" stroke-linecap="round" fill="none"/>
+<path d="M113 215C127 228 135 214 148 226M178 228C195 219 207 232 220 218" stroke="#DEA54A" stroke-width="4" opacity=".38" fill="none"/>
+<g fill="#FFF4BE" stroke="#D79A39" stroke-width="4"><circle cx="163" cy="164" r="28"/><path d="M163 137v54 M136 164h54 M144 145l38 38 M182 145l-38 38" fill="none" stroke="#E6B455" stroke-width="3"/></g>
+</g></svg>

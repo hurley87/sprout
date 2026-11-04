@@ -1,0 +1,110 @@
+.stage {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #fae8e2;
+  container-type: size;
+  --room: calc(100cqh - var(--stage-top, 0px) - var(--stage-bottom, 0px));
+}
+.background {
+  position: absolute;
+  inset: 0;
+}
+.background img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center bottom;
+}
+.objects {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--stage-top, 0px) + var(--room) / 2);
+  width: min(100cqw - 2rem, var(--room) * 1.6);
+  aspect-ratio: 8 / 5;
+  translate: -50% -50%;
+}
+.object {
+  position: absolute;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+}
+.object img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.tub::after {
+  content: "";
+  position: absolute;
+  left: 23%;
+  right: 23%;
+  bottom: 12%;
+  height: 21%;
+  border: 3px solid #a97579;
+  border-radius: 5px 5px 35% 35%;
+  background: #fff7e4;
+  z-index: -1;
+}
+.landing img {
+  animation: drop 700ms ease-out both;
+}
+.stage[data-motion="success"]:not([data-answer-kind="order_step"]) .object:not(.tub):not(.landing) img {
+  animation: react 700ms ease-in-out;
+}
+.complete,
+.loading {
+  position: absolute;
+  color: #693c56;
+  font-size: clamp(1rem, 2.5vw, 1.5rem);
+}
+.complete {
+  left: 50%;
+  top: var(--stage-top, 1rem);
+  transform: translateX(-50%);
+  text-align: center;
+  background: #fff9efed;
+  border-radius: 999px;
+  padding: 0.4em 1em;
+  width: max-content;
+  max-width: 90%;
+}
+.loading {
+  inset: 0;
+  display: grid;
+  place-content: center;
+  padding: 1rem;
+  background: #fff8f1f2;
+  text-align: center;
+}
+@keyframes drop {
+  from {
+    transform: translateY(-30%);
+    opacity: 0.3;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+@keyframes react {
+  50% {
+    transform: translateY(-4%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stage .object img {
+    animation: none !important;
+  }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  .complete {
+    left: 17%;
+    top: 37%;
+    max-width: 28%;
+    width: auto;
+  }
+}

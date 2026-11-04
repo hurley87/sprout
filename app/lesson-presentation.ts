@@ -12,6 +12,7 @@ type PresentationSnapshot = Pick<LessonSnapshot, "status" | "error" | "awaitingS
 export type PresentationCopy = {
   readonly welcome: string;
   readonly complete: string;
+  readonly ready?: string;
   /** Irregular plurals for the success line; everything else adds "s". */
   readonly plurals?: Readonly<Record<string, string>>;
 };
@@ -51,7 +52,7 @@ export function lessonPresentation(
     return { kind: "waiting", message: "One moment…" };
   if (snapshot.runtime.hasChildTranscript && snapshot.runtime.transcriptSource === "child")
     return { kind: "thinking", message: "Sprout is thinking…" };
-  return { kind: "ready", message: "Your turn to count!" };
+  return { kind: "ready", message: copy.ready ?? "Your turn to count!" };
 }
 
 export type VoiceActivity = "off" | "waiting" | "your-turn" | "listening" | "speaking" | "thinking" | "understood";
