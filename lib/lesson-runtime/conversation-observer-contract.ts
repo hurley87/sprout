@@ -105,7 +105,7 @@ export function conversationStateQuestions(lesson: LessonDefinition, nodeId?: st
   if (acceptsLearnerAnswerIndependently(lesson)) {
     questions.answerCommitment = {
       type: "choice",
-      instructions: `${scope} Judge the learner's endorsement of their task answer separately from correctness and tutor feedback. A committed answer may be correct or incorrect. Follow revisions in order: a replacement supersedes an earlier candidate only when the learner presents it as their answer. Hesitations do not themselves prevent commitment; the last-mentioned candidate does not automatically establish it. Keep alternatives unresolved when the learner has not selected between them. Do not infer commitment from the expected quantity, tutor agreement, transcript ending or silence. An explanation request does not withdraw an answer unless it also revises it or expresses unresolved doubt about the task answer. Use only textual evidence; do not invent intonation or acoustic finality.`,
+      instructions: `${scope} Judge the learner's endorsement of their task answer separately from correctness and tutor feedback. A committed answer may be correct or incorrect. Follow revisions in order: a replacement supersedes an earlier candidate only when the learner presents it as their answer. Hesitations do not themselves prevent commitment; the last-mentioned candidate does not automatically establish it. Keep alternatives unresolved when the learner has not selected between them. Do not infer commitment from the expected ${lesson.id === "ice-cream-shop" ? "answer" : "quantity"}, tutor agreement, transcript ending or silence. An explanation request does not withdraw an answer unless it also revises it or expresses unresolved doubt about the task answer. Use only textual evidence; do not invent intonation or acoustic finality.`,
       criteria: {
         committed:
           "The learner currently endorses one identifiable answer. Any earlier conflicting candidates were replaced or rejected by the learner's revision; no competing alternative or expressed task uncertainty remains unresolved. A self-correction can establish commitment without special wording or a fluent delivery.",
@@ -212,7 +212,7 @@ export type ConversationStateOutputs = {
   discussionClosure?: ChoiceOutput<"closed" | "open">;
   objectiveState: ChoiceOutput<ObjectiveState>;
   tutorState: ChoiceOutput<ObservedTutorState>;
-  /** Required for live learner-evidence counting; absent in other/frozen contracts. */
+  /** Required for live learner-evidence lessons; absent in other/frozen contracts. */
   answerCommitment?: ChoiceOutput<AnswerCommitment>;
   concepts?: Readonly<Record<string, ChoiceOutput<(typeof CONCEPT_OBSERVATIONS)[number]>>>;
   /** Q10 selection and selected-proposal criterion scores. */
