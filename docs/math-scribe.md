@@ -126,14 +126,23 @@ Tests below are deterministic or mocked; they do not establish live-provider or 
 | Failure cases | “rejects an inner sign error without leaking an expression”, “preserves a dropped term in the invalid attempted numerator”, “clarifies premature cancellation before and after combining”, “rejects a dictated premature cancellation”, “clarifies ambiguous speech”, “records recognition correction before verifying minus h”, and “recognizes calculus drift without proposing a step”. The dropped-term test also asserts the localized “look at the numerator” feedback without leaking the expression. Whether the live interpreter clarifies rather than guesses a part is measured by the utterance fixtures in the paid benchmark, not proven deterministically. |
 | Undo, correction, clarification, check, hint and Stop | “keeps verified state through hint, check and undo” and the correction and clarification tests above; `tests/math-scribe-runtime.test.ts` — “ignores late responses after stop or a revision-changing undo” covers generic Stop behavior, not the difference-quotient lesson. |
 | Tutor does not pre-solve or claim to see paper | Sign-error and reference-path instruction assertions; exhaustive instruction coverage across all scenarios remains untested. |
-| Real microphone metrics | **Pending — requires a real microphone session.** |
-| Demo recording and voice suitability findings | **Pending — requires a real microphone session.** |
+| Real microphone metrics | Difference quotient pilot below (one developer session); learner and instructor sessions pending. |
+| Demo recording and voice suitability findings | Voice suitability findings in the pilot below; **demo recording pending.** |
 
-Pilot row template (no results recorded):
+### Difference quotient pilot
+
+**Pilot only: one adult tester (the developer), one session, 2026-11-05, flow B (describe changes).** No learner or instructor yet.
 
 | Session | Speech-end → proposal latency | Check → feedback latency | Transcription corrections | Unnecessary clarifications | Invalid-check rate | Full-expression dictation frequency | Recording and limitations |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-|  |  |  |  |  |  |  |  |
+| 1 (11-05) | 1.8–5.3 s, median 2.6 s (6 proposals) | 1.9–2.9 s, median 2.2 s (4 checks) | 0 | 1 of 4 | 0 / 4 | 0 whole lines; 2 parts (the expanded numerator, then `-h`) | Completed `-\frac{1}{(x+1)(x+h+1)}` in ~3.7 min from first proposal to final check; tester: "relatively smooth". Recording pending. |
+
+Findings from session 1:
+
+- **What worked:** "combine the two fractions by finding a common denominator" and "multiply it by 1 over h to leave us with one fraction" applied as `combine-fractions` and `flatten-nested-fraction` with no dictation; "factor out h out of the numerator denominator" applied as `cancel-common-factor`. Every check was equivalent and the final cancellation showed no domain warning.
+- **Clarifications (4):** "expand the numerator" and "let's simplify" asked for the result, by design; "now we wanna take the h" was genuinely underspecified. The fourth was unnecessary: mid-expansion, the interpreter asked "Do you want to replace the product `(x+h)(x+1)`, part p10, with its expansion…?" The application instruction contained LaTeX and an internal part ID (the tutor paraphrased it aloud), and the learner's "Yes" was read as confirming the already-pending first-bracket expansion rather than accepting the offered reading, so the learner then dictated the whole numerator.
+- **Where voice was slow:** the expansion step took 103 s, the only step over 25 s: dictating the expanded numerator with pauses, plus the lost clarification. 7 of 23 reads were superseded by mid-sentence pauses and one was rejected for a misquote; none lost an edit.
+- **Checks:** `-h` and the cancellation were spoken back to back and checked once, so the checker verified the jump from the expanded numerator directly to the answer.
 
 # Experimental tutor audio gate
 
