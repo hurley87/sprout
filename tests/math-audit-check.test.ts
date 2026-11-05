@@ -1,6 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { checkTransformation } from "../lib/math-audit/check";
 
+it("rejects a sign error and a dropped xh term in the difference quotient", () => {
+  const original = String.raw`\frac{\frac{x}{x+1}-\frac{x+h}{x+h+1}}{h}`;
+  const plus = String.raw`\frac{\frac{x}{x+1}+\frac{x+h}{x+h+1}}{h}`;
+  const combined = String.raw`\frac{x(x+h+1)-(x+h)(x+1)}{h(x+1)(x+h+1)}`;
+  const dropped = String.raw`\frac{x(x+h+1)-(x^2+x+h)}{h(x+1)(x+h+1)}`;
+  for (const [previous, proposed] of [
+    [original, plus],
+    [combined, dropped],
+  ])
+    expect(checkTransformation({ previous: { latex: previous }, proposed: { latex: proposed } }).verdict).toBe(
+      "not-equivalent",
+    );
+});
+
 const original = String.raw`\frac{6xy-5y^2}{4x+10y} \div \frac{12x^2-10xy}{12x+30y}`;
 const reciprocal = String.raw`\frac{6xy-5y^2}{4x+10y} \times \frac{12x+30y}{12x^2-10xy}`;
 const missing = String.raw`\frac{6xy-5y^2}{4x+10y} \times \frac{12+30y}{12x^2-10xy}`;

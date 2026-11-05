@@ -13,6 +13,15 @@ function read(source: string): AlgebraExpression {
 }
 
 describe("math scribe addressable parts", () => {
+  it("names the components of a complex fraction", () => {
+    const parts = listParts(read(String.raw`\frac{\frac{x}{x+1}-\frac{x+h}{x+h+1}}{h}`));
+    expect(parts.find(part => part.description === "numerator")?.aliases).toContain("the big numerator");
+    expect(parts.find(part => part.description === "denominator")?.aliases).toContain("the outside denominator");
+    expect(parts.find(part => part.description === "second fraction on top")?.aliases).toContain(
+      "the second fraction on top",
+    );
+    expect(parts.find(part => part.description === "numerator of the second fraction on top")?.latex).toBe("x+h");
+  });
   it("describes both fractions of the division with stable addresses", () => {
     const expression = read(original);
     const parts = listParts(expression);

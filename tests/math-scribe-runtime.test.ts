@@ -7,6 +7,12 @@ import { listParts } from "../lib/math-scribe/parts";
 import type { Interpretation } from "../lib/math-scribe/session";
 import fixtures from "./fixtures/math-scribe-utterances.json";
 
+it("never sends unsafe clarification text to the tutor", () => {
+  expect(scribeInstruction({ kind: "clarify", question: String.raw`Change \(x^2\), part p10?` })).not.toMatch(
+    /\\|\bp\d+\b|\^|[{}]/,
+  );
+});
+
 function expression(latex: string) {
   const result = readAlgebraLatex(latex);
   if (!result.ok) throw new Error(result.reason);
@@ -79,6 +85,40 @@ describe("math scribe voice runtime", () => {
     operation: Extract<Interpretation, { intent: "propose" }>["operation"],
     source: "instruction" | "report" = "instruction",
   ): Interpretation => ({ intent: "propose", operation, source, quote: "said" });
+
+  it("passes a structured offer into the next read and accepts a plain yes", async () => {
+    const operation = { kind: "replace-part" as const, partId: "p0", expression: expression("x") };
+    await say("change it", { intent: "clarify", question: "Change the line?", operation });
+    await say("Yes");
+    const request = JSON.parse(fetcher.mock.calls.at(-1)![1].body);
+    expect(request.openQuestion.offeredOperation).toEqual(operation);
+    expect(runtime.snapshot().session?.workingLine.latex).toBe("x");
+    expect(runtime.report().visits.at(-1)?.log.at(-1)).toMatchObject({ intent: "propose", quote: "Yes" });
+  });
+
+  it("clears an offered change on a plain no", async () => {
+    const operation = { kind: "replace-part" as const, partId: "p0", expression: expression("x") };
+    await say("change it", { intent: "clarify", question: "Change the line?", operation });
+    await say("No");
+    expect(runtime.snapshot().session?.clarification).toBeNull();
+    expect(runtime.snapshot().session?.pending).toBeNull();
+  });
+
+  it("routes hints and calculus drift through application instructions", async () => {
+    runtime.onStart("difference-quotient", 1);
+    await say("give me a hint", { intent: "request-help", quote: "give me a hint" });
+    expect(messages.at(-1)).toContain("common denominator");
+    expect(runtime.report().visits.at(-1)?.log.at(-1)?.hint).toContain("common denominator");
+    await say("take the derivative", {
+      intent: "propose",
+      source: "instruction",
+      quote: "take the derivative",
+      operation: { kind: "non-unique", name: "calculus" },
+    });
+    expect(messages.at(-1)).toContain("not take a limit or derivative");
+    expect(runtime.snapshot().session?.pending).toBeNull();
+    expect(runtime.snapshot().metrics?.proposals).toBe(0);
+  });
 
   it("factors the second denominator and verifies the proposal", async () => {
     await say("flip", proposal({ kind: "division-to-reciprocal", partId: part("divisor") }));

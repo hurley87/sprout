@@ -1,4 +1,4 @@
-/** Exact sparse integer polynomials in x,y. Degree <=24, terms <=64,
+/** Exact sparse integer polynomials in x,y,h. Degree <=24, terms <=64,
  * |coefficient| <=10^15 and <=4096 term products per operation context.
  * Budget overruns throw PolynomialLimitError; divisibility returns unknown.
  */
@@ -9,7 +9,7 @@ export const POLYNOMIAL_LIMITS = {
   products: 4096,
 } as const;
 export type Polynomial = ReadonlyMap<string, bigint>;
-export type RationalPoint = { x: Fraction; y: Fraction };
+export type RationalPoint = { x: Fraction; y: Fraction; h: Fraction };
 export type Fraction = { numerator: bigint; denominator: bigint };
 export class PolynomialLimitError extends Error {}
 export type PolynomialBudget = { products: number };
@@ -21,9 +21,9 @@ const gcd = (left: bigint, right: bigint): bigint => {
 };
 const degrees = (key: string) => key.split(",").map(Number);
 const compare = (left: string, right: string) => {
-  const [lx, ly] = degrees(left),
-    [rx, ry] = degrees(right);
-  return rx - lx || ry - ly;
+  const [lx, ly, lh] = degrees(left),
+    [rx, ry, rh] = degrees(right);
+  return rx - lx || ry - ly || rh - lh;
 };
 function put(result: Map<string, bigint>, key: string, coefficient: bigint) {
   if (abs(coefficient) > POLYNOMIAL_LIMITS.coefficient) throw new PolynomialLimitError("Coefficient limit");
@@ -33,11 +33,11 @@ function put(result: Map<string, bigint>, key: string, coefficient: bigint) {
 }
 export function constant(value: bigint): Polynomial {
   const result = new Map<string, bigint>();
-  put(result, "0,0", value);
+  put(result, "0,0,0", value);
   return result;
 }
-export function variable(name: "x" | "y"): Polynomial {
-  return new Map([[name === "x" ? "1,0" : "0,1", BigInt(1)]]);
+export function variable(name: "x" | "y" | "h"): Polynomial {
+  return new Map([[name === "x" ? "1,0,0" : name === "y" ? "0,1,0" : "0,0,1", BigInt(1)]]);
 }
 export function add(left: Polynomial, right: Polynomial): Polynomial {
   const result = new Map(left);
@@ -59,17 +59,17 @@ export function multiply(
   for (const [leftKey, leftValue] of left)
     for (const [rightKey, rightValue] of right) {
       if (++budget.products > POLYNOMIAL_LIMITS.products) throw new PolynomialLimitError("Product limit");
-      const [lx, ly] = degrees(leftKey),
-        [rx, ry] = degrees(rightKey);
-      if (lx + ly + rx + ry > POLYNOMIAL_LIMITS.degree) throw new PolynomialLimitError("Degree limit");
-      const key = `${lx + rx},${ly + ry}`;
+      const [lx, ly, lh] = degrees(leftKey),
+        [rx, ry, rh] = degrees(rightKey);
+      if (lx + ly + lh + rx + ry + rh > POLYNOMIAL_LIMITS.degree) throw new PolynomialLimitError("Degree limit");
+      const key = `${lx + rx},${ly + ry},${lh + rh}`;
       put(result, key, (result.get(key) ?? BigInt(0)) + leftValue * rightValue);
     }
   return result;
 }
 export const isZero = (value: Polynomial): boolean => value.size === 0;
 export const constantValue = (value: Polynomial): bigint | null =>
-  value.size === 0 ? BigInt(0) : value.size === 1 && value.has("0,0") ? value.get("0,0")! : null;
+  value.size === 0 ? BigInt(0) : value.size === 1 && value.has("0,0,0") ? value.get("0,0,0")! : null;
 export const signature = (value: Polynomial): string =>
   [...value]
     .sort(([left], [right]) => compare(left, right))
@@ -81,10 +81,11 @@ export function formatPolynomial(value: Polynomial): string {
   if (!terms.length) return "0";
   return terms
     .map(([key, coefficient], index) => {
-      const [x, y] = degrees(key);
+      const [x, y, h] = degrees(key);
       const variables = [
         ["x", x],
         ["y", y],
+        ["h", h],
       ]
         .map(([name, degree]) => (degree ? `${name}${degree === 1 ? "" : `^${degree}`}` : ""))
         .join("");
@@ -112,15 +113,15 @@ export function divides(
   try {
     const normalizedDivisor = primitivePart(divisor);
     const divisorKey = [...normalizedDivisor.keys()].sort(compare)[0];
-    const [dx, dy] = degrees(divisorKey);
+    const [dx, dy, dh] = degrees(divisorKey);
     let remainder = primitivePart(dividend);
     while (!isZero(remainder)) {
       const key = [...remainder.keys()].sort(compare)[0];
-      const [rx, ry] = degrees(key);
-      if (rx < dx || ry < dy) return false;
+      const [rx, ry, rh] = degrees(key);
+      if (rx < dx || ry < dy || rh < dh) return false;
       const leading = remainder.get(key)!;
       const divisorLeading = normalizedDivisor.get(divisorKey)!;
-      const monomial = new Map([[`${rx - dx},${ry - dy}`, leading]]);
+      const monomial = new Map([[`${rx - dx},${ry - dy},${rh - dh}`, leading]]);
       remainder = primitivePart(
         subtract(multiply(remainder, constant(divisorLeading), budget), multiply(normalizedDivisor, monomial, budget)),
       );
@@ -138,15 +139,22 @@ function fraction(numerator: bigint, denominator: bigint): Fraction {
   const sign = denominator < BigInt(0) ? -BigInt(1) : BigInt(1);
   return { numerator: (numerator / common) * sign, denominator: (denominator / common) * sign };
 }
-export function evaluate(value: Polynomial, point: RationalPoint): Fraction {
+export function evaluate(value: Polynomial, point: Omit<RationalPoint, "h"> & { h?: Fraction }): Fraction {
   const x = fraction(point.x.numerator, point.x.denominator),
-    y = fraction(point.y.numerator, point.y.denominator);
+    y = fraction(point.y.numerator, point.y.denominator),
+    h = point.h ? fraction(point.h.numerator, point.h.denominator) : null;
   let result = fraction(BigInt(0), BigInt(1));
   for (const [key, coefficient] of value) {
-    const [xDegree, yDegree] = degrees(key);
+    const [xDegree, yDegree, hDegree] = degrees(key);
+    if (hDegree && !h) throw new Error("Missing h coordinate");
     const term = fraction(
-      coefficient * x.numerator ** BigInt(xDegree) * y.numerator ** BigInt(yDegree),
-      x.denominator ** BigInt(xDegree) * y.denominator ** BigInt(yDegree),
+      coefficient *
+        x.numerator ** BigInt(xDegree) *
+        y.numerator ** BigInt(yDegree) *
+        (h?.numerator ?? BigInt(1)) ** BigInt(hDegree),
+      x.denominator ** BigInt(xDegree) *
+        y.denominator ** BigInt(yDegree) *
+        (h?.denominator ?? BigInt(1)) ** BigInt(hDegree),
     );
     result = fraction(
       result.numerator * term.denominator + term.numerator * result.denominator,

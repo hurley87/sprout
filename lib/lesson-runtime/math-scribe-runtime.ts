@@ -1,7 +1,7 @@
 import type { AlgebraExpression } from "../math-audit/expression";
 import { formatExpression } from "../math-audit/format";
 import { SCRIBE_LIMITS, type ScribeInput } from "../math-scribe/interpretation";
-import { listParts, type PathStep } from "../math-scribe/parts";
+import { listParts, safeClarification, type PathStep } from "../math-scribe/parts";
 import { getMathScribeProblem, isMathScribeProblemId, type MathScribeProblem } from "../math-scribe/problems";
 import {
   createSession,
@@ -72,7 +72,7 @@ export function scribeInstruction(
     case "proposed":
       return context.firstProposal ? "Got it — say check when you're ready." : "Got it.";
     case "clarify":
-      return notice.question;
+      return safeClarification(notice.question);
     case "checked": {
       if (notice.verdict === "equivalent") {
         if (notice.domainStatus === "restriction-unverified")
@@ -91,6 +91,9 @@ export function scribeInstruction(
       );
     }
     case "logged":
+      if (notice.intent === "calculus")
+        return "This question asks you to simplify the expression, not take a limit or derivative. What would you like to do next?";
+      if (notice.intent === "request-help") return notice.hint ?? null;
       return notice.intent === "describe-strategy" ? "What would you like to change?" : null;
     case "confirmed":
       return "Okay.";
@@ -338,6 +341,10 @@ export class MathScribeRuntime {
               prompt: visit.session.clarification.prompt ?? "",
               ...(visit.session.clarification.part ? { part: visit.session.clarification.part } : {}),
               ...(visit.session.clarification.operation ? { operation: visit.session.clarification.operation } : {}),
+              ...(visit.session.clarification.offeredOperation &&
+              visit.session.clarification.offerRevision === visit.session.revision
+                ? { offeredOperation: visit.session.clarification.offeredOperation }
+                : {}),
             },
           }
         : {}),
@@ -385,6 +392,20 @@ export class MathScribeRuntime {
       if (!current) {
         this.log("math-scribe.request", record);
         return;
+      }
+      const answer = learner
+        .map(group => group.text)
+        .join(" ")
+        .trim();
+      if (
+        status === "ok" &&
+        visit.session.clarification?.offeredOperation &&
+        visit.session.clarification.offerRevision === visit.session.revision
+      ) {
+        if (/^yes[.!?]*$/i.test(answer)) body.interpretations = [{ intent: "confirm", quote: answer }];
+        else if (/^no[.!?]*$/i.test(answer)) body.interpretations = [{ intent: "describe-strategy", quote: answer }];
+        else if (body.interpretations?.length === 0 && rejectedCount(body.diagnostics) === 0)
+          body.interpretations = [{ intent: "describe-strategy", quote: answer }];
       }
       if (status === "ok" && body.interpretations?.length === 0 && rejectedCount(body.diagnostics) > 0) {
         // Every reading failed validation (e.g. a misquoted learner phrase): ask again at once
@@ -534,7 +555,7 @@ export class MathScribeRuntime {
         !queued.slice(index + 1).some(
           later =>
             // "What would you like to change?" is moot once the same breath did anything else.
-            item.kind === "logged" ||
+            (item.kind === "logged" && item.content === "What would you like to change?") ||
             (later.kind === "proposed" &&
               item.kind === "clarify" &&
               item.scope &&
@@ -551,8 +572,8 @@ export class MathScribeRuntime {
   /** Within a batch the update is queued for `flush`; otherwise (UI actions) it is spoken now. */
   private brief(visit: Visit, notice: SessionNotice, started: number, queue?: { batch: Queued[]; scope?: PathStep[] }) {
     if (notice.kind === "proposed") visit.proposalTimings.push(Math.max(0, Date.now() - this.speechEndedAt));
-    if (notice.kind === "logged" && (notice.intent === "request-help" || notice.intent === "request-repeat")) {
-      this.support(notice.intent === "request-help" ? "help" : "repeat");
+    if (notice.kind === "logged" && notice.intent === "request-repeat") {
+      this.support("repeat");
       return;
     }
     const origin = visit.session.pending?.versions[visit.session.pending.current].origin;

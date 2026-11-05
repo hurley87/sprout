@@ -44,6 +44,18 @@
   overflow-x: auto;
   vertical-align: middle;
 }
+.equation :global(.katex-display) {
+  margin: 0.25em 0;
+}
+.restrictions,
+.retained {
+  color: var(--ink2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.retained {
+  margin: 0 0 12px;
+}
 .working {
   padding: 30px 0;
   min-width: 0;
@@ -90,6 +102,7 @@
   gap: 16px;
   min-width: 0;
   font-size: 1.2rem;
+  overflow-x: auto;
 }
 .latest {
   color: var(--ink);

@@ -30,6 +30,26 @@ const unwrap = <T extends { ok: boolean }>(value: T): Extract<T, { ok: true }> =
 const expr = (latex: string) => ({ latex });
 
 describe("ordered math audits", () => {
+  it("verifies the difference quotient path and reports the lost h restriction", () => {
+    const lines = [
+      String.raw`\frac{\frac{x}{x+1}-\frac{x+h}{x+h+1}}{h}`,
+      String.raw`\frac{x(x+h+1)-(x+h)(x+1)}{h(x+1)(x+h+1)}`,
+      String.raw`\frac{-h}{h(x+1)(x+h+1)}`,
+      String.raw`-\frac{1}{(x+1)(x+h+1)}`,
+    ];
+    const result = unwrap(auditSequence(lines));
+    expect(
+      result.trail.entries.slice(1).every(entry => entry.kind !== "start" && entry.result.verdict === "equivalent"),
+    ).toBe(true);
+    expect(result.trail.entries[3]).toMatchObject({
+      result: {
+        domain: {
+          status: "restriction-lost",
+          lost: expect.arrayContaining([expect.objectContaining({ restriction: "h ≠ 0" })]),
+        },
+      },
+    });
+  });
   it("reports the earliest error with downstream dependencies", () => {
     const result = unwrap(auditSequence([original, wrong, ...sequence.slice(2)]));
     expect(result.summary.firstIssue).toMatchObject({

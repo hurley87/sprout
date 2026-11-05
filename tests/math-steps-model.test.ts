@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { discrepancyArea, historyRows, proposalLabel, showDoneHint, spokenTrail } from "../components/math-steps-model";
-import { createSession, snapshot } from "../lib/math-scribe/session";
+import { createSession, reduceSession, snapshot, type SessionState } from "../lib/math-scribe/session";
 import { readAlgebraLatex } from "../lib/math-audit/latex";
 
 describe("math steps view model", () => {
@@ -83,5 +83,35 @@ describe("math steps view model", () => {
       { parent: 0, cause: "edit" as const, quote: "replacement" },
     ];
     expect(spokenTrail(versions, 3)).toEqual({ quotes: ["first", "replacement"], misheard: [] });
+  });
+  it("shows the problem's own restrictions once when a step relies on them", () => {
+    const result = createSession({
+      problemId: "difference-quotient",
+      latex: String.raw`\frac{\frac{x}{x+1}-\frac{x+h}{x+h+1}}{h}`,
+    });
+    if (!result.ok) throw new Error(result.reason);
+    const step = (state: SessionState, latex: string) => {
+      const line = readAlgebraLatex(latex);
+      if (!line.ok) throw new Error(line.reason);
+      const proposed = reduceSession(state, {
+        type: "interpretation",
+        requestId: `${state.revision}`,
+        basedOnRevision: state.revision,
+        interpretation: {
+          intent: "propose",
+          source: "report",
+          operation: { kind: "replace-line", expression: line.expression },
+          quote: "q",
+        },
+        at: state.revision + 1,
+      }).state;
+      return reduceSession(proposed, { type: "ui", action: "check", at: proposed.revision + 1 }).state;
+    };
+    let state = step(result.state, String.raw`\frac{-h}{h(x+1)(x+h+1)}`);
+    state = step(state, String.raw`-\frac{1}{(x+1)(x+h+1)}`);
+    const last = historyRows(snapshot(state)).at(-1)!;
+    expect(last.badge).toBe("✓ Verified");
+    expect(last.domainNotes).toEqual([]);
+    expect(last.retained).toBe(String.raw`x + 1 \neq 0,\quad x + h + 1 \neq 0,\quad h \neq 0`);
   });
 });
