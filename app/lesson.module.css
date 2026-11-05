@@ -67,6 +67,34 @@
     0 0 0 1px #ffd98a40;
 }
 
+.screen[data-palette="pastel"] .status[data-status-cue="glow"] {
+  background: #fff1fa;
+  box-shadow:
+    0 3px 0 #b57aad,
+    0 0 0 1px #6a2b67;
+}
+
+.screen[data-palette="pastel"] .play {
+  border-color: #fff1fa;
+  background: #8a3f84;
+  box-shadow:
+    0 8px 0 #5c2558,
+    0 16px 32px #48204740;
+}
+
+.screen[data-palette="pastel"] .play:active {
+  box-shadow:
+    0 4px 0 #5c2558,
+    0 8px 16px #48204740;
+}
+
+.screen[data-palette="pastel"] .stop {
+  border-color: #6a2b67;
+  background: #fff1fa;
+  color: #482047;
+  font-weight: 600;
+}
+
 .progress {
   padding: 0.6rem 1rem;
   border-radius: 999px;

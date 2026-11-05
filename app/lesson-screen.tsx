@@ -20,7 +20,8 @@ export type LessonScreenTheme = {
   readonly lesson: LessonDefinition;
   readonly copy: PresentationCopy;
   readonly statusCue?: "glow";
-  readonly palette?: "night";
+  /** "night": dark controls for a night-time scene. "pastel": light plum controls for a pastel stage. */
+  readonly palette?: "night" | "pastel";
   readonly progress: {
     readonly base: string;
     readonly done: string;
@@ -95,7 +96,7 @@ export function LessonScreen({
         <div className={styles.top}>
           <h1 className={styles.title}>Sprout</h1>
           <div className={styles.status} data-status-cue={glowing ? "glow" : undefined}>
-            {glow ? <GlowCue activity={activity} /> : <VoiceCue activity={activity} />}
+            {glow ? <GlowCue activity={activity} palette={theme.palette} /> : <VoiceCue activity={activity} />}
             <p role={shown.kind === "error" ? "alert" : "status"} className={glowing ? "sr-only" : undefined}>
               {shown.message}
             </p>

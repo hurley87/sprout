@@ -4,7 +4,12 @@ export const ANSWER_COMMITMENTS = ["committed", "unresolved", "withdrawn", "no_a
 export type AnswerCommitment = (typeof ANSWER_COMMITMENTS)[number];
 
 /** Application-owned learner-evidence lessons; others keep their confirmation gates. */
-const LEARNER_EVIDENCE_LESSON_IDS: ReadonlySet<string> = new Set(["counting", "counting-halloween", "ice-cream-shop"]);
+const LEARNER_EVIDENCE_LESSON_IDS: ReadonlySet<string> = new Set([
+  "counting",
+  "counting-halloween",
+  "counting-concert",
+  "ice-cream-shop",
+]);
 
 /** Accept learner evidence separately from the latest tutor feedback. */
 export function acceptsLearnerAnswerIndependently(lesson?: LessonDefinition) {

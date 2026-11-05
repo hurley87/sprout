@@ -4,6 +4,7 @@ import { MATH_SCRIBE_RECIPROCAL_LESSON } from "./math-scribe-reciprocal-lesson";
 import { MATH_SCRIBE_DIFFERENCE_QUOTIENT_LESSON } from "./math-scribe-difference-quotient-lesson";
 import { COUNTING_LESSON } from "./counting-lesson";
 import { COUNTING_HALLOWEEN_LESSON } from "./counting-halloween-lesson";
+import { COUNTING_CONCERT_LESSON } from "./counting-concert-lesson";
 import { ICE_CREAM_LESSON } from "./ice-cream-lesson";
 import { CATCHING_UNICORNS_LESSON } from "./catching-unicorns-lesson";
 import { MAE386_LESSON } from "./mae386-lesson";
@@ -17,6 +18,7 @@ const APPLICATION_LESSONS: Readonly<Record<string, LessonDefinition>> = {
   [MATH_SCRIBE_DIFFERENCE_QUOTIENT_LESSON.id]: MATH_SCRIBE_DIFFERENCE_QUOTIENT_LESSON,
   [COUNTING_LESSON.id]: COUNTING_LESSON,
   [COUNTING_HALLOWEEN_LESSON.id]: COUNTING_HALLOWEEN_LESSON,
+  [COUNTING_CONCERT_LESSON.id]: COUNTING_CONCERT_LESSON,
   [ICE_CREAM_LESSON.id]: ICE_CREAM_LESSON,
   [CATCHING_UNICORNS_LESSON.id]: CATCHING_UNICORNS_LESSON,
   [MAE386_LESSON.id]: MAE386_LESSON,

@@ -23,6 +23,7 @@ uses the Sprout tutor configuration; `/api/classify` returns semantic proposals
 and normalized diagnostics. Both endpoints enforce local request boundaries.
 
 The interest-led [Halloween counting adventure](docs/halloween-counting.md) is at `/halloween`.
+The [concert counting adventure](docs/concert-counting.md) is at `/concert`.
 
 Attempts and speaker-labelled transcripts stay in page memory. **Export diagnostics**
 downloads the current attempt as JSON; restarting or refreshing clears it. The app

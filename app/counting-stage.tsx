@@ -135,6 +135,13 @@ export function CountingStage({
       ) : (
         <>
           <Backdrop theme={theme} background={theme.celebration.background} />
+          {theme.celebration.confetti && (
+            <div className={styles.confetti} aria-hidden="true" data-confetti>
+              {Array.from({ length: 12 }, (_, index) => (
+                <span key={index} style={{ "--i": index } as CSSProperties} />
+              ))}
+            </div>
+          )}
           <div className={styles.objects} aria-hidden="true">
             {theme.celebration.decorations.map((decoration, index) => (
               <div
