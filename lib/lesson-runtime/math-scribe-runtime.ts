@@ -341,6 +341,10 @@ export class MathScribeRuntime {
               prompt: visit.session.clarification.prompt ?? "",
               ...(visit.session.clarification.part ? { part: visit.session.clarification.part } : {}),
               ...(visit.session.clarification.operation ? { operation: visit.session.clarification.operation } : {}),
+              ...(visit.session.clarification.offeredOperation &&
+              visit.session.clarification.offerRevision === visit.session.revision
+                ? { offeredOperation: visit.session.clarification.offeredOperation }
+                : {}),
             },
           }
         : {}),
@@ -388,6 +392,20 @@ export class MathScribeRuntime {
       if (!current) {
         this.log("math-scribe.request", record);
         return;
+      }
+      const answer = learner
+        .map(group => group.text)
+        .join(" ")
+        .trim();
+      if (
+        status === "ok" &&
+        visit.session.clarification?.offeredOperation &&
+        visit.session.clarification.offerRevision === visit.session.revision
+      ) {
+        if (/^yes[.!?]*$/i.test(answer)) body.interpretations = [{ intent: "confirm", quote: answer }];
+        else if (/^no[.!?]*$/i.test(answer)) body.interpretations = [{ intent: "describe-strategy", quote: answer }];
+        else if (body.interpretations?.length === 0 && rejectedCount(body.diagnostics) === 0)
+          body.interpretations = [{ intent: "describe-strategy", quote: answer }];
       }
       if (status === "ok" && body.interpretations?.length === 0 && rejectedCount(body.diagnostics) > 0) {
         // Every reading failed validation (e.g. a misquoted learner phrase): ask again at once

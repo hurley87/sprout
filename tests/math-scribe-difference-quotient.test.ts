@@ -60,6 +60,45 @@ function flattened() {
 }
 
 describe("difference quotient session", () => {
+  it("applies a confirmed offered expansion to the pending first expansion and checks it", () => {
+    const state = flattened();
+    const first = proposal(
+      state,
+      { kind: "replace-part", partId: part(state, "term 1 of numerator"), expression: read("x^2+hx+x") },
+      "expand the first product",
+    ).state;
+    const operation = {
+      kind: "replace-part" as const,
+      partId: part(first, "term 2 of numerator"),
+      expression: read("x^2+hx+h+x"),
+    };
+    const offered = say(first, { intent: "clarify", question: "Should I expand the second product?", operation }).state;
+    const accepted = say(offered, { intent: "confirm", quote: "Yes" });
+    expect(accepted.notice.kind).toBe("proposed");
+    expect(accepted.state.pending?.versions.at(-1)).toMatchObject({
+      operation,
+      quote: "Yes",
+      origin: "spoken-expression",
+    });
+    expect(formatExpression(accepted.state.pending!.versions.at(-1)!.expression)).toContain("x^2+hx+h+x");
+    expect(check(accepted.state).notice).toMatchObject({ verdict: "equivalent" });
+    expect(accepted.state.log.at(-1)).toMatchObject({ intent: "propose", outcome: "proposed", quote: "Yes" });
+  });
+
+  it("does not apply stale offers, clears rejected offers, and preserves ordinary confirmation", () => {
+    const state = proposal(
+      flattened(),
+      { kind: "replace-part", partId: "p0", expression: read(String.raw`\frac{x^2+hx+x-(x+h)(x+1)}{h(x+1)(x+h+1)}`) },
+      "first",
+    ).state;
+    const operation = { kind: "replace-part" as const, partId: "p10", expression: read("x^2+hx+h+x") };
+    const offered = say(state, { intent: "clarify", question: "Expand it?", operation }).state;
+    const stale = { ...offered, revision: offered.revision + 1 };
+    expect(say(stale, { intent: "confirm", quote: "yes" }).state.pending?.versions).toHaveLength(1);
+    const rejected = say(offered, { intent: "describe-strategy", quote: "no" }).state;
+    expect(rejected.clarification).toBeNull();
+    expect(say(rejected, { intent: "confirm", quote: "yes" }).notice.kind).toBe("confirmed");
+  });
   it("verifies contextual reference path and retains the given domain", () => {
     let state = flattened();
     state = verified(

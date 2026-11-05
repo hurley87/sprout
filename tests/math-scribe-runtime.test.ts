@@ -86,6 +86,24 @@ describe("math scribe voice runtime", () => {
     source: "instruction" | "report" = "instruction",
   ): Interpretation => ({ intent: "propose", operation, source, quote: "said" });
 
+  it("passes a structured offer into the next read and accepts a plain yes", async () => {
+    const operation = { kind: "replace-part" as const, partId: "p0", expression: expression("x") };
+    await say("change it", { intent: "clarify", question: "Change the line?", operation });
+    await say("Yes");
+    const request = JSON.parse(fetcher.mock.calls.at(-1)![1].body);
+    expect(request.openQuestion.offeredOperation).toEqual(operation);
+    expect(runtime.snapshot().session?.workingLine.latex).toBe("x");
+    expect(runtime.report().visits.at(-1)?.log.at(-1)).toMatchObject({ intent: "propose", quote: "Yes" });
+  });
+
+  it("clears an offered change on a plain no", async () => {
+    const operation = { kind: "replace-part" as const, partId: "p0", expression: expression("x") };
+    await say("change it", { intent: "clarify", question: "Change the line?", operation });
+    await say("No");
+    expect(runtime.snapshot().session?.clarification).toBeNull();
+    expect(runtime.snapshot().session?.pending).toBeNull();
+  });
+
   it("routes hints and calculus drift through application instructions", async () => {
     runtime.onStart("difference-quotient", 1);
     await say("give me a hint", { intent: "request-help", quote: "give me a hint" });

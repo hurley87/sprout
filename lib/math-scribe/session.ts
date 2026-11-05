@@ -16,7 +16,7 @@ import { conceptHint } from "./hints";
  * an interpretation requested against the current state.
  * Withdrawals and retries remain in the append-only log and audit trail.
  */
-type InterpretedOperation = ScribeOperation | { kind: "non-unique"; name: "calculus"; partId?: string };
+export type InterpretedOperation = ScribeOperation | { kind: "non-unique"; name: "calculus"; partId?: string };
 export type Interpretation =
   | { intent: "propose"; operation: InterpretedOperation; source: "instruction" | "report"; quote: string }
   | { intent: "correct"; operation: InterpretedOperation; quote: string }
@@ -31,7 +31,13 @@ export type Interpretation =
         | "continue-unverified";
       quote: string;
     }
-  | { intent: "clarify"; question: string; readings?: AlgebraExpression[]; quote?: string };
+  | {
+      intent: "clarify";
+      question: string;
+      readings?: AlgebraExpression[];
+      quote?: string;
+      operation?: InterpretedOperation;
+    };
 export type SessionEvent =
   | { type: "interpretation"; requestId: string; basedOnRevision: number; interpretation: Interpretation; at: number }
   | { type: "ui"; action: "confirm" | "undo" | "check" | "continue"; at: number };
@@ -72,6 +78,8 @@ export type Clarification = {
   prompt?: string;
   part?: { id: string; description: string; latex: string };
   operation?: string;
+  offeredOperation?: InterpretedOperation;
+  offerRevision?: number;
   readings?: AlgebraExpression[];
 };
 type SafeDiscrepancy = { [key: string]: unknown };
@@ -163,6 +171,23 @@ export function reduceSession(
   event: SessionEvent,
 ): { state: SessionState; notice: SessionNotice } {
   if (state.log.length >= SESSION_LIMITS.logEntries) return { state, notice: { kind: "limit" } };
+  if (
+    event.type === "interpretation" &&
+    event.basedOnRevision === state.revision &&
+    event.interpretation.intent === "confirm" &&
+    state.clarification?.offeredOperation &&
+    state.clarification.offerRevision === state.revision
+  ) {
+    return reduceSession(state, {
+      ...event,
+      interpretation: {
+        intent: "propose",
+        source: "instruction",
+        quote: event.interpretation.quote,
+        operation: state.clarification.offeredOperation,
+      },
+    });
+  }
   const intent =
     event.type === "ui"
       ? ({ confirm: "confirm", undo: "undo", check: "request-check", continue: "continue-unverified" } as const)[
@@ -176,6 +201,7 @@ export function reduceSession(
   let checked: TransformationResult | undefined;
   let duration: number | undefined;
   const stale = event.type === "interpretation" && event.basedOnRevision !== state.revision;
+  if (!stale && intent !== "clarify" && state.clarification?.offeredOperation) next.clarification = null;
   if (stale) notice = { kind: "stale" };
   else if (event.type === "interpretation" && (intent === "propose" || intent === "correct")) {
     const interpretation = event.interpretation as Extract<Interpretation, { intent: "propose" | "correct" }>;
@@ -246,6 +272,8 @@ export function reduceSession(
         ? { prompt: event.interpretation.quote }
         : {}),
       readings: undefined,
+      offeredOperation: event.interpretation.operation,
+      offerRevision: event.interpretation.operation ? state.revision + 1 : undefined,
       ...(event.interpretation.readings ? { readings: event.interpretation.readings } : {}),
     });
     notice = { kind: "clarify", question: next.clarification.question };

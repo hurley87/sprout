@@ -1,5 +1,41 @@
 [
   {
+    "name": "difference quotient second product expansion",
+    "workingLatex": "\\frac{x^2+hx+x-(x+h)(x+1)}{h(x+1)(x+h+1)}",
+    "baseLatex": "\\frac{x(x+h+1)-(x+h)(x+1)}{h(x+1)(x+h+1)}",
+    "pendingStatus": "interpreted",
+    "learnerTurns": [
+      { "id": "l1", "text": "leaving us with minus open bracket x squared plus hx plus h plus x close bracket" }
+    ],
+    "tutorTurns": [],
+    "expected": [
+      {
+        "intent": "propose",
+        "source": "report",
+        "quote": "leaving us with minus open bracket x squared plus hx plus h plus x close bracket",
+        "operation": {
+          "kind": "replace-part",
+          "partId": "p10",
+          "expression": {
+            "op": "add",
+            "args": [
+              { "op": "power", "base": { "op": "variable", "name": "x" }, "exponent": 2 },
+              {
+                "op": "multiply",
+                "args": [
+                  { "op": "variable", "name": "h" },
+                  { "op": "variable", "name": "x" }
+                ]
+              },
+              { "op": "variable", "name": "h" },
+              { "op": "variable", "name": "x" }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  {
     "name": "difference quotient common denominator",
     "workingLatex": "\\frac{\\frac{x}{x+1}-\\frac{x+h}{x+h+1}}{h}",
     "baseLatex": "\\frac{\\frac{x}{x+1}-\\frac{x+h}{x+h+1}}{h}",

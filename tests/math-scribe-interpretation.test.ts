@@ -52,6 +52,27 @@ it("validates the new operation shapes and their parts", () => {
   }
 });
 
+it("validates offered operations against the working line", () => {
+  const input = parseScribeInput({
+    workingLatex: "x",
+    baseLatex: "x",
+    pendingStatus: "none",
+    learnerTurns: [{ id: "l", text: "change it" }],
+    tutorTurns: [],
+  });
+  const operation = { kind: "replace-part", partId: "p999", expression: { op: "number", value: 1 } };
+  expect(
+    parseScribeWithDrops({ interpretations: [{ intent: "clarify", question: "Change it?", operation }] }, input)
+      .dropped[0].reason,
+  ).toBe("unknown-part");
+  expect(() =>
+    parseScribeInput({
+      ...input,
+      openQuestion: { question: "Change it?", prompt: "change it", offeredOperation: operation },
+    }),
+  ).toThrow();
+});
+
 for (const fixture of fixtures)
   it(`accepts fixture: ${fixture.name}`, async () => {
     const input = parseScribeInput({
@@ -86,7 +107,7 @@ for (const fixture of fixtures)
       expect(state.pending).not.toBeNull();
     }
     for (const [index, interpretation] of result.interpretations.entries()) {
-      if ("operation" in interpretation && "partId" in interpretation.operation)
+      if ("operation" in interpretation && interpretation.operation && "partId" in interpretation.operation)
         expect(listParts(line.expression).map(part => part.id)).toContain(interpretation.operation.partId);
       const reduced = reduceSession(state, {
         type: "interpretation",
