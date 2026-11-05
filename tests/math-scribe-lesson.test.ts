@@ -5,8 +5,13 @@ import { getMathScribeProblem, MATH_SCRIBE_PROBLEM_IDS } from "../lib/math-scrib
 import { createSession } from "../lib/math-scribe/session";
 import { MATH_SCRIBE_DIFFERENCE_QUOTIENT_LESSON } from "../lib/lesson-runtime/math-scribe-difference-quotient-lesson";
 import { isMathScribeProblemId } from "../lib/math-scribe/problems";
+import { resolveLessonDefinition } from "../lib/lesson-runtime/lesson-registry";
 
 describe("math scribe lesson", () => {
+  it("lets the live session route resolve the difference-quotient lesson", () => {
+    expect(resolveLessonDefinition("math-scribe-difference-quotient")).toBe(MATH_SCRIBE_DIFFERENCE_QUOTIENT_LESSON);
+  });
+
   it("keeps the difference quotient in a separate one-problem lesson", () => {
     expect(lessonNodeOrder(MATH_SCRIBE_DIFFERENCE_QUOTIENT_LESSON)).toEqual(["difference-quotient", "recap"]);
     expect(isMathScribeProblemId("difference-quotient")).toBe(true);
