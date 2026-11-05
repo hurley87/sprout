@@ -11,6 +11,24 @@ import { createSession, reduceSession } from "../lib/math-scribe/session";
 import { listParts } from "../lib/math-scribe/parts";
 import { readAlgebraLatex } from "../lib/math-audit/latex";
 
+it("sanitizes clarification questions while retaining their original diagnostics", () => {
+  const input = parseScribeInput({
+    workingLatex: String.raw`\frac{x(x+h+1)-(x+h)(x+1)}{h(x+1)(x+h+1)}`,
+    baseLatex: "x",
+    pendingStatus: "interpreted",
+    learnerTurns: [{ id: "l", text: "leaving us with minus open bracket" }],
+    tutorTurns: [],
+  });
+  const question = String.raw`Do you want to replace the product \((x+h)(x+1)\text{, part }p10\) with \(x^2+hx+h+x\), keeping the minus sign already in the numerator?`;
+  const result = parseScribeWithDrops({ interpretations: [{ intent: "clarify", question }] }, input);
+  expect(result.interpretations[0]).toMatchObject({ intent: "clarify" });
+  expect((result.interpretations[0] as { question: string }).question).not.toMatch(/\\|\bp\d+\b|\^|[{}]/);
+  expect(result.dropped).toEqual([{ reason: "sanitized-question", value: { intent: "clarify", question } }]);
+  expect(
+    parseScribeWithDrops({ interpretations: [{ intent: "clarify", question: "Which term?" }] }, input).interpretations,
+  ).toEqual([{ intent: "clarify", question: "Which term?" }]);
+});
+
 it("validates the new operation shapes and their parts", () => {
   const input = parseScribeInput({
     workingLatex: "x",

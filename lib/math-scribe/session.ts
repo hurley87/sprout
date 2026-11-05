@@ -6,7 +6,7 @@ import { readAlgebraLatex } from "../math-audit/latex";
 import { reduceRational } from "../math-audit/rational";
 import { formatPolynomial } from "../math-audit/polynomial";
 import { applyOperation, type OperationResult, type ScribeOperation } from "./operations";
-import { listParts } from "./parts";
+import { listParts, safeClarification } from "./parts";
 import { conceptHint } from "./hints";
 
 /** Base is the last accepted line; pending versions compose on the working line.
@@ -199,7 +199,10 @@ export function reduceSession(
               )
             : undefined;
         next.clarification = {
-          question: result.detail,
+          question: safeClarification(
+            result.detail,
+            listParts(state.pending?.versions[state.pending.current].expression ?? state.base),
+          ),
           prompt: interpretation.quote,
           ...(part ? { part: { id: part.id, description: part.description, latex: part.latex } } : {}),
           ...(operation.kind === "non-unique" ? { operation: operation.name } : {}),
@@ -207,7 +210,7 @@ export function reduceSession(
             ? { operation: operation.kind }
             : {}),
         };
-        notice = { kind: "clarify", question: result.detail };
+        notice = { kind: "clarify", question: next.clarification.question };
       } else {
         version = {
           ...result,
@@ -235,7 +238,10 @@ export function reduceSession(
     const sameRequest = state.log.at(-1)?.requestId === event.requestId;
     next.clarification = copy({
       ...(state.clarification ?? {}),
-      question: event.interpretation.question,
+      question: safeClarification(
+        event.interpretation.question,
+        listParts(state.pending?.versions[state.pending.current].expression ?? state.base),
+      ),
       ...((sameRequest || !state.clarification?.prompt) && event.interpretation.quote
         ? { prompt: event.interpretation.quote }
         : {}),

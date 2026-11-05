@@ -14,6 +14,19 @@ export type Part = {
   kind: "expression" | "exponent";
 };
 export const MATH_SCRIBE_PART_LIMIT = 64;
+export function safeClarification(question: string, parts: Pick<Part, "id" | "description">[] = []): string {
+  let known: string | undefined;
+  const clean = question.replace(/\bp\d+\b/gi, id => {
+    const part = parts.find(candidate => candidate.id === id);
+    if (part) known = part.description;
+    return part?.description ?? id;
+  });
+  if (/\\|\^|[{}]|\bp\d+\b/i.test(clean)) {
+    const description = known && !/\\|\^|[{}]|\bp\d+\b/i.test(known) ? known : undefined;
+    return description ? `What should ${description} become?` : "Which part do you mean, and what should it become?";
+  }
+  return clean;
+}
 export type ReplacePartResult =
   { ok: true; expression: AlgebraExpression } | { ok: false; reason: "bad-path" | "invalid-replacement" | "limit" };
 

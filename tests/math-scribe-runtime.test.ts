@@ -7,6 +7,12 @@ import { listParts } from "../lib/math-scribe/parts";
 import type { Interpretation } from "../lib/math-scribe/session";
 import fixtures from "./fixtures/math-scribe-utterances.json";
 
+it("never sends unsafe clarification text to the tutor", () => {
+  expect(scribeInstruction({ kind: "clarify", question: String.raw`Change \(x^2\), part p10?` })).not.toMatch(
+    /\\|\bp\d+\b|\^|[{}]/,
+  );
+});
+
 function expression(latex: string) {
   const result = readAlgebraLatex(latex);
   if (!result.ok) throw new Error(result.reason);

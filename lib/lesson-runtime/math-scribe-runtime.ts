@@ -1,7 +1,7 @@
 import type { AlgebraExpression } from "../math-audit/expression";
 import { formatExpression } from "../math-audit/format";
 import { SCRIBE_LIMITS, type ScribeInput } from "../math-scribe/interpretation";
-import { listParts, type PathStep } from "../math-scribe/parts";
+import { listParts, safeClarification, type PathStep } from "../math-scribe/parts";
 import { getMathScribeProblem, isMathScribeProblemId, type MathScribeProblem } from "../math-scribe/problems";
 import {
   createSession,
@@ -72,7 +72,7 @@ export function scribeInstruction(
     case "proposed":
       return context.firstProposal ? "Got it — say check when you're ready." : "Got it.";
     case "clarify":
-      return notice.question;
+      return safeClarification(notice.question);
     case "checked": {
       if (notice.verdict === "equivalent") {
         if (notice.domainStatus === "restriction-unverified")
