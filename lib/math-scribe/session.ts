@@ -1,10 +1,13 @@
 import { appendCorrection, appendStep, auditSummary, createAuditTrail, type AuditTrail } from "../math-audit/audit";
-import type { TransformationResult } from "../math-audit/check";
+import { restrictionsImpliedByProblem, type TransformationResult } from "../math-audit/check";
 import type { AlgebraExpression } from "../math-audit/expression";
 import { formatExpression } from "../math-audit/format";
 import { readAlgebraLatex } from "../math-audit/latex";
+import { reduceRational } from "../math-audit/rational";
+import { formatPolynomial } from "../math-audit/polynomial";
 import { applyOperation, type OperationResult, type ScribeOperation } from "./operations";
-import { listParts } from "./parts";
+import { listParts, safeClarification } from "./parts";
+import { conceptHint } from "./hints";
 
 /** Base is the last accepted line; pending versions compose on the working line.
  * Checks alone verify; corrections before a check fix recognition, afterwards edit math.
@@ -13,9 +16,10 @@ import { listParts } from "./parts";
  * an interpretation requested against the current state.
  * Withdrawals and retries remain in the append-only log and audit trail.
  */
+export type InterpretedOperation = ScribeOperation | { kind: "non-unique"; name: "calculus"; partId?: string };
 export type Interpretation =
-  | { intent: "propose"; operation: ScribeOperation; source: "instruction" | "report"; quote: string }
-  | { intent: "correct"; operation: ScribeOperation; quote: string }
+  | { intent: "propose"; operation: InterpretedOperation; source: "instruction" | "report"; quote: string }
+  | { intent: "correct"; operation: InterpretedOperation; quote: string }
   | {
       intent:
         | "confirm"
@@ -27,7 +31,13 @@ export type Interpretation =
         | "continue-unverified";
       quote: string;
     }
-  | { intent: "clarify"; question: string; readings?: AlgebraExpression[]; quote?: string };
+  | {
+      intent: "clarify";
+      question: string;
+      readings?: AlgebraExpression[];
+      quote?: string;
+      operation?: InterpretedOperation;
+    };
 export type SessionEvent =
   | { type: "interpretation"; requestId: string; basedOnRevision: number; interpretation: Interpretation; at: number }
   | { type: "ui"; action: "confirm" | "undo" | "check" | "continue"; at: number };
@@ -59,6 +69,7 @@ export type AcceptedLine = {
   domainStatus?: NonNullable<TransformationResult["domain"]>["status"];
   /** Restrictions (e.g. "2x ≠ 0") this step dropped, added, or could not confirm; set only when changed. */
   domainChanges?: { lost: string[]; added: string[]; unverified: string[] };
+  problemDomainRetained?: string[];
   pending?: Pending;
   withdrawn?: boolean;
 };
@@ -67,6 +78,8 @@ export type Clarification = {
   prompt?: string;
   part?: { id: string; description: string; latex: string };
   operation?: string;
+  offeredOperation?: InterpretedOperation;
+  offerRevision?: number;
   readings?: AlgebraExpression[];
 };
 type SafeDiscrepancy = { [key: string]: unknown };
@@ -77,11 +90,12 @@ export type SessionNotice =
       verdict: TransformationResult["verdict"];
       reason: string;
       domainStatus?: NonNullable<TransformationResult["domain"]>["status"];
+      problemDomainRetained?: string[];
       discrepancy?: SafeDiscrepancy;
     }
   | { kind: "clarify"; question: string }
   | { kind: "stale" | "nothing-changed" | "confirmed" | "undone" | "continued" | "limit" }
-  | { kind: "logged"; intent: string };
+  | { kind: "logged"; intent: string; hint?: string };
 export type SessionLogEntry = {
   at: number;
   revision: number;
@@ -93,9 +107,11 @@ export type SessionLogEntry = {
   version?: PendingVersion;
   check?: TransformationResult;
   duration?: number;
+  hint?: string;
 };
 export type SessionState = {
   problemId: string;
+  problemDomain: { expression: AlgebraExpression; restrictions: string[] };
   revision: number;
   base: AlgebraExpression;
   history: readonly AcceptedLine[];
@@ -126,12 +142,17 @@ export function createSession(input: {
   if (!input.problemId) return { ok: false, reason: "invalid-problem-id" };
   const parsed = readAlgebraLatex(input.latex);
   if (!parsed.ok) return { ok: false, reason: parsed.reason };
+  const original = reduceRational(parsed.expression);
   const audit = createAuditTrail({ id: "start", expression: { ast: parsed.expression } });
   if (!audit.ok) return { ok: false, reason: audit.reason };
   return {
     ok: true,
     state: freeze({
       problemId: input.problemId,
+      problemDomain: {
+        expression: parsed.expression,
+        restrictions: original.ok ? original.restrictions.map(item => `${formatPolynomial(item)} ≠ 0`) : [],
+      },
       revision: 0,
       base: parsed.expression,
       history: [{ id: "start", expression: parsed.expression, status: "verified" }],
@@ -150,6 +171,23 @@ export function reduceSession(
   event: SessionEvent,
 ): { state: SessionState; notice: SessionNotice } {
   if (state.log.length >= SESSION_LIMITS.logEntries) return { state, notice: { kind: "limit" } };
+  if (
+    event.type === "interpretation" &&
+    event.basedOnRevision === state.revision &&
+    event.interpretation.intent === "confirm" &&
+    state.clarification?.offeredOperation &&
+    state.clarification.offerRevision === state.revision
+  ) {
+    return reduceSession(state, {
+      ...event,
+      interpretation: {
+        intent: "propose",
+        source: "instruction",
+        quote: event.interpretation.quote,
+        operation: state.clarification.offeredOperation,
+      },
+    });
+  }
   const intent =
     event.type === "ui"
       ? ({ confirm: "confirm", undo: "undo", check: "request-check", continue: "continue-unverified" } as const)[
@@ -163,10 +201,13 @@ export function reduceSession(
   let checked: TransformationResult | undefined;
   let duration: number | undefined;
   const stale = event.type === "interpretation" && event.basedOnRevision !== state.revision;
+  if (!stale && intent !== "clarify" && state.clarification?.offeredOperation) next.clarification = null;
   if (stale) notice = { kind: "stale" };
   else if (event.type === "interpretation" && (intent === "propose" || intent === "correct")) {
     const interpretation = event.interpretation as Extract<Interpretation, { intent: "propose" | "correct" }>;
-    if (intent === "correct" && !state.pending) {
+    if (interpretation.operation.kind === "non-unique" && interpretation.operation.name === "calculus") {
+      notice = { kind: "logged", intent: "calculus" };
+    } else if (intent === "correct" && !state.pending) {
       next.clarification = { question: "What would you like to change?", prompt: interpretation.quote };
       notice = { kind: "clarify", question: next.clarification.question };
     } else if (state.pending && state.pending.versions.length >= SESSION_LIMITS.versions) notice = { kind: "limit" };
@@ -184,7 +225,10 @@ export function reduceSession(
               )
             : undefined;
         next.clarification = {
-          question: result.detail,
+          question: safeClarification(
+            result.detail,
+            listParts(state.pending?.versions[state.pending.current].expression ?? state.base),
+          ),
           prompt: interpretation.quote,
           ...(part ? { part: { id: part.id, description: part.description, latex: part.latex } } : {}),
           ...(operation.kind === "non-unique" ? { operation: operation.name } : {}),
@@ -192,7 +236,7 @@ export function reduceSession(
             ? { operation: operation.kind }
             : {}),
         };
-        notice = { kind: "clarify", question: result.detail };
+        notice = { kind: "clarify", question: next.clarification.question };
       } else {
         version = {
           ...result,
@@ -220,11 +264,16 @@ export function reduceSession(
     const sameRequest = state.log.at(-1)?.requestId === event.requestId;
     next.clarification = copy({
       ...(state.clarification ?? {}),
-      question: event.interpretation.question,
+      question: safeClarification(
+        event.interpretation.question,
+        listParts(state.pending?.versions[state.pending.current].expression ?? state.base),
+      ),
       ...((sameRequest || !state.clarification?.prompt) && event.interpretation.quote
         ? { prompt: event.interpretation.quote }
         : {}),
       readings: undefined,
+      offeredOperation: event.interpretation.operation,
+      offerRevision: event.interpretation.operation ? state.revision + 1 : undefined,
       ...(event.interpretation.readings ? { readings: event.interpretation.readings } : {}),
     });
     notice = { kind: "clarify", question: next.clarification.question };
@@ -271,6 +320,27 @@ export function reduceSession(
         const entry = result.trail.entries.at(-1)!;
         if (entry.kind === "start") throw new Error("Unexpected audit start");
         checked = entry.result;
+        let problemDomainRetained: string[] = [];
+        if (checked.verdict === "equivalent" && checked.domain?.lost.length) {
+          problemDomainRetained = restrictionsImpliedByProblem(
+            state.base,
+            state.problemDomain.expression,
+            checked.domain.lost.map(item => item.restriction),
+          );
+          const lost = checked.domain.lost.filter(item => !problemDomainRetained.includes(item.restriction));
+          const domain = {
+            ...checked.domain,
+            lost,
+            status: lost.length
+              ? ("restriction-lost" as const)
+              : checked.domain.unverified.length
+                ? ("restriction-unverified" as const)
+                : checked.domain.added.length
+                  ? ("restriction-added" as const)
+                  : ("preserved" as const),
+          };
+          checked = { ...checked, domain };
+        }
         duration = Math.max(0, event.at - pending.firstProposedAt);
         const lineStatus =
           checked.verdict === "equivalent"
@@ -291,6 +361,7 @@ export function reduceSession(
               expression: next.base,
               status: "verified",
               ...(checked.domain ? { domainStatus: checked.domain.status } : {}),
+              ...(problemDomainRetained.length ? { problemDomainRetained } : {}),
               ...(checked.domain && checked.domain.status !== "preserved"
                 ? {
                     domainChanges: {
@@ -314,6 +385,7 @@ export function reduceSession(
           verdict: checked.verdict,
           reason: checked.reason,
           ...(checked.domain ? { domainStatus: checked.domain.status } : {}),
+          ...(problemDomainRetained.length ? { problemDomainRetained } : {}),
           ...(discrepancy ? { discrepancy } : {}),
         };
       }
@@ -331,7 +403,18 @@ export function reduceSession(
       notice = { kind: "continued" };
     }
   } else if (["describe-strategy", "request-help", "request-repeat"].includes(intent))
-    notice = { kind: "logged", intent };
+    notice = {
+      kind: "logged",
+      intent,
+      ...(intent === "request-help"
+        ? {
+            hint: conceptHint(
+              state.history.filter(line => !line.withdrawn && line.status === "verified").at(-1)?.expression ??
+                state.problemDomain.expression,
+            ),
+          }
+        : {}),
+    };
   // Only state changes advance the revision: a stale drop, no-op or logged-only event must
   // not invalidate interpretations requested against the unchanged state.
   if (!stale && intent === "request-check") next.clarification = null;
@@ -350,6 +433,7 @@ export function reduceSession(
       ...(event.type === "interpretation" ? { requestId: event.requestId } : {}),
       status: status(next),
       outcome: notice.kind,
+      ...(notice.kind === "logged" && notice.hint ? { hint: notice.hint } : {}),
       ...(version ? { version } : {}),
       ...(checked ? { check: checked } : {}),
       ...(duration !== undefined ? { duration } : {}),
@@ -361,6 +445,7 @@ export function reduceSession(
 export function snapshot(state: SessionState) {
   const render = (expression: AlgebraExpression) => ({ expression, latex: formatExpression(expression) });
   return freeze({
+    problemDomain: state.problemDomain,
     base: render(state.base),
     history: state.history.map(line => ({ ...line, latex: formatExpression(line.expression) })),
     pending: state.pending
@@ -386,6 +471,7 @@ export function sessionMetrics(state: SessionState) {
       entry => entry.version?.cause === "recognition-correction" && entry.outcome === "proposed",
     ).length,
     clarifications: state.log.filter(entry => entry.outcome === "clarify").length,
+    hints: state.log.filter(entry => entry.hint).length,
     checks,
     undos: state.log.filter(entry => entry.outcome === "undone").length,
     staleDrops: state.log.filter(entry => entry.outcome === "stale").length,

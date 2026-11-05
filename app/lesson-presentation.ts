@@ -12,6 +12,7 @@ type PresentationSnapshot = Pick<LessonSnapshot, "status" | "error" | "awaitingS
 export type PresentationCopy = {
   readonly welcome: string;
   readonly complete: string;
+  readonly ready?: string;
   /** Irregular plurals for the success line; everything else adds "s". */
   readonly plurals?: Readonly<Record<string, string>>;
 };
@@ -24,7 +25,7 @@ export const GARDEN_COPY: PresentationCopy = {
 
 export function lessonPresentation(
   snapshot: PresentationSnapshot | null,
-  successNode?: { quantity: number; object: string } | null,
+  successNode?: { quantity: number; object: string } | { label: string } | null,
   copy: PresentationCopy = GARDEN_COPY,
 ) {
   if (snapshot?.error)
@@ -40,7 +41,10 @@ export function lessonPresentation(
   if (successNode)
     return {
       kind: "understood",
-      message: `${successNode.quantity} ${successNode.quantity === 1 ? successNode.object : (copy.plurals?.[successNode.object] ?? `${successNode.object}s`)}!`,
+      message:
+        "label" in successNode
+          ? successNode.label
+          : `${successNode.quantity} ${successNode.quantity === 1 ? successNode.object : (copy.plurals?.[successNode.object] ?? `${successNode.object}s`)}!`,
     };
   if (snapshot.runtime?.outputActivity === "active") return { kind: "speaking", message: "Sprout is talking…" };
   if (snapshot.runtime?.childSpeaking) return { kind: "listening", message: "Sprout is listening…" };
@@ -48,7 +52,7 @@ export function lessonPresentation(
     return { kind: "waiting", message: "One moment…" };
   if (snapshot.runtime.hasChildTranscript && snapshot.runtime.transcriptSource === "child")
     return { kind: "thinking", message: "Sprout is thinking…" };
-  return { kind: "ready", message: "Your turn to count!" };
+  return { kind: "ready", message: copy.ready ?? "Your turn to count!" };
 }
 
 export type VoiceActivity = "off" | "waiting" | "your-turn" | "listening" | "speaking" | "thinking" | "understood";

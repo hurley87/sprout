@@ -1,9 +1,9 @@
 import { boundedArray, exactObject } from "../calculus/math-expression";
 
-/** Bounded integer expressions in x and y; parsing never repairs input. */
+/** Bounded integer expressions in x, y and h; parsing never repairs input. */
 export type AlgebraExpression =
   | { readonly op: "number"; readonly value: number }
-  | { readonly op: "variable"; readonly name: "x" | "y" }
+  | { readonly op: "variable"; readonly name: "x" | "y" | "h" }
   | { readonly op: "add"; readonly args: readonly AlgebraExpression[] }
   | { readonly op: "multiply"; readonly args: readonly AlgebraExpression[] }
   | { readonly op: "subtract"; readonly left: AlgebraExpression; readonly right: AlgebraExpression }
@@ -45,7 +45,7 @@ export function parseAlgebraExpression(value: unknown): AlgebraParseResult {
       case "variable": {
         const name = exactObject(input, ["op", "name"]).name;
         if (typeof name !== "string") throw new Error("Expected variable name");
-        if (name !== "x" && name !== "y")
+        if (name !== "x" && name !== "y" && name !== "h")
           throw new ParseFailure("unsupported-variable", `Unsupported variable: ${name}`);
         return { op, name };
       }

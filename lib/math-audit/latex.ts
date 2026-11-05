@@ -1,6 +1,6 @@
 import { ALGEBRA_EXPRESSION_LIMITS, parseAlgebraExpression, type AlgebraExpression } from "./expression";
 
-/** Integers, x/y, +/-, products, slash/div, frac variants, groups and integer powers.
+/** Integers, x/y/h, +/-, products, slash/div, frac variants, groups and integer powers.
  * Slash/div chains or ungrouped right-hand juxtaposition, div followed by a product,
  * mixed numbers, separated digits and stacked powers are ambiguous. Flat sums and
  * products over eight operands return limit. Fractions and div are binary divide;
@@ -62,7 +62,7 @@ export function readAlgebraLatex(source: string): LatexReadResult {
         tokens.push({ kind: "number", text: source.slice(start, position), position: start, end: position });
       } else {
         position++;
-        const kind = char === "x" || char === "y" ? "variable" : "+-*/^(){}".includes(char) ? char : "unsupported";
+        const kind = ["x", "y", "h"].includes(char) ? "variable" : "+-*/^(){}".includes(char) ? char : "unsupported";
         tokens.push({ kind, text: char, position: start, end: position });
       }
     }
@@ -108,7 +108,7 @@ export function readAlgebraLatex(source: string): LatexReadResult {
       }
       if (token.kind === "variable") {
         index++;
-        return { op: "variable", name: token.text as "x" | "y" };
+        return { op: "variable", name: token.text as "x" | "y" | "h" };
       }
       if (token.kind === "(") return group("(", ")");
       if (token.kind === "{") return group("{", "}");

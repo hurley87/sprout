@@ -8,6 +8,18 @@ import { installSyntheticMicrophone } from "../helpers/synthetic-microphone";
 const current = (page: Page) =>
   page.evaluate(() => (window as LessonObservationWindow).sproutLessonObservation?.read()?.snapshot);
 
+for (const width of [375, 1440]) {
+  test(`difference quotient shows the original nested expression at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/demos/math-steps/difference-quotient");
+    const problem = page.getByRole("region", { name: "Current problem" });
+    await expect(problem).toContainText("Simplify the following expression, where h ≠ 0.");
+    await expect(problem.locator(".katex-html .mfrac .mfrac").first()).toBeVisible();
+    await expect(problem).toContainText("Required:");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
+}
+
 test("voice proposal, localized check, actions and microphone stop on a narrow screen", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const microphone = await installSyntheticMicrophone(page);

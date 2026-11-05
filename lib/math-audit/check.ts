@@ -19,7 +19,7 @@ import {
   type RationalPoint,
 } from "./polynomial";
 
-/** Exact bounded rational algebra in x,y; no calculus or rule validation.
+/** Exact bounded rational algebra in x,y,h; no calculus or rule validation.
  * Domains require every recorded restriction to be nonzero. Equivalence means
  * equality on the intersection, even when the domain report is not preserved.
  */
@@ -32,7 +32,7 @@ export interface TransformationInput {
   operation?: Operation;
   provenance?: Provenance;
 }
-export type PointWitness = { x: string; y: string };
+export type PointWitness = { x: string; y: string; h: string };
 export type DomainReport = {
   status: "preserved" | "restriction-lost" | "restriction-unverified" | "restriction-added";
   previousRestrictions: string[];
@@ -119,36 +119,40 @@ const frac = (numerator: bigint, denominator = BigInt(1)): Fraction => {
 };
 const text = (value: Fraction) =>
   value.denominator === BigInt(1) ? `${value.numerator}` : `${value.numerator}/${value.denominator}`;
-const pointText = (point: RationalPoint): PointWitness => ({ x: text(point.x), y: text(point.y) });
+const pointText = (point: RationalPoint): PointWitness => ({ x: text(point.x), y: text(point.y), h: text(point.h) });
 const grid = [0, 1, -1, 2, -2, 3, -3, 4, -4]
   .map(value => frac(BigInt(value)))
   .concat([frac(BigInt(1), BigInt(2)), frac(-BigInt(1), BigInt(2))]);
 const nonzero = (polynomial: Polynomial, point: RationalPoint) => evaluate(polynomial, point).numerator !== BigInt(0);
 function* points(restriction?: Polynomial): Generator<RationalPoint> {
-  for (const x of grid) for (const y of grid) yield { x, y };
+  for (const x of grid) for (const y of grid) for (const h of grid) yield { x, y, h };
   if (!restriction) return;
-  for (const variable of ["x", "y"] as const) {
+  for (const [index, variable] of (["x", "y", "h"] as const).entries()) {
     const coefficient = new Map<string, bigint>(),
       remainder = new Map<string, bigint>();
     let linear = true;
     for (const [key, value] of restriction) {
-      const [x, y] = key.split(",").map(Number),
-        degree = variable === "x" ? x : y;
+      const degrees = key.split(",").map(Number),
+        degree = degrees[index];
       if (degree > 1) {
         linear = false;
         break;
       }
-      (degree ? coefficient : remainder).set(variable === "x" ? `0,${y}` : `${x},0`, value);
+      degrees[index] = 0;
+      (degree ? coefficient : remainder).set(degrees.join(","), value);
     }
     if (!linear) continue;
-    for (const other of grid) {
-      const base = { x: variable === "x" ? grid[0] : other, y: variable === "y" ? grid[0] : other };
-      const a = evaluate(coefficient, base),
-        b = evaluate(remainder, base);
-      if (!a.numerator) continue;
-      const root = frac(-b.numerator * a.denominator, b.denominator * a.numerator);
-      yield variable === "x" ? { x: root, y: other } : { x: other, y: root };
-    }
+    for (const first of grid)
+      for (const second of grid) {
+        const remaining = [first, second];
+        const base = { x: grid[0], y: grid[0], h: grid[0] };
+        for (const other of ["x", "y", "h"] as const) if (other !== variable) base[other] = remaining.shift()!;
+        const a = evaluate(coefficient, base),
+          b = evaluate(remainder, base);
+        if (!a.numerator) continue;
+        const root = frac(-b.numerator * a.denominator, b.denominator * a.numerator);
+        yield { ...base, [variable]: root };
+      }
   }
 }
 function implied(restriction: Polynomial, others: Polynomial[]): boolean {
@@ -173,6 +177,21 @@ function implied(restriction: Polynomial, others: Polynomial[]): boolean {
     if (!(error instanceof PolynomialLimitError)) throw error;
   }
   return false;
+}
+
+export function restrictionsImpliedByProblem(
+  previous: AlgebraExpression,
+  problem: AlgebraExpression,
+  labels: readonly string[],
+): string[] {
+  const prior = reduceRational(previous);
+  const original = reduceRational(problem);
+  if (!prior.ok || !original.ok) return [];
+  return labels.filter(label =>
+    prior.restrictions.some(
+      restriction => `${formatPolynomial(restriction)} ≠ 0` === label && implied(restriction, original.restrictions),
+    ),
+  );
 }
 function domain(previous: Polynomial[], proposed: Polynomial[]): DomainReport {
   const lost: DomainReport["lost"] = [],

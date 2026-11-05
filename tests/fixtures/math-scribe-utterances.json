@@ -1,15 +1,269 @@
 [
   {
+    "name": "difference quotient second product expansion",
+    "workingLatex": "\\frac{x^2+hx+x-(x+h)(x+1)}{h(x+1)(x+h+1)}",
+    "baseLatex": "\\frac{x(x+h+1)-(x+h)(x+1)}{h(x+1)(x+h+1)}",
+    "pendingStatus": "interpreted",
+    "learnerTurns": [
+      { "id": "l1", "text": "leaving us with minus open bracket x squared plus hx plus h plus x close bracket" }
+    ],
+    "tutorTurns": [],
+    "expected": [
+      {
+        "intent": "propose",
+        "source": "report",
+        "quote": "leaving us with minus open bracket x squared plus hx plus h plus x close bracket",
+        "operation": {
+          "kind": "replace-part",
+          "partId": "p10",
+          "expression": {
+            "op": "add",
+            "args": [
+              { "op": "power", "base": { "op": "variable", "name": "x" }, "exponent": 2 },
+              {
+                "op": "multiply",
+                "args": [
+                  { "op": "variable", "name": "h" },
+                  { "op": "variable", "name": "x" }
+                ]
+              },
+              { "op": "variable", "name": "h" },
+              { "op": "variable", "name": "x" }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "difference quotient common denominator",
+    "workingLatex": "\\frac{\\frac{x}{x+1}-\\frac{x+h}{x+h+1}}{h}",
+    "baseLatex": "\\frac{\\frac{x}{x+1}-\\frac{x+h}{x+h+1}}{h}",
+    "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "Find a common denominator for the two fractions on top." }],
+    "tutorTurns": [],
+    "expected": [
+      {
+        "intent": "propose",
+        "source": "instruction",
+        "quote": "Find a common denominator for the two fractions on top.",
+        "operation": { "kind": "combine-fractions", "partId": "p1" }
+      }
+    ]
+  },
+  {
+    "name": "difference quotient multiply first numerator",
+    "workingLatex": "\\frac{\\frac{x}{x+1}-\\frac{x+h}{x+h+1}}{h}",
+    "baseLatex": "\\frac{\\frac{x}{x+1}-\\frac{x+h}{x+h+1}}{h}",
+    "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "Multiply the first numerator by x plus h plus one." }],
+    "tutorTurns": [],
+    "expected": [
+      {
+        "intent": "propose",
+        "source": "instruction",
+        "quote": "Multiply the first numerator by x plus h plus one.",
+        "operation": {
+          "kind": "multiply-part",
+          "partId": "p3",
+          "factor": {
+            "op": "add",
+            "args": [
+              { "op": "variable", "name": "x" },
+              { "op": "variable", "name": "h" },
+              { "op": "number", "value": 1 }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "difference quotient expand and combine",
+    "workingLatex": "\\frac{\\frac{x}{x+1}-\\frac{x+h}{x+h+1}}{h}",
+    "baseLatex": "\\frac{\\frac{x}{x+1}-\\frac{x+h}{x+h+1}}{h}",
+    "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "Expand the top and combine like terms." }],
+    "tutorTurns": [],
+    "expected": [
+      {
+        "intent": "propose",
+        "source": "instruction",
+        "quote": "Expand the top and combine like terms.",
+        "operation": { "kind": "non-unique", "name": "expand", "partId": "p1" }
+      }
+    ]
+  },
+  {
+    "name": "difference quotient negative h",
+    "workingLatex": "\\frac{xh-h}{h}",
+    "baseLatex": "\\frac{xh-h}{h}",
+    "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "That numerator should be negative h." }],
+    "tutorTurns": [],
+    "expected": [
+      {
+        "intent": "propose",
+        "source": "report",
+        "quote": "That numerator should be negative h.",
+        "operation": {
+          "kind": "replace-part",
+          "partId": "p1",
+          "expression": { "op": "negate", "argument": { "op": "variable", "name": "h" } }
+        }
+      }
+    ]
+  },
+  {
+    "name": "difference quotient cancel h",
+    "workingLatex": "\\frac{-h}{h}",
+    "baseLatex": "\\frac{-h}{h}",
+    "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "Now cancel the h." }],
+    "tutorTurns": [],
+    "expected": [
+      {
+        "intent": "propose",
+        "source": "instruction",
+        "quote": "Now cancel the h.",
+        "operation": { "kind": "cancel-common-factor", "factor": { "op": "variable", "name": "h" } }
+      }
+    ]
+  },
+  {
+    "name": "difference quotient check",
+    "workingLatex": "\\frac{-h}{h}",
+    "baseLatex": "\\frac{-h}{h}",
+    "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "Check that step." }],
+    "tutorTurns": [],
+    "expected": [{ "intent": "request-check", "quote": "Check that step." }]
+  },
+  {
+    "name": "difference quotient correction",
+    "workingLatex": "\\frac{h}{h}",
+    "baseLatex": "\\frac{-h}{h}",
+    "pendingStatus": "interpreted",
+    "learnerTurns": [{ "id": "l1", "text": "No, I meant minus, not plus." }],
+    "tutorTurns": [],
+    "expected": [
+      {
+        "intent": "correct",
+        "quote": "No, I meant minus, not plus.",
+        "operation": {
+          "kind": "replace-part",
+          "partId": "p1",
+          "expression": { "op": "negate", "argument": { "op": "variable", "name": "h" } }
+        }
+      }
+    ]
+  },
+  {
+    "name": "difference quotient undo",
+    "workingLatex": "\\frac{-h}{h}",
+    "baseLatex": "\\frac{-h}{h}",
+    "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "Undo." }],
+    "tutorTurns": [],
+    "expected": [{ "intent": "undo", "quote": "Undo." }]
+  },
+  {
+    "name": "difference quotient hint",
+    "workingLatex": "\\frac{-h}{h}",
+    "baseLatex": "\\frac{-h}{h}",
+    "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "Give me a hint." }],
+    "tutorTurns": [],
+    "expected": [{ "intent": "request-help", "quote": "Give me a hint." }]
+  },
+  {
+    "name": "difference quotient ambiguous denominator",
+    "workingLatex": "\\frac{\\frac{x}{x+1}-\\frac{x+h}{x+h+1}}{h}",
+    "baseLatex": "\\frac{\\frac{x}{x+1}-\\frac{x+h}{x+h+1}}{h}",
+    "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "cancel the denominator" }],
+    "tutorTurns": [],
+    "expected": [{ "intent": "clarify", "question": "Which denominator do you mean?" }]
+  },
+  {
+    "name": "difference quotient calculus drift",
+    "workingLatex": "\\frac{\\frac{x}{x+1}-\\frac{x+h}{x+h+1}}{h}",
+    "baseLatex": "\\frac{\\frac{x}{x+1}-\\frac{x+h}{x+h+1}}{h}",
+    "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "take the limit as h goes to zero" }],
+    "tutorTurns": [],
+    "expected": [
+      {
+        "intent": "propose",
+        "source": "instruction",
+        "quote": "take the limit as h goes to zero",
+        "operation": { "kind": "non-unique", "name": "calculus" }
+      }
+    ]
+  },
+  {
     "name": "factor self correction uses last factor",
-    "workingLatex": "12x^2-10xy", "baseLatex": "12x^2-10xy", "pendingStatus": "none",
-    "learnerTurns": [{ "id": "l1", "text": "factor out six x or 2x" }], "tutorTurns": [],
-    "expected": [{ "intent": "propose", "source": "instruction", "quote": "factor out six x or 2x", "operation": { "kind": "factor-out", "partId": "p0", "factor": { "op": "multiply", "args": [{ "op": "number", "value": 2 }, { "op": "variable", "name": "x" }] } } }]
+    "workingLatex": "12x^2-10xy",
+    "baseLatex": "12x^2-10xy",
+    "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "factor out six x or 2x" }],
+    "tutorTurns": [],
+    "expected": [
+      {
+        "intent": "propose",
+        "source": "instruction",
+        "quote": "factor out six x or 2x",
+        "operation": {
+          "kind": "factor-out",
+          "partId": "p0",
+          "factor": {
+            "op": "multiply",
+            "args": [
+              { "op": "number", "value": 2 },
+              { "op": "variable", "name": "x" }
+            ]
+          }
+        }
+      }
+    ]
   },
   {
     "name": "factor with dictated result uses stated result",
-    "workingLatex": "12x+30y", "baseLatex": "12x+30y", "pendingStatus": "none",
-    "learnerTurns": [{ "id": "l1", "text": "take out six, that is six times x plus five y" }], "tutorTurns": [],
-    "expected": [{ "intent": "propose", "source": "instruction", "quote": "take out six, that is six times x plus five y", "operation": { "kind": "replace-part", "partId": "p0", "expression": { "op": "multiply", "args": [{ "op": "number", "value": 6 }, { "op": "add", "args": [{ "op": "variable", "name": "x" }, { "op": "multiply", "args": [{ "op": "number", "value": 5 }, { "op": "variable", "name": "y" }] }] }] } } }]
+    "workingLatex": "12x+30y",
+    "baseLatex": "12x+30y",
+    "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "take out six, that is six times x plus five y" }],
+    "tutorTurns": [],
+    "expected": [
+      {
+        "intent": "propose",
+        "source": "instruction",
+        "quote": "take out six, that is six times x plus five y",
+        "operation": {
+          "kind": "replace-part",
+          "partId": "p0",
+          "expression": {
+            "op": "multiply",
+            "args": [
+              { "op": "number", "value": 6 },
+              {
+                "op": "add",
+                "args": [
+                  { "op": "variable", "name": "x" },
+                  {
+                    "op": "multiply",
+                    "args": [
+                      { "op": "number", "value": 5 },
+                      { "op": "variable", "name": "y" }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ]
   },
   {
     "name": "factor 2x from second denominator",
@@ -18,31 +272,128 @@
     "pendingStatus": "none",
     "learnerTurns": [{ "id": "l1", "text": "factor 2x out of the denominator of the second fraction" }],
     "tutorTurns": [],
-    "expected": [{ "intent": "propose", "source": "instruction", "quote": "factor 2x out of the denominator of the second fraction", "operation": { "kind": "factor-out", "partId": "p12", "factor": { "op": "multiply", "args": [{ "op": "number", "value": 2 }, { "op": "variable", "name": "x" }] } } }]
+    "expected": [
+      {
+        "intent": "propose",
+        "source": "instruction",
+        "quote": "factor 2x out of the denominator of the second fraction",
+        "operation": {
+          "kind": "factor-out",
+          "partId": "p12",
+          "factor": {
+            "op": "multiply",
+            "args": [
+              { "op": "number", "value": 2 },
+              { "op": "variable", "name": "x" }
+            ]
+          }
+        }
+      }
+    ]
   },
   {
     "name": "take six from second numerator",
-    "workingLatex": "\\frac{x}{y}\\frac{12x+30y}{x}", "baseLatex": "\\frac{x}{y}\\frac{12x+30y}{x}", "pendingStatus": "none",
-    "learnerTurns": [{ "id": "l1", "text": "take out a 6 from the second numerator" }], "tutorTurns": [],
-    "expected": [{ "intent": "propose", "source": "instruction", "quote": "take out a 6 from the second numerator", "operation": { "kind": "factor-out", "partId": "p5", "factor": 6 } }]
+    "workingLatex": "\\frac{x}{y}\\frac{12x+30y}{x}",
+    "baseLatex": "\\frac{x}{y}\\frac{12x+30y}{x}",
+    "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "take out a 6 from the second numerator" }],
+    "tutorTurns": [],
+    "expected": [
+      {
+        "intent": "propose",
+        "source": "instruction",
+        "quote": "take out a 6 from the second numerator",
+        "operation": { "kind": "factor-out", "partId": "p5", "factor": 6 }
+      }
+    ]
   },
   {
     "name": "pull y from first numerator",
-    "workingLatex": "\\frac{6xy-5y^2}{x}", "baseLatex": "\\frac{6xy-5y^2}{x}", "pendingStatus": "none",
-    "learnerTurns": [{ "id": "l1", "text": "pull out y from the first numerator" }], "tutorTurns": [],
-    "expected": [{ "intent": "propose", "source": "instruction", "quote": "pull out y from the first numerator", "operation": { "kind": "factor-out", "partId": "p1", "factor": { "op": "variable", "name": "y" } } }]
+    "workingLatex": "\\frac{6xy-5y^2}{x}",
+    "baseLatex": "\\frac{6xy-5y^2}{x}",
+    "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "pull out y from the first numerator" }],
+    "tutorTurns": [],
+    "expected": [
+      {
+        "intent": "propose",
+        "source": "instruction",
+        "quote": "pull out y from the first numerator",
+        "operation": { "kind": "factor-out", "partId": "p1", "factor": { "op": "variable", "name": "y" } }
+      }
+    ]
   },
   {
     "name": "cancel named common factor",
-    "workingLatex": "\\frac{6x-5y}{6x-5y}", "baseLatex": "\\frac{6x-5y}{6x-5y}", "pendingStatus": "none",
-    "learnerTurns": [{ "id": "l1", "text": "cancel the 6x minus 5y" }], "tutorTurns": [],
-    "expected": [{ "intent": "propose", "source": "instruction", "quote": "cancel the 6x minus 5y", "operation": { "kind": "cancel-common-factor", "factor": { "op": "subtract", "left": { "op": "multiply", "args": [{ "op": "number", "value": 6 }, { "op": "variable", "name": "x" }] }, "right": { "op": "multiply", "args": [{ "op": "number", "value": 5 }, { "op": "variable", "name": "y" }] } } } }]
+    "workingLatex": "\\frac{6x-5y}{6x-5y}",
+    "baseLatex": "\\frac{6x-5y}{6x-5y}",
+    "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "cancel the 6x minus 5y" }],
+    "tutorTurns": [],
+    "expected": [
+      {
+        "intent": "propose",
+        "source": "instruction",
+        "quote": "cancel the 6x minus 5y",
+        "operation": {
+          "kind": "cancel-common-factor",
+          "factor": {
+            "op": "subtract",
+            "left": {
+              "op": "multiply",
+              "args": [
+                { "op": "number", "value": 6 },
+                { "op": "variable", "name": "x" }
+              ]
+            },
+            "right": {
+              "op": "multiply",
+              "args": [
+                { "op": "number", "value": 5 },
+                { "op": "variable", "name": "y" }
+              ]
+            }
+          }
+        }
+      }
+    ]
   },
   {
     "name": "cancel named sum top and bottom",
-    "workingLatex": "\\frac{2x+5y}{2x+5y}", "baseLatex": "\\frac{2x+5y}{2x+5y}", "pendingStatus": "none",
-    "learnerTurns": [{ "id": "l1", "text": "cancel the 2x plus 5y from top and bottom" }], "tutorTurns": [],
-    "expected": [{ "intent": "propose", "source": "instruction", "quote": "cancel the 2x plus 5y from top and bottom", "operation": { "kind": "cancel-common-factor", "factor": { "op": "add", "args": [{ "op": "multiply", "args": [{ "op": "number", "value": 2 }, { "op": "variable", "name": "x" }] }, { "op": "multiply", "args": [{ "op": "number", "value": 5 }, { "op": "variable", "name": "y" }] }] } } }]
+    "workingLatex": "\\frac{2x+5y}{2x+5y}",
+    "baseLatex": "\\frac{2x+5y}{2x+5y}",
+    "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "cancel the 2x plus 5y from top and bottom" }],
+    "tutorTurns": [],
+    "expected": [
+      {
+        "intent": "propose",
+        "source": "instruction",
+        "quote": "cancel the 2x plus 5y from top and bottom",
+        "operation": {
+          "kind": "cancel-common-factor",
+          "factor": {
+            "op": "add",
+            "args": [
+              {
+                "op": "multiply",
+                "args": [
+                  { "op": "number", "value": 2 },
+                  { "op": "variable", "name": "x" }
+                ]
+              },
+              {
+                "op": "multiply",
+                "args": [
+                  { "op": "number", "value": 5 },
+                  { "op": "variable", "name": "y" }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ]
   },
   {
     "name": "answer factor clarification with inner expression",
@@ -57,18 +408,42 @@
       "part": { "id": "p5", "description": "numerator of factor 2", "latex": "12x+30y" },
       "operation": "factor"
     },
-    "expected": [{
-      "intent": "propose", "source": "report", "quote": "It would be 2x plus 5 y",
-      "operation": { "kind": "replace-part", "partId": "p5", "expression": {
-        "op": "multiply", "args": [
-          { "op": "number", "value": 6 },
-          { "op": "add", "args": [
-            { "op": "multiply", "args": [{ "op": "number", "value": 2 }, { "op": "variable", "name": "x" }] },
-            { "op": "multiply", "args": [{ "op": "number", "value": 5 }, { "op": "variable", "name": "y" }] }
-          ] }
-        ]
-      } }
-    }]
+    "expected": [
+      {
+        "intent": "propose",
+        "source": "report",
+        "quote": "It would be 2x plus 5 y",
+        "operation": {
+          "kind": "replace-part",
+          "partId": "p5",
+          "expression": {
+            "op": "multiply",
+            "args": [
+              { "op": "number", "value": 6 },
+              {
+                "op": "add",
+                "args": [
+                  {
+                    "op": "multiply",
+                    "args": [
+                      { "op": "number", "value": 2 },
+                      { "op": "variable", "name": "x" }
+                    ]
+                  },
+                  {
+                    "op": "multiply",
+                    "args": [
+                      { "op": "number", "value": 5 },
+                      { "op": "variable", "name": "y" }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ]
   },
   {
     "name": "flip second fraction",
@@ -484,5 +859,60 @@
     "learnerTurns": [{ "id": "l1", "text": "um" }],
     "tutorTurns": [{ "id": "t1", "text": "replace x with y" }],
     "expected": []
+  },
+  {
+    "name": "difference quotient multiply h into the denominator",
+    "workingLatex": "\\frac{\\frac{x(x+h+1)-(x+h)(x+1)}{(x+1)(x+h+1)}}{h}",
+    "baseLatex": "\\frac{\\frac{x(x+h+1)-(x+h)(x+1)}{(x+1)(x+h+1)}}{h}",
+    "pendingStatus": "none",
+    "learnerTurns": [
+      {
+        "id": "l1",
+        "text": "Now we wanna get rid of that fraction over h. We can do that by multiplying h into the denominator of that fraction"
+      }
+    ],
+    "tutorTurns": [],
+    "expected": [
+      {
+        "intent": "propose",
+        "source": "instruction",
+        "quote": "Now we wanna get rid of that fraction over h. We can do that by multiplying h into the denominator of that fraction",
+        "operation": { "kind": "flatten-nested-fraction", "partId": "p0" }
+      }
+    ]
+  },
+  {
+    "name": "difference quotient make it one fraction",
+    "workingLatex": "\\frac{\\frac{x(x+h+1)-(x+h)(x+1)}{(x+1)(x+h+1)}}{h}",
+    "baseLatex": "\\frac{\\frac{x(x+h+1)-(x+h)(x+1)}{(x+1)(x+h+1)}}{h}",
+    "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "Make it one fraction" }],
+    "tutorTurns": [],
+    "expected": [
+      {
+        "intent": "propose",
+        "source": "instruction",
+        "quote": "Make it one fraction",
+        "operation": { "kind": "flatten-nested-fraction", "partId": "p0" }
+      }
+    ]
+  },
+  {
+    "name": "difference quotient multiply by one over h",
+    "workingLatex": "\\frac{\\frac{x(x+h+1)-(x+h)(x+1)}{(x+1)(x+h+1)}}{h}",
+    "baseLatex": "\\frac{\\frac{x(x+h+1)-(x+h)(x+1)}{(x+1)(x+h+1)}}{h}",
+    "pendingStatus": "none",
+    "learnerTurns": [
+      { "id": "l1", "text": "Keeping the fraction in the numerator, I would like to multiply it by one over h" }
+    ],
+    "tutorTurns": [],
+    "expected": [
+      {
+        "intent": "propose",
+        "source": "instruction",
+        "quote": "Keeping the fraction in the numerator, I would like to multiply it by one over h",
+        "operation": { "kind": "division-to-reciprocal", "partId": "p0" }
+      }
+    ]
   }
 ]

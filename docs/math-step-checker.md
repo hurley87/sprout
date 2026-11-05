@@ -50,7 +50,7 @@ separate `verified`, `invalid`, `unverified`, and `domainChanged` transitions.
 
 ## Supported mathematics
 
-Integer-coefficient rational expressions in `x` and `y`: integers, variables,
+Integer-coefficient rational expressions in `x`, `y`, and `h`: integers, variables,
 addition, subtraction, multiplication, division, unary negation and integer
 powers, including negative powers. Rational _values_ can arise through division;
 decimal and rational AST number literals are not supported.

@@ -1,15 +1,79 @@
-import { expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import fixtures from "./fixtures/math-scribe-utterances.json";
 import {
   createResponsesScribeProvider,
   interpretSpeech,
   parseScribeInput,
   parseScribeWithDrops,
+  SCRIBE_INSTRUCTIONS,
   SCRIBE_LIMITS,
+  SCRIBE_SCHEMA,
 } from "../lib/math-scribe/interpretation";
 import { createSession, reduceSession } from "../lib/math-scribe/session";
 import { listParts } from "../lib/math-scribe/parts";
 import { readAlgebraLatex } from "../lib/math-audit/latex";
+
+it("sanitizes clarification questions while retaining their original diagnostics", () => {
+  const input = parseScribeInput({
+    workingLatex: String.raw`\frac{x(x+h+1)-(x+h)(x+1)}{h(x+1)(x+h+1)}`,
+    baseLatex: "x",
+    pendingStatus: "interpreted",
+    learnerTurns: [{ id: "l", text: "leaving us with minus open bracket" }],
+    tutorTurns: [],
+  });
+  const question = String.raw`Do you want to replace the product \((x+h)(x+1)\text{, part }p10\) with \(x^2+hx+h+x\), keeping the minus sign already in the numerator?`;
+  const result = parseScribeWithDrops({ interpretations: [{ intent: "clarify", question }] }, input);
+  expect(result.interpretations[0]).toMatchObject({ intent: "clarify" });
+  expect((result.interpretations[0] as { question: string }).question).not.toMatch(/\\|\bp\d+\b|\^|[{}]/);
+  expect(result.dropped).toEqual([{ reason: "sanitized-question", value: { intent: "clarify", question } }]);
+  expect(
+    parseScribeWithDrops({ interpretations: [{ intent: "clarify", question: "Which term?" }] }, input).interpretations,
+  ).toEqual([{ intent: "clarify", question: "Which term?" }]);
+});
+
+it("validates the new operation shapes and their parts", () => {
+  const input = parseScribeInput({
+    workingLatex: "x",
+    baseLatex: "x",
+    pendingStatus: "none",
+    learnerTurns: [{ id: "l", text: "do it" }],
+    tutorTurns: [],
+  });
+  const parse = (operation: object) =>
+    parseScribeWithDrops(
+      { interpretations: [{ intent: "propose", source: "instruction", quote: "do it", operation }] },
+      input,
+    );
+  for (const kind of ["combine-fractions", "flatten-nested-fraction"])
+    expect(parse({ kind, partId: "p0" }).interpretations).toHaveLength(1);
+  for (const kind of ["scale-fraction", "multiply-part"]) {
+    expect(parse({ kind, partId: "p0", factor: 2 }).interpretations).toHaveLength(1);
+    expect(parse({ kind, partId: "p0", factor: { op: "bogus" } }).interpretations).toHaveLength(0);
+    expect(parse({ kind, partId: "p999", factor: 2 }).interpretations).toHaveLength(0);
+    expect(parse({ kind, partId: "p0" }).interpretations).toHaveLength(0);
+  }
+});
+
+it("validates offered operations against the working line", () => {
+  const input = parseScribeInput({
+    workingLatex: "x",
+    baseLatex: "x",
+    pendingStatus: "none",
+    learnerTurns: [{ id: "l", text: "change it" }],
+    tutorTurns: [],
+  });
+  const operation = { kind: "replace-part", partId: "p999", expression: { op: "number", value: 1 } };
+  expect(
+    parseScribeWithDrops({ interpretations: [{ intent: "clarify", question: "Change it?", operation }] }, input)
+      .dropped[0].reason,
+  ).toBe("unknown-part");
+  expect(() =>
+    parseScribeInput({
+      ...input,
+      openQuestion: { question: "Change it?", prompt: "change it", offeredOperation: operation },
+    }),
+  ).toThrow();
+});
 
 for (const fixture of fixtures)
   it(`accepts fixture: ${fixture.name}`, async () => {
@@ -45,7 +109,7 @@ for (const fixture of fixtures)
       expect(state.pending).not.toBeNull();
     }
     for (const [index, interpretation] of result.interpretations.entries()) {
-      if ("operation" in interpretation && "partId" in interpretation.operation)
+      if ("operation" in interpretation && interpretation.operation && "partId" in interpretation.operation)
         expect(listParts(line.expression).map(part => part.id)).toContain(interpretation.operation.partId);
       const reduced = reduceSession(state, {
         type: "interpretation",
@@ -135,4 +199,11 @@ it("uses server-derived parts, the shared model, and bounded provider responses"
     status: "timeout",
   });
   expect(SCRIBE_LIMITS.bytes).toBeGreaterThan(0);
+});
+
+describe("scribe provider response cap", () => {
+  it("leaves room for the echoed schema and instructions", () => {
+    const echoed = JSON.stringify(SCRIBE_SCHEMA, null, 2).length + SCRIBE_INSTRUCTIONS.length;
+    expect(SCRIBE_LIMITS.outputBytes).toBeGreaterThan(4 * echoed);
+  });
 });

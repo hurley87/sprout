@@ -14,6 +14,19 @@ export type Part = {
   kind: "expression" | "exponent";
 };
 export const MATH_SCRIBE_PART_LIMIT = 64;
+export function safeClarification(question: string, parts: Pick<Part, "id" | "description">[] = []): string {
+  let known: string | undefined;
+  const clean = question.replace(/\bp\d+\b/gi, id => {
+    const part = parts.find(candidate => candidate.id === id);
+    if (part) known = part.description;
+    return part?.description ?? id;
+  });
+  if (/\\|\^|[{}]|\bp\d+\b/i.test(clean)) {
+    const description = known && !/\\|\^|[{}]|\bp\d+\b/i.test(known) ? known : undefined;
+    return description ? `What should ${description} become?` : "Which part do you mean, and what should it become?";
+  }
+  return clean;
+}
 export type ReplacePartResult =
   { ok: true; expression: AlgebraExpression } | { ok: false; reason: "bad-path" | "invalid-replacement" | "limit" };
 
@@ -93,6 +106,48 @@ export function listParts(expression: AlgebraExpression, options?: { limit?: num
   fractions.forEach((part, index) => {
     if (ordinals[index]) part.aliases.push(`the ${ordinals[index]} fraction`);
   });
+  if (expression.op === "divide" && (expression.left.op === "subtract" || expression.left.op === "add")) {
+    const top = candidates.find(part => JSON.stringify(part.path) === JSON.stringify([{ child: "left" }]));
+    const bottom = candidates.find(part => JSON.stringify(part.path) === JSON.stringify([{ child: "right" }]));
+    const topFractions = fractions.filter(part => part.path.length === 2 && part.path[0].child === "left");
+    if (topFractions.length === 2) {
+      const outer = candidates.find(part => part.path.length === 0);
+      if (outer) outer.aliases = [];
+      top?.aliases.push("the top", "the big numerator", "the outer numerator");
+      bottom?.aliases.push("the outside denominator", "the bottom", "the outer denominator");
+      topFractions.forEach((fraction, index) => {
+        const name = `the ${ordinals[index]} fraction on top`;
+        fraction.aliases = [name, `the ${ordinals[index]} fraction`];
+        fraction.description = `${ordinals[index]} fraction on top`;
+        for (const child of candidates) {
+          if (
+            child.path.length !== fraction.path.length + 1 ||
+            JSON.stringify(child.path.slice(0, -1)) !== JSON.stringify(fraction.path)
+          )
+            continue;
+          const step = child.path.at(-1);
+          if (step?.child === "left" || step?.child === "right")
+            child.description = `${step.child === "left" ? "numerator" : "denominator"} of ${name}`;
+        }
+      });
+    }
+  } else if (expression.op === "divide" && expression.left.op === "divide" && expression.right.op !== "divide") {
+    // A single fraction over an outside denominator, e.g. after combining the fractions on
+    // top: name it as the top fraction rather than numbering the whole line a fraction.
+    const at = (path: PathStep[]) => candidates.find(part => JSON.stringify(part.path) === JSON.stringify(path));
+    const outer = at([]);
+    if (outer) outer.aliases = [];
+    const top = at([{ child: "left" }]);
+    if (top) {
+      top.description = "top fraction";
+      top.aliases = ["the top fraction", "the big numerator", "the outer numerator"];
+    }
+    at([{ child: "right" }])?.aliases.push("the outside denominator", "the bottom", "the outer denominator");
+    for (const side of ["left", "right"] as const) {
+      const child = at([{ child: "left" }, { child: side }]);
+      if (child) child.description = `${side === "left" ? "numerator" : "denominator"} of the top fraction`;
+    }
+  }
   const selected =
     candidates.length <= limit
       ? candidates
