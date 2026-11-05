@@ -859,5 +859,60 @@
     "learnerTurns": [{ "id": "l1", "text": "um" }],
     "tutorTurns": [{ "id": "t1", "text": "replace x with y" }],
     "expected": []
+  },
+  {
+    "name": "difference quotient multiply h into the denominator",
+    "workingLatex": "\\frac{\\frac{x(x+h+1)-(x+h)(x+1)}{(x+1)(x+h+1)}}{h}",
+    "baseLatex": "\\frac{\\frac{x(x+h+1)-(x+h)(x+1)}{(x+1)(x+h+1)}}{h}",
+    "pendingStatus": "none",
+    "learnerTurns": [
+      {
+        "id": "l1",
+        "text": "Now we wanna get rid of that fraction over h. We can do that by multiplying h into the denominator of that fraction"
+      }
+    ],
+    "tutorTurns": [],
+    "expected": [
+      {
+        "intent": "propose",
+        "source": "instruction",
+        "quote": "Now we wanna get rid of that fraction over h. We can do that by multiplying h into the denominator of that fraction",
+        "operation": { "kind": "flatten-nested-fraction", "partId": "p0" }
+      }
+    ]
+  },
+  {
+    "name": "difference quotient make it one fraction",
+    "workingLatex": "\\frac{\\frac{x(x+h+1)-(x+h)(x+1)}{(x+1)(x+h+1)}}{h}",
+    "baseLatex": "\\frac{\\frac{x(x+h+1)-(x+h)(x+1)}{(x+1)(x+h+1)}}{h}",
+    "pendingStatus": "none",
+    "learnerTurns": [{ "id": "l1", "text": "Make it one fraction" }],
+    "tutorTurns": [],
+    "expected": [
+      {
+        "intent": "propose",
+        "source": "instruction",
+        "quote": "Make it one fraction",
+        "operation": { "kind": "flatten-nested-fraction", "partId": "p0" }
+      }
+    ]
+  },
+  {
+    "name": "difference quotient multiply by one over h",
+    "workingLatex": "\\frac{\\frac{x(x+h+1)-(x+h)(x+1)}{(x+1)(x+h+1)}}{h}",
+    "baseLatex": "\\frac{\\frac{x(x+h+1)-(x+h)(x+1)}{(x+1)(x+h+1)}}{h}",
+    "pendingStatus": "none",
+    "learnerTurns": [
+      { "id": "l1", "text": "Keeping the fraction in the numerator, I would like to multiply it by one over h" }
+    ],
+    "tutorTurns": [],
+    "expected": [
+      {
+        "intent": "propose",
+        "source": "instruction",
+        "quote": "Keeping the fraction in the numerator, I would like to multiply it by one over h",
+        "operation": { "kind": "division-to-reciprocal", "partId": "p0" }
+      }
+    ]
   }
 ]
