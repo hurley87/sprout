@@ -1,11 +1,13 @@
-import { expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import fixtures from "./fixtures/math-scribe-utterances.json";
 import {
   createResponsesScribeProvider,
   interpretSpeech,
   parseScribeInput,
   parseScribeWithDrops,
+  SCRIBE_INSTRUCTIONS,
   SCRIBE_LIMITS,
+  SCRIBE_SCHEMA,
 } from "../lib/math-scribe/interpretation";
 import { createSession, reduceSession } from "../lib/math-scribe/session";
 import { listParts } from "../lib/math-scribe/parts";
@@ -197,4 +199,11 @@ it("uses server-derived parts, the shared model, and bounded provider responses"
     status: "timeout",
   });
   expect(SCRIBE_LIMITS.bytes).toBeGreaterThan(0);
+});
+
+describe("scribe provider response cap", () => {
+  it("leaves room for the echoed schema and instructions", () => {
+    const echoed = JSON.stringify(SCRIBE_SCHEMA, null, 2).length + SCRIBE_INSTRUCTIONS.length;
+    expect(SCRIBE_LIMITS.outputBytes).toBeGreaterThan(4 * echoed);
+  });
 });

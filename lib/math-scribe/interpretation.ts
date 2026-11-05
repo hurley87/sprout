@@ -7,7 +7,15 @@ import { speechMatcher } from "../speech-quotes";
 import { listParts, safeClarification } from "./parts";
 import type { Interpretation, InterpretedOperation } from "./session";
 
-export const SCRIBE_LIMITS = { ...EXTRACTION_LIMITS, latex: 4000, question: 300, readings: 3 } as const;
+// The Responses API echoes the request's JSON schema (pretty-printed) in every response, so the
+// scribe's response cap must grow with SCRIBE_SCHEMA, not share the smaller extraction cap.
+export const SCRIBE_LIMITS = {
+  ...EXTRACTION_LIMITS,
+  outputBytes: 1_048_576,
+  latex: 4000,
+  question: 300,
+  readings: 3,
+} as const;
 export type ScribeInput = {
   workingLatex: string;
   baseLatex: string;
