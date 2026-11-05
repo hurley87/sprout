@@ -101,14 +101,13 @@ export function historyRows(session: Session) {
     withdrawn: !!line.withdrawn,
     versions: line.pending?.versions ?? [],
     current: line.pending?.current,
-    domainNotes: [
-      ...domainNotes(line.domainChanges),
-      ...(line.problemDomainRetained ?? []).map(item => ({
-        label: "Still required by the problem",
-        latex: item.replace("≠", String.raw`\neq`),
-      })),
-    ],
-    retained: (line.problemDomainRetained ?? []).map(item => item.replace("≠", String.raw`\neq`)),
+    domainNotes: domainNotes(line.domainChanges),
+    // A step may drop a restriction only because the original problem already imposes it. The
+    // dropped form can be an expanded product (h(x+1)(x+h+1) multiplied out), so show the
+    // problem's own restrictions, which imply it, once.
+    retained: line.problemDomainRetained?.length
+      ? session.problemDomain.restrictions.map(item => item.replace("≠", String.raw`\neq`)).join(String.raw`,\quad `)
+      : null,
     badge:
       index === 0
         ? "Problem"

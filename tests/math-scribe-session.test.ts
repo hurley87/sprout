@@ -256,7 +256,8 @@ describe("scribe session", () => {
     expect(snapshot(state).history.at(-1)?.domainChanges).toBeUndefined();
     const row = historyRows(snapshot(state)).at(-1)!;
     expect(row.badge).toBe("✓ Verified");
-    expect(row.domainNotes).toContainEqual({ label: "Still required by the problem", latex: String.raw`h \neq 0` });
+    expect(row.domainNotes).toEqual([]);
+    expect(row.retained).toContain(String.raw`h \neq 0`);
   });
   it("still reports a newly added restriction", () => {
     const state = propose(start("x"), String.raw`\frac{x^2}{x}`);

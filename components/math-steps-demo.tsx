@@ -192,11 +192,11 @@ export default function MathStepsDemo({
                       ))}
                     </div>
                   </details>
-                  {row.retained.map(item => (
-                    <p className={styles.retained} key={item}>
-                      <Equation latex={item} /> still required (given)
+                  {row.retained && (
+                    <p className={styles.retained}>
+                      Still required by the problem: <Equation latex={row.retained} />
                     </p>
-                  ))}
+                  )}
                 </li>
               ))}
               {pending && current && (
