@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, type ReactNode, type Ref } from "react";
+import Image from "next/image";
 import {
   isLessonNodeId,
   lessonNodeOrder,
@@ -22,6 +23,7 @@ export type LessonScreenTheme = {
   readonly statusCue?: "glow";
   /** "night": dark controls for a night-time scene. "pastel": light plum controls for a pastel stage. */
   readonly palette?: "night" | "pastel";
+  readonly progressIcons?: Readonly<Record<string, string>>;
   readonly progress: {
     readonly base: string;
     readonly done: string;
@@ -110,13 +112,16 @@ export function LessonScreen({
           <ol aria-label="Adventure progress" className={`flex items-center gap-3 ${styles.progress}`}>
             {nodeIds.map((id, index) => {
               const progress = index < step ? "done" : index === step ? "current" : "upcoming";
+              const icon = progress === "done" ? theme.progressIcons?.[id] : undefined;
               return (
                 <li
                   key={id}
                   data-progress={progress}
                   aria-current={progress === "current" ? "step" : undefined}
-                  className={`${theme.progress.base} ${theme.progress[progress]}`}
+                  className={`${theme.progress.base} ${theme.progress[progress]}${icon ? " flex items-center justify-center" : ""}`}
+                  style={icon ? { width: 20, height: 20, backgroundColor: "#fffdf6" } : undefined}
                 >
+                  {icon && <Image src={icon} alt="" aria-hidden="true" width={16} height={16} />}
                   <span className="sr-only">
                     Scene {index + 1}
                     {progress === "done" ? ", done" : progress === "current" ? ", playing now" : ""}

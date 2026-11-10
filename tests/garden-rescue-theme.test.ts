@@ -18,6 +18,28 @@ describe("Garden Rescue theme", () => {
     }
   });
 
+  it("celebrates the restored world with bounded, registered artwork", () => {
+    const { celebration, assets, progressIcons } = GARDEN_RESCUE_THEME;
+    expect(celebration.friends.filter(friend => friend.asset === "duckling")).toHaveLength(3);
+    expect(celebration.friends.filter(friend => friend.asset === "lily-pad")).toHaveLength(3);
+    expect(celebration.friends.filter(friend => friend.asset === "butterfly-awake")).toHaveLength(3);
+    expect(celebration.decorations.filter(decoration => decoration.asset === "flower-bloomed")).toHaveLength(4);
+    expect(assets).toHaveProperty(celebration.background);
+    for (const friend of celebration.friends) {
+      expect(assets).toHaveProperty(friend.asset);
+      for (const value of [friend.x, friend.y, friend.width]) expect(value).toBeGreaterThanOrEqual(0);
+      for (const value of [friend.x, friend.y, friend.width]) expect(value).toBeLessThanOrEqual(1);
+    }
+    for (const decoration of celebration.decorations) {
+      expect(assets).toHaveProperty(decoration.asset);
+      expect(decoration.left).toBeGreaterThanOrEqual(0);
+      expect(decoration.left).toBeLessThanOrEqual(100);
+    }
+    for (const src of Object.values(progressIcons ?? {})) {
+      expect(Object.values(assets).some(asset => asset.src === src)).toBe(true);
+    }
+  });
+
   it("uses a fresh scattered butterfly layout", () => {
     const familiar = GARDEN_RESCUE_THEME.scenes["wake-butterflies"].objects;
     const fresh = GARDEN_RESCUE_THEME.scenes["fresh-challenge"].objects;

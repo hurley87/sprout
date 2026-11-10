@@ -119,8 +119,16 @@ test("plays the fixed quest order and records events", async ({ page }) => {
     if (index < 3) await scene(page, observer, GARDEN_RESCUE_NODE_IDS[index + 1]);
     else await expect(game).toHaveAttribute("data-game-status", "celebrating");
     await expect(game).toHaveAttribute("data-game-restored", GARDEN_RESCUE_NODE_IDS.slice(0, index + 1).join(" "));
+    const dots = page.getByRole("list", { name: "Adventure progress" }).locator("li");
+    await expect(dots.locator("img")).toHaveCount(Math.min(index + 1, 3));
+    await expect(dots.nth(index).locator("img")).toHaveCount(index < 3 ? 1 : 0);
   }
   await expect(page.locator('[data-scene-id="complete"]')).toBeVisible();
+  const celebration = page.locator('[data-scene-id="complete"]');
+  await expect(celebration.locator('[data-celebration-character="duckling"]')).toHaveCount(3);
+  await expect(celebration.locator('[data-celebration-character="lily-pad"]')).toHaveCount(3);
+  await expect(celebration.locator('[data-celebration-character="butterfly-awake"]')).toHaveCount(3);
+  await expect(celebration.locator("[data-celebration-flower]")).toHaveCount(4);
   const events = await page.getByRole("list", { name: "Game events" }).locator("li").allTextContents();
   expect(
     events.map(event => {

@@ -141,6 +141,24 @@
   }
 }
 
+@media (orientation: landscape) {
+  .screen:has([data-celebration-character="lily-pad"]) .play {
+    top: auto;
+    right: 1rem;
+    bottom: 1rem;
+    left: auto;
+    translate: none;
+    min-width: 0;
+    min-height: 0;
+    padding: 0.6rem 1.25rem;
+    font-size: 1.25rem;
+  }
+
+  .screen:has([data-celebration-character="lily-pad"]) .play:active {
+    translate: 0 4px;
+  }
+}
+
 .stop {
   min-height: 2.75rem;
   padding: 0.5rem 1.5rem;
