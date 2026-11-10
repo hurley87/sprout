@@ -83,3 +83,35 @@
     translate: 0 0;
   }
 }
+
+/* Flower growing */
+.effects[data-world-effect="flowers.bloomed"]:is([data-effect-state="playing"], [data-effect-state="held"])
+  [data-world-prop="flower-bloomed"] {
+  animation: none;
+}
+
+.effects[data-world-effect="flowers.bloomed"]:is([data-effect-state="playing"], [data-effect-state="held"])
+  [data-world-prop="flower-bloomed"]
+  img {
+  transform-origin: 50% 95%;
+  animation: flower-grow 1s ease-out calc(var(--i) * 550ms) backwards;
+}
+
+.effects[data-world-effect="flowers.bloomed"]:is([data-effect-state="playing"], [data-effect-state="held"])
+  [data-counting-object="sprout"] {
+  opacity: 0;
+  animation: sprout-disappear 1s ease-out calc(var(--i) * 550ms) backwards;
+}
+
+@keyframes flower-grow {
+  from {
+    opacity: 0;
+    scale: 0.3;
+  }
+}
+
+@keyframes sprout-disappear {
+  from {
+    opacity: 1;
+  }
+}

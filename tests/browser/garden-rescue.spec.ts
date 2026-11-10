@@ -149,6 +149,68 @@ test("plays the fixed quest order and records events", async ({ page }) => {
   await screenshots(page, "celebration");
 });
 
+for (const reducedMotion of [false, true]) {
+  test(`flowers bloom after counting sprouts${reducedMotion ? " with reduced motion" : ""}`, async ({ page }) => {
+    test.setTimeout(120_000);
+    if (reducedMotion) await page.emulateMedia({ reducedMotion: "reduce" });
+    let verdict: Outcome = "correct";
+    const { microphone, observer } = await setup(page, () => verdict);
+    await page.goto("/games/garden?debug=1");
+    await page.getByRole("button", { name: "Play", exact: true }).click();
+    for (const nodeId of GARDEN_RESCUE_NODE_IDS.slice(0, 2)) {
+      await scene(page, observer, nodeId);
+      await answer(page, observer, microphone, nodeId);
+    }
+    const stage = await scene(page, observer, "grow-flowers");
+    const sprouts = stage.locator('[data-counting-object="sprout"]');
+    const flowers = stage.locator('[data-world-prop="flower-bloomed"]');
+    const expectBefore = async () => {
+      await expect(stage).toHaveAttribute("data-effect-state", "before");
+      await expect(sprouts).toHaveCount(4);
+      await expect(flowers).toHaveCount(0);
+    };
+    await expectBefore();
+    if (!reducedMotion) {
+      await screenshots(page, "grow-flowers-before");
+      for (const outcome of ["incorrect", "unclear"] as const) {
+        verdict = outcome;
+        await answer(page, observer, microphone, "grow-flowers", outcome);
+        await scene(page, observer, "grow-flowers");
+        await expectBefore();
+      }
+    }
+    verdict = "correct";
+    await answer(page, observer, microphone, "grow-flowers", "correct", async () => {
+      await expect(stage).toHaveAttribute("data-effect-state", "playing");
+      await expect(sprouts).toHaveCount(4);
+      await expect(flowers).toHaveCount(4);
+      if (reducedMotion) {
+        expect(await sprouts.evaluateAll(items => items.map(item => getComputedStyle(item).opacity))).toEqual([
+          "0",
+          "0",
+          "0",
+          "0",
+        ]);
+        expect(
+          await flowers.locator("img").evaluateAll(items =>
+            items.map(item => ({
+              opacity: getComputedStyle(item).opacity,
+              animation: getComputedStyle(item).animationName,
+            })),
+          ),
+        ).toEqual(Array(4).fill({ opacity: "1", animation: "none" }));
+      } else await screenshots(page, "grow-flowers-success");
+    });
+    await scene(page, observer, "fresh-challenge");
+    const events = await page.getByRole("list", { name: "Game events" }).locator("li").allTextContents();
+    expect(
+      events
+        .map(event => JSON.parse(event))
+        .filter(event => event.type === "world.effect" && event.questId === "grow-flowers"),
+    ).toHaveLength(1);
+  });
+}
+
 test("direct load, reload, diagnostics and live lesson identity", async ({ page }) => {
   const { observer } = await setup(page);
   await page.goto("/games/garden");

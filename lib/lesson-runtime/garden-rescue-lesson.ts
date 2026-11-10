@@ -25,11 +25,11 @@ const quests = [
       "Wake the butterflies: some butterflies are fast asleep in the garden. How many sleeping butterflies do you see? Success story idea: counting them gently wakes them up.",
   },
   {
-    object: "flower",
+    object: "sprout",
     quantity: 4,
-    objective: "Identify the total of four displayed flowers.",
+    objective: "Identify the total of four displayed sprouts.",
     brief:
-      "Grow the flowers: flowers are popping up to bring the garden back. How many flowers do you see? Give extra time. Success story idea: the garden is getting colourful again.",
+      "Grow the flowers: little sprouts are waiting to bloom. How many little sprouts are waiting? Give extra time. Success story idea: counting the sprouts helps them bloom into flowers.",
   },
   {
     object: "butterfly",

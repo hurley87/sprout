@@ -74,8 +74,22 @@ describe("Garden Rescue theme", () => {
     }
   });
 
-  it("softens the garden behind countable flowers so its decorative flowers recede", () => {
-    expect(GARDEN_RESCUE_THEME.scenes["grow-flowers"]).toMatchObject({ background: "garden", softBackdrop: true });
+  it("aligns four sprouts with four known flower effect props over a softened garden", () => {
+    const scene = GARDEN_RESCUE_THEME.scenes["grow-flowers"];
+    expect(scene).toMatchObject({ background: "garden", softBackdrop: true, object: "sprout" });
+    expect(GARDEN_RESCUE_THEME.assets.sprout.src).toBe("/garden-rescue/sprout.png");
+    expect(scene.objects).toHaveLength(4);
+    expect(scene.effect?.id).toBe("flowers.bloomed");
+    expect(scene.effect?.props).toHaveLength(4);
+    for (const [index, prop] of (scene.effect?.props ?? []).entries()) {
+      expect(prop.asset).toBe("flower-bloomed");
+      expect(GARDEN_RESCUE_THEME.assets).toHaveProperty(prop.asset);
+      for (const value of [prop.x, prop.y, prop.width]) {
+        expect(value).toBeGreaterThanOrEqual(0);
+        expect(value).toBeLessThanOrEqual(1);
+      }
+      expect(scene.objects[index]).toMatchObject({ asset: "sprout", x: prop.x, width: prop.width });
+    }
   });
 
   it("uses the abstract glow status cue", () => {

@@ -16,6 +16,7 @@ export const GARDEN_RESCUE_THEME: CountingTheme = {
     "butterfly-sleeping": image("butterfly-sleeping", "png", 512, 512),
     "butterfly-awake": image("butterfly-awake", "png", 512, 512),
     "flower-bloomed": image("flower-bloomed", "png", 512, 512),
+    sprout: image("sprout", "png", 512, 512),
     "lily-pad": image("lily-pad", "png", 512, 512),
   },
   scenes: {
@@ -57,13 +58,22 @@ export const GARDEN_RESCUE_THEME: CountingTheme = {
     "grow-flowers": {
       background: "garden",
       softBackdrop: true,
-      object: "flower",
+      object: "sprout",
       objects: [
-        { asset: "flower-bloomed", x: 0.16, y: 0.5, width: 0.2 },
-        { asset: "flower-bloomed", x: 0.39, y: 0.5, width: 0.2 },
-        { asset: "flower-bloomed", x: 0.62, y: 0.5, width: 0.2 },
-        { asset: "flower-bloomed", x: 0.85, y: 0.5, width: 0.2 },
+        { asset: "sprout", x: 0.16, y: 0.532, width: 0.2 },
+        { asset: "sprout", x: 0.39, y: 0.532, width: 0.2 },
+        { asset: "sprout", x: 0.62, y: 0.532, width: 0.2 },
+        { asset: "sprout", x: 0.85, y: 0.532, width: 0.2 },
       ],
+      effect: {
+        id: "flowers.bloomed",
+        props: [
+          { asset: "flower-bloomed", x: 0.16, y: 0.5, width: 0.2 },
+          { asset: "flower-bloomed", x: 0.39, y: 0.5, width: 0.2 },
+          { asset: "flower-bloomed", x: 0.62, y: 0.5, width: 0.2 },
+          { asset: "flower-bloomed", x: 0.85, y: 0.5, width: 0.2 },
+        ],
+      },
     },
     "fresh-challenge": {
       background: "garden",
