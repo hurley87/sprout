@@ -500,3 +500,66 @@ test("reduced motion, stop and new run", async ({ page }) => {
   await expect(game).toHaveAttribute("data-game-restored", "");
   await expect(page.getByRole("list", { name: "Game events" }).locator("li")).toHaveCount(2);
 });
+
+test("releases quests after repeated difficulty and finishes gently", async ({ page }) => {
+  test.setTimeout(120_000);
+  let outcome: Outcome = "correct";
+  const { microphone, observer } = await setup(page, () => outcome);
+  await page.goto("/games/garden?debug=1");
+  await page.getByRole("button", { name: "Play", exact: true }).click();
+  const first = GARDEN_RESCUE_NODE_IDS[0];
+  await scene(page, observer, first);
+  outcome = "incorrect";
+  for (let i = 0; i < 3; i++)
+    await answer(
+      page,
+      observer,
+      microphone,
+      first,
+      "incorrect",
+      undefined,
+      i === 2
+        ? "It's fine to stop here. The garden friends will be OK. Thank you for helping!"
+        : "Try pointing to each one.",
+    );
+  // Keep the fake verdict incorrect until the release departs: correct evidence accepted
+  // before departure would otherwise (rightly) win over the release.
+  await scene(page, observer, GARDEN_RESCUE_NODE_IDS[1]);
+  outcome = "correct";
+  for (const nodeId of GARDEN_RESCUE_NODE_IDS.slice(1, 3)) {
+    await scene(page, observer, nodeId);
+    await answer(page, observer, microphone, nodeId);
+  }
+  const last = GARDEN_RESCUE_NODE_IDS[3];
+  await scene(page, observer, last);
+  outcome = "incorrect";
+  for (let i = 0; i < 3; i++)
+    await answer(
+      page,
+      observer,
+      microphone,
+      last,
+      "incorrect",
+      undefined,
+      i === 2
+        ? "It's fine to stop here. The garden friends will be OK. Thank you for helping!"
+        : "Try pointing to each one.",
+    );
+  const game = page.locator("[data-game-status]");
+  await expect(game).toHaveAttribute("data-game-status", "finished");
+  await expect(game).toHaveAttribute("data-game-released", `${first} ${last}`);
+  await expect(page.locator('[data-scene-id="complete"] [data-celebration-character="duckling"]')).toHaveCount(0);
+  await expect(page.getByRole("list", { name: "Adventure progress" }).locator("li").first().locator("img")).toHaveCount(
+    0,
+  );
+  await expect(page.getByText("Thank you for helping the garden friends!", { exact: true }).first()).toBeVisible();
+  const events = (await page.getByRole("list", { name: "Game events" }).locator("li").allTextContents()).map(text =>
+    JSON.parse(text),
+  );
+  expect(events).toContainEqual(expect.objectContaining({ type: "quest.released", questId: first }));
+  expect(events).not.toContainEqual(expect.objectContaining({ type: "quest.succeeded", questId: first }));
+  expect(events).not.toContainEqual(expect.objectContaining({ type: "world.effect", questId: first }));
+  expect(events).toContainEqual(expect.objectContaining({ type: "quest.released", questId: last }));
+  expect(events).not.toContainEqual(expect.objectContaining({ type: "quest.succeeded", questId: last }));
+  expect(events).not.toContainEqual(expect.objectContaining({ type: "world.effect", questId: last }));
+});

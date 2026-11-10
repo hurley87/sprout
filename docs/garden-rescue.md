@@ -33,6 +33,14 @@ In short landscape viewports, the pre-Play button overlaps the opening ducklings
 
 The duckling crossing moves the ducklings forward onto their pads rather than to a fixed spot on the far bank, because the background is cover-cropped independently of the fixed 8:5 character area. The celebration's lily pads sit on grass. The sprout art has a faint smudge behind its stem, barely visible at desktop size. The "Play again" button moves to the bottom-right corner only in the Garden Rescue landscape celebration.
 
+The bounded-support help-request check needs the literal word "help" in the child's words, so differently worded requests for help are not counted. If the tutor produces no output after the support-limit close instruction, the quest is not released until Stop; this is deferred to #108.
+
 ## Not performed
 
 Live microphone, GPT-Live/Jev, and child playtests (#108) were not performed. Provider-free tests do not establish live provider or child usability.
+
+## Bounded support (#107 C2)
+
+Garden opts into three visit-local difficulties. A settled incorrect answer or an explicit unresolved child help request counts at most once per child turn. Unclear speech and unfinished answers do not count. At the limit the application sends one authored, non-leading close; after fresh tutor output drains, the reducer follows the authored edge without accepting an answer. A correct answer accepted before departure takes precedence. Stop before render confirmation records no visit outcome.
+
+Committed visit outcomes, rather than quest position, determine restored and released quests. Only successes emit `quest.succeeded` and `world.effect`; releases emit `quest.released`. A completed run with any release shows a gentle thank-you and only the restored artwork. A fully successful run retains the celebration. Stop and errors remain separate. The classifier's `needs_help` label also covers uncertainty, so the reducer requires an explicit child help request in the authenticated snapshot before counting that kind of difficulty; this conservative text check can miss differently worded requests.

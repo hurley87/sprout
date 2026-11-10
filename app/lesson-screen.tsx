@@ -46,11 +46,15 @@ export function LessonScreen({
   debug = false,
   renderStage,
   renderDebug,
+  progressOutcome,
+  presentationCopy,
 }: {
   theme: LessonScreenTheme;
   debug?: boolean;
   renderStage: (props: LessonStageProps) => ReactNode;
   renderDebug?: (snapshot: LessonSnapshot | null) => ReactNode;
+  presentationCopy?: (snapshot: LessonSnapshot | null) => PresentationCopy;
+  progressOutcome?: (snapshot: LessonSnapshot | null, id: string) => "succeeded" | "released" | undefined;
 }) {
   const lessonDefinition = theme.lesson;
   const { audio, sceneRef, snapshot, live, start, stop, download } = useVoiceDemo({
@@ -72,7 +76,7 @@ export function LessonScreen({
         ? { label: theme.successLabel(node) }
         : { quantity: Number(node.presentation.quantity), object: String(node.presentation.object) }
       : null,
-    theme.copy,
+    presentationCopy?.(snapshot) ?? theme.copy,
   );
   const completed = presentation.kind === "complete";
   const glow = theme.statusCue === "glow";
@@ -111,7 +115,17 @@ export function LessonScreen({
         <div className={styles.bottom}>
           <ol aria-label="Adventure progress" className={`flex items-center gap-3 ${styles.progress}`}>
             {nodeIds.map((id, index) => {
-              const progress = index < step ? "done" : index === step ? "current" : "upcoming";
+              const outcome = progressOutcome?.(snapshot, id);
+              const progress =
+                outcome === "succeeded"
+                  ? "done"
+                  : outcome === "released"
+                    ? "upcoming"
+                    : index < step && !progressOutcome
+                      ? "done"
+                      : index === step
+                        ? "current"
+                        : "upcoming";
               const icon = progress === "done" ? theme.progressIcons?.[id] : undefined;
               return (
                 <li

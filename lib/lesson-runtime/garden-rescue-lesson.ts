@@ -49,6 +49,11 @@ export const GARDEN_RESCUE_LESSON = buildCountingLesson({
   // enough for the effect (about 2.5 s) to finish.
   successHoldMs: 3_000,
   addressLearnerByName: true,
+  supportLimit: {
+    maxDifficulties: 3,
+    instruction:
+      "Warmly say it is fine to stop here, the garden friends will be OK, and thank the child for helping. Do not confirm success, give or imply the count, or ask another counting question. Do not change scenes; the application does that.",
+  },
   nodes: Object.fromEntries(
     quests.map((quest, index) => {
       const id = GARDEN_RESCUE_NODE_IDS[index];
