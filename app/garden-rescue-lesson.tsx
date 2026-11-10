@@ -1,15 +1,24 @@
 "use client";
 
+import { useCallback, useEffect, useRef } from "react";
 import type { LessonSnapshot } from "@/lib/lesson-runtime/lesson-runtime";
+import { buildGardenExport, GARDEN_EXPORT_PREFIX } from "@/lib/garden-rescue/evidence-export";
 import { CountingStage } from "./counting-stage";
-import { projectGardenGame } from "@/lib/garden-rescue/game-state";
+import { projectGardenGame, type GardenGameEvent } from "@/lib/garden-rescue/game-state";
 import { gardenEffectKey, gardenEffectState, useGardenGame } from "./garden-rescue-game";
 import styles from "./garden-rescue-effects.module.css";
 import { GARDEN_RESCUE_THEME } from "./garden-rescue-theme";
 import { LessonScreen, type LessonStageProps } from "./lesson-screen";
 
-function GardenStage({ snapshot, node, ...props }: LessonStageProps) {
-  const { game } = useGardenGame(snapshot);
+function GardenStage({
+  snapshot,
+  node,
+  onEvents,
+  ...props
+}: LessonStageProps & { onEvents: (events: readonly GardenGameEvent[]) => void }) {
+  const { game, events } = useGardenGame(snapshot);
+  // Hand the current run's log to the export; it is read only when a download is requested.
+  useEffect(() => onEvents(events), [events, onEvents]);
   const state = gardenEffectState(snapshot);
   return (
     <div
@@ -82,11 +91,17 @@ function GardenDebug({ snapshot }: { snapshot: LessonSnapshot | null }) {
 }
 
 export default function GardenRescueLesson({ debug = false }: { debug?: boolean }) {
+  const gameEvents = useRef<readonly GardenGameEvent[]>([]);
+  const recordEvents = useCallback((events: readonly GardenGameEvent[]) => {
+    gameEvents.current = events;
+  }, []);
   return (
     <LessonScreen
       theme={GARDEN_RESCUE_THEME}
       debug={debug}
-      renderStage={props => <GardenStage {...props} />}
+      exportPrefix={GARDEN_EXPORT_PREFIX}
+      exportReport={runtime => buildGardenExport({ report: runtime.report(), gameEvents: gameEvents.current })}
+      renderStage={props => <GardenStage {...props} onEvents={recordEvents} />}
       renderDebug={snapshot => <GardenDebug snapshot={snapshot} />}
       presentationCopy={snapshot =>
         projectGardenGame(snapshot).status === "finished"

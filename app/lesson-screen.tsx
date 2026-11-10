@@ -9,7 +9,12 @@ import {
   type LessonNodeDefinition,
 } from "@/lib/lesson-runtime/lesson-definition";
 import type { PresentationCopy, StageMotion } from "./lesson-presentation";
-import { LESSON_TIMING, transitionQuietMs, type LessonSnapshot } from "@/lib/lesson-runtime/lesson-runtime";
+import {
+  LESSON_TIMING,
+  transitionQuietMs,
+  type LessonRuntime,
+  type LessonSnapshot,
+} from "@/lib/lesson-runtime/lesson-runtime";
 import { useVoiceDemo } from "@/components/voice-demo/use-voice-demo";
 import { VoiceDemoControls } from "@/components/voice-demo/controls";
 import { lessonPresentation, showsSuccessFeedback, stageMotion, voiceActivity } from "./lesson-presentation";
@@ -48,6 +53,8 @@ export function LessonScreen({
   renderDebug,
   progressOutcome,
   presentationCopy,
+  exportReport = runtime => runtime.report(),
+  exportPrefix = "sprout-lesson",
 }: {
   theme: LessonScreenTheme;
   debug?: boolean;
@@ -55,12 +62,15 @@ export function LessonScreen({
   renderDebug?: (snapshot: LessonSnapshot | null) => ReactNode;
   presentationCopy?: (snapshot: LessonSnapshot | null) => PresentationCopy;
   progressOutcome?: (snapshot: LessonSnapshot | null, id: string) => "succeeded" | "released" | undefined;
+  /** Builds the diagnostics download; runs only when the export is requested. */
+  exportReport?: (runtime: LessonRuntime) => unknown;
+  exportPrefix?: string;
 }) {
   const lessonDefinition = theme.lesson;
   const { audio, sceneRef, snapshot, live, start, stop, download } = useVoiceDemo({
     lesson: lessonDefinition,
-    exportReport: runtime => runtime.report(),
-    exportPrefix: "sprout-lesson",
+    exportReport,
+    exportPrefix,
   });
   const display = snapshot?.display;
   const status = snapshot?.status;
