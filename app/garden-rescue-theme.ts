@@ -45,6 +45,14 @@ export const GARDEN_RESCUE_THEME: CountingTheme = {
         { asset: "butterfly-sleeping", x: 0.5, y: 0.58, width: 0.22 },
         { asset: "butterfly-sleeping", x: 0.77, y: 0.58, width: 0.22 },
       ],
+      effect: {
+        id: "butterflies.awakened",
+        props: [
+          { asset: "butterfly-awake", x: 0.23, y: 0.58, width: 0.22 },
+          { asset: "butterfly-awake", x: 0.5, y: 0.58, width: 0.22 },
+          { asset: "butterfly-awake", x: 0.77, y: 0.58, width: 0.22 },
+        ],
+      },
     },
     "grow-flowers": {
       background: "garden",

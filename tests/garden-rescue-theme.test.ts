@@ -61,6 +61,19 @@ describe("Garden Rescue theme", () => {
     }
   });
 
+  it("pairs each awakening butterfly with its sleeping position", () => {
+    const { objects, effect } = GARDEN_RESCUE_THEME.scenes["wake-butterflies"];
+    expect(effect?.id).toBe("butterflies.awakened");
+    expect(effect?.props).toHaveLength(objects.length);
+    for (const [index, prop] of (effect?.props ?? []).entries()) {
+      expect(prop).toMatchObject({ ...objects[index], asset: "butterfly-awake" });
+      for (const value of [prop.x, prop.y, prop.width]) {
+        expect(value).toBeGreaterThanOrEqual(0);
+        expect(value).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
   it("softens the garden behind countable flowers so its decorative flowers recede", () => {
     expect(GARDEN_RESCUE_THEME.scenes["grow-flowers"]).toMatchObject({ background: "garden", softBackdrop: true });
   });

@@ -60,7 +60,7 @@ async function answer(
   microphone: Microphone,
   nodeId: string,
   outcome: Outcome = "correct",
-  onAcknowledged?: () => Promise<void>,
+  duringSuccess?: () => Promise<void>,
 ) {
   const node = GARDEN_RESCUE_LESSON.nodes[nodeId];
   await microphone.loadSpeech("counting");
@@ -91,10 +91,10 @@ async function answer(
     text => (window as unknown as LocalSessionWindow).sendTranscript("session.output_transcript.delta", text),
     outcome === "correct" ? "Yes, that's right!" : "Let's try again.",
   );
-  if (outcome === "correct")
+  if (outcome === "correct") {
     await expect(stage.locator("[data-success-numeral]")).toHaveText(String(node.presentation.quantity));
-  else await expect(stage.locator("[data-success-numeral]")).toHaveCount(0);
-  await onAcknowledged?.();
+    await duringSuccess?.();
+  } else await expect(stage.locator("[data-success-numeral]")).toHaveCount(0);
   await page.evaluate(() => {
     (window as unknown as LocalSessionWindow).currentPeer.level.gain.value = 0;
   });
@@ -205,6 +205,42 @@ test("incorrect and unclear answers hold until correction", async ({ page }) => 
   await expect(page.locator("[data-game-status]")).toHaveAttribute("data-game-restored", GARDEN_RESCUE_NODE_IDS[0]);
 });
 
+test("butterflies awaken only after a correct answer", async ({ page }) => {
+  test.setTimeout(120_000);
+  let verdict: Outcome = "correct";
+  const { microphone, observer } = await setup(page, () => verdict);
+  await page.goto("/games/garden?debug=1");
+  await page.getByRole("button", { name: "Play", exact: true }).click();
+  await scene(page, observer, GARDEN_RESCUE_NODE_IDS[0]);
+  await answer(page, observer, microphone, GARDEN_RESCUE_NODE_IDS[0]);
+  const nodeId = GARDEN_RESCUE_NODE_IDS[1];
+  const stage = await scene(page, observer, nodeId);
+  const awake = stage.locator('[data-world-prop="butterfly-awake"]');
+  const expectBefore = async () => {
+    await expect(stage).toHaveAttribute("data-effect-state", "before");
+    await expect(awake).toHaveCount(0);
+  };
+  await expectBefore();
+  for (const outcome of ["incorrect", "unclear"] as const) {
+    verdict = outcome;
+    await answer(page, observer, microphone, nodeId, outcome);
+    await scene(page, observer, nodeId);
+    await expectBefore();
+  }
+  verdict = "correct";
+  await answer(page, observer, microphone, nodeId, "correct", async () => {
+    await expect(stage).toHaveAttribute("data-effect-state", "playing");
+    await expect(awake).toHaveCount(3);
+    await expect(stage.locator('[data-counting-object="butterfly"]')).toHaveCount(3);
+    await screenshots(page, "butterfly-awakening");
+  });
+  await scene(page, observer, GARDEN_RESCUE_NODE_IDS[2]);
+  const events = await page.getByRole("list", { name: "Game events" }).locator("li").allTextContents();
+  expect(
+    events.map(event => JSON.parse(event)).filter(event => event.type === "world.effect" && event.questId === nodeId),
+  ).toHaveLength(1);
+});
+
 test("reduced motion, stop and new run", async ({ page }) => {
   const { microphone, observer } = await setup(page);
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -238,10 +274,30 @@ test("reduced motion, stop and new run", async ({ page }) => {
       .evaluateAll(objects => objects.map(object => object.getBoundingClientRect().top));
     afterPositions.forEach((position, index) => expect(position).toBeLessThan(beforePositions[index]));
   });
-  await scene(page, observer, GARDEN_RESCUE_NODE_IDS[1]);
+  const butterflyStage = await scene(page, observer, GARDEN_RESCUE_NODE_IDS[1]);
+  await answer(page, observer, microphone, GARDEN_RESCUE_NODE_IDS[1], "correct", async () => {
+    await expect(butterflyStage).toHaveAttribute("data-effect-state", "playing");
+    const sleeping = butterflyStage.locator('[data-character="butterfly-sleeping"] img');
+    const awake = butterflyStage.locator('[data-world-prop="butterfly-awake"]');
+    await expect(awake).toHaveCount(3);
+    await expect
+      .poll(() => sleeping.evaluateAll(images => images.map(image => getComputedStyle(image).opacity)))
+      .toEqual(["0", "0", "0"]);
+    await expect
+      .poll(() =>
+        awake.evaluateAll(props =>
+          props.map(prop => ({
+            opacity: getComputedStyle(prop).opacity,
+            animation: getComputedStyle(prop).animationName,
+          })),
+        ),
+      )
+      .toEqual(Array(3).fill({ opacity: "1", animation: "none" }));
+  });
+  await scene(page, observer, GARDEN_RESCUE_NODE_IDS[2]);
   await page.getByRole("button", { name: "Stop", exact: true }).click();
   await expect(game).toHaveAttribute("data-game-status", "stopped");
-  await expect(game).toHaveAttribute("data-game-restored", GARDEN_RESCUE_NODE_IDS[0]);
+  await expect(game).toHaveAttribute("data-game-restored", GARDEN_RESCUE_NODE_IDS.slice(0, 2).join(" "));
   await expect(page.locator('[data-scene-id="complete"]')).toHaveCount(0);
   await page.getByRole("button", { name: "Play", exact: true }).click();
   await scene(page, observer, GARDEN_RESCUE_NODE_IDS[0]);

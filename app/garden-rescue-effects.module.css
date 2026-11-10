@@ -35,3 +35,51 @@
     translate: 0 0;
   }
 }
+
+/* Butterfly awakening */
+.effects[data-world-effect="butterflies.awakened"]:is([data-effect-state="playing"], [data-effect-state="held"])
+  [data-counting-object="butterfly"][data-character="butterfly-sleeping"]
+  img {
+  opacity: 0;
+  animation: butterfly-sleeping-fade 600ms ease-in-out calc(var(--i) * 180ms) backwards;
+}
+
+.effects[data-world-effect="butterflies.awakened"]:is([data-effect-state="playing"], [data-effect-state="held"])
+  [data-world-prop="butterfly-awake"] {
+  --drift-x: 0%;
+  --drift-y: -65%;
+  translate: var(--drift-x) var(--drift-y);
+  animation: butterfly-awaken 2.1s ease-in-out calc(var(--i) * 180ms) backwards;
+}
+
+.effects[data-world-effect="butterflies.awakened"]:is([data-effect-state="playing"], [data-effect-state="held"])
+  [data-world-prop="butterfly-awake"]:nth-child(2) {
+  --drift-y: -5%;
+}
+
+.effects[data-world-effect="butterflies.awakened"]:is([data-effect-state="playing"], [data-effect-state="held"])
+  [data-world-prop="butterfly-awake"]:first-child {
+  --drift-x: -25%;
+}
+
+.effects[data-world-effect="butterflies.awakened"]:is([data-effect-state="playing"], [data-effect-state="held"])
+  [data-world-prop="butterfly-awake"]:nth-child(3) {
+  --drift-x: 25%;
+}
+
+@keyframes butterfly-sleeping-fade {
+  from {
+    opacity: 1;
+  }
+}
+
+@keyframes butterfly-awaken {
+  0% {
+    opacity: 0;
+    translate: 0 0;
+  }
+  29% {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
