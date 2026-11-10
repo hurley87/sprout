@@ -1,0 +1,134 @@
+import { describe, expect, it } from "vitest";
+import { gardenGameEvents, projectGardenGame, type GardenGameSnapshot } from "../lib/garden-rescue/game-state";
+import { GARDEN_RESCUE_LESSON, GARDEN_RESCUE_NODE_IDS as ids } from "../lib/lesson-runtime/garden-rescue-lesson";
+import { createLessonRuntime, reduceLessonRuntime } from "../lib/lesson-runtime/lesson-runtime-reducer";
+
+function snapshot(runId = "run"): GardenGameSnapshot {
+  return {
+    status: "live",
+    error: null,
+    awaitingSteering: false,
+    display: { token: "initial", nodeId: ids[0], sceneId: ids[0] },
+    runtime: createLessonRuntime(runId, { lesson: GARDEN_RESCUE_LESSON }),
+  };
+}
+
+describe("Garden Rescue game projection", () => {
+  it("handles ready, starting, steering and matching display", () => {
+    expect(projectGardenGame(null).status).toBe("ready");
+    const s = snapshot();
+    expect(projectGardenGame({ ...s, runtime: null }).status).toBe("starting");
+    expect(projectGardenGame({ ...s, status: "connecting" }).status).toBe("starting");
+    expect(projectGardenGame({ ...s, awaitingSteering: true }).quest).toBeNull();
+    expect(projectGardenGame({ ...s, display: { ...s.display, nodeId: null } }).quest).toBeNull();
+    expect(projectGardenGame(s).quest).toEqual({ id: ids[0], visitId: 1, renderToken: "initial" });
+    expect(projectGardenGame({ ...s, runtime: { ...s.runtime!, lessonId: "other" } })).toEqual(projectGardenGame(null));
+  });
+
+  it("emits the exact progression only when each render commits", () => {
+    let s = snapshot();
+    let previous = projectGardenGame(null);
+    const events = [...gardenGameEvents(previous, projectGardenGame(s))];
+    previous = projectGardenGame(s);
+    for (let i = 0; i < ids.length; i++) {
+      const identity = { token: `token-${i + 1}`, nodeId: ids[i + 1] ?? null, sceneId: ids[i + 1] ?? null };
+      s = {
+        ...s,
+        runtime: {
+          ...s.runtime!,
+          nodeId: ids[i + 1] ?? ids[i],
+          visitId: i + 2,
+          phase: "rendering",
+          pendingRender: {
+            identity,
+            origin: { runtimeId: "run", nodeId: ids[i], visitId: i + 1, childTurnId: 1, transcriptRevision: 1 },
+          },
+        },
+      };
+      const rendering = projectGardenGame(s);
+      expect(rendering.restored).toEqual(ids.slice(0, i));
+      events.push(...gardenGameEvents(previous, rendering));
+      previous = rendering;
+      s = {
+        ...s,
+        display: identity,
+        runtime: { ...s.runtime!, phase: i === ids.length - 1 ? "complete" : "active", pendingRender: null },
+      };
+      const confirmed = projectGardenGame(s);
+      events.push(...gardenGameEvents(previous, confirmed));
+      expect(gardenGameEvents(confirmed, confirmed)).toEqual([]);
+      previous = confirmed;
+    }
+    expect(events).toEqual([
+      { type: "game.started", runId: "run" },
+      { type: "quest.started", runId: "run", questId: ids[0], visitId: 1, renderToken: "initial" },
+      ...ids.flatMap((questId, i) => [
+        { type: "quest.succeeded", runId: "run", questId },
+        ...(i < 3
+          ? [
+              {
+                type: "quest.started",
+                runId: "run",
+                questId: ids[i + 1],
+                visitId: i + 2,
+                renderToken: `token-${i + 1}`,
+              },
+            ]
+          : []),
+      ]),
+      { type: "game.ended", runId: "run", outcome: "completed", restored: [...ids] },
+    ]);
+    expect(previous.status).toBe("celebrating");
+    expect(gardenGameEvents(previous, projectGardenGame({ ...s, error: "failed" }))).toEqual([]);
+    expect(projectGardenGame({ ...s, error: "failed" }).status).toBe("error");
+  });
+
+  it("uses the real reducer to revert a pending success on stop", () => {
+    const initial = createLessonRuntime("run", { lesson: GARDEN_RESCUE_LESSON });
+    const identity = { token: "pending", nodeId: ids[1], sceneId: ids[1] };
+    const rendering = {
+      ...initial,
+      nodeId: ids[1],
+      visitId: 2,
+      phase: "rendering" as const,
+      lessonComplete: true,
+      pendingRender: {
+        identity,
+        origin: { runtimeId: "run", nodeId: ids[0], visitId: 1, childTurnId: 1, transcriptRevision: 1 },
+      },
+    };
+    const s = { ...snapshot(), runtime: rendering };
+    const before = projectGardenGame(s);
+    expect(before.restored).toEqual([]);
+    const stopped = reduceLessonRuntime(
+      rendering,
+      { type: "stop", runtimeId: "run", atMs: 1 },
+      GARDEN_RESCUE_LESSON,
+    ).state;
+    expect(stopped).toMatchObject({ nodeId: ids[0], phase: "stopped", lessonComplete: false, pendingRender: null });
+    const after = projectGardenGame({ ...s, status: "ended", runtime: stopped });
+    expect(gardenGameEvents(before, after)).toEqual([
+      { type: "game.ended", runId: "run", outcome: "stopped", restored: [] },
+    ]);
+    expect(gardenGameEvents(after, projectGardenGame(snapshot()))).toEqual([]);
+  });
+
+  it("starts new runs and does not repeat successes across consecutive projections", () => {
+    const first = projectGardenGame(snapshot());
+    const progressed = projectGardenGame({
+      ...snapshot(),
+      display: { token: "two", nodeId: ids[1], sceneId: ids[1] },
+      runtime: { ...snapshot().runtime!, nodeId: ids[1], visitId: 2 },
+    });
+    expect(gardenGameEvents(first, progressed).filter(e => e.type === "quest.succeeded")).toEqual([
+      { type: "quest.succeeded", runId: "run", questId: ids[0] },
+    ]);
+    expect(gardenGameEvents(progressed, { ...progressed, quest: null })).toEqual([]);
+    expect(gardenGameEvents(progressed, progressed)).toEqual([]);
+    expect(gardenGameEvents(progressed, projectGardenGame(snapshot("new")))[0]).toEqual({
+      type: "game.started",
+      runId: "new",
+    });
+    expect(gardenGameEvents(first, projectGardenGame(null))).toEqual([]);
+  });
+});
