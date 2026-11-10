@@ -7,6 +7,7 @@ The production prototype is the realtime counting lesson at `/`, backed by
 | --- | --- |
 | [Halloween counting](halloween-counting.md) | Interest-led counting adventure and verification limits |
 | [Ice cream shop](ice-cream-shop.md) | Mixed-skill lesson, answer authority and playtest checklist |
+| [Garden Rescue](garden-rescue.md) | Fixed-order game shell, projection contract and verification limits |
 | [Concert counting](concert-counting.md) | Concert counting adventure and verification limits |
 | [Calculus demo](calculus-demo.md) | Worked-steps flow, required steps per problem, tutor outcomes, diagnostics and PENDING live acceptance |
 | [Math step checker](math-step-checker.md) | Exact algebraic audit contract, domain restrictions, limits and acceptance coverage |

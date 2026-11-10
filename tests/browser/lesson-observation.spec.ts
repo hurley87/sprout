@@ -22,6 +22,9 @@ test("opt-in observes actual React render, terminal failure, report, and restart
   });
   await page.goto("/");
   await expect(page.getByRole("button", { name: "Play", exact: true })).toBeEnabled();
+  await expect
+    .poll(() => page.evaluate(() => Boolean((window as LessonObservationWindow).sproutLessonObservation)))
+    .toBe(true);
   await expect.poll(() => observer.read()).toBeNull();
   await page.getByRole("button", { name: "Play", exact: true }).click();
   await expect.poll(async () => (await observer.read())?.snapshot.status).toBe("ended");

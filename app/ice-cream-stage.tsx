@@ -17,7 +17,8 @@ export function IceCreamStage({
   renderToken,
   sceneRef,
   motion = "idle",
-}: Omit<LessonStageProps, "sceneRef" | "motion"> & Partial<Pick<LessonStageProps, "sceneRef" | "motion">>) {
+}: Omit<LessonStageProps, "sceneRef" | "motion" | "snapshot"> &
+  Partial<Pick<LessonStageProps, "sceneRef" | "motion">>) {
   const scene = node ? iceCreamScene(node) : null;
   const landing =
     node?.presentation.answerKind === "order_step" && motion === "success"

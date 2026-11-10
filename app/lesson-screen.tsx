@@ -8,7 +8,7 @@ import {
   type LessonNodeDefinition,
 } from "@/lib/lesson-runtime/lesson-definition";
 import type { PresentationCopy, StageMotion } from "./lesson-presentation";
-import { LESSON_TIMING, transitionQuietMs } from "@/lib/lesson-runtime/lesson-runtime";
+import { LESSON_TIMING, transitionQuietMs, type LessonSnapshot } from "@/lib/lesson-runtime/lesson-runtime";
 import { useVoiceDemo } from "@/components/voice-demo/use-voice-demo";
 import { VoiceDemoControls } from "@/components/voice-demo/controls";
 import { lessonPresentation, showsSuccessFeedback, stageMotion, voiceActivity } from "./lesson-presentation";
@@ -32,6 +32,7 @@ export type LessonScreenTheme = {
 };
 
 export type LessonStageProps = {
+  snapshot: LessonSnapshot | null;
   node: LessonNodeDefinition | null;
   renderToken?: string;
   sceneRef: Ref<HTMLDivElement>;
@@ -42,10 +43,12 @@ export function LessonScreen({
   theme,
   debug = false,
   renderStage,
+  renderDebug,
 }: {
   theme: LessonScreenTheme;
   debug?: boolean;
   renderStage: (props: LessonStageProps) => ReactNode;
+  renderDebug?: (snapshot: LessonSnapshot | null) => ReactNode;
 }) {
   const lessonDefinition = theme.lesson;
   const { audio, sceneRef, snapshot, live, start, stop, download } = useVoiceDemo({
@@ -87,6 +90,7 @@ export function LessonScreen({
       <section className={styles.screen} data-palette={theme.palette}>
         <div className={styles.scene}>
           {renderStage({
+            snapshot,
             node,
             renderToken: display?.token,
             sceneRef,
@@ -198,6 +202,7 @@ export function LessonScreen({
               ))}
             </div>
           </section>
+          {renderDebug?.(snapshot)}
         </aside>
       )}
     </main>
