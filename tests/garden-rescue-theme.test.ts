@@ -18,6 +18,41 @@ describe("Garden Rescue theme", () => {
     }
   });
 
+  it("celebrates the restored world with bounded, registered artwork", () => {
+    const { celebration, assets, progressIcons } = GARDEN_RESCUE_THEME;
+    expect(celebration.friends.filter(friend => friend.asset === "duckling")).toHaveLength(3);
+    expect(celebration.friends.filter(friend => friend.asset === "lily-pad")).toHaveLength(3);
+    expect(celebration.friends.filter(friend => friend.asset === "butterfly-awake")).toHaveLength(3);
+    expect(celebration.decorations.filter(decoration => decoration.asset === "flower-bloomed")).toHaveLength(4);
+    expect(assets).toHaveProperty(celebration.background);
+    for (const friend of celebration.friends) {
+      expect(assets).toHaveProperty(friend.asset);
+      for (const value of [friend.x, friend.y, friend.width]) expect(value).toBeGreaterThanOrEqual(0);
+      for (const value of [friend.x, friend.y, friend.width]) expect(value).toBeLessThanOrEqual(1);
+    }
+    for (const decoration of celebration.decorations) {
+      expect(assets).toHaveProperty(decoration.asset);
+      expect(decoration.left).toBeGreaterThanOrEqual(0);
+      expect(decoration.left).toBeLessThanOrEqual(100);
+    }
+    for (const src of Object.values(progressIcons ?? {})) {
+      expect(Object.values(assets).some(asset => asset.src === src)).toBe(true);
+    }
+  });
+
+  it("uses known assets and normalized placements for duckling crossing props", () => {
+    const effect = GARDEN_RESCUE_THEME.scenes["rescue-ducklings"].effect;
+    expect(effect?.id).toBe("ducklings.crossed");
+    expect(effect?.props.length).toBeGreaterThanOrEqual(3);
+    for (const prop of effect!.props) {
+      expect(GARDEN_RESCUE_THEME.assets).toHaveProperty(prop.asset);
+      for (const value of [prop.x, prop.y, prop.width]) {
+        expect(value).toBeGreaterThanOrEqual(0);
+        expect(value).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
   it("uses a fresh scattered butterfly layout", () => {
     const familiar = GARDEN_RESCUE_THEME.scenes["wake-butterflies"].objects;
     const fresh = GARDEN_RESCUE_THEME.scenes["fresh-challenge"].objects;
@@ -26,8 +61,35 @@ describe("Garden Rescue theme", () => {
     }
   });
 
-  it("softens the garden behind countable flowers so its decorative flowers recede", () => {
-    expect(GARDEN_RESCUE_THEME.scenes["grow-flowers"]).toMatchObject({ background: "garden", softBackdrop: true });
+  it("pairs each awakening butterfly with its sleeping position", () => {
+    const { objects, effect } = GARDEN_RESCUE_THEME.scenes["wake-butterflies"];
+    expect(effect?.id).toBe("butterflies.awakened");
+    expect(effect?.props).toHaveLength(objects.length);
+    for (const [index, prop] of (effect?.props ?? []).entries()) {
+      expect(prop).toMatchObject({ ...objects[index], asset: "butterfly-awake" });
+      for (const value of [prop.x, prop.y, prop.width]) {
+        expect(value).toBeGreaterThanOrEqual(0);
+        expect(value).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
+  it("aligns four sprouts with four known flower effect props over a softened garden", () => {
+    const scene = GARDEN_RESCUE_THEME.scenes["grow-flowers"];
+    expect(scene).toMatchObject({ background: "garden", softBackdrop: true, object: "sprout" });
+    expect(GARDEN_RESCUE_THEME.assets.sprout.src).toBe("/garden-rescue/sprout.png");
+    expect(scene.objects).toHaveLength(4);
+    expect(scene.effect?.id).toBe("flowers.bloomed");
+    expect(scene.effect?.props).toHaveLength(4);
+    for (const [index, prop] of (scene.effect?.props ?? []).entries()) {
+      expect(prop.asset).toBe("flower-bloomed");
+      expect(GARDEN_RESCUE_THEME.assets).toHaveProperty(prop.asset);
+      for (const value of [prop.x, prop.y, prop.width]) {
+        expect(value).toBeGreaterThanOrEqual(0);
+        expect(value).toBeLessThanOrEqual(1);
+      }
+      expect(scene.objects[index]).toMatchObject({ asset: "sprout", x: prop.x, width: prop.width });
+    }
   });
 
   it("uses the abstract glow status cue", () => {

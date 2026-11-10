@@ -1,0 +1,117 @@
+/* Final styles are static; animations start from the initial frame so reduced motion shows the finished picture. */
+.effects:is([data-effect-state="playing"], [data-effect-state="held"]) [data-world-prop] {
+  animation: world-prop-enter 400ms ease-out backwards;
+}
+
+@keyframes world-prop-enter {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Duckling crossing */
+.effects[data-world-effect="ducklings.crossed"]:is([data-effect-state="playing"], [data-effect-state="held"])
+  [data-counting-object="duckling"] {
+  translate: 0 -65%;
+}
+
+.effects[data-world-effect="ducklings.crossed"][data-effect-state="playing"] [data-world-prop="lily-pad"] {
+  animation: duckling-pad-enter 450ms ease-out calc(var(--i, 0) * 120ms) backwards;
+}
+
+.effects[data-world-effect="ducklings.crossed"][data-effect-state="playing"] [data-counting-object="duckling"] {
+  animation: duckling-cross 1300ms ease-in-out calc(800ms + var(--i, 0) * 150ms) backwards;
+}
+
+@keyframes duckling-pad-enter {
+  from {
+    opacity: 0;
+    scale: 0.75;
+  }
+}
+
+@keyframes duckling-cross {
+  from {
+    translate: 0 0;
+  }
+}
+
+/* Butterfly awakening */
+.effects[data-world-effect="butterflies.awakened"]:is([data-effect-state="playing"], [data-effect-state="held"])
+  [data-counting-object="butterfly"][data-character="butterfly-sleeping"]
+  img {
+  opacity: 0;
+  animation: butterfly-sleeping-fade 600ms ease-in-out calc(var(--i) * 180ms) backwards;
+}
+
+.effects[data-world-effect="butterflies.awakened"]:is([data-effect-state="playing"], [data-effect-state="held"])
+  [data-world-prop="butterfly-awake"] {
+  --drift-x: 0%;
+  --drift-y: -65%;
+  translate: var(--drift-x) var(--drift-y);
+  animation: butterfly-awaken 2.1s ease-in-out calc(var(--i) * 180ms) backwards;
+}
+
+.effects[data-world-effect="butterflies.awakened"]:is([data-effect-state="playing"], [data-effect-state="held"])
+  [data-world-prop="butterfly-awake"]:nth-child(2) {
+  --drift-y: -5%;
+}
+
+.effects[data-world-effect="butterflies.awakened"]:is([data-effect-state="playing"], [data-effect-state="held"])
+  [data-world-prop="butterfly-awake"]:first-child {
+  --drift-x: -25%;
+}
+
+.effects[data-world-effect="butterflies.awakened"]:is([data-effect-state="playing"], [data-effect-state="held"])
+  [data-world-prop="butterfly-awake"]:nth-child(3) {
+  --drift-x: 25%;
+}
+
+@keyframes butterfly-sleeping-fade {
+  from {
+    opacity: 1;
+  }
+}
+
+@keyframes butterfly-awaken {
+  0% {
+    opacity: 0;
+    translate: 0 0;
+  }
+  29% {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+/* Flower growing */
+.effects[data-world-effect="flowers.bloomed"]:is([data-effect-state="playing"], [data-effect-state="held"])
+  [data-world-prop="flower-bloomed"] {
+  animation: none;
+}
+
+.effects[data-world-effect="flowers.bloomed"]:is([data-effect-state="playing"], [data-effect-state="held"])
+  [data-world-prop="flower-bloomed"]
+  img {
+  transform-origin: 50% 95%;
+  animation: flower-grow 1s ease-out calc(var(--i) * 550ms) backwards;
+}
+
+.effects[data-world-effect="flowers.bloomed"]:is([data-effect-state="playing"], [data-effect-state="held"])
+  [data-counting-object="sprout"] {
+  opacity: 0;
+  animation: sprout-disappear 1s ease-out calc(var(--i) * 550ms) backwards;
+}
+
+@keyframes flower-grow {
+  from {
+    opacity: 0;
+    scale: 0.3;
+  }
+}
+
+@keyframes sprout-disappear {
+  from {
+    opacity: 1;
+  }
+}

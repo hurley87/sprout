@@ -27,7 +27,7 @@ it("authors one fixed quest order ending in the fresh challenge", () => {
   ).toEqual([
     ["rescue-ducklings", "duckling", 3],
     ["wake-butterflies", "butterfly", 3],
-    ["grow-flowers", "flower", 4],
+    ["grow-flowers", "sprout", 4],
     ["fresh-challenge", "butterfly", 4],
   ]);
   expect(GARDEN_RESCUE_LESSON.nodes["fresh-challenge"].onSuccess).toEqual({ kind: "complete" });

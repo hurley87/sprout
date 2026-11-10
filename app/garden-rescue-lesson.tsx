@@ -2,12 +2,14 @@
 
 import type { LessonSnapshot } from "@/lib/lesson-runtime/lesson-runtime";
 import { CountingStage } from "./counting-stage";
-import { useGardenGame } from "./garden-rescue-game";
+import { gardenEffectKey, gardenEffectState, useGardenGame } from "./garden-rescue-game";
+import styles from "./garden-rescue-effects.module.css";
 import { GARDEN_RESCUE_THEME } from "./garden-rescue-theme";
 import { LessonScreen, type LessonStageProps } from "./lesson-screen";
 
 function GardenStage({ snapshot, node, ...props }: LessonStageProps) {
   const { game } = useGardenGame(snapshot);
+  const state = gardenEffectState(snapshot);
   return (
     <div
       style={{ display: "contents" }}
@@ -15,9 +17,11 @@ function GardenStage({ snapshot, node, ...props }: LessonStageProps) {
       data-game-run={game.runId ?? ""}
       data-game-quest={game.quest?.id ?? ""}
       data-game-restored={game.restored.join(" ")}
+      data-effect-state={state}
     >
       <CountingStage
         theme={GARDEN_RESCUE_THEME}
+        effect={{ className: styles.effects, state, key: gardenEffectKey(snapshot) }}
         node={
           node
             ? {

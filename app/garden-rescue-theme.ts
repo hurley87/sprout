@@ -16,6 +16,7 @@ export const GARDEN_RESCUE_THEME: CountingTheme = {
     "butterfly-sleeping": image("butterfly-sleeping", "png", 512, 512),
     "butterfly-awake": image("butterfly-awake", "png", 512, 512),
     "flower-bloomed": image("flower-bloomed", "png", 512, 512),
+    sprout: image("sprout", "png", 512, 512),
     "lily-pad": image("lily-pad", "png", 512, 512),
   },
   scenes: {
@@ -28,6 +29,14 @@ export const GARDEN_RESCUE_THEME: CountingTheme = {
         { asset: "duckling", x: 0.5, y: 0.76, width: 0.2 },
         { asset: "duckling", x: 0.76, y: 0.72, width: 0.2 },
       ],
+      effect: {
+        id: "ducklings.crossed",
+        props: [
+          { asset: "lily-pad", x: 0.24, y: 0.59, width: 0.16 },
+          { asset: "lily-pad", x: 0.5, y: 0.63, width: 0.16 },
+          { asset: "lily-pad", x: 0.76, y: 0.59, width: 0.16 },
+        ],
+      },
     },
     "wake-butterflies": {
       background: "garden",
@@ -37,17 +46,34 @@ export const GARDEN_RESCUE_THEME: CountingTheme = {
         { asset: "butterfly-sleeping", x: 0.5, y: 0.58, width: 0.22 },
         { asset: "butterfly-sleeping", x: 0.77, y: 0.58, width: 0.22 },
       ],
+      effect: {
+        id: "butterflies.awakened",
+        props: [
+          { asset: "butterfly-awake", x: 0.23, y: 0.58, width: 0.22 },
+          { asset: "butterfly-awake", x: 0.5, y: 0.58, width: 0.22 },
+          { asset: "butterfly-awake", x: 0.77, y: 0.58, width: 0.22 },
+        ],
+      },
     },
     "grow-flowers": {
       background: "garden",
       softBackdrop: true,
-      object: "flower",
+      object: "sprout",
       objects: [
-        { asset: "flower-bloomed", x: 0.16, y: 0.5, width: 0.2 },
-        { asset: "flower-bloomed", x: 0.39, y: 0.5, width: 0.2 },
-        { asset: "flower-bloomed", x: 0.62, y: 0.5, width: 0.2 },
-        { asset: "flower-bloomed", x: 0.85, y: 0.5, width: 0.2 },
+        { asset: "sprout", x: 0.16, y: 0.532, width: 0.2 },
+        { asset: "sprout", x: 0.39, y: 0.532, width: 0.2 },
+        { asset: "sprout", x: 0.62, y: 0.532, width: 0.2 },
+        { asset: "sprout", x: 0.85, y: 0.532, width: 0.2 },
       ],
+      effect: {
+        id: "flowers.bloomed",
+        props: [
+          { asset: "flower-bloomed", x: 0.16, y: 0.5, width: 0.2 },
+          { asset: "flower-bloomed", x: 0.39, y: 0.5, width: 0.2 },
+          { asset: "flower-bloomed", x: 0.62, y: 0.5, width: 0.2 },
+          { asset: "flower-bloomed", x: 0.85, y: 0.5, width: 0.2 },
+        ],
+      },
     },
     "fresh-challenge": {
       background: "garden",
@@ -62,15 +88,26 @@ export const GARDEN_RESCUE_THEME: CountingTheme = {
   },
   celebration: {
     background: "garden",
-    decorations: [36, 52, 68, 84].map(left => ({ asset: "flower-bloomed", left })),
+    decorations: [10, 36, 64, 90].map(left => ({ asset: "flower-bloomed", left })),
     friends: [
-      { asset: "duckling", x: 0.2, y: 0.72, width: 0.2 },
-      { asset: "butterfly-awake", x: 0.16, y: 0.3, width: 0.15 },
-      { asset: "butterfly-awake", x: 0.84, y: 0.5, width: 0.15 },
+      { asset: "lily-pad", x: 0.24, y: 0.78, width: 0.17 },
+      { asset: "lily-pad", x: 0.5, y: 0.78, width: 0.17 },
+      { asset: "lily-pad", x: 0.76, y: 0.78, width: 0.17 },
+      { asset: "duckling", x: 0.24, y: 0.63, width: 0.15 },
+      { asset: "duckling", x: 0.5, y: 0.63, width: 0.15 },
+      { asset: "duckling", x: 0.76, y: 0.63, width: 0.15 },
+      { asset: "butterfly-awake", x: 0.15, y: 0.4, width: 0.13 },
+      { asset: "butterfly-awake", x: 0.5, y: 0.4, width: 0.13 },
+      { asset: "butterfly-awake", x: 0.85, y: 0.4, width: 0.13 },
     ],
     message: "The garden is back to life! Thank you for helping the animals.",
   },
   statusCue: "glow",
+  progressIcons: {
+    "rescue-ducklings": "/garden-rescue/lily-pad.png",
+    "wake-butterflies": "/garden-rescue/butterfly-awake.png",
+    "grow-flowers": "/garden-rescue/flower-bloomed.png",
+  },
   copy: {
     welcome: "Help the animals bring the garden back to life.",
     complete: "The garden is back to life!",

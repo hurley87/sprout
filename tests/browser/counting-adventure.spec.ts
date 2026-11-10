@@ -142,6 +142,7 @@ async function expectProgress(page: Page, expected: string[]) {
   await expect
     .poll(() => leaves.evaluateAll(items => items.map(item => item.getAttribute("data-progress"))))
     .toEqual(expected);
+  await expect(leaves.locator("img")).toHaveCount(0);
 }
 
 async function setTutorLevel(page: Page, gain: number) {
