@@ -9,6 +9,7 @@ const LEARNER_EVIDENCE_LESSON_IDS: ReadonlySet<string> = new Set([
   "counting-halloween",
   "counting-concert",
   "ice-cream-shop",
+  "garden-rescue",
 ]);
 
 /** Accept learner evidence separately from the latest tutor feedback. */
