@@ -46,6 +46,9 @@ export type LessonDefinition = {
   /** Sustained tutor-audio quiet before an accepted scene transition. It must outlast the tutor's
    * pauses between sentences: audio that resumes during an unconfirmed render ends the attempt. */
   readonly transitionQuietMs?: number;
+  /** Minimum time an accepted success stays on the answered scene, measured from when it becomes
+   * visible, before the next scene is requested. Lets authored success feedback finish playing. */
+  readonly successHoldMs?: number;
   /** Greet the learner by the server-configured first name (SPROUT_CHILD_NAME), when one is set. */
   readonly addressLearnerByName?: boolean;
   /** Concise topic labels for an accepted-evidence terminal close. No answer text. */
@@ -123,6 +126,11 @@ export function validateLessonDefinition(value: LessonDefinition): LessonDefinit
     (!Number.isSafeInteger(value.transitionQuietMs) || value.transitionQuietMs <= 0 || value.transitionQuietMs > 5_000)
   )
     throw new Error("Transition quiet must be a positive whole number of milliseconds up to 5000");
+  if (
+    value.successHoldMs !== undefined &&
+    (!Number.isSafeInteger(value.successHoldMs) || value.successHoldMs <= 0 || value.successHoldMs > 5_000)
+  )
+    throw new Error("Success hold must be a positive whole number of milliseconds up to 5000");
   if (value.questionGroups) {
     const groups = value.questionGroups;
     const ids = groups.flatMap(group => group.nodeIds);

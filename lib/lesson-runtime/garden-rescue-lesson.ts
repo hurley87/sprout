@@ -44,6 +44,10 @@ export const GARDEN_RESCUE_LESSON = buildCountingLesson({
   id: "garden-rescue",
   initialNodeId: GARDEN_RESCUE_NODE_IDS[0],
   singleItemExample: "a single duckling",
+  // Live attempt 9e4646cd: the answer is accepted only after the tutor's reply ends, so the next
+  // scene replaced each world effect ~0.35 s after it started. Keep the answered scene up long
+  // enough for the effect (about 2.5 s) to finish.
+  successHoldMs: 3_000,
   addressLearnerByName: true,
   nodes: Object.fromEntries(
     quests.map((quest, index) => {

@@ -114,6 +114,9 @@ export type LessonRuntimeState = {
   readonly terminalLearnerPending?: boolean;
   readonly quietSinceMs: number | null;
   readonly quietDrainMs: number;
+  /** When the current accepted success became visible (evidence plus observed tutor reply). Only
+   * tracked for lessons that author `successHoldMs`. */
+  readonly successSinceMs?: number | null;
   readonly nowMs: number;
   readonly phase: "active" | "rendering" | "complete" | "stopped";
   readonly lessonComplete: boolean;
@@ -429,6 +432,13 @@ function stopped(state: LessonRuntimeState, lesson: LessonDefinition): LessonRun
     : next;
 }
 
+/** An authored minimum time an accepted success stays on the answered scene before it changes.
+ * It only lengthens the wait; it never creates completion evidence. */
+function successHeld(state: LessonRuntimeState, lesson: LessonDefinition) {
+  if (lesson.successHoldMs === undefined || !hasCurrentCompletionEvidence(state, lesson)) return true;
+  return (state.successSinceMs ?? null) !== null && state.nowMs - state.successSinceMs! >= lesson.successHoldMs;
+}
+
 function outputHasDrained(state: LessonRuntimeState, lesson: LessonDefinition) {
   return (
     (state.tutorOutputObserved ||
@@ -436,11 +446,18 @@ function outputHasDrained(state: LessonRuntimeState, lesson: LessonDefinition) {
     state.outputActivity === "quiet" &&
     state.quietSinceMs !== null &&
     state.nowMs - state.quietSinceMs >=
-      (lesson.nodes[state.nodeId].completeAfterTutorOutput ? Math.max(1500, state.quietDrainMs) : state.quietDrainMs)
+      (lesson.nodes[state.nodeId].completeAfterTutorOutput ? Math.max(1500, state.quietDrainMs) : state.quietDrainMs) &&
+    successHeld(state, lesson)
   );
 }
 
-function finish(state: LessonRuntimeState, lesson: LessonDefinition): LessonRuntimeResult {
+function finish(current: LessonRuntimeState, lesson: LessonDefinition): LessonRuntimeResult {
+  const showingSuccess =
+    current.phase === "active" && current.tutorOutputObserved && hasCurrentCompletionEvidence(current, lesson);
+  const state =
+    lesson.successHoldMs === undefined
+      ? current
+      : { ...current, successSinceMs: showingSuccess ? (current.successSinceMs ?? current.nowMs) : null };
   const drained = outputHasDrained(state, lesson);
   const next = { ...state, tutorOutputDrained: drained, transitionReady: false };
   if (!hasCurrentCompletionEvidence(next, lesson) || !drained || next.childSpeaking) {

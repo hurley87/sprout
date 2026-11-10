@@ -51,7 +51,10 @@ describe("garden effect state", () => {
     const { harness, snapshot } = scenario();
     const key = gardenEffectKey(snapshot());
     harness.send({ type: "output.activity", source: runtimeSource(harness.state), state: "quiet" });
+    // The success stays on the answered scene for the lesson's authored hold before rendering.
     harness.send({ type: "clock.tick", source: runtimeSource(harness.state) }, 150);
+    expect(gardenEffectState(snapshot())).toBe("playing");
+    harness.send({ type: "clock.tick", source: runtimeSource(harness.state) }, GARDEN_RESCUE_LESSON.successHoldMs!);
     const rendering = snapshot();
     expect(rendering.runtime?.phase).toBe("rendering");
     expect(rendering.runtime?.visitId).toBe(2);

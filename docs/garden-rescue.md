@@ -15,7 +15,7 @@ Sprouts are counted over a blurred, softened garden backdrop (`softBackdrop`), s
 
 Game state is a read-only projection of authoritative lesson progress. During a pending render, its origin node and encounter remain authoritative until the exact render is confirmed; stopping during rendering reverts to that origin. The runtime ID identifies a run, the node and visit identify a quest encounter, and the render token identifies the exact displayed scene. Effects are presentation-only: they never authorize progress, delay render confirmation or steer the tutor. Effect props sit behind the counting objects, are not countable and are excluded from the artwork loading gate.
 
-The effect plays during the existing success window, alongside the success numeral. Its `held` state keeps the final frame on the answered scene while the committed transition renders; otherwise it is `before`. Stop, restart or a stale visit cancels the effect. Renewed speech or Stop can cancel a success window before commit, so animation alone does not produce a log entry.
+The effect plays during the existing success window, alongside the success numeral. In live sessions the answer is accepted only after the tutor's reply ends, so the lesson authors `successHoldMs: 3000`: an accepted success stays on the answered scene for three seconds from when it becomes visible, long enough for each effect (about 2.5 s) to finish, before the next scene is requested. The hold is lesson timing in the reducer, not driven by the effects; renewed speech clears the success and restarts it. Without it, live attempt 9e4646cd replaced each effect about 0.35 s after it started. Its `held` state keeps the final frame on the answered scene while the committed transition renders; otherwise it is `before`. Stop, restart or a stale visit cancels the effect. Renewed speech or Stop can cancel a success window before commit, so animation alone does not produce a log entry.
 
 At render-confirmed commit, projection diffs emit `world.effect` immediately after the matching `quest.succeeded`, once per run. Its `visitId` identifies the committing visit, or is null if the diff never observed that visit. Diffs also emit `game.started`, `quest.started` and `game.ended`; the event log is local to the current run. `object.interacted` remains reserved and is not emitted because the game is voice-only. #107 can extend the session-local event log for export.
 
@@ -23,7 +23,7 @@ Counting scenes stay clean to keep counts unambiguous. Restored effects reappear
 
 ## Verification (#106)
 
-On November 10, 2026, typecheck, ESLint, Prettier on the changed files, 2,546 Vitest tests across 140 files, the production build and the full provider-free browser suite (82 tests, including 10 Garden Rescue tests) passed. Screenshots of every effect at 1440×1000, 1024×640, 390×844 and 844×390 were inspected. Screenshots can be captured with `GARDEN_SCREENSHOTS=1 npx playwright test tests/browser/garden-rescue.spec.ts` in `/tmp/garden-rescue-shots`.
+On November 10, 2026, typecheck, ESLint, Prettier on the changed files, 2,549 Vitest tests across 141 files, the production build and the full provider-free browser suite (82 tests, including 10 Garden Rescue tests) passed. Screenshots of every effect at 1440×1000, 1024×640, 390×844 and 844×390 were inspected. Screenshots can be captured with `GARDEN_SCREENSHOTS=1 npx playwright test tests/browser/garden-rescue.spec.ts` in `/tmp/garden-rescue-shots`.
 
 ## Known limitations
 
