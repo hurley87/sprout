@@ -50,6 +50,17 @@
     radial-gradient(ellipse 100% 65% at 70% 130%, #9ad0a0 99%, transparent 100%), linear-gradient(#fbf8f0, #e1f1d7);
 }
 
+/* Softened artwork: decorative details blur into colour behind the countable objects. Scaled so
+ * the blurred edges stay outside the stage. */
+.soft {
+  overflow: hidden;
+}
+
+.soft img {
+  filter: blur(0.6rem) saturate(0.85) brightness(1.04);
+  scale: 1.06;
+}
+
 .object {
   position: absolute;
 }

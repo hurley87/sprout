@@ -11,6 +11,9 @@ export type CountingScene = {
   /** CSS-module backdrop class drawn instead of the background artwork, so nothing behind the
    * countable objects can be mistaken for one of them. */
   readonly plainBackdrop?: string;
+  /** Draw the background artwork blurred and softened, so its small decorative details (flowers in
+   * the garden art) recede and cannot be mistaken for the countable objects in front of them. */
+  readonly softBackdrop?: boolean;
   readonly object: string;
   readonly objects: readonly CountingPlacement[];
 };

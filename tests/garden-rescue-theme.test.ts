@@ -26,7 +26,11 @@ describe("Garden Rescue theme", () => {
     }
   });
 
-  it("uses a plain backdrop for countable flowers", () => {
-    expect(GARDEN_RESCUE_THEME.scenes["grow-flowers"].plainBackdrop).toBe("meadow");
+  it("softens the garden behind countable flowers so its decorative flowers recede", () => {
+    expect(GARDEN_RESCUE_THEME.scenes["grow-flowers"]).toMatchObject({ background: "garden", softBackdrop: true });
+  });
+
+  it("uses the abstract glow status cue", () => {
+    expect(GARDEN_RESCUE_THEME.statusCue).toBe("glow");
   });
 });

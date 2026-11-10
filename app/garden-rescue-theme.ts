@@ -40,7 +40,7 @@ export const GARDEN_RESCUE_THEME: CountingTheme = {
     },
     "grow-flowers": {
       background: "garden",
-      plainBackdrop: "meadow",
+      softBackdrop: true,
       object: "flower",
       objects: [
         { asset: "flower-bloomed", x: 0.16, y: 0.5, width: 0.2 },
@@ -70,6 +70,7 @@ export const GARDEN_RESCUE_THEME: CountingTheme = {
     ],
     message: "The garden is back to life! Thank you for helping the animals.",
   },
+  statusCue: "glow",
   copy: {
     welcome: "Help the animals bring the garden back to life.",
     complete: "The garden is back to life!",

@@ -9,7 +9,7 @@ The `/games/garden` route uses the shared voice runtime and the server-owned `ga
 | `grow-flowers` | 4 | flowers |
 | `fresh-challenge` | 4 | awake butterflies |
 
-Flowers use a plain meadow backdrop so decorative flowers cannot be mistaken for countable objects. The fresh challenge uses a new scattered layout and a different object from the immediately preceding flower scene, to probe counting in a new arrangement.
+Flowers are counted over a blurred, softened garden backdrop (`softBackdrop`), so the small decorative flowers in the garden art recede and cannot be mistaken for countable objects. During the conversation the status pill shows the same abstract glow cue as `/halloween`. The fresh challenge uses a new scattered layout and a different object from the immediately preceding flower scene, to probe counting in a new arrangement.
 
 ## Architecture
 

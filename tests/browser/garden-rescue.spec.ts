@@ -112,6 +112,7 @@ test("plays the fixed quest order and records events", async ({ page }) => {
     await expect(stage.locator(`[data-counting-object="${node.presentation.object}"]`)).toHaveCount(
       Number(node.presentation.quantity),
     );
+    await screenshots(page, nodeId);
     await expect(game).toHaveAttribute("data-game-restored", GARDEN_RESCUE_NODE_IDS.slice(0, index).join(" "));
     await answer(page, observer, microphone, nodeId);
     await expect(game).toHaveAttribute("data-game-restored", GARDEN_RESCUE_NODE_IDS.slice(0, index).join(" "));
