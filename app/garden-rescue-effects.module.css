@@ -115,3 +115,26 @@
     opacity: 1;
   }
 }
+
+/* The banner stays outside the fitted counting area; the tint sits behind its objects. */
+.gardenStage {
+  display: contents;
+}
+.challengeLabel {
+  position: absolute;
+  z-index: 1;
+  top: 0.75rem;
+  left: 0.75rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  background: #f8edff;
+  color: #55366d;
+  font-weight: 700;
+  box-shadow: 0 3px 0 #d9bfe9;
+}
+.gardenStage :global([data-node-id="fresh-challenge"]) :global([data-background])::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: #b5a2e43b;
+}

@@ -56,7 +56,14 @@ export const GARDEN_RESCUE_LESSON = buildCountingLesson({
         id,
         {
           id,
-          presentation: { sceneId: id, object: quest.object, quantity: quest.quantity },
+          presentation: {
+            sceneId: id,
+            object: quest.object,
+            quantity: quest.quantity,
+            skillId: "count-total-1-5",
+            sceneVersion: "1",
+          },
+          evidenceRole: index === quests.length - 1 ? ("transfer" as const) : ("rehearsal" as const),
           learningObjective: quest.objective,
           tutorBrief: quest.brief,
           onSuccess:

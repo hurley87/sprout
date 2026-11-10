@@ -5,6 +5,8 @@ import { GARDEN_RESCUE_LESSON, GARDEN_RESCUE_NODE_IDS } from "../lib/lesson-runt
 import { COUNTING_LESSON } from "../lib/lesson-runtime/counting-lesson";
 import { acceptsLearnerAnswerIndependently } from "../lib/lesson-runtime/counting-answer-policy";
 import { lessonNodeOrder, validateLessonDefinition } from "../lib/lesson-runtime/lesson-definition";
+import { currentNodeContext } from "../lib/lesson-runtime/lesson-definition";
+import { teachingInstruction } from "../lib/lesson-runtime/live-context";
 import { resolveLessonDefinition } from "../lib/lesson-runtime/lesson-registry";
 
 const request = (route: string, body: object) =>
@@ -77,4 +79,43 @@ it("accepts garden rescue live sessions and classifier nodes, rejecting mismatch
     { lessonId: "counting", nodeId: "grow-flowers" },
   ])
     expect((await classify(request("classify", { ...input, ...fields }))).status).toBe(400);
+});
+
+it("authors validated evidence roles and stable Garden skill and scene versions", () => {
+  for (const [index, id] of GARDEN_RESCUE_NODE_IDS.entries()) {
+    const node = GARDEN_RESCUE_LESSON.nodes[id];
+    expect(node.evidenceRole).toBe(index === 3 ? "transfer" : "rehearsal");
+    expect(node.presentation).toMatchObject({ skillId: "count-total-1-5", sceneVersion: "1" });
+  }
+  const node = COUNTING_LESSON.nodes[COUNTING_LESSON.initialNodeId];
+  expect(node.evidenceRole).toBeUndefined();
+  for (const role of ["transfer", "rehearsal", undefined] as const) {
+    expect(() =>
+      validateLessonDefinition({
+        ...COUNTING_LESSON,
+        nodes: { ...COUNTING_LESSON.nodes, [node.id]: { ...node, evidenceRole: role } },
+      }),
+    ).not.toThrow();
+  }
+  expect(() =>
+    validateLessonDefinition({
+      ...COUNTING_LESSON,
+      nodes: { ...COUNTING_LESSON.nodes, [node.id]: { ...node, evidenceRole: "invalid" as never } },
+    }),
+  ).toThrow(/evidence role/);
+});
+
+it("keeps the transfer quantity out of spoken text but in the private steering context", () => {
+  const node = GARDEN_RESCUE_LESSON.nodes["fresh-challenge"];
+  // The brief and shared guidance shape what the tutor says aloud; neither may reveal the count.
+  const spoken = [
+    node.tutorBrief,
+    ...Object.values(GARDEN_RESCUE_LESSON.tutor),
+    ...Object.values(GARDEN_RESCUE_LESSON.recovery),
+  ].join(" ");
+  expect(spoken).not.toMatch(/\b(?:4|four)\b/i);
+  // The tutor still needs the private target to confirm only a correct answer.
+  const steering = teachingInstruction(currentNodeContext(GARDEN_RESCUE_LESSON, node.id), GARDEN_RESCUE_LESSON);
+  expect(steering).toContain('"quantity":4');
+  expect(steering).toMatch(/Private current-node teaching context/);
 });

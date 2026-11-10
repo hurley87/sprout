@@ -12,13 +12,14 @@ function GardenStage({ snapshot, node, ...props }: LessonStageProps) {
   const state = gardenEffectState(snapshot);
   return (
     <div
-      style={{ display: "contents" }}
+      className={styles.gardenStage}
       data-game-status={game.status}
       data-game-run={game.runId ?? ""}
       data-game-quest={game.quest?.id ?? ""}
       data-game-restored={game.restored.join(" ")}
       data-effect-state={state}
     >
+      {node?.id === "fresh-challenge" && <span className={styles.challengeLabel}>New challenge!</span>}
       <CountingStage
         theme={GARDEN_RESCUE_THEME}
         effect={{ className: styles.effects, state, key: gardenEffectKey(snapshot) }}

@@ -7,6 +7,12 @@ import type { LessonSnapshot } from "../lesson-runtime/lesson-runtime";
 import type { LessonRuntimeState } from "../lesson-runtime/lesson-runtime-reducer";
 
 export type GardenQuestId = GardenRescueNodeId;
+export type GardenProbe = "rehearsal" | "transfer";
+const probeFor = (id: GardenQuestId): GardenProbe => {
+  const role = GARDEN_RESCUE_LESSON.nodes[id].evidenceRole;
+  if (!role) throw new Error(`Garden quest ${id} needs an evidence role`);
+  return role;
+};
 export const GARDEN_WORLD_EFFECTS = {
   "rescue-ducklings": "ducklings.crossed",
   "wake-butterflies": "butterflies.awakened",
@@ -23,8 +29,13 @@ export type GardenGameSnapshot = Pick<LessonSnapshot, "status" | "display" | "er
 export type GardenGameState = {
   readonly status: GardenGameStatus;
   readonly runId: string | null;
-  readonly quest: { readonly id: GardenQuestId; readonly visitId: number; readonly renderToken: string } | null;
-  readonly encounter: { readonly id: GardenQuestId; readonly visitId: number } | null;
+  readonly quest: {
+    readonly id: GardenQuestId;
+    readonly visitId: number;
+    readonly renderToken: string;
+    readonly probe: GardenProbe;
+  } | null;
+  readonly encounter: { readonly id: GardenQuestId; readonly visitId: number; readonly probe: GardenProbe } | null;
   readonly restored: readonly GardenQuestId[];
 };
 
@@ -36,6 +47,7 @@ export type GardenGameEvent =
       readonly questId: GardenQuestId;
       readonly visitId: number;
       readonly renderToken: string;
+      readonly probe: GardenProbe;
     }
   | { readonly type: "quest.succeeded"; readonly runId: string; readonly questId: GardenQuestId }
   | {
@@ -86,6 +98,7 @@ export function projectGardenGame(snapshot: GardenGameSnapshot | null): GardenGa
   const encounter = encounterId
     ? {
         id: encounterId,
+        probe: probeFor(encounterId),
         visitId:
           runtime.phase === "rendering" && runtime.pendingRender
             ? runtime.pendingRender.origin.visitId
@@ -101,7 +114,7 @@ export function projectGardenGame(snapshot: GardenGameSnapshot | null): GardenGa
     !snapshot.awaitingSteering &&
     snapshot.display.nodeId === runtime.nodeId &&
     questId
-      ? { id: questId, visitId: runtime.visitId, renderToken: snapshot.display.token }
+      ? { id: questId, visitId: runtime.visitId, renderToken: snapshot.display.token, probe: probeFor(questId) }
       : null;
   return { status, runId: runtime.runtimeId, quest, encounter, restored };
 }
@@ -136,6 +149,7 @@ export function gardenGameEvents(previous: GardenGameState, next: GardenGameStat
       questId: next.quest.id,
       visitId: next.quest.visitId,
       renderToken: next.quest.renderToken,
+      probe: next.quest.probe,
     });
   }
   if (terminal(next.status))

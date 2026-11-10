@@ -4,6 +4,8 @@ export type LessonNodeDefinition = {
   readonly presentation: Readonly<Record<string, string | number | boolean>>;
   readonly learningObjective: string;
   readonly tutorBrief: string;
+  /** Authored evidence classification only; never grants answer or transition authority. */
+  readonly evidenceRole?: "rehearsal" | "transfer";
   /** Assess the saved conversation when this scene's render is confirmed, before steering. */
   readonly assessConversationOnEntry?: boolean;
   /** Terminal presentation: complete after observed tutor output drains, without a learner answer. */
@@ -85,6 +87,8 @@ export function validateLessonDefinition(value: LessonDefinition): LessonDefinit
   if (!value.id || !Object.hasOwn(value.nodes, value.initialNodeId))
     throw new Error("Lesson needs an authored initial node");
   for (const [id, node] of Object.entries(value.nodes)) {
+    if (node.evidenceRole !== undefined && node.evidenceRole !== "rehearsal" && node.evidenceRole !== "transfer")
+      throw new Error(`Lesson node ${id} has an invalid evidence role`);
     if (id !== node.id) throw new Error(`Lesson node key does not match node identity: ${id}`);
     if (node.onSuccess.kind === "node" && !Object.hasOwn(value.nodes, node.onSuccess.nodeId))
       throw new Error(`Lesson edge from ${id} targets an unknown node`);

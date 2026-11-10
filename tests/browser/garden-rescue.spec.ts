@@ -116,6 +116,7 @@ test("plays the fixed quest order and records events", async ({ page }) => {
   for (const [index, nodeId] of GARDEN_RESCUE_NODE_IDS.entries()) {
     const stage = await scene(page, observer, nodeId);
     const node = GARDEN_RESCUE_LESSON.nodes[nodeId];
+    await expect(page.getByText("New challenge!", { exact: true })).toHaveCount(index === 3 ? 1 : 0);
     await expect(stage.locator(`[data-counting-object="${node.presentation.object}"]`)).toHaveCount(
       Number(node.presentation.quantity),
     );
@@ -237,6 +238,25 @@ test("effects and counting objects remain within responsive stages", async ({ pa
         }
       }
     });
+  }
+  const stage = await scene(page, observer, "fresh-challenge");
+  const label = page.getByText("New challenge!", { exact: true });
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 844, height: 390 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect(label).toBeVisible();
+    const badge = (await label.boundingBox())!;
+    for (const item of await stage.locator("[data-counting-object]").all()) {
+      const box = (await item.boundingBox())!;
+      expect(
+        badge.x + badge.width <= box.x ||
+          box.x + box.width <= badge.x ||
+          badge.y + badge.height <= box.y ||
+          box.y + box.height <= badge.y,
+      ).toBe(true);
+    }
   }
 });
 

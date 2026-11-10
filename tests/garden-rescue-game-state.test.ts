@@ -28,7 +28,7 @@ describe("Garden Rescue game projection", () => {
     expect(projectGardenGame({ ...s, status: "connecting" }).status).toBe("starting");
     expect(projectGardenGame({ ...s, awaitingSteering: true }).quest).toBeNull();
     expect(projectGardenGame({ ...s, display: { ...s.display, nodeId: null } }).quest).toBeNull();
-    expect(projectGardenGame(s).quest).toEqual({ id: ids[0], visitId: 1, renderToken: "initial" });
+    expect(projectGardenGame(s).quest).toEqual({ id: ids[0], visitId: 1, renderToken: "initial", probe: "rehearsal" });
     expect(projectGardenGame({ ...s, runtime: { ...s.runtime!, lessonId: "other" } })).toEqual(projectGardenGame(null));
   });
 
@@ -54,7 +54,7 @@ describe("Garden Rescue game projection", () => {
       };
       const rendering = projectGardenGame(s);
       expect(rendering.restored).toEqual(ids.slice(0, i));
-      expect(rendering.encounter).toEqual({ id: ids[i], visitId: i + 1 });
+      expect(rendering.encounter).toEqual({ id: ids[i], visitId: i + 1, probe: i === 3 ? "transfer" : "rehearsal" });
       expect(gardenGameEvents(previous, rendering).filter(event => event.type === "world.effect")).toEqual([]);
       events.push(...gardenGameEvents(previous, rendering));
       previous = rendering;
@@ -70,7 +70,7 @@ describe("Garden Rescue game projection", () => {
     }
     expect(events).toEqual([
       { type: "game.started", runId: "run" },
-      { type: "quest.started", runId: "run", questId: ids[0], visitId: 1, renderToken: "initial" },
+      { type: "quest.started", runId: "run", questId: ids[0], visitId: 1, renderToken: "initial", probe: "rehearsal" },
       ...ids.flatMap((questId, i) => [
         { type: "quest.succeeded", runId: "run", questId },
         ...(i < 3
@@ -92,6 +92,7 @@ describe("Garden Rescue game projection", () => {
                 questId: ids[i + 1],
                 visitId: i + 2,
                 renderToken: `token-${i + 1}`,
+                probe: i === 2 ? "transfer" : "rehearsal",
               },
             ]
           : []),

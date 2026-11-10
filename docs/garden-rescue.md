@@ -9,9 +9,11 @@ The `/games/garden` route uses the shared voice runtime and the server-owned `ga
 | `grow-flowers` | 4 | sprouts | `flowers.bloomed`: the sprouts become flowers, one after another |
 | `fresh-challenge` | 4 | awake butterflies | none |
 
-Sprouts are counted over a blurred, softened garden backdrop (`softBackdrop`), so the small decorative flowers in the garden art recede and cannot be mistaken for countable objects. During the conversation the status pill shows the same abstract glow cue as `/halloween`. The fresh challenge uses a new scattered layout and a different object from the immediately preceding sprout scene, to probe counting in a new arrangement.
+Sprouts are counted over a blurred, softened garden backdrop (`softBackdrop`), so the small decorative flowers in the garden art recede and cannot be mistaken for countable objects. During the conversation the status pill shows the same abstract glow cue as `/halloween`. The fresh challenge uses a new scattered layout and a different object from the immediately preceding sprout scene, to probe counting in a new arrangement. A “New challenge!” badge and a tinted backdrop distinguish it without adding countable objects. Its spoken brief and the shared tutor guidance never state the target count; the quantity stays in the private steering context so the tutor can judge the answer.
 
 ## Architecture
+
+The three quests author `evidenceRole: "rehearsal"`; the fresh challenge authors `"transfer"`. Garden presentation records carry the authored `skillId` and `sceneVersion` alongside quantity and scene ID. The projection exposes the role as `probe` on encounters, displayed quests and `quest.started` events. This metadata grants no answer, transition or steering authority and does not establish mastery.
 
 Game state is a read-only projection of authoritative lesson progress. During a pending render, its origin node and encounter remain authoritative until the exact render is confirmed; stopping during rendering reverts to that origin. The runtime ID identifies a run, the node and visit identify a quest encounter, and the render token identifies the exact displayed scene. Effects are presentation-only: they never authorize progress, delay render confirmation or steer the tutor. Effect props sit behind the counting objects, are not countable and are excluded from the artwork loading gate.
 
