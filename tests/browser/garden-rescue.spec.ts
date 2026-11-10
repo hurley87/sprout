@@ -129,7 +129,11 @@ test("plays the fixed quest order and records events", async ({ page }) => {
     }),
   ).toEqual([
     "game.started",
-    ...GARDEN_RESCUE_NODE_IDS.flatMap(id => [`quest.started:${id}`, `quest.succeeded:${id}`]),
+    ...GARDEN_RESCUE_NODE_IDS.flatMap((id, index) => [
+      `quest.started:${id}`,
+      `quest.succeeded:${id}`,
+      ...(index < 3 ? [`world.effect:${id}`] : []),
+    ]),
     "game.ended:completed",
   ]);
   await screenshots(page, "celebration");

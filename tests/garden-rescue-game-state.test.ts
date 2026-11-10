@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { gardenGameEvents, projectGardenGame, type GardenGameSnapshot } from "../lib/garden-rescue/game-state";
+import {
+  GARDEN_WORLD_EFFECTS,
+  gardenGameEvents,
+  projectGardenGame,
+  type GardenGameSnapshot,
+} from "../lib/garden-rescue/game-state";
 import { GARDEN_RESCUE_LESSON, GARDEN_RESCUE_NODE_IDS as ids } from "../lib/lesson-runtime/garden-rescue-lesson";
 import { createLessonRuntime, reduceLessonRuntime } from "../lib/lesson-runtime/lesson-runtime-reducer";
 
@@ -16,8 +21,10 @@ function snapshot(runId = "run"): GardenGameSnapshot {
 describe("Garden Rescue game projection", () => {
   it("handles ready, starting, steering and matching display", () => {
     expect(projectGardenGame(null).status).toBe("ready");
+    expect(projectGardenGame(null).encounter).toBeNull();
     const s = snapshot();
     expect(projectGardenGame({ ...s, runtime: null }).status).toBe("starting");
+    expect(projectGardenGame({ ...s, runtime: null }).encounter).toBeNull();
     expect(projectGardenGame({ ...s, status: "connecting" }).status).toBe("starting");
     expect(projectGardenGame({ ...s, awaitingSteering: true }).quest).toBeNull();
     expect(projectGardenGame({ ...s, display: { ...s.display, nodeId: null } }).quest).toBeNull();
@@ -47,6 +54,8 @@ describe("Garden Rescue game projection", () => {
       };
       const rendering = projectGardenGame(s);
       expect(rendering.restored).toEqual(ids.slice(0, i));
+      expect(rendering.encounter).toEqual({ id: ids[i], visitId: i + 1 });
+      expect(gardenGameEvents(previous, rendering).filter(event => event.type === "world.effect")).toEqual([]);
       events.push(...gardenGameEvents(previous, rendering));
       previous = rendering;
       s = {
@@ -67,6 +76,17 @@ describe("Garden Rescue game projection", () => {
         ...(i < 3
           ? [
               {
+                type: "world.effect",
+                runId: "run",
+                questId,
+                visitId: i + 1,
+                effect: Object.values(GARDEN_WORLD_EFFECTS)[i],
+              },
+            ]
+          : []),
+        ...(i < 3
+          ? [
+              {
                 type: "quest.started",
                 runId: "run",
                 questId: ids[i + 1],
@@ -78,6 +98,7 @@ describe("Garden Rescue game projection", () => {
       ]),
       { type: "game.ended", runId: "run", outcome: "completed", restored: [...ids] },
     ]);
+    expect(events.filter(event => event.type === "world.effect")).toHaveLength(3);
     expect(previous.status).toBe("celebrating");
     expect(gardenGameEvents(previous, projectGardenGame({ ...s, error: "failed" }))).toEqual([]);
     expect(projectGardenGame({ ...s, error: "failed" }).status).toBe("error");
@@ -129,6 +150,29 @@ describe("Garden Rescue game projection", () => {
       type: "game.started",
       runId: "new",
     });
+    expect(
+      gardenGameEvents(progressed, projectGardenGame(snapshot("new"))).filter(e => e.type === "world.effect"),
+    ).toEqual([]);
     expect(gardenGameEvents(first, projectGardenGame(null))).toEqual([]);
+  });
+
+  it("does not emit effects for an uncommitted answer", () => {
+    const current = projectGardenGame(snapshot());
+    const wrong = projectGardenGame({ ...snapshot(), awaitingSteering: true });
+    expect(gardenGameEvents(current, wrong).filter(event => event.type === "world.effect")).toEqual([]);
+  });
+
+  it("records an unobserved committing visit as unknown", () => {
+    const first = projectGardenGame(snapshot());
+    const third = projectGardenGame({ ...snapshot(), runtime: { ...snapshot().runtime!, nodeId: ids[2], visitId: 3 } });
+    expect(gardenGameEvents(first, third).filter(event => event.type === "world.effect")).toMatchObject([
+      { questId: ids[0], visitId: 1 },
+      { questId: ids[1], visitId: null },
+    ]);
+    const noEncounter = { ...first, encounter: null };
+    expect(gardenGameEvents(noEncounter, third).filter(event => event.type === "world.effect")).toMatchObject([
+      { visitId: null },
+      { visitId: null },
+    ]);
   });
 });
