@@ -28,6 +28,14 @@ export const GARDEN_RESCUE_THEME: CountingTheme = {
         { asset: "duckling", x: 0.5, y: 0.76, width: 0.2 },
         { asset: "duckling", x: 0.76, y: 0.72, width: 0.2 },
       ],
+      effect: {
+        id: "ducklings.crossed",
+        props: [
+          { asset: "lily-pad", x: 0.24, y: 0.59, width: 0.16 },
+          { asset: "lily-pad", x: 0.5, y: 0.63, width: 0.16 },
+          { asset: "lily-pad", x: 0.76, y: 0.59, width: 0.16 },
+        ],
+      },
     },
     "wake-butterflies": {
       background: "garden",

@@ -8,3 +8,30 @@
     opacity: 0;
   }
 }
+
+/* Duckling crossing */
+.effects[data-world-effect="ducklings.crossed"]:is([data-effect-state="playing"], [data-effect-state="held"])
+  [data-counting-object="duckling"] {
+  translate: 0 -65%;
+}
+
+.effects[data-world-effect="ducklings.crossed"][data-effect-state="playing"] [data-world-prop="lily-pad"] {
+  animation: duckling-pad-enter 450ms ease-out calc(var(--i, 0) * 120ms) backwards;
+}
+
+.effects[data-world-effect="ducklings.crossed"][data-effect-state="playing"] [data-counting-object="duckling"] {
+  animation: duckling-cross 1300ms ease-in-out calc(800ms + var(--i, 0) * 150ms) backwards;
+}
+
+@keyframes duckling-pad-enter {
+  from {
+    opacity: 0;
+    scale: 0.75;
+  }
+}
+
+@keyframes duckling-cross {
+  from {
+    translate: 0 0;
+  }
+}

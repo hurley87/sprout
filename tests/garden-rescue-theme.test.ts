@@ -40,6 +40,19 @@ describe("Garden Rescue theme", () => {
     }
   });
 
+  it("uses known assets and normalized placements for duckling crossing props", () => {
+    const effect = GARDEN_RESCUE_THEME.scenes["rescue-ducklings"].effect;
+    expect(effect?.id).toBe("ducklings.crossed");
+    expect(effect?.props.length).toBeGreaterThanOrEqual(3);
+    for (const prop of effect!.props) {
+      expect(GARDEN_RESCUE_THEME.assets).toHaveProperty(prop.asset);
+      for (const value of [prop.x, prop.y, prop.width]) {
+        expect(value).toBeGreaterThanOrEqual(0);
+        expect(value).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
   it("uses a fresh scattered butterfly layout", () => {
     const familiar = GARDEN_RESCUE_THEME.scenes["wake-butterflies"].objects;
     const fresh = GARDEN_RESCUE_THEME.scenes["fresh-challenge"].objects;

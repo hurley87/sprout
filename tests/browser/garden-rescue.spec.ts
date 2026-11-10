@@ -60,6 +60,7 @@ async function answer(
   microphone: Microphone,
   nodeId: string,
   outcome: Outcome = "correct",
+  onAcknowledged?: () => Promise<void>,
 ) {
   const node = GARDEN_RESCUE_LESSON.nodes[nodeId];
   await microphone.loadSpeech("counting");
@@ -93,6 +94,7 @@ async function answer(
   if (outcome === "correct")
     await expect(stage.locator("[data-success-numeral]")).toHaveText(String(node.presentation.quantity));
   else await expect(stage.locator("[data-success-numeral]")).toHaveCount(0);
+  await onAcknowledged?.();
   await page.evaluate(() => {
     (window as unknown as LocalSessionWindow).currentPeer.level.gain.value = 0;
   });
@@ -181,14 +183,24 @@ test("incorrect and unclear answers hold until correction", async ({ page }) => 
   await page.goto("/games/garden");
   await page.getByRole("button", { name: "Play", exact: true }).click();
   await scene(page, observer, GARDEN_RESCUE_NODE_IDS[0]);
+  const stage = page.locator('[data-scene-id="rescue-ducklings"]');
+  await expect(stage).toHaveAttribute("data-effect-state", "before");
+  await expect(stage.locator('[data-world-prop="lily-pad"]')).toHaveCount(0);
   for (const outcome of ["incorrect", "unclear"] as const) {
     verdict = outcome;
     await answer(page, observer, microphone, GARDEN_RESCUE_NODE_IDS[0], outcome);
     await scene(page, observer, GARDEN_RESCUE_NODE_IDS[0]);
+    await expect(stage).toHaveAttribute("data-effect-state", "before");
+    await expect(stage.locator('[data-world-prop="lily-pad"]')).toHaveCount(0);
     await expect(page.locator("[data-game-status]")).toHaveAttribute("data-game-restored", "");
   }
   verdict = "correct";
-  await answer(page, observer, microphone, GARDEN_RESCUE_NODE_IDS[0]);
+  await answer(page, observer, microphone, GARDEN_RESCUE_NODE_IDS[0], "correct", async () => {
+    await expect(stage).toHaveAttribute("data-effect-state", "playing");
+    await expect(stage.locator('[data-world-prop="lily-pad"]')).toHaveCount(3);
+    await expect(stage.locator('[data-counting-object="duckling"]')).toHaveCount(3);
+    await screenshots(page, "duckling-crossing");
+  });
   await scene(page, observer, GARDEN_RESCUE_NODE_IDS[1]);
   await expect(page.locator("[data-game-status]")).toHaveAttribute("data-game-restored", GARDEN_RESCUE_NODE_IDS[0]);
 });
@@ -208,7 +220,24 @@ test("reduced motion, stop and new run", async ({ page }) => {
     .toEqual(["none", "none", "none"]);
   const game = page.locator("[data-game-status]");
   const run = await game.getAttribute("data-game-run");
-  await answer(page, observer, microphone, GARDEN_RESCUE_NODE_IDS[0]);
+  const beforePositions = await stage
+    .locator('[data-counting-object="duckling"]')
+    .evaluateAll(objects => objects.map(object => object.getBoundingClientRect().top));
+  await answer(page, observer, microphone, GARDEN_RESCUE_NODE_IDS[0], "correct", async () => {
+    await expect(stage).toHaveAttribute("data-effect-state", "playing");
+    const pads = stage.locator('[data-world-prop="lily-pad"]');
+    await expect(pads).toHaveCount(3);
+    for (const pad of await pads.all()) await expect(pad).toBeVisible();
+    expect(await pads.evaluateAll(objects => objects.map(object => getComputedStyle(object).animationName))).toEqual([
+      "none",
+      "none",
+      "none",
+    ]);
+    const afterPositions = await stage
+      .locator('[data-counting-object="duckling"]')
+      .evaluateAll(objects => objects.map(object => object.getBoundingClientRect().top));
+    afterPositions.forEach((position, index) => expect(position).toBeLessThan(beforePositions[index]));
+  });
   await scene(page, observer, GARDEN_RESCUE_NODE_IDS[1]);
   await page.getByRole("button", { name: "Stop", exact: true }).click();
   await expect(game).toHaveAttribute("data-game-status", "stopped");
