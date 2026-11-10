@@ -9,7 +9,7 @@ export default function Lesson({ theme, debug = false }: { theme: CountingTheme;
     <LessonScreen
       theme={theme}
       debug={debug}
-      renderStage={({ node, ...props }) => (
+      renderStage={({ node, renderToken, sceneRef, motion }) => (
         <CountingStage
           theme={theme}
           node={
@@ -22,7 +22,9 @@ export default function Lesson({ theme, debug = false }: { theme: CountingTheme;
                 }
               : null
           }
-          {...props}
+          renderToken={renderToken}
+          sceneRef={sceneRef}
+          motion={motion}
         />
       )}
     />

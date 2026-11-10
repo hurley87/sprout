@@ -6,6 +6,7 @@ import { COUNTING_LESSON } from "./counting-lesson";
 import { COUNTING_HALLOWEEN_LESSON } from "./counting-halloween-lesson";
 import { COUNTING_CONCERT_LESSON } from "./counting-concert-lesson";
 import { ICE_CREAM_LESSON } from "./ice-cream-lesson";
+import { GARDEN_RESCUE_LESSON } from "./garden-rescue-lesson";
 import { CATCHING_UNICORNS_LESSON } from "./catching-unicorns-lesson";
 import { MAE386_LESSON } from "./mae386-lesson";
 import type { LessonDefinition } from "./lesson-definition";
@@ -20,6 +21,7 @@ const APPLICATION_LESSONS: Readonly<Record<string, LessonDefinition>> = {
   [COUNTING_HALLOWEEN_LESSON.id]: COUNTING_HALLOWEEN_LESSON,
   [COUNTING_CONCERT_LESSON.id]: COUNTING_CONCERT_LESSON,
   [ICE_CREAM_LESSON.id]: ICE_CREAM_LESSON,
+  [GARDEN_RESCUE_LESSON.id]: GARDEN_RESCUE_LESSON,
   [CATCHING_UNICORNS_LESSON.id]: CATCHING_UNICORNS_LESSON,
   [MAE386_LESSON.id]: MAE386_LESSON,
 };

@@ -20,18 +20,23 @@ function Backdrop({
   theme,
   background,
   plainBackdrop,
+  soft,
   imageProps,
 }: {
   theme: CountingTheme;
   background: string;
   plainBackdrop?: string;
+  soft?: boolean;
   imageProps?: Omit<AssetImageProps, "theme" | "asset">;
 }) {
   return (
     <div
-      className={plainBackdrop ? `${styles.background} ${styles[plainBackdrop]}` : styles.background}
+      className={[styles.background, plainBackdrop && styles[plainBackdrop], soft && styles.soft]
+        .filter(Boolean)
+        .join(" ")}
       data-background={background}
       data-plain-backdrop={plainBackdrop}
+      data-soft-backdrop={soft || undefined}
       aria-hidden="true"
     >
       {!plainBackdrop && <AssetImage theme={theme} asset={background} preload {...imageProps} />}
@@ -90,6 +95,7 @@ export function CountingStage({
             theme={theme}
             background={scene.background}
             plainBackdrop={scene.plainBackdrop}
+            soft={scene.softBackdrop}
             imageProps={imageEvents(scene.background)}
           />
           <div className={styles.objects} data-counting-objects aria-hidden="true">
