@@ -16,6 +16,7 @@ export type CountingScene = {
   readonly softBackdrop?: boolean;
   readonly object: string;
   readonly objects: readonly CountingPlacement[];
+  readonly effect?: { readonly id: string; readonly props: readonly CountingPlacement[] };
 };
 
 export const COUNTING_SCENES = {

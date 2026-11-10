@@ -50,6 +50,7 @@ export function CountingStage({
   renderToken,
   sceneRef,
   motion = "idle",
+  effect,
 }: {
   theme: CountingTheme;
   node: { id: string; sceneId: string; object: string; quantity: number } | null;
@@ -57,8 +58,10 @@ export function CountingStage({
   sceneRef?: Ref<HTMLDivElement>;
   /** Presentation only, derived from the runtime snapshot; it never gates render confirmation. */
   motion?: StageMotion;
+  effect?: { className?: string; state: "before" | "playing" | "held"; key?: string };
 }) {
   const scene = node ? countingScene(node, theme.scenes) : null;
+  const worldEffect = scene?.effect && effect ? scene.effect : undefined;
   const [loaded, setLoaded] = useState<ReadonlySet<string>>(new Set());
   const [failed, setFailed] = useState<ReadonlySet<string>>(new Set());
   const assets = scene
@@ -78,7 +81,7 @@ export function CountingStage({
   return (
     <div
       ref={sceneRef}
-      className={styles.stage}
+      className={worldEffect && effect?.className ? `${styles.stage} ${effect.className}` : styles.stage}
       role="img"
       aria-label={
         node ? `${node.quantity} ${node.object}${node.quantity === 1 ? "" : "s"} to count` : "Lesson complete"
@@ -88,6 +91,8 @@ export function CountingStage({
       data-node-id={node?.id ?? "complete"}
       data-scene-id={node?.sceneId ?? "complete"}
       data-motion={motion}
+      data-world-effect={worldEffect?.id}
+      data-effect-state={worldEffect ? effect?.state : undefined}
     >
       {scene ? (
         <>
@@ -99,6 +104,37 @@ export function CountingStage({
             imageProps={imageEvents(scene.background)}
           />
           <div className={styles.objects} data-counting-objects aria-hidden="true">
+            {worldEffect &&
+              effect &&
+              worldEffect.props.map((prop, index) =>
+                effect.state === "before" ? (
+                  <AssetImage
+                    key={`preload:${index}`}
+                    theme={theme}
+                    asset={prop.asset}
+                    preload
+                    style={{ display: "none" }}
+                  />
+                ) : (
+                  <div
+                    key={`${effect.key ?? "effect"}:${index}`}
+                    className={styles.object}
+                    data-world-prop={prop.asset}
+                    style={
+                      {
+                        left: `${prop.x * 100}%`,
+                        top: `${prop.y * 100}%`,
+                        width: `${prop.width * 100}%`,
+                        aspectRatio: aspect(prop.asset),
+                        transform: `translate(-50%, -50%) scaleX(${prop.flipped ? -1 : 1})`,
+                        ["--i" as string]: index,
+                      } as CSSProperties
+                    }
+                  >
+                    <AssetImage theme={theme} asset={prop.asset} preload />
+                  </div>
+                ),
+              )}
             {motion === "success" && (
               <div className={styles.numeral} data-success-numeral>
                 {node!.quantity}

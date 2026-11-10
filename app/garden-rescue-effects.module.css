@@ -1,0 +1,10 @@
+/* Final styles are static; animations start from the initial frame so reduced motion shows the finished picture. */
+.effects:is([data-effect-state="playing"], [data-effect-state="held"]) [data-world-prop] {
+  animation: world-prop-enter 400ms ease-out backwards;
+}
+
+@keyframes world-prop-enter {
+  from {
+    opacity: 0;
+  }
+}
