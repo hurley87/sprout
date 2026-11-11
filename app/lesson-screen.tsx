@@ -55,6 +55,7 @@ export function LessonScreen({
   presentationCopy,
   exportReport = runtime => runtime.report(),
   exportPrefix = "sprout-lesson",
+  startButtonClassName,
 }: {
   theme: LessonScreenTheme;
   debug?: boolean;
@@ -65,6 +66,7 @@ export function LessonScreen({
   /** Builds the diagnostics download; runs only when the export is requested. */
   exportReport?: (runtime: LessonRuntime) => unknown;
   exportPrefix?: string;
+  startButtonClassName?: string;
 }) {
   const lessonDefinition = theme.lesson;
   const { audio, sceneRef, snapshot, live, start, stop, download } = useVoiceDemo({
@@ -165,7 +167,11 @@ export function LessonScreen({
             restartLabel="Play again"
             showDownload={false}
             showStop={live}
-            classNames={{ controls: styles.controls, startButton: styles.play, button: styles.stop }}
+            classNames={{
+              controls: styles.controls,
+              startButton: `${styles.play} ${startButtonClassName ?? ""}`,
+              button: styles.stop,
+            }}
           />
         </div>
       </section>

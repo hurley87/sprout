@@ -98,6 +98,7 @@ export default function GardenRescueLesson({ debug = false }: { debug?: boolean 
   return (
     <LessonScreen
       theme={GARDEN_RESCUE_THEME}
+      startButtonClassName={styles.play}
       debug={debug}
       exportPrefix={GARDEN_EXPORT_PREFIX}
       exportReport={runtime => buildGardenExport({ report: runtime.report(), gameEvents: gameEvents.current })}
