@@ -51,8 +51,12 @@ export function CountingStage({
   sceneRef,
   motion = "idle",
   effect,
+  accessibleLabel,
+  artworkFallbacks,
 }: {
   theme: CountingTheme;
+  accessibleLabel?: string;
+  artworkFallbacks?: Readonly<Record<string, string>>;
   node: { id: string; sceneId: string; object: string; quantity: number } | null;
   renderToken?: string;
   sceneRef?: Ref<HTMLDivElement>;
@@ -67,7 +71,7 @@ export function CountingStage({
   const assets = scene
     ? [...(scene.plainBackdrop ? [] : [scene.background]), ...scene.objects.map(object => object.asset)]
     : [];
-  const pending = assets.some(asset => !loaded.has(asset));
+  const pending = assets.some(asset => !loaded.has(asset) && !(artworkFallbacks && failed.has(asset)));
   const unavailable = assets.some(asset => failed.has(asset));
   const imageEvents = (asset: string) => ({
     onLoad: () => setLoaded(previous => new Set(previous).add(asset)),
@@ -84,7 +88,8 @@ export function CountingStage({
       className={worldEffect && effect?.className ? `${styles.stage} ${effect.className}` : styles.stage}
       role="img"
       aria-label={
-        node ? `${node.quantity} ${node.object}${node.quantity === 1 ? "" : "s"} to count` : "Lesson complete"
+        accessibleLabel ??
+        (node ? `${node.quantity} ${node.object}${node.quantity === 1 ? "" : "s"} to count` : "Lesson complete")
       }
       aria-busy={pending}
       data-render-token={renderToken}
@@ -158,17 +163,32 @@ export function CountingStage({
                   } as CSSProperties
                 }
               >
-                <AssetImage
-                  theme={theme}
-                  asset={object.asset}
-                  className={styles.character}
-                  preload
-                  {...imageEvents(object.asset)}
-                />
+                {artworkFallbacks && failed.has(object.asset) ? (
+                  <span
+                    data-artwork-fallback
+                    style={{
+                      display: "grid",
+                      placeItems: "center",
+                      width: "100%",
+                      height: "100%",
+                      fontSize: "min(12cqw, 12cqh)",
+                    }}
+                  >
+                    {artworkFallbacks[object.asset] ?? "●"}
+                  </span>
+                ) : (
+                  <AssetImage
+                    theme={theme}
+                    asset={object.asset}
+                    className={styles.character}
+                    preload
+                    {...imageEvents(object.asset)}
+                  />
+                )}
               </div>
             ))}
           </div>
-          {(pending || unavailable) && (
+          {(pending || (unavailable && !artworkFallbacks)) && (
             <div className={styles.loading} aria-hidden="true" data-artwork-state={unavailable ? "error" : "loading"}>
               {unavailable ? "The picture couldn’t load. Ask a grown-up to reload." : "Getting the picture ready…"}
             </div>

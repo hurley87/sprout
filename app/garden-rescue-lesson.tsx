@@ -30,8 +30,17 @@ function GardenStage({
       data-game-released={game.released.join(" ")}
       data-effect-state={state}
     >
+      <span className="sr-only" aria-live="polite" aria-atomic="true">
+        {node ? `Garden quest: ${node.id.replaceAll("-", " ")}` : "Garden adventure complete"}
+      </span>
       {node?.id === "fresh-challenge" && <span className={styles.challengeLabel}>New challenge!</span>}
       <CountingStage
+        artworkFallbacks={{ duckling: "🐤", "butterfly-sleeping": "🦋", "butterfly-awake": "🦋", sprout: "🌱" }}
+        accessibleLabel={
+          node
+            ? `${node.presentation.quantity} ${node.presentation.object === "butterfly" ? "butterflies" : `${node.presentation.object}s`} to count`
+            : "Lesson complete"
+        }
         theme={
           game.status === "finished" ||
           (node === null &&
