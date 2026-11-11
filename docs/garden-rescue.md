@@ -93,3 +93,5 @@ The exported game-event log is derived from the snapshots React renders, as the 
 ## Not performed
 
 Live microphone, GPT-Live/Jev and child playtests (#108) were not performed for #106 or #107. Provider-free tests do not establish live provider behaviour or child usability, and the export has not been reviewed against a live session's report.
+
+For real-microphone and parent-observed sessions, use the [Garden Rescue playtest protocol](garden-rescue-playtest.md).
