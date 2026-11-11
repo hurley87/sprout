@@ -1128,6 +1128,16 @@ export class LessonRuntime {
       category = "invalid_json";
       const body: unknown = await response.json();
       if (abort.signal.aborted || this.status !== "live") return;
+      // A result for speech from a retired transport source must not become current evidence.
+      if ((this.transport.activeSourceId ?? null) !== origin.transportSourceId) {
+        this.log(
+          "classifier.source_replaced",
+          { transportSourceId: origin.transportSourceId, activeSourceId: this.transport.activeSourceId ?? null },
+          source,
+          speaker,
+        );
+        return;
+      }
       if (timeout.aborted) throw new Error("Classification timed out");
       category = "invalid_schema";
       if (!body || typeof body !== "object" || !("proposal" in body)) throw new Error("Invalid classifier response");

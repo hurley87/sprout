@@ -163,8 +163,8 @@ it("ignores old audio source events and disconnects without committing", async (
   expect(successes(run)).toEqual([]);
 });
 
-// P1: in-flight classification is not invalidated when the transport source changes.
-it.fails("rejects old-source input after microphone replacement and accepts the new source", async () => {
+// An in-flight classification from a retired transport source must not commit.
+it("rejects old-source input after microphone replacement and accepts the new source", async () => {
   const run = (active = await gardenRun(transport));
   const base = vi.mocked(fetch).getMockImplementation()!;
   let release!: () => void;
