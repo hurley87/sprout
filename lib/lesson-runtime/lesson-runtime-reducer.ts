@@ -1337,12 +1337,7 @@ export function reduceLessonRuntime(
       };
       break;
     case "support.close.timeout":
-      if (
-        !lesson.supportLimit ||
-        !state.supportLimitReached?.closeSent ||
-        state.tutorOutputObserved
-      )
-        return ignored;
+      if (!lesson.supportLimit || !state.supportLimitReached?.closeSent || state.tutorOutputObserved) return ignored;
       next = { ...next, supportLimitReached: { ...state.supportLimitReached, timedOut: true } };
       break;
     case "output.activity":
