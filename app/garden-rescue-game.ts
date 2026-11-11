@@ -39,6 +39,7 @@ export function gardenEffectState(
     !snapshot.error &&
     runtime?.phase === "rendering" &&
     origin &&
+    runtime.pendingRender?.outcome?.outcome !== "released_after_support_limit" &&
     origin.runtimeId === runtime.runtimeId &&
     origin.nodeId === snapshot.display.nodeId
   )

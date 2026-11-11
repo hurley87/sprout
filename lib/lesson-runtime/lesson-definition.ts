@@ -4,6 +4,8 @@ export type LessonNodeDefinition = {
   readonly presentation: Readonly<Record<string, string | number | boolean>>;
   readonly learningObjective: string;
   readonly tutorBrief: string;
+  /** Authored evidence classification only; never grants answer or transition authority. */
+  readonly evidenceRole?: "rehearsal" | "transfer";
   /** Assess the saved conversation when this scene's render is confirmed, before steering. */
   readonly assessConversationOnEntry?: boolean;
   /** Terminal presentation: complete after observed tutor output drains, without a learner answer. */
@@ -49,6 +51,7 @@ export type LessonDefinition = {
   /** Minimum time an accepted success stays on the answered scene, measured from when it becomes
    * visible, before the next scene is requested. Lets authored success feedback finish playing. */
   readonly successHoldMs?: number;
+  readonly supportLimit?: { readonly maxDifficulties: number; readonly instruction: string };
   /** Greet the learner by the server-configured first name (SPROUT_CHILD_NAME), when one is set. */
   readonly addressLearnerByName?: boolean;
   /** Concise topic labels for an accepted-evidence terminal close. No answer text. */
@@ -85,6 +88,8 @@ export function validateLessonDefinition(value: LessonDefinition): LessonDefinit
   if (!value.id || !Object.hasOwn(value.nodes, value.initialNodeId))
     throw new Error("Lesson needs an authored initial node");
   for (const [id, node] of Object.entries(value.nodes)) {
+    if (node.evidenceRole !== undefined && node.evidenceRole !== "rehearsal" && node.evidenceRole !== "transfer")
+      throw new Error(`Lesson node ${id} has an invalid evidence role`);
     if (id !== node.id) throw new Error(`Lesson node key does not match node identity: ${id}`);
     if (node.onSuccess.kind === "node" && !Object.hasOwn(value.nodes, node.onSuccess.nodeId))
       throw new Error(`Lesson edge from ${id} targets an unknown node`);
@@ -131,6 +136,16 @@ export function validateLessonDefinition(value: LessonDefinition): LessonDefinit
     (!Number.isSafeInteger(value.successHoldMs) || value.successHoldMs <= 0 || value.successHoldMs > 5_000)
   )
     throw new Error("Success hold must be a positive whole number of milliseconds up to 5000");
+  if (
+    value.supportLimit !== undefined &&
+    (value.supportLimit === null ||
+      typeof value.supportLimit !== "object" ||
+      !Number.isSafeInteger(value.supportLimit.maxDifficulties) ||
+      value.supportLimit.maxDifficulties < 1 ||
+      typeof value.supportLimit.instruction !== "string" ||
+      !value.supportLimit.instruction.trim())
+  )
+    throw new Error("Support limit needs a positive whole number and a close instruction");
   if (value.questionGroups) {
     const groups = value.questionGroups;
     const ids = groups.flatMap(group => group.nodeIds);

@@ -9,7 +9,7 @@ vi.mock("../../lib/lesson-runtime/lesson-runtime-reducer", async importOriginal 
     ...current,
     createLessonRuntime(...args: Parameters<typeof current.createLessonRuntime>) {
       const result = current.createLessonRuntime(...args);
-      if (args[1]?.lesson?.id !== "mae386")
+      if (args[1]?.lesson?.id !== "mae386" && !args[1]?.lesson?.supportLimit)
         expect(result, "baseline initial state").toEqual(baseline.createLessonRuntime(...args));
       return result;
     },
@@ -18,6 +18,8 @@ vi.mock("../../lib/lesson-runtime/lesson-runtime-reducer", async importOriginal 
       // MAE386 and its new events have no pre-instrumentation counterpart.
       if (
         args[2].id === "mae386" ||
+        !!args[2].supportLimit ||
+        args[1].type === "support.close.sent" ||
         args[1].type === "question.observation" ||
         args[1].type === "textless.turn.resolved"
       )

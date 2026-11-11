@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { GARDEN_RESCUE_LESSON, GARDEN_RESCUE_NODE_IDS } from "../../lib/lesson-runtime/garden-rescue-lesson";
+import { redactionViolations } from "../helpers/export-redaction";
 import { classifierProposal } from "../helpers/runtime-classifier";
 import { installLessonObserver, type LessonObserver } from "../helpers/lesson-observer";
 import { installLocalSession, type LocalSessionWindow } from "../helpers/local-voice-session";
@@ -26,22 +27,28 @@ async function screenshots(page: Page, nodeId: string) {
   }
 }
 
-async function setup(page: Page, verdict: () => Outcome = () => "correct") {
+/** `hint` labels the latest tutor line "helping" when it matches, as a real classifier describes the
+ * latest tutor message even when the child spoke after it; otherwise tutor turns are acknowledging. */
+async function setup(page: Page, verdict: () => Outcome = () => "correct", hint?: RegExp) {
   const microphone = await installSyntheticMicrophone(page);
   await installLocalSession(page);
   const observer = await installLessonObserver(page);
-  await page.route("**/api/classify", route =>
-    route.fulfill({
+  await page.route("**/api/classify", route => {
+    const input = route.request().postDataJSON();
+    const tutor = String(input.transcript ?? "")
+      .split("\n")
+      .findLast(line => line.startsWith("Tutor:"));
+    return route.fulfill({
       json: {
-        proposal: classifierProposal(route.request().postDataJSON(), {
+        proposal: classifierProposal(input, {
           answerOutcome: verdict(),
           answerCommitment: "committed",
           supportState: verdict() === "unclear" ? "needs_help" : "none",
-          tutorState: "acknowledging",
+          tutorState: hint && tutor && hint.test(tutor) ? "helping" : "acknowledging",
         }),
       },
-    }),
-  );
+    });
+  });
   return { microphone, observer };
 }
 
@@ -116,6 +123,7 @@ test("plays the fixed quest order and records events", async ({ page }) => {
   for (const [index, nodeId] of GARDEN_RESCUE_NODE_IDS.entries()) {
     const stage = await scene(page, observer, nodeId);
     const node = GARDEN_RESCUE_LESSON.nodes[nodeId];
+    await expect(page.getByText("New challenge!", { exact: true })).toHaveCount(index === 3 ? 1 : 0);
     await expect(stage.locator(`[data-counting-object="${node.presentation.object}"]`)).toHaveCount(
       Number(node.presentation.quantity),
     );
@@ -237,6 +245,25 @@ test("effects and counting objects remain within responsive stages", async ({ pa
         }
       }
     });
+  }
+  const stage = await scene(page, observer, "fresh-challenge");
+  const label = page.getByText("New challenge!", { exact: true });
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 844, height: 390 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect(label).toBeVisible();
+    const badge = (await label.boundingBox())!;
+    for (const item of await stage.locator("[data-counting-object]").all()) {
+      const box = (await item.boundingBox())!;
+      expect(
+        badge.x + badge.width <= box.x ||
+          box.x + box.width <= badge.x ||
+          badge.y + badge.height <= box.y ||
+          box.y + box.height <= badge.y,
+      ).toBe(true);
+    }
   }
 });
 
@@ -479,4 +506,152 @@ test("reduced motion, stop and new run", async ({ page }) => {
   await expect(game).not.toHaveAttribute("data-game-run", run!);
   await expect(game).toHaveAttribute("data-game-restored", "");
   await expect(page.getByRole("list", { name: "Game events" }).locator("li")).toHaveCount(2);
+});
+
+test("releases quests after repeated difficulty and finishes gently", async ({ page }) => {
+  test.setTimeout(120_000);
+  let outcome: Outcome = "correct";
+  const { microphone, observer } = await setup(page, () => outcome);
+  await page.goto("/games/garden?debug=1");
+  await page.getByRole("button", { name: "Play", exact: true }).click();
+  const first = GARDEN_RESCUE_NODE_IDS[0];
+  await scene(page, observer, first);
+  outcome = "incorrect";
+  for (let i = 0; i < 3; i++)
+    await answer(
+      page,
+      observer,
+      microphone,
+      first,
+      "incorrect",
+      undefined,
+      i === 2
+        ? "It's fine to stop here. The garden friends will be OK. Thank you for helping!"
+        : "Try pointing to each one.",
+    );
+  // Keep the fake verdict incorrect until the release departs: correct evidence accepted
+  // before departure would otherwise (rightly) win over the release.
+  await scene(page, observer, GARDEN_RESCUE_NODE_IDS[1]);
+  outcome = "correct";
+  for (const nodeId of GARDEN_RESCUE_NODE_IDS.slice(1, 3)) {
+    await scene(page, observer, nodeId);
+    await answer(page, observer, microphone, nodeId);
+  }
+  const last = GARDEN_RESCUE_NODE_IDS[3];
+  await scene(page, observer, last);
+  outcome = "incorrect";
+  for (let i = 0; i < 3; i++)
+    await answer(
+      page,
+      observer,
+      microphone,
+      last,
+      "incorrect",
+      undefined,
+      i === 2
+        ? "It's fine to stop here. The garden friends will be OK. Thank you for helping!"
+        : "Try pointing to each one.",
+    );
+  const game = page.locator("[data-game-status]");
+  await expect(game).toHaveAttribute("data-game-status", "finished");
+  await expect(game).toHaveAttribute("data-game-released", `${first} ${last}`);
+  await expect(page.locator('[data-scene-id="complete"] [data-celebration-character="duckling"]')).toHaveCount(0);
+  await expect(page.getByRole("list", { name: "Adventure progress" }).locator("li").first().locator("img")).toHaveCount(
+    0,
+  );
+  await expect(page.getByText("Thank you for helping the garden friends!", { exact: true }).first()).toBeVisible();
+  const events = (await page.getByRole("list", { name: "Game events" }).locator("li").allTextContents()).map(text =>
+    JSON.parse(text),
+  );
+  expect(events).toContainEqual(expect.objectContaining({ type: "quest.released", questId: first }));
+  expect(events).not.toContainEqual(expect.objectContaining({ type: "quest.succeeded", questId: first }));
+  expect(events).not.toContainEqual(expect.objectContaining({ type: "world.effect", questId: first }));
+  expect(events).toContainEqual(expect.objectContaining({ type: "quest.released", questId: last }));
+  expect(events).not.toContainEqual(expect.objectContaining({ type: "quest.succeeded", questId: last }));
+  expect(events).not.toContainEqual(expect.objectContaining({ type: "world.effect", questId: last }));
+});
+
+async function exportDiagnostics(page: Page) {
+  const downloading = page.waitForEvent("download");
+  await page
+    .getByRole("complementary", { name: "Developer diagnostics" })
+    .getByRole("button", { name: "Export diagnostics" })
+    .click();
+  const download = await downloading;
+  const exported = JSON.parse(await readFile((await download.path())!, "utf8"));
+  expect(download.suggestedFilename()).toBe(`sprout-garden-${exported.runtimeId}.json`);
+  expect(redactionViolations(exported, exported.runtimeId)).toEqual([]);
+  expect(exported.game.provenance).toMatchObject({
+    schema: "garden-export/v1",
+    summarySchema: "garden-evidence/v1",
+    lessonId: "garden-rescue",
+    lessonRevision: expect.stringMatching(/^fnv1a64:[0-9a-f]{16}$/),
+    runId: exported.runtimeId,
+    build: "unknown",
+  });
+  expect(exported.game.summary.runId).toBe(exported.runtimeId);
+  return exported;
+}
+
+test("exports a redacted evidence trace with a hinted success and the transfer probe", async ({ page }) => {
+  test.setTimeout(150_000);
+  let verdict: Outcome = "unclear";
+  const hint = "Try pointing to each duckling.";
+  const { microphone, observer } = await setup(page, () => verdict, /pointing to each duckling/);
+  await page.goto("/games/garden?debug=1");
+  await page.getByRole("button", { name: "Play", exact: true }).click();
+  const first = GARDEN_RESCUE_NODE_IDS[0];
+  await scene(page, observer, first);
+  const before = await observer.cursor();
+  await answer(page, observer, microphone, first, "unclear", undefined, hint);
+  // Let the hint's own tutor-turn classification land before the child answers again.
+  await observer.waitForEvent("tracking.feedback", {
+    after: before,
+    scope: { runtimeId: before.runtimeId, nodeId: first },
+    detail: { semantic: "helping" },
+  });
+  await scene(page, observer, first);
+  verdict = "correct";
+  for (const [index, nodeId] of GARDEN_RESCUE_NODE_IDS.entries()) {
+    await scene(page, observer, nodeId);
+    await answer(page, observer, microphone, nodeId);
+    if (index < 3) await scene(page, observer, GARDEN_RESCUE_NODE_IDS[index + 1]);
+  }
+  await expect(page.locator("[data-game-status]")).toHaveAttribute("data-game-status", "celebrating");
+  const exported = await exportDiagnostics(page);
+  const { summary, events } = exported.game;
+  expect(summary.schema).toBe("garden-evidence/v1");
+  expect(summary.ending).toBe("completed_all_restored");
+  expect(summary.integrity).toEqual({ ok: true, issues: [] });
+  expect(summary.rehearsals.map((visit: { questId: string }) => visit.questId)).toEqual(
+    GARDEN_RESCUE_NODE_IDS.slice(0, 3),
+  );
+  expect(summary.rehearsals[0]).toMatchObject({ support: "hinted", outcome: "succeeded" });
+  expect(summary.rehearsals[0].hints.count).toBeGreaterThanOrEqual(1);
+  expect(summary.transfer).toMatchObject({
+    questId: GARDEN_RESCUE_NODE_IDS[3],
+    probe: "transfer",
+    outcome: "succeeded",
+  });
+  expect(events.filter((event: { type: string }) => event.type === "world.effect")).toHaveLength(3);
+  // Conversation text stays in the disclosed diagnostics; the summary carries none of it.
+  expect(JSON.stringify(exported.events)).toContain(hint);
+  expect(JSON.stringify(summary)).not.toContain("pointing");
+});
+
+test("a stopped run exports as stopped, never completed", async ({ page }) => {
+  test.setTimeout(90_000);
+  const { microphone, observer } = await setup(page);
+  await page.goto("/games/garden?debug=1");
+  await page.getByRole("button", { name: "Play", exact: true }).click();
+  await scene(page, observer, GARDEN_RESCUE_NODE_IDS[0]);
+  await answer(page, observer, microphone, GARDEN_RESCUE_NODE_IDS[0]);
+  await scene(page, observer, GARDEN_RESCUE_NODE_IDS[1]);
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  await expect(page.locator("[data-game-status]")).toHaveAttribute("data-game-status", "stopped");
+  const exported = await exportDiagnostics(page);
+  expect(exported.game.summary.ending).toBe("stopped");
+  expect(exported.game.summary.transfer).toBeNull();
+  expect(exported.game.events.at(-1)).toMatchObject({ type: "game.ended", outcome: "stopped" });
+  expect(JSON.stringify(exported.game)).not.toMatch(/"(?:completed|completed_all_restored|completed_with_release)"/);
 });

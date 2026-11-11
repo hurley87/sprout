@@ -9,7 +9,12 @@ import {
   type LessonNodeDefinition,
 } from "@/lib/lesson-runtime/lesson-definition";
 import type { PresentationCopy, StageMotion } from "./lesson-presentation";
-import { LESSON_TIMING, transitionQuietMs, type LessonSnapshot } from "@/lib/lesson-runtime/lesson-runtime";
+import {
+  LESSON_TIMING,
+  transitionQuietMs,
+  type LessonRuntime,
+  type LessonSnapshot,
+} from "@/lib/lesson-runtime/lesson-runtime";
 import { useVoiceDemo } from "@/components/voice-demo/use-voice-demo";
 import { VoiceDemoControls } from "@/components/voice-demo/controls";
 import { lessonPresentation, showsSuccessFeedback, stageMotion, voiceActivity } from "./lesson-presentation";
@@ -46,17 +51,26 @@ export function LessonScreen({
   debug = false,
   renderStage,
   renderDebug,
+  progressOutcome,
+  presentationCopy,
+  exportReport = runtime => runtime.report(),
+  exportPrefix = "sprout-lesson",
 }: {
   theme: LessonScreenTheme;
   debug?: boolean;
   renderStage: (props: LessonStageProps) => ReactNode;
   renderDebug?: (snapshot: LessonSnapshot | null) => ReactNode;
+  presentationCopy?: (snapshot: LessonSnapshot | null) => PresentationCopy;
+  progressOutcome?: (snapshot: LessonSnapshot | null, id: string) => "succeeded" | "released" | undefined;
+  /** Builds the diagnostics download; runs only when the export is requested. */
+  exportReport?: (runtime: LessonRuntime) => unknown;
+  exportPrefix?: string;
 }) {
   const lessonDefinition = theme.lesson;
   const { audio, sceneRef, snapshot, live, start, stop, download } = useVoiceDemo({
     lesson: lessonDefinition,
-    exportReport: runtime => runtime.report(),
-    exportPrefix: "sprout-lesson",
+    exportReport,
+    exportPrefix,
   });
   const display = snapshot?.display;
   const status = snapshot?.status;
@@ -72,7 +86,7 @@ export function LessonScreen({
         ? { label: theme.successLabel(node) }
         : { quantity: Number(node.presentation.quantity), object: String(node.presentation.object) }
       : null,
-    theme.copy,
+    presentationCopy?.(snapshot) ?? theme.copy,
   );
   const completed = presentation.kind === "complete";
   const glow = theme.statusCue === "glow";
@@ -111,7 +125,17 @@ export function LessonScreen({
         <div className={styles.bottom}>
           <ol aria-label="Adventure progress" className={`flex items-center gap-3 ${styles.progress}`}>
             {nodeIds.map((id, index) => {
-              const progress = index < step ? "done" : index === step ? "current" : "upcoming";
+              const outcome = progressOutcome?.(snapshot, id);
+              const progress =
+                outcome === "succeeded"
+                  ? "done"
+                  : outcome === "released"
+                    ? "upcoming"
+                    : index < step && !progressOutcome
+                      ? "done"
+                      : index === step
+                        ? "current"
+                        : "upcoming";
               const icon = progress === "done" ? theme.progressIcons?.[id] : undefined;
               return (
                 <li

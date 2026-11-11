@@ -7,25 +7,37 @@ import type { LessonSnapshot } from "../lesson-runtime/lesson-runtime";
 import type { LessonRuntimeState } from "../lesson-runtime/lesson-runtime-reducer";
 
 export type GardenQuestId = GardenRescueNodeId;
+export type GardenProbe = "rehearsal" | "transfer";
+const probeFor = (id: GardenQuestId): GardenProbe => {
+  const role = GARDEN_RESCUE_LESSON.nodes[id].evidenceRole;
+  if (!role) throw new Error(`Garden quest ${id} needs an evidence role`);
+  return role;
+};
 export const GARDEN_WORLD_EFFECTS = {
   "rescue-ducklings": "ducklings.crossed",
   "wake-butterflies": "butterflies.awakened",
   "grow-flowers": "flowers.bloomed",
 } as const;
 export type GardenWorldEffect = (typeof GARDEN_WORLD_EFFECTS)[keyof typeof GARDEN_WORLD_EFFECTS];
-export type GardenGameStatus = "ready" | "starting" | "playing" | "celebrating" | "stopped" | "error";
+export type GardenGameStatus = "ready" | "starting" | "playing" | "celebrating" | "finished" | "stopped" | "error";
 export type GardenGameSnapshot = Pick<LessonSnapshot, "status" | "display" | "error" | "awaitingSteering"> & {
   readonly runtime: Pick<
     LessonRuntimeState,
-    "runtimeId" | "lessonId" | "nodeId" | "visitId" | "phase" | "pendingRender"
+    "runtimeId" | "lessonId" | "nodeId" | "visitId" | "phase" | "pendingRender" | "visitOutcomes"
   > | null;
 };
 export type GardenGameState = {
   readonly status: GardenGameStatus;
   readonly runId: string | null;
-  readonly quest: { readonly id: GardenQuestId; readonly visitId: number; readonly renderToken: string } | null;
-  readonly encounter: { readonly id: GardenQuestId; readonly visitId: number } | null;
+  readonly quest: {
+    readonly id: GardenQuestId;
+    readonly visitId: number;
+    readonly renderToken: string;
+    readonly probe: GardenProbe;
+  } | null;
+  readonly encounter: { readonly id: GardenQuestId; readonly visitId: number; readonly probe: GardenProbe } | null;
   readonly restored: readonly GardenQuestId[];
+  readonly released: readonly GardenQuestId[];
 };
 
 export type GardenGameEvent =
@@ -36,13 +48,16 @@ export type GardenGameEvent =
       readonly questId: GardenQuestId;
       readonly visitId: number;
       readonly renderToken: string;
+      readonly probe: GardenProbe;
     }
+  | { readonly type: "quest.released"; readonly runId: string; readonly questId: GardenQuestId }
   | { readonly type: "quest.succeeded"; readonly runId: string; readonly questId: GardenQuestId }
   | {
       readonly type: "game.ended";
       readonly runId: string;
       readonly outcome: "completed" | "stopped" | "error";
       readonly restored: readonly GardenQuestId[];
+      readonly released: readonly GardenQuestId[];
     }
   | {
       readonly type: "world.effect";
@@ -63,37 +78,52 @@ export type GardenGameEvent =
       readonly modality: "touch" | "keyboard";
     };
 
-const ready: GardenGameState = { status: "ready", runId: null, quest: null, encounter: null, restored: [] };
+const ready: GardenGameState = {
+  status: "ready",
+  runId: null,
+  quest: null,
+  encounter: null,
+  restored: [],
+  released: [],
+};
 
 /** Read-only projection: a pending render is not yet a committed success. */
 export function projectGardenGame(snapshot: GardenGameSnapshot | null): GardenGameState {
   if (!snapshot || (snapshot.runtime && snapshot.runtime.lessonId !== GARDEN_RESCUE_LESSON.id)) return ready;
   const runtime = snapshot.runtime;
+  const restored = GARDEN_RESCUE_NODE_IDS.filter(id =>
+    runtime?.visitOutcomes?.some(outcome => outcome.nodeId === id && outcome.outcome === "succeeded"),
+  );
+  const released = GARDEN_RESCUE_NODE_IDS.filter(id =>
+    runtime?.visitOutcomes?.some(
+      outcome => outcome.nodeId === id && outcome.outcome === "released_after_support_limit",
+    ),
+  );
   const status: GardenGameStatus = snapshot.error
     ? "error"
     : runtime?.phase === "complete"
-      ? "celebrating"
+      ? restored.length === GARDEN_RESCUE_NODE_IDS.length
+        ? "celebrating"
+        : "finished"
       : snapshot.status === "ended"
         ? "stopped"
         : snapshot.status !== "live" || !runtime
           ? "starting"
           : "playing";
-  if (!runtime) return { status, runId: null, quest: null, encounter: null, restored: [] };
+  if (!runtime) return { status, runId: null, quest: null, encounter: null, restored: [], released: [] };
   const authoritativeNode =
     runtime.phase === "rendering" && runtime.pendingRender ? runtime.pendingRender.origin.nodeId : runtime.nodeId;
-  const index = GARDEN_RESCUE_NODE_IDS.findIndex(id => id === authoritativeNode);
   const encounterId = GARDEN_RESCUE_NODE_IDS.find(id => id === authoritativeNode);
   const encounter = encounterId
     ? {
         id: encounterId,
+        probe: probeFor(encounterId),
         visitId:
           runtime.phase === "rendering" && runtime.pendingRender
             ? runtime.pendingRender.origin.visitId
             : runtime.visitId,
       }
     : null;
-  const restored =
-    runtime.phase === "complete" ? [...GARDEN_RESCUE_NODE_IDS] : GARDEN_RESCUE_NODE_IDS.slice(0, Math.max(index, 0));
   const questId = GARDEN_RESCUE_NODE_IDS.find(id => id === runtime.nodeId);
   const quest =
     status === "playing" &&
@@ -101,12 +131,13 @@ export function projectGardenGame(snapshot: GardenGameSnapshot | null): GardenGa
     !snapshot.awaitingSteering &&
     snapshot.display.nodeId === runtime.nodeId &&
     questId
-      ? { id: questId, visitId: runtime.visitId, renderToken: snapshot.display.token }
+      ? { id: questId, visitId: runtime.visitId, renderToken: snapshot.display.token, probe: probeFor(questId) }
       : null;
-  return { status, runId: runtime.runtimeId, quest, encounter, restored };
+  return { status, runId: runtime.runtimeId, quest, encounter, restored, released };
 }
 
-const terminal = (status: GardenGameStatus) => status === "celebrating" || status === "stopped" || status === "error";
+const terminal = (status: GardenGameStatus) =>
+  status === "celebrating" || status === "finished" || status === "stopped" || status === "error";
 
 /** Diff consecutive projections from the same authoritative stream; terminal runs are absorbing. */
 export function gardenGameEvents(previous: GardenGameState, next: GardenGameState): GardenGameEvent[] {
@@ -129,6 +160,10 @@ export function gardenGameEvents(previous: GardenGameState, next: GardenGameStat
       }
     }
   }
+  for (const questId of GARDEN_RESCUE_NODE_IDS) {
+    if (next.released.includes(questId) && !baseline.released.includes(questId))
+      events.push({ type: "quest.released", runId, questId });
+  }
   if (next.quest && (next.quest.id !== baseline.quest?.id || next.quest.visitId !== baseline.quest.visitId)) {
     events.push({
       type: "quest.started",
@@ -136,14 +171,19 @@ export function gardenGameEvents(previous: GardenGameState, next: GardenGameStat
       questId: next.quest.id,
       visitId: next.quest.visitId,
       renderToken: next.quest.renderToken,
+      probe: next.quest.probe,
     });
   }
   if (terminal(next.status))
     events.push({
       type: "game.ended",
       runId,
-      outcome: next.status === "celebrating" ? "completed" : (next.status as "stopped" | "error"),
+      outcome:
+        next.status === "celebrating" || next.status === "finished"
+          ? "completed"
+          : (next.status as "stopped" | "error"),
       restored: next.restored,
+      released: next.released,
     });
   return events;
 }

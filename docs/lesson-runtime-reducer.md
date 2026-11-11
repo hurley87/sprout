@@ -533,3 +533,7 @@ Counting and Catching Unicorns do not opt into this projection. Their existing
 progression, accepted evidence ledger and demonstrated-topic recital are unchanged.
 These are deterministic fixture/runtime guarantees, not live Jev reliability
 measurements; microphone acceptance follows the route implementation.
+
+## Bounded support departures
+
+Lessons may opt into a validated `supportLimit` with an authored close instruction. Current child-sourced, committed incorrect proposals and explicit unresolved help requests add source-bearing difficulty records, deduplicated by visit and child turn. A reached limit emits one close effect. The runtime records delivery or cancellation; fresh observed output and the existing quiet and child-speech gates authorize a release along the authored edge. Accepted correct evidence wins until that request. Release carries no concept evidence and does not use the success hold. The pending render records its departure reason, and only render confirmation appends a succeeded or released visit outcome; Stop discards the pending outcome. The ledger retains source identities for session reporting while each new visit gets a fresh budget.

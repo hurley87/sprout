@@ -70,7 +70,17 @@ export type NavigationRecord = {
   readonly skippedNodeIds: readonly string[];
   readonly atMs: number;
 };
+export type DifficultyRecord = { readonly source: ClassificationSource; readonly kind: "incorrect" | "help_request" };
+export type VisitOutcome = {
+  readonly nodeId: string;
+  readonly visitId: number;
+  readonly outcome: "succeeded" | "released_after_support_limit";
+  readonly source: ClassificationSource;
+};
 export type LessonRuntimeState = {
+  readonly difficulties?: readonly DifficultyRecord[];
+  readonly supportLimitReached?: { readonly source: ClassificationSource; readonly closeSent: boolean } | null;
+  readonly visitOutcomes?: readonly VisitOutcome[];
   readonly runtimeId: string;
   readonly lessonId: string;
   readonly nodeId: string;
@@ -154,6 +164,7 @@ export type LessonRuntimeState = {
     readonly identity: RenderIdentity;
     readonly origin: ClassificationSource;
     readonly navigation?: NavigationRecord;
+    readonly outcome?: VisitOutcome;
   } | null;
 };
 
@@ -203,6 +214,7 @@ export type LessonRuntimeEvent = { readonly atMs: number } & (
   | { readonly type: "terminal.transcript.checked"; readonly source: RuntimeSource; readonly complete: boolean }
   | { readonly type: "terminal.learner.resolved"; readonly source: RuntimeSource }
   | { readonly type: "textless.turn.resolved"; readonly source: ClassificationSource }
+  | { readonly type: "support.close.sent"; readonly source: ClassificationSource }
   | { readonly type: "clock.tick"; readonly source: RuntimeSource }
   | { readonly type: "render.confirmed"; readonly runtimeId: string; readonly identity: RenderIdentity }
   | { readonly type: "scene.skipped"; readonly source: RuntimeSource; readonly scope?: NavigationIntent["scope"] }
@@ -219,6 +231,7 @@ export type LessonRuntimeEffect =
       readonly context: CurrentNodeSteeringContext;
     }
   | { readonly type: "lesson.completed"; readonly renderToken: string }
+  | { readonly type: "support.limit.reached"; readonly source: ClassificationSource }
   | ConceptRevealEffect;
 /** Observation only: captured before finish can clear accepted flags on transition. */
 export type ProposalConsumption = {
@@ -319,6 +332,7 @@ export function createLessonRuntime(
       : {}),
     ...(lesson.id === "mae386" ? { questionAttempts: {}, questionObservations: {} } : {}),
     conceptEvidence: {},
+    ...(lesson.supportLimit ? { difficulties: [], supportLimitReached: null, visitOutcomes: [] } : {}),
     pendingRender: null,
   };
 }
@@ -460,9 +474,23 @@ function finish(current: LessonRuntimeState, lesson: LessonDefinition): LessonRu
       : { ...current, successSinceMs: showingSuccess ? (current.successSinceMs ?? current.nowMs) : null };
   const drained = outputHasDrained(state, lesson);
   const next = { ...state, tutorOutputDrained: drained, transitionReady: false };
-  if (!hasCurrentCompletionEvidence(next, lesson) || !drained || next.childSpeaking) {
+  const release = next.supportLimitReached?.closeSent && !hasCurrentCompletionEvidence(next, lesson);
+  if (
+    (!hasCurrentCompletionEvidence(next, lesson) && !release) ||
+    !drained ||
+    next.childSpeaking ||
+    (release && next.childCandidate)
+  ) {
     return { state: next, effects: [] };
   }
+  if (release)
+    return requestAuthoredTransition(
+      next,
+      lesson,
+      next.supportLimitReached!.source,
+      undefined,
+      "released_after_support_limit",
+    );
   const edge = lesson.nodes[next.nodeId].onSuccess;
   if (
     next.questionObservations?.[next.nodeId]?.status === "pending" &&
@@ -485,6 +513,7 @@ function requestAuthoredTransition(
   lesson: LessonDefinition,
   origin: ClassificationSource,
   explicitIntent?: NavigationIntent,
+  departure: VisitOutcome["outcome"] = "succeeded",
 ): LessonRuntimeResult {
   // The only transition authority is this authored edge. No model-selected destination is read.
   const node = lesson.nodes[next.nodeId];
@@ -512,7 +541,7 @@ function requestAuthoredTransition(
     sceneId: edge.kind === "node" ? String(lesson.nodes[edge.nodeId].presentation.sceneId ?? edge.nodeId) : null,
   };
   const conceptEvidence = { ...next.conceptEvidence };
-  if (edge.kind === "node") {
+  if (edge.kind === "node" && departure !== "released_after_support_limit") {
     for (const criterionId of skippedNodeIds.length ? [] : (edge.carryForwardCriteria ?? [])) {
       const sourceRecord = conceptEvidence[conceptKey(node.id, criterionId)];
       if (sourceRecord?.status !== "demonstrated") continue;
@@ -544,7 +573,15 @@ function requestAuthoredTransition(
       consumedRevision: null,
       phase: "rendering",
       lessonComplete: edge.kind === "complete",
-      pendingRender: { identity, origin, ...(navigation ? { navigation } : {}) },
+      pendingRender: {
+        identity,
+        origin,
+        ...(navigation ? { navigation } : {}),
+        ...(lesson.supportLimit && (departure === "released_after_support_limit" || next.answerAccepted)
+          ? { outcome: { nodeId: origin.nodeId, visitId: origin.visitId, outcome: departure, source: origin } }
+          : {}),
+      },
+      ...(lesson.supportLimit ? { supportLimitReached: null } : {}),
       conceptEvidence,
       ...(lesson.id === "mae386" ? { learnerTranscript: null } : {}),
     },
@@ -626,6 +663,9 @@ export function reduceLessonRuntime(
         ? {
             navigationHistory: [...(state.navigationHistory ?? []), state.pendingRender.navigation],
           }
+        : {}),
+      ...(state.pendingRender.outcome
+        ? { visitOutcomes: [...(state.visitOutcomes ?? []), state.pendingRender.outcome] }
         : {}),
       pendingRender: null,
     };
@@ -740,7 +780,7 @@ export function reduceLessonRuntime(
   if (state.phase !== "active" || !sameSource(state, event.source)) return ignore("inactive_or_source_mismatch");
 
   let next: LessonRuntimeState = { ...state, nowMs: event.atMs };
-  let additionalEffects: LessonRuntimeEffect[] = [];
+  const additionalEffects: LessonRuntimeEffect[] = [];
   let proposalReason: string | null = null;
   switch (event.type) {
     case "child.candidate.started":
@@ -1055,6 +1095,37 @@ export function reduceLessonRuntime(
         return ignore("proposal_guard_rejected");
       if (state.consumedRevision === state.transcriptRevision) return ignore("revision_already_consumed");
       next = { ...next, consumedRevision: state.transcriptRevision };
+      // A help classification also covers uncertainty; require an explicit child request.
+      const childText =
+        (transcriptMessages(event.transcriptSnapshot ?? "") ?? []).filter(message => message.speaker === "Child").at(-1)
+          ?.text ?? "";
+      const kind: DifficultyRecord["kind"] | null =
+        proposal.answerOutcome === "incorrect" &&
+        proposal.answerCommitment === "committed" &&
+        proposal.childActivity !== "answering"
+          ? "incorrect"
+          : proposal.supportState === "needs_help" && /\b(help|help me|can you help|need help)\b/i.test(childText)
+            ? "help_request"
+            : null;
+      if (
+        lesson.supportLimit &&
+        state.transcriptSource === "child" &&
+        kind &&
+        !state.difficulties?.some(
+          record => record.source.visitId === state.visitId && record.source.childTurnId === state.childTurnId,
+        )
+      ) {
+        const difficulties = [...(state.difficulties ?? []), { source: event.source, kind }];
+        next = { ...next, difficulties };
+        if (
+          !state.supportLimitReached &&
+          difficulties.filter(record => record.source.visitId === state.visitId).length >=
+            lesson.supportLimit.maxDifficulties
+        ) {
+          next = { ...next, supportLimitReached: { source: event.source, closeSent: false } };
+          additionalEffects.push({ type: "support.limit.reached", source: event.source });
+        }
+      }
       // A textless turn is not evidence. MAE386 rechecks may assess previously
       // authenticated words in the exact current-visit snapshot, with null
       // conceptual turn identity rather than crediting the microphone-only turn.
@@ -1187,7 +1258,7 @@ export function reduceLessonRuntime(
           };
         }
       }
-      additionalEffects = conceptResult.effects;
+      additionalEffects.push(...conceptResult.effects);
       if (lesson.conversationFirst) {
         const exchange = closingTutorExchange(event.transcriptSnapshot);
         const tutorClosed = tutorAcknowledgedClosure(proposal.tutorState, state.transcriptSource, exchange);
@@ -1208,7 +1279,14 @@ export function reduceLessonRuntime(
         proposal.supportState !== "none" ||
         proposal.childActivity === "answering"
       ) {
-        next = { ...next, ...clearedEvidence, ...clearedNavigation(state) };
+        next = {
+          ...next,
+          ...clearedEvidence,
+          ...clearedNavigation(state),
+          ...(state.supportLimitReached?.closeSent && state.transcriptSource === "tutor"
+            ? { tutorOutputObserved: state.tutorOutputObserved, quietSinceMs: state.quietSinceMs }
+            : {}),
+        };
         proposalReason =
           acceptsLearnerAnswerIndependently(lesson) && proposal.answerCommitment !== "committed"
             ? "uncommitted_answer_judgment"
@@ -1225,6 +1303,21 @@ export function reduceLessonRuntime(
       };
       break;
     }
+    case "support.close.sent":
+      if (
+        !state.supportLimitReached ||
+        state.supportLimitReached.closeSent ||
+        !sameClassificationSource(state, event.source)
+      )
+        return ignored;
+      next = {
+        ...next,
+        supportLimitReached: { ...state.supportLimitReached, closeSent: true },
+        tutorOutputObserved: false,
+        tutorOutputDrained: false,
+        quietSinceMs: null,
+      };
+      break;
     case "output.activity":
       next = { ...next, outputActivity: event.state };
       if (state.interruptedExchange) {

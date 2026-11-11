@@ -488,7 +488,28 @@ export class LessonRuntime {
     for (const effect of result.effects) {
       this.log(effect.type, effect);
       switch (effect.type) {
+        case "support.limit.reached": {
+          const source = effect.source;
+          const eventId = `${this.runtimeId}:support-limit:${source.visitId}`;
+          const content = this.lessonDefinition.supportLimit!.instruction;
+          try {
+            this.sendInstruction({
+              type: "session.instructions.append",
+              event_id: eventId,
+              delegation_id: null,
+              content,
+            });
+            this.log("support_limit.sent", { eventId, content }, source);
+            this.dispatch({ type: "support.close.sent", source, atMs: this.now() });
+          } catch {
+            this.log("support_limit.failed", { eventId, reason: "send_failed" }, source);
+            this.fail("The support close could not be sent. Please start a fresh attempt.");
+          }
+          break;
+        }
         case "render.requested":
+          if (before.supportLimitReached && this.state.pendingRender?.outcome?.outcome === "succeeded")
+            this.log("support_limit.cancelled", { reason: "success_accepted" }, before.supportLimitReached.source);
           if (this.mathPlugin) {
             const outcome =
               event.type === "scene.skipped" || before.navigationIntent?.action === "skip" ? "skipped" : "completed";
@@ -748,6 +769,12 @@ export class LessonRuntime {
       }
       case "provider.error":
         this.log("gpt_live.error", { code: event.code, clientEventId: event.clientEventId });
+        if (event.clientEventId?.startsWith(`${this.runtimeId}:support-limit:`))
+          this.log(
+            "support_limit.failed",
+            { eventId: event.clientEventId, reason: "provider_error" },
+            this.state.supportLimitReached?.source,
+          );
         if (event.clientEventId?.startsWith(`${this.runtimeId}:math:`)) {
           this.log("gpt_live.math_feedback_failed", { eventId: event.clientEventId });
           return;
@@ -1437,6 +1464,12 @@ export class LessonRuntime {
 
   stop(reason = "parent_stop", disconnected = false) {
     if (this.status === "ended") return;
+    const supportSource =
+      this.state?.supportLimitReached?.source ??
+      (this.state?.pendingRender?.outcome?.outcome === "released_after_support_limit"
+        ? this.state.pendingRender.outcome.source
+        : undefined);
+    if (supportSource) this.log("support_limit.cancelled", { reason }, supportSource);
     this.mathPlugin?.onStop();
     this.missingAnswerCheck = undefined;
     this.cancelClassification(reason);
