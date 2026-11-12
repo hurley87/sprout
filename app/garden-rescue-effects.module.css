@@ -1,3 +1,16 @@
+/* In short landscape the fitted character area crosses the centre of the screen. */
+@media (orientation: landscape) and (max-height: 650px) {
+  .play.play {
+    left: auto;
+    right: 1rem;
+    translate: 0 -50%;
+  }
+
+  .play.play:active {
+    translate: 0 calc(-50% + 4px);
+  }
+}
+
 /* Final styles are static; animations start from the initial frame so reduced motion shows the finished picture. */
 .effects:is([data-effect-state="playing"], [data-effect-state="held"]) [data-world-prop] {
   animation: world-prop-enter 400ms ease-out backwards;

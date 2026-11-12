@@ -58,3 +58,41 @@ it("sends one close and records its cancellation on stop", async () => {
   expect(runtime.snapshot().diagnostics.filter(event => event.type === "support_limit.cancelled")).toHaveLength(1);
   expect(runtime.snapshot().runtime?.visitOutcomes).toEqual([]);
 });
+
+it("releases a silent close after the timeout", async () => {
+  useRuntimeFakeTimers();
+  const { gardenRun } = await import("./helpers/garden-session");
+  const run = await gardenRun(transport);
+  runtime = run.runtime;
+  for (let i = 0; i < 3; i++) await run.child("five");
+  await vi.advanceTimersByTimeAsync(9_500);
+  expect(runtime.snapshot().runtime?.phase).toBe("active");
+  await vi.advanceTimersByTimeAsync(500);
+  expect(runtime.snapshot().runtime?.phase).toBe("rendering");
+  runtime.confirmRendered(runtime.snapshot().display);
+  expect(runtime.snapshot().runtime?.visitOutcomes?.[0].outcome).toBe("released_after_support_limit");
+});
+
+it("cancels the fallback when tutor output releases the quest", async () => {
+  useRuntimeFakeTimers();
+  const { gardenRun } = await import("./helpers/garden-session");
+  const run = await gardenRun(transport);
+  runtime = run.runtime;
+  for (let i = 0; i < 3; i++) await run.child("five");
+  await run.tutor("Let's try the next one.");
+  expect(runtime.snapshot().runtime?.phase).toBe("rendering");
+  runtime.confirmRendered(runtime.snapshot().display);
+  await vi.advanceTimersByTimeAsync(10_000);
+  expect(runtime.snapshot().runtime?.visitOutcomes).toHaveLength(1);
+});
+
+it("cancels the fallback on stop", async () => {
+  useRuntimeFakeTimers();
+  const { gardenRun } = await import("./helpers/garden-session");
+  const run = await gardenRun(transport);
+  runtime = run.runtime;
+  for (let i = 0; i < 3; i++) await run.child("five");
+  runtime.stop();
+  await vi.advanceTimersByTimeAsync(10_000);
+  expect(runtime.snapshot().runtime?.visitOutcomes).toEqual([]);
+});

@@ -55,6 +55,7 @@ export const LESSON_TIMING = {
   clockTickMs: 50,
   classifierTimeoutMs: 10_000,
   steeringAckTimeoutMs: 10_000,
+  supportCloseTimeoutMs: 10_000,
   startupTimeoutMs: 30_000,
   microphoneOnsetMs: MICROPHONE_ONSET_MS,
   microphoneOnsetQuietMs: MICROPHONE_ONSET_QUIET_MS,
@@ -147,6 +148,7 @@ export class LessonRuntime {
   private stabilizationTimer?: ReturnType<typeof setTimeout>;
   private clockTimer?: ReturnType<typeof setTimeout>;
   private terminalTimer?: ReturnType<typeof setTimeout>;
+  private supportCloseTimer?: ReturnType<typeof setTimeout>;
   private terminalText?: string;
   private supportRequestedAt?: { visitId: number; revision: number };
   private missingAnswerCheck?: { eventId: string; source: ClassificationSource };
@@ -451,6 +453,13 @@ export class LessonRuntime {
     const before = this.state;
     const result = reduceLessonRuntime(before, event, this.lessonDefinition);
     this.state = result.state;
+    if (
+      this.supportCloseTimer &&
+      (this.state.tutorOutputObserved || !this.state.supportLimitReached?.closeSent || this.state.phase !== "active")
+    ) {
+      clearTimeout(this.supportCloseTimer);
+      this.supportCloseTimer = undefined;
+    }
     // Provisional energy alone is not learner speech. Only an accepted turn or
     // authenticated learner text can supersede a check already sent to Live.
     if (
@@ -501,6 +510,10 @@ export class LessonRuntime {
             });
             this.log("support_limit.sent", { eventId, content }, source);
             this.dispatch({ type: "support.close.sent", source, atMs: this.now() });
+            this.supportCloseTimer = setTimeout(() => {
+              this.supportCloseTimer = undefined;
+              this.dispatch({ type: "support.close.timeout", source, atMs: this.now() });
+            }, LESSON_TIMING.supportCloseTimeoutMs);
           } catch {
             this.log("support_limit.failed", { eventId, reason: "send_failed" }, source);
             this.fail("The support close could not be sent. Please start a fresh attempt.");
@@ -1115,6 +1128,16 @@ export class LessonRuntime {
       category = "invalid_json";
       const body: unknown = await response.json();
       if (abort.signal.aborted || this.status !== "live") return;
+      // A result for speech from a retired transport source must not become current evidence.
+      if ((this.transport.activeSourceId ?? null) !== origin.transportSourceId) {
+        this.log(
+          "classifier.source_replaced",
+          { transportSourceId: origin.transportSourceId, activeSourceId: this.transport.activeSourceId ?? null },
+          source,
+          speaker,
+        );
+        return;
+      }
       if (timeout.aborted) throw new Error("Classification timed out");
       category = "invalid_schema";
       if (!body || typeof body !== "object" || !("proposal" in body)) throw new Error("Invalid classifier response");
@@ -1478,6 +1501,8 @@ export class LessonRuntime {
     clearTimeout(this.clockTimer);
     clearTimeout(this.startupTimer);
     clearTimeout(this.terminalTimer);
+    clearTimeout(this.supportCloseTimer);
+    this.supportCloseTimer = undefined;
     if (this.steering) clearTimeout(this.steering.timer);
     this.steering = undefined;
     if (this.state && this.state.phase !== "complete") {

@@ -84,14 +84,14 @@ The Garden browser classifier stub now labels the latest tutor line, as a real c
 
 ## Known limitations
 
-In short landscape viewports, the pre-Play button overlaps the opening ducklings. This shared-layout behaviour is left for #108.
-
 The duckling crossing moves the ducklings forward onto their pads rather than to a fixed spot on the far bank, because the background is cover-cropped independently of the fixed 8:5 character area. The celebration's lily pads sit on grass. The sprout art has a faint smudge behind its stem, barely visible at desktop size. The "Play again" button moves to the bottom-right corner only in the Garden Rescue landscape celebration.
 
-The bounded-support help-request check needs the literal word "help" in the child's words, so differently worded requests for help are not counted. If the tutor produces no output after the support-limit close instruction, the quest is not released until Stop; this is deferred to #108.
+The bounded-support help-request check needs the literal word "help" in the child's words, so differently worded requests for help are not counted. If the tutor produces no output after the support-limit close instruction, the quest is released after a 10-second timeout.
 
 The exported game-event log is derived from the snapshots React renders, as the debug list is. Snapshots published within one task can be coalesced. The projection diff tolerates this, but a skipped encounter records a `world.effect` with a null `visitId`, which the summary's integrity check flags. The export is reachable only from the debug panel.
 
 ## Not performed
 
 Live microphone, GPT-Live/Jev and child playtests (#108) were not performed for #106 or #107. Provider-free tests do not establish live provider behaviour or child usability, and the export has not been reviewed against a live session's report.
+
+For #108 findings, see the [v1 QA note](garden-rescue-v1-qa.md). For real-microphone and parent-observed sessions, use the [Garden Rescue playtest protocol](garden-rescue-playtest.md).

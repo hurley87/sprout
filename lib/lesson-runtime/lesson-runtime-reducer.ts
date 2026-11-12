@@ -79,7 +79,11 @@ export type VisitOutcome = {
 };
 export type LessonRuntimeState = {
   readonly difficulties?: readonly DifficultyRecord[];
-  readonly supportLimitReached?: { readonly source: ClassificationSource; readonly closeSent: boolean } | null;
+  readonly supportLimitReached?: {
+    readonly source: ClassificationSource;
+    readonly closeSent: boolean;
+    readonly timedOut?: boolean;
+  } | null;
   readonly visitOutcomes?: readonly VisitOutcome[];
   readonly runtimeId: string;
   readonly lessonId: string;
@@ -215,6 +219,7 @@ export type LessonRuntimeEvent = { readonly atMs: number } & (
   | { readonly type: "terminal.learner.resolved"; readonly source: RuntimeSource }
   | { readonly type: "textless.turn.resolved"; readonly source: ClassificationSource }
   | { readonly type: "support.close.sent"; readonly source: ClassificationSource }
+  | { readonly type: "support.close.timeout"; readonly source: ClassificationSource }
   | { readonly type: "clock.tick"; readonly source: RuntimeSource }
   | { readonly type: "render.confirmed"; readonly runtimeId: string; readonly identity: RenderIdentity }
   | { readonly type: "scene.skipped"; readonly source: RuntimeSource; readonly scope?: NavigationIntent["scope"] }
@@ -472,7 +477,12 @@ function finish(current: LessonRuntimeState, lesson: LessonDefinition): LessonRu
     lesson.successHoldMs === undefined
       ? current
       : { ...current, successSinceMs: showingSuccess ? (current.successSinceMs ?? current.nowMs) : null };
-  const drained = outputHasDrained(state, lesson);
+  const drained =
+    outputHasDrained(state, lesson) ||
+    (!!state.supportLimitReached?.timedOut &&
+      !hasCurrentCompletionEvidence(state, lesson) &&
+      !state.tutorOutputObserved &&
+      state.outputActivity !== "active");
   const next = { ...state, tutorOutputDrained: drained, transitionReady: false };
   const release = next.supportLimitReached?.closeSent && !hasCurrentCompletionEvidence(next, lesson);
   if (
@@ -777,7 +787,15 @@ export function reduceLessonRuntime(
       return ignored;
     return { state: stopped({ ...state, nowMs: event.atMs }, lesson), effects: [] };
   }
-  if (state.phase !== "active" || !sameSource(state, event.source)) return ignore("inactive_or_source_mismatch");
+  if (
+    state.phase !== "active" ||
+    (event.type === "support.close.timeout"
+      ? state.runtimeId !== event.source.runtimeId ||
+        state.visitId !== event.source.visitId ||
+        state.nodeId !== event.source.nodeId
+      : !sameSource(state, event.source))
+  )
+    return ignore("inactive_or_source_mismatch");
 
   let next: LessonRuntimeState = { ...state, nowMs: event.atMs };
   const additionalEffects: LessonRuntimeEffect[] = [];
@@ -1317,6 +1335,10 @@ export function reduceLessonRuntime(
         tutorOutputDrained: false,
         quietSinceMs: null,
       };
+      break;
+    case "support.close.timeout":
+      if (!lesson.supportLimit || !state.supportLimitReached?.closeSent || state.tutorOutputObserved) return ignored;
+      next = { ...next, supportLimitReached: { ...state.supportLimitReached, timedOut: true } };
       break;
     case "output.activity":
       next = { ...next, outputActivity: event.state };

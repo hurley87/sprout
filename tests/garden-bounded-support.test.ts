@@ -182,3 +182,15 @@ it("starts every run with a fresh ledger", () => {
   expect(first.state.difficulties).toHaveLength(1);
   expect(harness().state.difficulties).toEqual([]);
 });
+
+it("ignores a timeout from an earlier visit", () => {
+  const h = harness();
+  attempt(h, 1, "incorrect");
+  attempt(h, 2, "incorrect");
+  const third = attempt(h, 3, "incorrect");
+  close(h, third.source);
+  commit(h);
+  const before = h.state;
+  h.send({ type: "support.close.timeout", source: third.source }, 10_000);
+  expect(h.state).toEqual(before);
+});

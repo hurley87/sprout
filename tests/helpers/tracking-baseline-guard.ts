@@ -20,6 +20,7 @@ vi.mock("../../lib/lesson-runtime/lesson-runtime-reducer", async importOriginal 
         args[2].id === "mae386" ||
         !!args[2].supportLimit ||
         args[1].type === "support.close.sent" ||
+        args[1].type === "support.close.timeout" ||
         args[1].type === "question.observation" ||
         args[1].type === "textless.turn.resolved"
       )
