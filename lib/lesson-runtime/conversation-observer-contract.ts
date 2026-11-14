@@ -221,6 +221,7 @@ export type ConversationStateOutputs = {
   sources?: Readonly<Record<string, ChoiceOutput<string>>>;
 };
 export type ConversationStateDecision = {
+  spokenNumber?: import("./spoken-number-check").SpokenNumberDiagnostic;
   /** App-owned second-stage execution status; never a model claim. */
   rewriteAssessment?: "complete" | "unavailable" | "not_requested";
   status: "accepted" | "abstained";

@@ -270,3 +270,15 @@ Concept classification remains cumulative, but live requests now include one `so
 Prompting history identifies learner utterances, not repeated classifications: successive fragments update one entry, and unchanged cumulative observations preserve source and known attribution. A historical utterance first seen in a later turn uses `childTurnId: null`. Echo checks consider tutor content before the supporting learner utterance, preserving independence when a tutor later confirms it.
 
 A uniquely winning but uncertain `partial` label maps to `partial_uncertain`. With a valid source, this records tentative partial progress with unknown understanding. Recovery can privately quote the learner's contribution for a tentative acknowledgment and focused non-leading clarification. These cues do not establish demonstration, reveal hidden answers, satisfy completion criteria, lower mastery thresholds, or overwrite accepted mastery. See [the provenance review](evidence-provenance-review-2026-10-07.md) for recorded evidence, replay annotations, checks, and live-provider limits.
+
+## Opt-in spoken-number check
+
+Dino Car Crunch opts into a server-side check after classification. It reads the
+latest learner-owned number from the transcript, including a number split by a
+short tutor interjection. It vetoes a proposed correct answer when the number is
+wrong, missing, ambiguous, malformed, or an echo of the tutor. It rescues an
+abstention or unclear proposal only when the latest learner-owned number matches;
+a confident incorrect proposal is never rescued. Provider scores remain intact,
+and diagnostics record the reader result and action. This guards two-digit speech
+where the model can confuse teen and tens words or miss a split answer. It does
+not change the Choice contract or classifier version.
