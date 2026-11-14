@@ -1,10 +1,11 @@
 "use client";
 
 import Image from "next/image";
-import { useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { LessonStageProps } from "./lesson-screen";
 import { DINO_ART, dinoCarSrc, TRUCK_CAR_WIDTH, TRUCK_SPOTS, type DinoCarColour } from "./dino-art";
 import { DINO_FINALE, dinoScene } from "./dino-scenes";
+import type { createDinoSfx } from "./dino-sfx";
 import styles from "./dino-stage.module.css";
 
 export function DinoStage({
@@ -12,10 +13,53 @@ export function DinoStage({
   renderToken,
   sceneRef,
   motion = "idle",
+  snapshot,
+  playEffect,
+  sfx,
 }: Omit<LessonStageProps, "sceneRef" | "motion" | "snapshot"> &
-  Partial<Pick<LessonStageProps, "sceneRef" | "motion">>) {
+  Partial<Pick<LessonStageProps, "sceneRef" | "motion" | "snapshot">> & { sfx?: ReturnType<typeof createDinoSfx> }) {
   const scene = node ? dinoScene(node) : DINO_FINALE;
-  const rex = !node ? "full" : motion === "success" ? "chomp" : "hungry";
+  const [chomp, setChomp] = useState<{ token: string | undefined; phase: "eating" | "done" }>();
+  const started = useRef(new Set<string>());
+  const arrivals = useRef(new Set<string>());
+  const finale = useRef(new Set<string>());
+  const phase = chomp && chomp.token === renderToken ? chomp.phase : "idle";
+  const quiet = snapshot?.runtime?.outputActivity === "quiet";
+  const runtimePhase = snapshot?.runtime?.phase;
+  const ended = snapshot?.status === "ended";
+  const [finaleSound, setFinaleSound] = useState<"played" | "skipped">();
+  useEffect(() => {
+    if (!sfx || !playEffect) return;
+    if (!node && motion === "celebrate") {
+      const key = renderToken ?? "finale";
+      if (finale.current.has(key) || (!ended && !(runtimePhase === "complete" && quiet))) return;
+      finale.current.add(key);
+      // Completing the lesson stops the session, which closes the microphone and the tutor's audio, so once
+      // it has ended there is nothing for the mic-safe window to protect (and the runtime would refuse it).
+      setFinaleSound(sfx.play("success", ended ? () => true : playEffect) ? "played" : "skipped");
+      return;
+    }
+    if (!renderToken || !quiet) return;
+    // The runtime refuses effects while a scene is still rendering, so wait until it is active.
+    if (node && runtimePhase === "active" && !arrivals.current.has(renderToken)) {
+      // One attempt per visit: if the gate refuses (e.g. the tutor already started), skip rather than rumble late.
+      arrivals.current.add(renderToken);
+      if (node.id === "warm-up") sfx.play("horn", playEffect);
+      else if (scene.trucks.length) sfx.play("truck-rumble", playEffect);
+    }
+  }, [renderToken, node, motion, sfx, playEffect, scene.trucks.length, quiet, runtimePhase, ended]);
+  useEffect(() => {
+    if (!node || !renderToken || motion !== "success" || !quiet || started.current.has(renderToken)) return;
+    started.current.add(renderToken);
+    sfx?.play("crunch", playEffect ?? (() => false));
+    setChomp({ token: renderToken, phase: "eating" });
+  }, [node, renderToken, motion, quiet, sfx, playEffect]);
+  useEffect(() => {
+    if (phase !== "eating") return;
+    const timer = setTimeout(() => setChomp({ token: renderToken, phase: "done" }), 1500);
+    return () => clearTimeout(timer);
+  }, [phase, renderToken]);
+  const rex = !node ? "full" : phase === "eating" ? "chomp" : "hungry";
   // Load both lesson poses up front so the chomp never waits on (or flashes the loading overlay for) a new image.
   const rexPoses = node ? (["hungry", "chomp"] as const) : (["full"] as const);
   const background = node ? DINO_ART.background.road : DINO_ART.background.finale;
@@ -48,7 +92,7 @@ export function DinoStage({
         data-car
         data-colour={colour}
         data-in={location}
-        data-eaten={motion === "success" ? "true" : undefined}
+        data-eaten={phase !== "idle" ? "true" : undefined}
         style={style}
       >
         <Image src={src} alt="" width={DINO_ART.car.width} height={DINO_ART.car.height} preload {...events(src)} />
@@ -66,6 +110,8 @@ export function DinoStage({
       data-node-id={node?.id ?? "complete"}
       data-scene-id={node?.presentation.sceneId ?? "complete"}
       data-motion={motion}
+      data-chomp={phase}
+      data-finale-sound={node ? undefined : finaleSound}
       data-rex={rex}
     >
       <div className={styles.background} aria-hidden="true">
@@ -94,9 +140,15 @@ export function DinoStage({
             />
           ))}
         </div>
-        <div className={styles.trucks}>
+        <div className={styles.trucks} key={`trucks-${renderToken}`}>
           {scene.trucks.map((truck, index) => (
-            <div className={styles.truck} data-truck key={index}>
+            <div
+              className={styles.truck}
+              data-truck
+              data-eaten={phase !== "idle" ? "true" : undefined}
+              key={index}
+              style={{ "--stagger": `${index * 70}ms` } as CSSProperties}
+            >
               <Image
                 src={DINO_ART.truck.src}
                 alt=""
@@ -115,7 +167,7 @@ export function DinoStage({
             </div>
           ))}
         </div>
-        <div className={styles.loose}>
+        <div className={styles.loose} key={`loose-${renderToken}`}>
           {scene.loose.map((colour, index) => car(colour, "loose", index))}
           {scene.arriving.map((colour, index) => car(colour, "arriving", index))}
         </div>

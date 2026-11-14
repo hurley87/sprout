@@ -6,6 +6,7 @@ The production prototype is the realtime counting lesson at `/`, backed by
 | Document | Purpose |
 | --- | --- |
 | [Halloween counting](halloween-counting.md) | Interest-led counting adventure and verification limits |
+| [Dino Car Crunch](dino-car-crunch.md) | Tens-plus-ones lesson, assets and mic-safe effects |
 | [Ice cream shop](ice-cream-shop.md) | Mixed-skill lesson, answer authority and playtest checklist |
 | [Garden Rescue](garden-rescue.md) | Fixed-order game shell, projection contract and verification limits |
 | [Concert counting](concert-counting.md) | Concert counting adventure and verification limits |

@@ -66,8 +66,23 @@
 .arriving {
   animation: arrive 700ms 500ms ease-out both;
 }
-.car[data-eaten="true"] img {
-  animation: chomp 700ms ease-in both;
+.truck {
+  animation: arrive 800ms ease-out both;
+}
+.truck[data-eaten="true"] {
+  animation: chomp-truck 1200ms var(--stagger, 0ms) ease-in both;
+}
+.loose .car[data-eaten="true"] {
+  animation: chomp-car 1200ms ease-in both;
+}
+.loose .car[data-eaten="true"]:nth-child(2n) {
+  animation-delay: 80ms;
+}
+.loose .car[data-eaten="true"]:nth-child(3n) {
+  animation-delay: 160ms;
+}
+.stage[data-motion="celebrate"] .rex {
+  animation: celebrate 2500ms ease-in-out both;
 }
 .complete,
 .loading {
@@ -96,7 +111,7 @@
 }
 @keyframes arrive {
   from {
-    transform: translateX(25%);
+    transform: translateX(80%);
     opacity: 0;
   }
   to {
@@ -104,10 +119,30 @@
     opacity: 1;
   }
 }
-@keyframes chomp {
+@keyframes chomp-truck {
   to {
-    transform: translateX(-40%) scale(0);
+    transform: translate(-35cqw, -5cqh) scale(0);
     opacity: 0;
+  }
+}
+@keyframes chomp-car {
+  to {
+    transform: translate(-65cqw, -5cqh) scale(0);
+    opacity: 0;
+  }
+}
+@keyframes celebrate {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0);
+  }
+  25%,
+  65% {
+    transform: translateY(-5%) rotate(-4deg);
+  }
+  45%,
+  85% {
+    transform: translateY(0) rotate(4deg);
   }
 }
 @media (orientation: landscape) {
@@ -126,11 +161,14 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  .stage .rex,
+  .stage .truck,
   .stage .car,
   .stage .car img {
     animation: none !important;
   }
-  .car[data-eaten="true"] {
+  .car[data-eaten="true"],
+  .truck[data-eaten="true"] {
     visibility: hidden;
   }
 }

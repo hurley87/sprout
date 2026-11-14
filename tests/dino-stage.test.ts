@@ -27,12 +27,12 @@ describe("dino stage", () => {
     const trucks = markup.split('data-truck="true"').slice(1);
     for (const truck of trucks) expect(count(truck.split("</div></div>")[0], /data-in="truck"/g)).toBe(10);
     const success = renderToStaticMarkup(createElement(DinoStage, { node, motion: "success" }));
-    expect(success).toContain('data-rex="chomp"');
-    expect(count(success, /data-eaten="true"/g)).toBe(node.presentation.answer);
+    expect(success).toContain('data-rex="hungry"');
+    expect(success).not.toContain("data-eaten=");
     // Both poses are always in the page so the chomp image is already loaded when it is shown.
     for (const [html, shown] of [
       [markup, "hungry"],
-      [success, "chomp"],
+      [success, "hungry"],
     ] as const) {
       expect(count(html, /data-pose="(?:hungry|chomp)"/g)).toBe(2);
       expect(html).toMatch(new RegExp(`data-pose="${shown}"[^>]*data-shown="true"`));

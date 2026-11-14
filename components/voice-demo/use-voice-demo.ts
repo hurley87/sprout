@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { attachLessonObservation, type LessonObservationWindow } from "@/lib/lesson-runtime/browser-observation";
 import type { LessonDefinition } from "@/lib/lesson-runtime/lesson-definition";
 import { LessonRuntime, type LessonSnapshot } from "@/lib/lesson-runtime/lesson-runtime";
@@ -19,6 +19,10 @@ export function useVoiceDemo({
   const audio = useRef<HTMLAudioElement>(null);
   const sceneRef = useRef<HTMLDivElement>(null);
   const runtime = useRef<LessonRuntime | null>(null);
+  const playEffect = useCallback(
+    (name: string, durationMs: number) => runtime.current?.beginEffect(name, durationMs) ?? false,
+    [],
+  );
   const [snapshot, setSnapshot] = useState<LessonSnapshot | null>(null);
   const [readyQuietKey, setReadyQuietKey] = useState<string | null>(null);
   const state = snapshot?.runtime;
@@ -126,6 +130,7 @@ export function useVoiceDemo({
     support,
     skip,
     scribeAction,
+    playEffect,
   };
 }
 
