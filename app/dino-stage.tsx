@@ -26,19 +26,28 @@ export function DinoStage({
   const phase = chomp && chomp.token === renderToken ? chomp.phase : "idle";
   const quiet = snapshot?.runtime?.outputActivity === "quiet";
   const runtimePhase = snapshot?.runtime?.phase;
+  const ended = snapshot?.status === "ended";
+  const [finaleSound, setFinaleSound] = useState<"played" | "skipped">();
   useEffect(() => {
-    if (!renderToken || !sfx || !playEffect || !quiet) return;
-    // The runtime refuses effects while a scene is still rendering, so wait until it is active (or complete).
-    if (!node && motion === "celebrate" && runtimePhase === "complete" && !finale.current.has(renderToken)) {
-      finale.current.add(renderToken);
-      sfx.play("success", playEffect);
-    } else if (node && runtimePhase === "active" && !arrivals.current.has(renderToken)) {
+    if (!sfx || !playEffect) return;
+    if (!node && motion === "celebrate") {
+      const key = renderToken ?? "finale";
+      if (finale.current.has(key) || (!ended && !(runtimePhase === "complete" && quiet))) return;
+      finale.current.add(key);
+      // Completing the lesson stops the session, which closes the microphone and the tutor's audio, so once
+      // it has ended there is nothing for the mic-safe window to protect (and the runtime would refuse it).
+      setFinaleSound(sfx.play("success", ended ? () => true : playEffect) ? "played" : "skipped");
+      return;
+    }
+    if (!renderToken || !quiet) return;
+    // The runtime refuses effects while a scene is still rendering, so wait until it is active.
+    if (node && runtimePhase === "active" && !arrivals.current.has(renderToken)) {
       // One attempt per visit: if the gate refuses (e.g. the tutor already started), skip rather than rumble late.
       arrivals.current.add(renderToken);
       if (node.id === "warm-up") sfx.play("horn", playEffect);
       else if (scene.trucks.length) sfx.play("truck-rumble", playEffect);
     }
-  }, [renderToken, node, motion, sfx, playEffect, scene.trucks.length, quiet, runtimePhase]);
+  }, [renderToken, node, motion, sfx, playEffect, scene.trucks.length, quiet, runtimePhase, ended]);
   useEffect(() => {
     if (!node || !renderToken || motion !== "success" || !quiet || started.current.has(renderToken)) return;
     started.current.add(renderToken);
@@ -102,6 +111,7 @@ export function DinoStage({
       data-scene-id={node?.presentation.sceneId ?? "complete"}
       data-motion={motion}
       data-chomp={phase}
+      data-finale-sound={node ? undefined : finaleSound}
       data-rex={rex}
     >
       <div className={styles.background} aria-hidden="true">

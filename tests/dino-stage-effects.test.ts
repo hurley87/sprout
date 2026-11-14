@@ -35,8 +35,9 @@ describe("dino stage effects", () => {
     token = "visit",
     finale = false,
     phase = finale ? "complete" : "active",
+    status = "live",
   ) {
-    const snapshot = { runtime: { outputActivity: activity, phase } } as LessonSnapshot;
+    const snapshot = { status, runtime: { outputActivity: activity, phase } } as LessonSnapshot;
     act(() =>
       root.render(
         createElement(DinoStage, {
@@ -76,5 +77,17 @@ describe("dino stage effects", () => {
     render("celebrate", "quiet", "finale", true);
     render("celebrate", "quiet", "finale", true);
     expect(play).toHaveBeenCalledExactlyOnceWith("success", gate);
+  });
+  it("plays the finale once the completed session has closed the microphone", () => {
+    // Completing the lesson stops the session: the runtime would refuse the gate, and the mic is already closed.
+    play.mockReturnValue(true);
+    render("celebrate", "unavailable", "finale", true, "complete", "ended");
+    expect(play).toHaveBeenCalledOnce();
+    const [name, finaleGate] = play.mock.calls[0];
+    expect(name).toBe("success");
+    expect(finaleGate).not.toBe(gate);
+    expect(finaleGate("success", 700)).toBe(true);
+    expect(gate).not.toHaveBeenCalled();
+    expect(container.firstElementChild?.getAttribute("data-finale-sound")).toBe("played");
   });
 });
