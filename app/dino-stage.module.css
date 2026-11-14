@@ -1,0 +1,136 @@
+.stage {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #cbe8ed;
+  container-type: size;
+  --room: calc(100cqh - var(--stage-top, 0px) - var(--stage-bottom, 0px));
+}
+.background,
+.background img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.background img {
+  object-fit: cover;
+  object-position: center bottom;
+}
+.layout {
+  position: absolute;
+  inset: var(--stage-top, 0px) 2% var(--stage-bottom, 0px);
+  display: grid;
+  grid-template-columns: 22% 55% 19%;
+  gap: 2%;
+  align-items: center;
+}
+.rex img,
+.truck > img,
+.car img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.rex img:not([data-shown]) {
+  display: none;
+}
+.trucks {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: repeat(5, 1fr);
+  height: 100%;
+  align-items: center;
+  justify-items: center;
+}
+.truck {
+  position: relative;
+  width: min(100%, var(--room) * 0.45);
+  aspect-ratio: 900 / 392;
+}
+.car {
+  aspect-ratio: 400 / 219;
+}
+.truck .car {
+  position: absolute;
+  transform: translate(-50%, -100%);
+}
+.loose {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem 0.15rem;
+  align-content: center;
+}
+.arriving {
+  animation: arrive 700ms 500ms ease-out both;
+}
+.car[data-eaten="true"] img {
+  animation: chomp 700ms ease-in both;
+}
+.complete,
+.loading {
+  position: absolute;
+  color: #563b2b;
+  font-size: clamp(1rem, 2.5vw, 1.5rem);
+}
+.complete {
+  left: 50%;
+  top: var(--stage-top, 1rem);
+  transform: translateX(-50%);
+  text-align: center;
+  background: #fff9efed;
+  border-radius: 999px;
+  padding: 0.4em 1em;
+  width: max-content;
+  max-width: 90%;
+}
+.loading {
+  inset: 0;
+  display: grid;
+  place-content: center;
+  padding: 1rem;
+  background: #fff8f1f2;
+  text-align: center;
+}
+@keyframes arrive {
+  from {
+    transform: translateX(25%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+@keyframes chomp {
+  to {
+    transform: translateX(-40%) scale(0);
+    opacity: 0;
+  }
+}
+@media (orientation: landscape) {
+  .layout {
+    grid-template-columns: 19% 59% 18%;
+  }
+  .trucks {
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+  }
+  .truck {
+    width: min(100%, var(--room) * 0.95);
+  }
+  .loose {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stage .car,
+  .stage .car img {
+    animation: none !important;
+  }
+  .car[data-eaten="true"] {
+    visibility: hidden;
+  }
+}
