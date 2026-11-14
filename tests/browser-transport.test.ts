@@ -92,9 +92,16 @@ it("opens provider microphone only after the runtime fence, and sends bounded co
   const transport = new BrowserTransport(audioElement() as unknown as HTMLAudioElement, false);
   await transport.start(vi.fn(), vi.fn(), "test-patterns");
   expect(inputTrack.enabled).toBe(false);
+  transport.suspendInput();
+  transport.resumeInput();
+  expect(inputTrack.enabled).toBe(false);
   const fence = vi.fn(() => expect(inputTrack.enabled).toBe(false));
   expect(transport.openInput(fence)).toBe(true);
   expect(fence).toHaveBeenCalledWith(transport.activeSourceId);
+  expect(inputTrack.enabled).toBe(true);
+  transport.suspendInput();
+  expect(inputTrack.enabled).toBe(false);
+  transport.resumeInput();
   expect(inputTrack.enabled).toBe(true);
   transport.openInput(fence);
   expect(fence).toHaveBeenCalledOnce();

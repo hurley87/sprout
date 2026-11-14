@@ -45,6 +45,10 @@ import {
   type RuntimeSource,
 } from "./lesson-runtime-reducer";
 
+/** Room echo, plus the local detector's own quiet period, so an echo-triggered detector has settled
+ * (and emitted its stop inside the window) before child speech is listened to again. */
+export const EFFECT_TAIL_MS = MICROPHONE_QUIET_MS + 300;
+
 /** Explicit lesson policy, not a provider turn boundary or calibrated setting. */
 export const LESSON_TIMING = {
   childSnapshotDebounceMs: 300,
@@ -153,6 +157,7 @@ export class LessonRuntime {
   private supportRequestedAt?: { visitId: number; revision: number };
   private missingAnswerCheck?: { eventId: string; source: ClassificationSource };
   private startupTimer?: ReturnType<typeof setTimeout>;
+  private effect?: { name: string; durationMs: number; timer: ReturnType<typeof setTimeout> };
   private steering?: {
     eventId: string;
     source: RuntimeSource;
@@ -387,6 +392,42 @@ export class LessonRuntime {
     this.changed(this.snapshot());
   }
 
+  /** Open a window for a page sound effect: microphone events are ignored and provider input is paused
+   * until the effect plus EFFECT_TAIL_MS has passed. Refuses over tutor speech or an active child turn. */
+  beginEffect(name: string, durationMs: number): boolean {
+    const reason =
+      this.status !== "live" || !this.state
+        ? "not_live"
+        : this.state.phase !== "active" && this.state.phase !== "complete"
+          ? "phase"
+          : this.state.outputActivity !== "quiet"
+            ? "tutor_output"
+            : this.state.childSpeaking || this.state.childCandidate
+              ? "child_active"
+              : this.effect
+                ? "effect_open"
+                : !Number.isFinite(durationMs) || durationMs <= 0 || durationMs > 2000
+                  ? "duration"
+                  : null;
+    if (reason) {
+      this.log("effect.refused", { name, durationMs, reason });
+      return false;
+    }
+    this.transport.suspendInput();
+    this.effect = { name, durationMs, timer: setTimeout(() => this.endEffect(), durationMs + EFFECT_TAIL_MS) };
+    this.log("effect.started", { name, durationMs });
+    return true;
+  }
+
+  private endEffect() {
+    const effect = this.effect;
+    if (!effect) return;
+    clearTimeout(effect.timer);
+    this.effect = undefined;
+    this.transport.resumeInput();
+    this.log("effect.ended", { name: effect.name, durationMs: effect.durationMs });
+  }
+
   snapshot(): LessonSnapshot {
     return {
       math: this.mathPlugin instanceof CalculusRuntime ? this.mathPlugin.snapshot() : undefined,
@@ -600,6 +641,16 @@ export class LessonRuntime {
       this.seenEventIds.add(event.eventId);
     }
     const source = runtimeSource(this.state);
+    if (
+      this.effect &&
+      (event.type === "microphone.activity_started" ||
+        event.type === "microphone.speech_started" ||
+        event.type === "microphone.speech_stopped" ||
+        event.type === "microphone.activity_discarded")
+    ) {
+      this.log("microphone.ignored_effect", { eventType: event.type });
+      return;
+    }
     switch (event.type) {
       case "session.started":
         if (this.status !== "connecting") return;
@@ -690,6 +741,8 @@ export class LessonRuntime {
         return;
       }
       case "output.activity":
+        if (event.state === "active" && this.effect)
+          this.log("effect.overlapped_tutor", { name: this.effect.name, durationMs: this.effect.durationMs });
         this.tutorOutputActivity = event.state;
         this.tutorAudioGate?.outputActivity(event.state, this.now());
         this.updateTutorAudio();
@@ -1487,6 +1540,7 @@ export class LessonRuntime {
 
   stop(reason = "parent_stop", disconnected = false) {
     if (this.status === "ended") return;
+    this.endEffect();
     const supportSource =
       this.state?.supportLimitReached?.source ??
       (this.state?.pendingRender?.outcome?.outcome === "released_after_support_limit"
