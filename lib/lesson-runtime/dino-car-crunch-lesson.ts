@@ -13,7 +13,9 @@ export const DINO_CAR_CRUNCH_LESSON: LessonDefinition = validateLessonDefinition
   id: "dino-car-crunch",
   initialNodeId: "warm-up",
   answerAcceptance: "learner_evidence",
-  transitionQuietMs: 1_000,
+  // Quiet after the tutor before the next scene: long enough for the ~1.5 s chomp and for the crunch's
+  // mic-safe window (450 ms + EFFECT_TAIL_MS) to close, so the next scene's arrival sound is not refused.
+  transitionQuietMs: 2_200,
   addressLearnerByName: true,
   recovery: {
     supportClarificationInstruction:

@@ -9,7 +9,7 @@ import { installSyntheticMicrophone } from "../helpers/synthetic-microphone";
 type Microphone = Awaited<ReturnType<typeof installSyntheticMicrophone>>;
 type Outcome = "correct" | "incorrect" | "unclear";
 
-async function setup(page: Page, verdict: () => Outcome = () => "correct") {
+async function setup(page: Page, verdict: (transcript: string) => Outcome = () => "correct") {
   const microphone = await installSyntheticMicrophone(page);
   await installLocalSession(page);
   const observer = await installLessonObserver(page);
@@ -17,7 +17,7 @@ async function setup(page: Page, verdict: () => Outcome = () => "correct") {
     route.fulfill({
       json: {
         proposal: classifierProposal(route.request().postDataJSON(), {
-          answerOutcome: verdict(),
+          answerOutcome: verdict(String(route.request().postDataJSON()?.transcript ?? "")),
           answerCommitment: "committed",
           tutorState: "acknowledging",
         }),
@@ -39,7 +39,22 @@ async function scene(page: Page, observer: LessonObserver, nodeId: string) {
       );
     })
     .toBe(true);
+  await effectsSettled(page, observer);
   return page.locator(`[data-scene-id][data-node-id="${nodeId}"]`);
+}
+
+/** Arrival sounds open a mic-safe window that ignores the microphone. Like a child waiting for the tutor,
+ * wait for any open effect window to close before speaking. The stage asks for the arrival sound within a
+ * frame of the scene becoming active, so a short pause first lets that request land. */
+async function effectsSettled(page: Page, observer: LessonObserver) {
+  await page.waitForTimeout(200);
+  await expect
+    .poll(async () => {
+      const events = (await observer.read())?.events ?? [];
+      const last = events.filter(event => event.type === "effect.started" || event.type === "effect.ended").at(-1);
+      return last?.type !== "effect.started";
+    })
+    .toBe(true);
 }
 
 async function answer(
@@ -77,15 +92,19 @@ async function answer(
   );
   if (outcome === "correct") {
     const stage = page.locator(`[data-node-id="${nodeId}"][data-scene-id]`);
-    await expect(stage).toHaveAttribute("data-rex", "chomp");
-    await expect(stage.locator('[data-car][data-eaten="true"]')).toHaveCount(
-      Number(DINO_CAR_CRUNCH_LESSON.nodes[nodeId].presentation.answer),
-    );
+    await expect(stage).toHaveAttribute("data-chomp", "idle");
   }
   await page.evaluate(() => {
     (window as unknown as LocalSessionWindow).currentPeer.level.gain.value = 0;
   });
   await observer.waitForEvent("output.activity", { after: acknowledged, scope, detail: { state: "quiet" } });
+  if (outcome === "correct") {
+    const stage = page.locator(`[data-node-id="${nodeId}"][data-scene-id]`);
+    await expect(stage).toHaveAttribute("data-chomp", "eating");
+    await expect(stage.locator('[data-car][data-eaten="true"]')).toHaveCount(
+      Number(DINO_CAR_CRUNCH_LESSON.nodes[nodeId].presentation.answer),
+    );
+  }
 }
 
 const counts = [
@@ -156,8 +175,17 @@ test("direct load, reload, identity and diagnostics", async ({ page }) => {
 
 test("wrong and unclear answers never eat cars", async ({ page }) => {
   test.setTimeout(180_000);
-  let verdict: Outcome = "correct";
-  const { microphone, observer } = await setup(page, () => verdict);
+  // Judge by what the child actually said most recently, like the real classifier. A shared mutable verdict
+  // races with background re-checks (e.g. after a help request) and could accept "I need help" as correct.
+  const latest = (transcript: string, words: readonly string[]) =>
+    Math.max(...words.map(word => transcript.lastIndexOf(word)));
+  const { microphone, observer } = await setup(page, transcript => {
+    const right = latest(transcript, ["56", "fifty-six"]);
+    const wrong = latest(transcript, ["eleven"]);
+    const help = latest(transcript, ["I need help"]);
+    if (right < 0 && wrong < 0 && help < 0) return "correct";
+    return right > Math.max(wrong, help) ? "correct" : wrong > help ? "incorrect" : "unclear";
+  });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/dinos");
@@ -167,13 +195,11 @@ test("wrong and unclear answers never eat cars", async ({ page }) => {
     ["eleven", "incorrect"],
     ["I need help", "unclear"],
   ] as const) {
-    verdict = outcome;
     await answer(page, observer, microphone, "fifty-six", text, outcome);
     await expect(stage).toHaveAttribute("data-rex", "hungry");
     await expect(stage.locator("[data-eaten]")).toHaveCount(0);
     await scene(page, observer, "fifty-six");
   }
-  verdict = "correct";
   await correct(page, observer, microphone, "fifty-six");
   await scene(page, observer, "thirty-five");
 });
@@ -191,6 +217,9 @@ test("phone layout without overlap", async ({ page }) => {
         await correct(page, observer, microphone, nodeId);
       }
     const stage = await scene(page, observer, DINO_CAR_CRUNCH_NODE_IDS[index]);
+    await stage.evaluate(element =>
+      Promise.all(element.getAnimations({ subtree: true }).map(animation => animation.finished)),
+    );
     for (const viewport of [
       { width: 390, height: 844 },
       { width: 844, height: 390 },
