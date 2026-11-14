@@ -13,6 +13,7 @@ export const DINO_CAR_CRUNCH_LESSON: LessonDefinition = validateLessonDefinition
   id: "dino-car-crunch",
   initialNodeId: "warm-up",
   answerAcceptance: "learner_evidence",
+  spokenNumberCheck: true,
   // The chomp (~1.5 s) and the crunch's mic-safe window (450 ms + EFFECT_TAIL_MS) must finish before the next
   // scene, or the chomp is cut short and the next arrival sound is refused. The chomp starts once the answer is
   // accepted and the tutor is quiet, so hold both from the tutor going quiet (transitionQuietMs) and from the

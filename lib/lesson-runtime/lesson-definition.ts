@@ -41,6 +41,8 @@ export type LessonDefinition = {
   readonly requirePresentationConfirmation?: boolean;
   /** Conversational closure advances independently of assessment/mastery. */
   readonly conversationFirst?: boolean;
+  /** Apply deterministic spoken-number checks to count answers. */
+  readonly spokenNumberCheck?: true;
   /** Opt in to ordered subpart/parent navigation and counted question progress. */
   readonly questionGroups?: readonly QuestionGroupDefinition[];
   /** Counting may accept learner answers independently of tutor confirmation. */
@@ -87,6 +89,18 @@ export const TUTOR_CRITERIA_IDS = ["confirmed_completion", "clarifying", "helpin
 export function validateLessonDefinition(value: LessonDefinition): LessonDefinition {
   if (!value.id || !Object.hasOwn(value.nodes, value.initialNodeId))
     throw new Error("Lesson needs an authored initial node");
+  if (
+    value.spokenNumberCheck !== undefined &&
+    (value.spokenNumberCheck !== true ||
+      value.conversationFirst ||
+      Object.values(value.nodes).some(
+        node =>
+          node.presentation.answerKind !== "count" ||
+          typeof node.presentation.answer !== "number" ||
+          !Number.isFinite(node.presentation.answer),
+      ))
+  )
+    throw new Error("Spoken-number check requires numeric count nodes and cannot use conversationFirst");
   for (const [id, node] of Object.entries(value.nodes)) {
     if (node.evidenceRole !== undefined && node.evidenceRole !== "rehearsal" && node.evidenceRole !== "transfer")
       throw new Error(`Lesson node ${id} has an invalid evidence role`);

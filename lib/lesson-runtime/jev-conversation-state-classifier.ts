@@ -1,5 +1,6 @@
 /** Canonical server-only classifier. Q10 opts into locate-then-assess; no retries or fallback. */
 import { REWRITE_CRITERIA, interpretRewrite, locateRewriteSpan } from "./mae386/rewrite-proposal";
+import { applySpokenNumberCheck } from "./spoken-number-check";
 import { JEV_MODEL } from "../jev";
 import type { ConversationStateClassifierInput } from "./conversation-state-classifier";
 import {
@@ -18,11 +19,12 @@ export async function classifyConversationStateWithDiagnostics(
   signal: AbortSignal,
 ): Promise<ConversationStateDecision> {
   if (!input.lesson) return abstain("invalid_input");
-  return executeConversationObserver(input, signal, {
+  const decision = await executeConversationObserver(input, signal, {
     model: JEV_MODEL,
     state: conversationObserverState(input),
     questions: conversationStateQuestions(input.lesson, input.nodeId, input.transcript),
   });
+  return applySpokenNumberCheck(decision, input);
 }
 
 /** Explicit request execution shared with offline comparisons; never retries or falls back. */

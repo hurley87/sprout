@@ -3,13 +3,17 @@ import {
   CONVERSATION_CLASSIFICATION_THRESHOLDS,
   normalizeConversationOutputs,
   interpretConversationOutputs,
+  mapConversationObservation,
+  abstain,
   type ConversationStateDecision,
   type ConversationStateOutputs,
 } from "./conversation-observer-contract";
+import { applySpokenNumberCheck } from "./spoken-number-check";
 import { isLessonNodeId, type LessonDefinition } from "./lesson-definition";
 export type LiveClassificationDiagnostic = {
   classifierVersion: typeof CLASSIFIER_VERSION;
   rewriteAssessment?: ConversationStateDecision["rewriteAssessment"];
+  spokenNumber?: ConversationStateDecision["spokenNumber"];
   decision: ConversationStateDecision["status"];
   outcome: ConversationStateDecision["outcome"];
   reason?: string;
@@ -158,13 +162,31 @@ export function parseLiveClassificationDiagnostic(
     : hasConceptQuestions
       ? !completionEligible && !confidentConcepts && !outputs?.rewrite
       : !genericConfident && !completionEligible;
+  let spokenNumber: ConversationStateDecision["spokenNumber"];
+  if (value.spokenNumber !== undefined) {
+    if (!lesson?.spokenNumberCheck || transcript === undefined) return null;
+    const input = { lesson, nodeId: value.nodeId, transcriptRevision: value.transcriptRevision as number, transcript };
+    const checked = applySpokenNumberCheck(
+      outputs ? mapConversationObservation(input, outputs) : abstain(value.reason as string),
+      input,
+    );
+    if (
+      JSON.stringify(value.spokenNumber) !== JSON.stringify(checked.spokenNumber) ||
+      value.decision !== checked.status ||
+      value.outcome !== checked.outcome
+    )
+      return null;
+    spokenNumber = checked.spokenNumber;
+  }
+  const overridden = spokenNumber?.action === "rescue" || spokenNumber?.action === "veto";
   if (
     value.labelCompletionEligible !== labelCompletionEligible ||
     (value.decision === "accepted" &&
       (!outputs ||
-        unconfidentJudgment ||
-        (value.outcome === "allow_semantic_completion_evidence") !== completionEligible ||
-        (value.outcome === "hold_scene") !== !completionEligible)) ||
+        (!overridden &&
+          (unconfidentJudgment ||
+            (value.outcome === "allow_semantic_completion_evidence") !== completionEligible ||
+            (value.outcome === "hold_scene") !== !completionEligible)))) ||
     (value.decision === "abstained" &&
       value.reason === "no_confident_concept_observation" &&
       (!outputs?.concepts || completionEligible || confidentConcepts))
@@ -172,6 +194,7 @@ export function parseLiveClassificationDiagnostic(
     return null;
   return {
     classifierVersion: CLASSIFIER_VERSION,
+    ...(spokenNumber ? { spokenNumber } : {}),
     ...(value.rewriteAssessment
       ? { rewriteAssessment: value.rewriteAssessment as ConversationStateDecision["rewriteAssessment"] }
       : {}),
