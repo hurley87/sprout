@@ -10,6 +10,8 @@ describe("Dino Car Crunch theme", () => {
       ready: "Your turn!",
       complete: "Rex is full!",
     });
+    // Same voice indicator as /halloween: the glow replaces the "Sprout is talking…" pill.
+    expect(DINO_THEME.statusCue).toBe("glow");
   });
 
   it("labels success with each node's answer", () => {

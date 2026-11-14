@@ -10,6 +10,7 @@ export const DINO_THEME: LessonScreenTheme = {
   lesson: DINO_CAR_CRUNCH_LESSON,
   copy: { welcome: "Rex is hungry! Let's count the cars.", ready: "Your turn!", complete: "Rex is full!" },
   successLabel: dinoSuccessLabel,
+  statusCue: "glow",
   palette: "pastel",
   progress: {
     base: "border-2 border-teal-800",
