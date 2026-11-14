@@ -43,6 +43,8 @@ type RuntimeTransport = {
   close: () => void;
   start?: (lessonId: string) => void;
   setOutputAudible?: (audible: boolean) => void;
+  suspendInput?: () => void;
+  resumeInput?: () => void;
 };
 
 // Keep each test file's hoisted mocks local; send/close retain their mock APIs.
@@ -66,6 +68,8 @@ export function mockBrowserTransport(transport: RuntimeTransport, options: { req
     openInput() {
       return true;
     }
+    suspendInput = () => transport.suspendInput?.();
+    resumeInput = () => transport.resumeInput?.();
     send = transport.send;
     setOutputAudible = (audible: boolean) => transport.setOutputAudible?.(audible);
     close = transport.close;

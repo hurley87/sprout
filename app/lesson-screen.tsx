@@ -44,6 +44,7 @@ export type LessonStageProps = {
   renderToken?: string;
   sceneRef: Ref<HTMLDivElement>;
   motion: StageMotion;
+  playEffect?: (name: string, durationMs: number) => boolean;
 };
 
 export function LessonScreen({
@@ -56,6 +57,7 @@ export function LessonScreen({
   exportReport = runtime => runtime.report(),
   exportPrefix = "sprout-lesson",
   startButtonClassName,
+  onStart,
 }: {
   theme: LessonScreenTheme;
   debug?: boolean;
@@ -67,9 +69,10 @@ export function LessonScreen({
   exportReport?: (runtime: LessonRuntime) => unknown;
   exportPrefix?: string;
   startButtonClassName?: string;
+  onStart?: () => void;
 }) {
   const lessonDefinition = theme.lesson;
-  const { audio, sceneRef, snapshot, live, start, stop, download } = useVoiceDemo({
+  const { audio, sceneRef, snapshot, live, start, stop, download, playEffect } = useVoiceDemo({
     lesson: lessonDefinition,
     exportReport,
     exportPrefix,
@@ -109,6 +112,7 @@ export function LessonScreen({
         <div className={styles.scene}>
           {renderStage({
             snapshot,
+            playEffect,
             node,
             renderToken: display?.token,
             sceneRef,
@@ -160,7 +164,10 @@ export function LessonScreen({
             snapshot={snapshot}
             live={live}
             completed={completed}
-            start={start}
+            start={() => {
+              onStart?.();
+              start();
+            }}
             stop={stop}
             download={download}
             startLabel="Play"

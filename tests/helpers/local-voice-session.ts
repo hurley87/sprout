@@ -10,6 +10,7 @@ type LocalPeer = {
 };
 export type LocalSessionWindow = LessonObservationWindow & {
   peers: LocalPeer[];
+  appSenders: RTCRtpSender[];
   peerContext: AudioContext;
   currentPeer: LocalPeer;
   appPeerCloseCount: number;
@@ -25,6 +26,13 @@ export async function installLocalSession(page: Page) {
     host.__SPROUT_OBSERVE_LESSON__ = true;
     const browser = window as unknown as LocalSessionWindow;
     browser.peers = [];
+    browser.appSenders = [];
+    const nativeAddTrack = RTCPeerConnection.prototype.addTrack;
+    RTCPeerConnection.prototype.addTrack = function (track, ...streams) {
+      const sender = nativeAddTrack.call(this, track, ...streams);
+      if (!serverPeers.has(this)) browser.appSenders.push(sender);
+      return sender;
+    };
     browser.peerContext = new AudioContext();
     browser.appPeerCloseCount = 0;
     browser.steeringContents = [];

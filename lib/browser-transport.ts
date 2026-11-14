@@ -236,6 +236,18 @@ export class BrowserTransport {
     return true;
   }
 
+  suspendInput() {
+    const source = this.current;
+    if (!source || !this.authoritative(source) || !source.inputOpened) return;
+    source.inputTracks?.forEach(track => (track.enabled = false));
+  }
+
+  resumeInput() {
+    const source = this.current;
+    if (!source || !this.authoritative(source) || !source.inputOpened) return;
+    source.inputTracks?.forEach(track => (track.enabled = true));
+  }
+
   /** Invalidate authority before teardown callbacks, then stop all media and
    * close the connection so this source cannot keep receiving microphone audio. */
   private retireSource() {

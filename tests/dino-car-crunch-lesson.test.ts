@@ -123,7 +123,7 @@ function replay(
     });
   }
   harness.send({ type: "output.activity", source: runtimeSource(harness.state), state: "quiet" });
-  harness.send({ type: "clock.tick", source: runtimeSource(harness.state) }, 1_000);
+  harness.send({ type: "clock.tick", source: runtimeSource(harness.state) }, lesson.successHoldMs ?? 1_000);
   return { harness, source };
 }
 
@@ -175,5 +175,37 @@ describe("learner-evidence reducer replays", () => {
       transcriptSnapshot: "Child: twenty-three",
     });
     expect(harness.state).toMatchObject({ nodeId: "forty-two", answerAccepted: false, phase: "active" });
+  });
+});
+
+describe("chomp hold", () => {
+  it("keeps an accepted answer on screen for the chomp when acceptance arrives after the tutor is quiet", () => {
+    // Live order: the tutor confirms and goes quiet, then the classifier (triggered by the stable tutor
+    // utterance) accepts. The quiet drain has mostly elapsed by then, so successHoldMs must hold the scene.
+    const hold = DINO_CAR_CRUNCH_LESSON.successHoldMs!;
+    expect(hold).toBeGreaterThanOrEqual(1_500);
+    const lesson = { ...DINO_CAR_CRUNCH_LESSON, initialNodeId: "twenty-three" };
+    const harness = createReducerHarness("dino-car-crunch", { lesson, quietDrainMs: lesson.transitionQuietMs });
+    prepareLearnerClassification(harness, 1);
+    harness.send({ type: "output.activity", source: runtimeSource(harness.state), state: "active" });
+    harness.send({ type: "transcript.updated", source: runtimeSource(harness.state), speaker: "tutor", revision: 2 });
+    harness.send({ type: "output.activity", source: runtimeSource(harness.state), state: "quiet" });
+    harness.send({ type: "clock.tick", source: runtimeSource(harness.state) }, 3_000);
+    const late = classificationSource(harness.state)!;
+    harness.send({
+      type: "proposal.received",
+      source: late,
+      proposal: classifierProposal(late, {
+        answerOutcome: "correct",
+        answerCommitment: "committed",
+        tutorState: "acknowledging",
+      }),
+      transcriptSnapshot: "Child: twenty-three\nTutor: Yes, twenty-three cars!",
+    });
+    expect(harness.state.answerAccepted).toBe(true);
+    harness.send({ type: "clock.tick", source: runtimeSource(harness.state) }, hold - 100);
+    expect(harness.state.phase).toBe("active");
+    harness.send({ type: "clock.tick", source: runtimeSource(harness.state) }, 100);
+    expect(harness.state.phase).toBe("rendering");
   });
 });
