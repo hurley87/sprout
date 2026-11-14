@@ -157,7 +157,7 @@ export class LessonRuntime {
   private supportRequestedAt?: { visitId: number; revision: number };
   private missingAnswerCheck?: { eventId: string; source: ClassificationSource };
   private startupTimer?: ReturnType<typeof setTimeout>;
-  private effect?: { name: string; durationMs: number; timer: ReturnType<typeof setTimeout> };
+  private effect?: { name: string; durationMs: number; startedAt: number; timer: ReturnType<typeof setTimeout> };
   private steering?: {
     eventId: string;
     source: RuntimeSource;
@@ -414,7 +414,12 @@ export class LessonRuntime {
       return false;
     }
     this.transport.suspendInput();
-    this.effect = { name, durationMs, timer: setTimeout(() => this.endEffect(), durationMs + EFFECT_TAIL_MS) };
+    this.effect = {
+      name,
+      durationMs,
+      startedAt: this.now(),
+      timer: setTimeout(() => this.endEffect(), durationMs + EFFECT_TAIL_MS),
+    };
     this.log("effect.started", { name, durationMs });
     return true;
   }
@@ -741,7 +746,8 @@ export class LessonRuntime {
         return;
       }
       case "output.activity":
-        if (event.state === "active" && this.effect)
+        // Only while the sound itself is playing; tutor speech during the silent tail is not an overlap.
+        if (event.state === "active" && this.effect && this.now() < this.effect.startedAt + this.effect.durationMs)
           this.log("effect.overlapped_tutor", { name: this.effect.name, durationMs: this.effect.durationMs });
         this.tutorOutputActivity = event.state;
         this.tutorAudioGate?.outputActivity(event.state, this.now());

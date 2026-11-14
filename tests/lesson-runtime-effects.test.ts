@@ -104,3 +104,14 @@ it("closes on stop without a later effect timer", async () => {
   await vi.advanceTimersByTimeAsync(1000);
   expect(runtime.report().events.filter(e => e.type === "effect.ended")).toHaveLength(1);
 });
+
+it("only reports a tutor overlap while the sound itself is playing", async () => {
+  const run = await gardenRun(transport);
+  runtime = run.runtime;
+  emit({ type: "output.activity", state: "quiet" });
+  expect(runtime.beginEffect("horn", 500)).toBe(true);
+  await vi.advanceTimersByTimeAsync(600);
+  // The tutor starting during the silent tail is expected (the window outlasts the sound) and is not an overlap.
+  emit({ type: "output.activity", state: "active" });
+  expect(runtime.report().events.some(e => e.type === "effect.overlapped_tutor")).toBe(false);
+});
