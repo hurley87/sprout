@@ -11,6 +11,9 @@ import { applySpokenNumberCheck } from "../lib/lesson-runtime/spoken-number-chec
 import { classifyConversationStateWithDiagnostics } from "../lib/lesson-runtime/jev-conversation-state-classifier";
 import { parseLiveClassificationDiagnostic } from "../lib/lesson-runtime/live-classification-diagnostic";
 import { JEV_MODEL } from "../lib/jev";
+import { classificationSource, runtimeSource } from "../lib/lesson-runtime/lesson-runtime-reducer";
+import { classifierProposal } from "./helpers/runtime-classifier";
+import { createReducerHarness, prepareLearnerClassification } from "./helpers/runtime-harness";
 
 const real = `Tutor: Here comes Rex, hungry! Big car-carrier trucks are carrying ten cars each, and some loose ones rolled up too. How many cars does Rex get to eat altogether?
 Child: Fifty-five
@@ -205,4 +208,53 @@ it("may rescue when the classifier is confident only that the answer is unclear"
     proposal: { answerOutcome: "correct", answerCommitment: "committed" },
     spokenNumber: { action: "rescue" },
   });
+});
+
+it.each([
+  ["live split number", "fifty-six", real, uncertain, "rescue", true, "thirty-five"],
+  ["teen for thirty-five", "thirty-five", "Child: thirteen", outputs, "veto", false, null],
+  ["paused number", "twenty-three", "Child: twenty... three", uncertain, "rescue", true, "forty-two"],
+  ["self-correction", "twenty-three", "Child: twenty-three... no, twenty-four", outputs, "veto", false, null],
+  [
+    "counting on",
+    "twenty-three",
+    "Child: twenty, twenty-one, twenty-two, twenty-three",
+    outputs,
+    "agree",
+    true,
+    "forty-two",
+  ],
+] as const)("replays %s through the check and reducer", (_name, nodeId, transcript, scores, action, accepted, next) => {
+  const harness = createReducerHarness("dino-car-crunch", {
+    lesson: { ...lesson, initialNodeId: nodeId },
+    quietDrainMs: 1_000,
+  });
+  const source = prepareLearnerClassification(harness, 1);
+  const snapshot = { lesson, nodeId, transcriptRevision: source.transcriptRevision, transcript };
+  const original = mapConversationObservation(snapshot, scores);
+  if (action === "rescue") expect(original.status).toBe("abstained");
+  const checked = applySpokenNumberCheck(original, snapshot);
+  expect(checked.spokenNumber?.action).toBe(action);
+  expect(checked.proposal).not.toBeNull();
+  harness.send({ type: "proposal.received", source, proposal: checked.proposal!, transcriptSnapshot: transcript });
+  if (accepted) {
+    harness.send({ type: "output.activity", source: runtimeSource(harness.state), state: "active" });
+    harness.send({ type: "transcript.updated", source: runtimeSource(harness.state), speaker: "tutor", revision: 2 });
+    const confirmationSource = classificationSource(harness.state)!;
+    harness.send({
+      type: "proposal.received",
+      source: confirmationSource,
+      proposal: classifierProposal(confirmationSource, {
+        answerOutcome: checked.proposal!.answerOutcome,
+        answerCommitment: checked.proposal!.answerCommitment,
+        tutorState: "acknowledging",
+      }),
+      transcriptSnapshot: `${transcript}\nTutor: That's right.`,
+    });
+  }
+  harness.send({ type: "output.activity", source: runtimeSource(harness.state), state: "quiet" });
+  expect(harness.state.answerAccepted).toBe(accepted);
+  harness.send({ type: "clock.tick", source: runtimeSource(harness.state) }, lesson.successHoldMs!);
+  expect(harness.state.phase === "rendering").toBe(accepted);
+  expect(harness.state.pendingRender?.identity.nodeId ?? null).toBe(next);
 });

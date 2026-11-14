@@ -15,6 +15,16 @@ The 30s come after 20, 40 and 50 because “thirteen” and “thirty” are eas
 
 Only the lesson reducer accepts an answer. The stage follows the resulting `motion` to chomp; sounds are requested through the runtime effect gate. Tutor words alone do not authorize a chomp.
 
+## Two-digit answers
+
+In one local live session, the child answered the warm-up and the first two truck scenes correctly. On the next scene, after a wrong answer and a count-on hint, the child counted on and paused within a two-digit number. GPT-Live ended the turn at the tens word; the tutor said “Yes,” before the child finished the ones. The classifier abstained and the app asked for a repeat. GPT-Live transcribed the two-digit answers as hyphenated words; this session did not show a teen/-ty mishearing.
+
+The lesson alone opts into a deterministic reader and server-side check after the classifier. The reader finds the latest child-owned number, including counting on, corrections, pauses and a short tutor interjection. The check vetoes a proposed correct answer if the reader disagrees, and rescues an abstained or unclear decision only when the child clearly supplied the matching answer. It never rescues a confident incorrect, no-attempt or unresolved-help judgment. The reducer remains responsible for acceptance. Tutor guidance now asks for silence while the child counts or pauses at a tens word, including after a hint, and prohibits praise or confirmation until a complete number is finished.
+
+Unnormalised pronunciations such as “firty-five” remain unresolved and the tutor asks again; they are not silently interpreted as the target. Teen/-ty recognition still needs more live data in #118. This repository documents local VAD but no GPT-Live `gpt-live-1` turn-detection, VAD or eagerness tuning field in the session configuration; investigate supported provider tuning as a follow-up rather than assuming an API setting.
+
+In `/dinos?debug=1`, export diagnostics and inspect classification entries for `diagnostic.spokenNumber`: `action` is `agree`, `veto`, `rescue` or `none`; `reader` describes the parsed number, ownership and status; `classifierOutcome` records the original proposal outcome (or null for an abstention). The exported provider scores remain the original scores, including when a rescue occurs.
+
 ## Assets and sources
 
 The PNG/JPG art in `public/dinos/` is original artwork generated for this project with ChatGPT image generation from written prompts, then trimmed and cropped. Rex's poses share one crop box; truck parking spots were measured into `app/dino-art.ts`. There are no licensed characters or third-party artwork. Issue #117's suggested `rex-closed`, `rex-open`, `car.png`, `truck.png` and `car-park.jpg` names were superseded by three Rex poses, three car colours, a carrier truck, and road and empty car-park backgrounds.
