@@ -149,8 +149,86 @@ test("full playthrough and replay", async ({ page }) => {
   const finale = page.locator('[data-scene-id][data-node-id="complete"]');
   await expect(finale).toHaveAttribute("data-rex", "full");
   await expect(finale.locator("[data-car]")).toHaveCount(0);
+  // Completing the lesson stops the session (closing the mic), so the finale sound plays without a window.
+  await expect(finale).toHaveAttribute("data-finale-sound", "played");
+  const events = (await observer.read())!.events;
+  const starts = events.filter(event => event.type === "effect.started");
+  expect(events.filter(event => event.type === "effect.overlapped_tutor")).toHaveLength(0);
+  for (const [index, nodeId] of DINO_CAR_CRUNCH_NODE_IDS.entries()) {
+    expect(
+      starts.filter(
+        event =>
+          event.nodeId === nodeId &&
+          (event.detail as { name: string }).name === (index === 0 ? "horn" : "truck-rumble"),
+      ),
+    ).toHaveLength(1);
+    const crunch = events.findIndex(
+      event =>
+        event.nodeId === nodeId &&
+        event.type === "effect.started" &&
+        (event.detail as { name: string }).name === "crunch",
+    );
+    expect(
+      starts.filter(event => event.nodeId === nodeId && (event.detail as { name: string }).name === "crunch"),
+    ).toHaveLength(1);
+    const acceptance = events.findIndex(
+      event =>
+        event.nodeId === nodeId &&
+        event.type === "runtime.changed" &&
+        (event.detail as { before: { answerAccepted: boolean }; after: { answerAccepted: boolean } }).before
+          .answerAccepted === false &&
+        (event.detail as { after: { answerAccepted: boolean } }).after.answerAccepted === true,
+    );
+    expect(acceptance).toBeGreaterThanOrEqual(0);
+    expect(crunch).toBeGreaterThan(acceptance);
+  }
   await page.getByRole("button", { name: "Play again", exact: true }).click();
   await expect((await scene(page, observer, "warm-up")).locator("[data-eaten]")).toHaveCount(0);
+});
+
+test("full-level microphone speech during crunch is ignored and input resumes", async ({ page }) => {
+  const { microphone, observer } = await setup(page);
+  await page.goto("/dinos");
+  await page.getByRole("button", { name: "Play", exact: true }).click();
+  await scene(page, observer, "warm-up");
+  await correct(page, observer, microphone, "warm-up");
+  const tracks = await page.evaluate(() =>
+    (window as unknown as LocalSessionWindow).appSenders.map(sender => ({
+      kind: sender.track?.kind,
+      enabled: sender.track?.enabled,
+    })),
+  );
+  expect(tracks.filter(track => track.kind === "audio")).not.toHaveLength(0);
+  expect(tracks.filter(track => track.kind === "audio").every(track => !track.enabled)).toBe(true);
+  // The page's own sound does not loop back into the mic in a headless browser, so play full-level speech into
+  // the microphone during the window as the worst case. The provider cannot hear it: its input tracks are off.
+  const playback = await microphone.playSpeech("counting");
+  expect(await microphone.waitForPlayback(playback.id)).toBe("ended");
+  await scene(page, observer, "twenty-three");
+  const events = (await observer.read())!.events;
+  const start = events.findIndex(
+    event => event.type === "effect.started" && (event.detail as { name: string }).name === "crunch",
+  );
+  const end = events.findIndex(
+    (event, index) =>
+      index > start && event.type === "effect.ended" && (event.detail as { name: string }).name === "crunch",
+  );
+  expect(start).toBeGreaterThanOrEqual(0);
+  expect(end).toBeGreaterThan(start);
+  const during = events.slice(start + 1, end);
+  expect(during.some(event => event.type === "microphone.ignored_effect")).toBe(true);
+  expect(during.filter(event => ["child.candidate.started", "child.turn.started"].includes(event.type))).toHaveLength(
+    0,
+  );
+  expect(
+    await page.evaluate(() =>
+      (window as unknown as LocalSessionWindow).appSenders
+        .filter(sender => sender.track?.kind === "audio")
+        .every(sender => sender.track!.enabled),
+    ),
+  ).toBe(true);
+  await correct(page, observer, microphone, "twenty-three");
+  await scene(page, observer, "forty-two");
 });
 
 test("direct load, reload, identity and diagnostics", async ({ page }) => {
@@ -199,6 +277,14 @@ test("wrong and unclear answers never eat cars", async ({ page }) => {
     await expect(stage).toHaveAttribute("data-rex", "hungry");
     await expect(stage.locator("[data-eaten]")).toHaveCount(0);
     await scene(page, observer, "fifty-six");
+    expect(
+      (await observer.read())!.events.filter(
+        event =>
+          event.nodeId === "fifty-six" &&
+          event.type === "effect.started" &&
+          (event.detail as { name: string }).name === "crunch",
+      ),
+    ).toHaveLength(0);
   }
   await correct(page, observer, microphone, "fifty-six");
   await scene(page, observer, "thirty-five");
