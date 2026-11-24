@@ -38,9 +38,36 @@ The interest-led [Halloween counting adventure](docs/halloween-counting.md) is a
 The [concert counting adventure](docs/concert-counting.md) is at `/concert`.
 
 Attempts and speaker-labelled transcripts stay in page memory. **Export diagnostics**
-downloads the current attempt as JSON; restarting or refreshing clears it. The app
-has no audio recording, durable sessions, post-session analysis, or review workflow.
-No backend database or deployment is required.
+downloads the current attempt as JSON. Restarting or refreshing clears the in-page
+attempt. When `SPROUT_SAVE_SESSIONS=1` on a hosted deployment, Dino Car Crunch
+saves the same scrubbed diagnostics report to private Vercel Blob once per ended
+lesson run. Sprout records no audio and has no review UI or backend database.
+
+#### Saving test sessions
+
+1. In the Vercel project, go to **Storage → Create → Blob**, create a private
+   store, and connect it to the project. Vercel sets `BLOB_READ_WRITE_TOKEN`.
+2. Set `SPROUT_SAVE_SESSIONS=1` for the deployment environment and redeploy.
+
+Review reports in **Storage → your store → Browser** in the Vercel dashboard, or
+download them into the gitignored `sessions/` directory from the linked project:
+
+```bash
+vercel env pull .env.local
+npm run sessions:pull
+npm run sessions:pull -- --env preview --lesson dino-car-crunch
+npm run sessions:pull -- --all
+```
+
+`vercel env pull` fetches Development variables by default. Connect the same store
+to Development too, or use `vercel env pull --environment=production .env.local`
+to fetch the Production token. The download command loads `.env.local` and defaults
+to production reports. Use `--env` with `production`, `preview`, or `development`,
+or use `--all` for all environments in the connected store. Add `--lesson <lessonId>`
+to limit downloads to one lesson.
+
+Reports contain the child's conversation transcripts. Tell testers before the
+lesson and delete the blobs and any local `sessions/` files after review.
 
 ## Adult-learning demos
 

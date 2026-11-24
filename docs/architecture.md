@@ -105,13 +105,15 @@ runtime events. Catching Unicorns gates detailed diagnostics behind `?debug=1`,
 while Download diagnostics is available after completion, Stop or failure in the
 default view. JSON export includes classification mapping, identity/staleness, stabilization,
 local media and render/steering diagnostics. Credentials, SDP and raw provider bodies
-are excluded. Exports contain conversation text and remain under the user's control.
+are excluded. Manual exports contain conversation text and remain under the user's control.
 
-There is no persistence, recording, saved-session recovery, post-session Observer,
-parent review or historical inspection stack. Convex and its project tooling have
-been removed. Historical prototype data is disposable, with no compatibility or
-migration layer. New persistence will be designed only when a current requirement
-needs it. Behavioral calibration and broader evaluation remain in #57.
+The only persistence path is opt-in saving of diagnostics reports from ended Dino
+Car Crunch runs to private Vercel Blob for hosted test sessions. See the
+[session route](../app/api/sessions/route.ts). There is no audio recording,
+saved-session recovery, post-session Observer, parent review or historical
+inspection stack. Convex and its project tooling have been removed. Historical
+prototype data is disposable, with no compatibility or migration layer.
+Behavioral calibration and broader evaluation remain in #57.
 
 Issue #42 uses an isolated frozen Jev 1.13 contract; active implementation hashes
 are recorded as provenance. See [benchmark identity](issue-42-provider-comparison.md#identity-and-parity).

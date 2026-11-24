@@ -2,6 +2,8 @@
 
 `/dinos` is a voice-first tens-plus-ones adventure: Rex eats cars counted by the learner. Append `?debug=1` to show diagnostics and export them.
 
+Hosted runs save a diagnostics report when the lesson ends if session saving is enabled. See [Saving test sessions](../README.md#saving-test-sessions).
+
 | Node | Scene | Answer |
 | --- | --- | --- |
 | `warm-up` | 3 cars + 4 cars | 7 |
