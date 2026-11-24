@@ -12,7 +12,8 @@
     "test": "vitest run",
     "test:browser": "playwright test",
     "test:browser:live": "playwright test --config=playwright.live.config.ts --project=lesson-live",
-    "typecheck": "next typegen && tsc --noEmit"
+    "typecheck": "next typegen && tsc --noEmit",
+    "sessions:pull": "node --env-file-if-exists=.env.local scripts/pull-sessions.mjs"
   },
   "dependencies": {
     "@vercel/blob": "2.9.0",

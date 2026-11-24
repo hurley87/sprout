@@ -51,3 +51,6 @@ next-env.d.ts
 /docs/evidence/mae386-*-live-*.json
 /sprout-mae386-*.json
 /docs/evidence/sprout-mae386-*.json
+
+# Downloaded lesson session reports contain child conversation transcripts.
+/sessions/
