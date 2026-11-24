@@ -69,10 +69,12 @@ export class AnswerRecovery {
     this.state = state;
     this.enabled = enabled;
     if (!this.turn) return;
-    // Energy candidates are not confirmed learner speech. Keep a missing-text
-    // recovery pending across discarded bursts, but never send while a candidate
-    // is active and never restore answer or acknowledgment authority.
-    const missingText = this.reason === "missing_transcript" && this.preserveMissingAcrossCandidates;
+    // A provisional burst must not strand an accepted answer held by the reducer.
+    // Keep its existing missing-text window, but wait until the candidate resolves.
+    const missingText =
+      this.reason === "missing_transcript" &&
+      (this.preserveMissingAcrossCandidates ||
+        (this.allowRecheck && !!this.recheckBeforePrompt && state.textlessTurnPrior?.answerAccepted === true));
     if (
       !enabled ||
       state.phase !== "active" ||
@@ -83,8 +85,12 @@ export class AnswerRecovery {
         ? state.hasChildTranscript
         : !state.hasChildTranscript || state.transcriptRevision !== this.turn.transcriptRevision) ||
       (missingText
-        ? state.runtimeId !== this.turn.runtimeId || state.visitId !== this.turn.visitId || state.nodeId !== this.turn.nodeId ||
-          (state.childTurnId !== this.turn.childTurnId && !state.childCandidate && this.missingCandidateTurn !== state.childTurnId)
+        ? state.runtimeId !== this.turn.runtimeId ||
+          state.visitId !== this.turn.visitId ||
+          state.nodeId !== this.turn.nodeId ||
+          (state.childTurnId !== this.turn.childTurnId &&
+            !state.childCandidate &&
+            this.missingCandidateTurn !== state.childTurnId)
         : turnKey(sourceFor(state)) !== turnKey(this.turn))
     ) {
       this.cancel("turn_or_eligibility_changed");
@@ -122,21 +128,24 @@ export class AnswerRecovery {
       waitMs,
       reason: this.reason,
     });
-    this.timer = setTimeout(() => {
-      this.timer = undefined;
-      // Every runtime transition updates this state; tutor fragments may change
-      // revision without supplying the missing child evidence or resetting quiet.
-      const current = this.state;
-      if (!current || !this.enabled || !this.turn || current.outputActivity !== "quiet") return;
-      if (current.childSpeaking || current.childCandidate) return;
-      const source = sourceFor(current);
-      this.turn = undefined;
-      this.diagnostic("answer_recovery.requested", source, { waitMs, reason: this.reason });
-      if (this.reason === "missing_transcript" && this.allowRecheck && this.recheckBeforePrompt?.(source)) return;
-      if (this.requestedStages.has(stage)) return;
-      this.requestedStages.add(stage); // Send failures also spend the budget.
-      this.request(source);
-    }, missingText ? Math.max(0, waitMs - (Date.now() - this.missingQuietSince!)) : waitMs);
+    this.timer = setTimeout(
+      () => {
+        this.timer = undefined;
+        // Every runtime transition updates this state; tutor fragments may change
+        // revision without supplying the missing child evidence or resetting quiet.
+        const current = this.state;
+        if (!current || !this.enabled || !this.turn || current.outputActivity !== "quiet") return;
+        if (current.childSpeaking || current.childCandidate) return;
+        const source = sourceFor(current);
+        this.turn = undefined;
+        this.diagnostic("answer_recovery.requested", source, { waitMs, reason: this.reason });
+        if (this.reason === "missing_transcript" && this.allowRecheck && this.recheckBeforePrompt?.(source)) return;
+        if (this.requestedStages.has(stage)) return;
+        this.requestedStages.add(stage); // Send failures also spend the budget.
+        this.request(source);
+      },
+      missingText ? Math.max(0, waitMs - (Date.now() - this.missingQuietSince!)) : waitMs,
+    );
   }
 
   /** A failed/held closure check still waits for quiet and shares the support prompt budget. */
