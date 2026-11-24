@@ -13,7 +13,7 @@ Hosted runs save a diagnostics report when the lesson ends if session saving is 
 | `thirty-five` | 3 trucks of 10 + 5 cars | 35 |
 | `twenty-nine` | 2 trucks of 10 + 9 cars | 29 |
 
-The 30s come after 20, 40 and 50 because “thirteen” and “thirty” are easy to mishear; the learner and classifier have time to settle in first. The hint path counts on from the tens and stops before the total, leaving the child to answer.
+The 30s come after 20, 40 and 50 because “thirteen” and “thirty” are easy to mishear; the learner and classifier have time to settle in first. The hint path counts on from the tens and stops before the total, leaving the child to answer. If the child misses again, the tutor does not repeat the count; it asks what comes after the last ones number (“What comes after one?”), then “So after forty-one comes…?”
 
 Only the lesson reducer accepts an answer. The stage follows the resulting `motion` to chomp; sounds are requested through the runtime effect gate. Tutor words alone do not authorize a chomp.
 
