@@ -1,4 +1,5 @@
-import { isLocalRequest, readJsonBody } from "@/lib/local-request";
+import { isAllowedRequest } from "@/lib/access";
+import { readJsonBody } from "@/lib/local-request";
 import { resolveLessonDefinition } from "@/lib/lesson-runtime/lesson-registry";
 import {
   assessmentQuestions,
@@ -10,7 +11,8 @@ import { JEV_MODEL } from "@/lib/jev";
 export const runtime = "nodejs";
 const json = (body: object, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 export async function POST(request: Request) {
-  if (!isLocalRequest(request)) return json({ error: "Use the local Sprout window." }, 403);
+  if (!(await isAllowedRequest(request)))
+    return json({ error: "Use the local Sprout window, or enter the family passcode." }, 403);
   if (!request.headers.get("content-type")?.startsWith("application/json"))
     return json({ error: "Invalid assessment request." }, 415);
   const body = await readJsonBody(request, 600_000);

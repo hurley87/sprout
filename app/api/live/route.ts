@@ -1,4 +1,5 @@
-import { isLocalRequest, readJsonBody } from "@/lib/local-request";
+import { isAllowedRequest } from "@/lib/access";
+import { readJsonBody } from "@/lib/local-request";
 import { configuredLearnerName, configuredLiveModel, createLiveSessionConfig } from "@/lib/lesson-runtime/live-context";
 import { resolveLessonDefinition } from "@/lib/lesson-runtime/lesson-registry";
 
@@ -8,7 +9,8 @@ const json = (body: object, status: number) =>
   Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 
 export async function POST(request: Request) {
-  if (!isLocalRequest(request)) return json({ error: "Start Sprout from its local browser window." }, 403);
+  if (!(await isAllowedRequest(request)))
+    return json({ error: "Start Sprout from its local window, or enter the family passcode." }, 403);
   if (!request.headers.get("content-type")?.startsWith("application/json"))
     return json({ error: "Invalid session request." }, 415);
   const body = await readJsonBody(request, LIMIT);
