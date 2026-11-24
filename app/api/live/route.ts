@@ -1,5 +1,6 @@
-import { isLocalRequest, readJsonBody } from "@/lib/local-request";
-import { configuredLearnerName, createLiveSessionConfig } from "@/lib/lesson-runtime/live-context";
+import { isAllowedRequest } from "@/lib/access";
+import { readJsonBody } from "@/lib/local-request";
+import { configuredLearnerName, configuredLiveModel, createLiveSessionConfig } from "@/lib/lesson-runtime/live-context";
 import { resolveLessonDefinition } from "@/lib/lesson-runtime/lesson-registry";
 
 export const runtime = "nodejs";
@@ -8,7 +9,8 @@ const json = (body: object, status: number) =>
   Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 
 export async function POST(request: Request) {
-  if (!isLocalRequest(request)) return json({ error: "Start Sprout from its local browser window." }, 403);
+  if (!(await isAllowedRequest(request)))
+    return json({ error: "Start Sprout from its local window, or enter the family passcode." }, 403);
   if (!request.headers.get("content-type")?.startsWith("application/json"))
     return json({ error: "Invalid session request." }, 415);
   const body = await readJsonBody(request, LIMIT);
@@ -42,7 +44,11 @@ export async function POST(request: Request) {
       method: "POST",
       headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        session: createLiveSessionConfig(lesson, configuredLearnerName(process.env.SPROUT_CHILD_NAME)),
+        session: createLiveSessionConfig(
+          lesson,
+          configuredLearnerName(process.env.SPROUT_CHILD_NAME),
+          configuredLiveModel(process.env.SPROUT_LIVE_MODEL),
+        ),
         transport: { type: "webrtc", sdp },
       }),
       signal: AbortSignal.any([request.signal, AbortSignal.timeout(20_000)]),
@@ -53,7 +59,7 @@ export async function POST(request: Request) {
         {
           error:
             response.status === 401 || response.status === 403
-              ? "OpenAI could not authorize GPT-Live-1. Ask the parent to check the API key and model access."
+              ? "OpenAI could not authorize GPT-Live. Ask the parent to check the API key and model access."
               : "Sprout could not connect to the voice service. Please try a new lesson later.",
         },
         502,

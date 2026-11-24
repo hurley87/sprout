@@ -1,4 +1,5 @@
-import { isLocalRequest, readJsonBody } from "@/lib/local-request";
+import { isAllowedRequest } from "@/lib/access";
+import { readJsonBody } from "@/lib/local-request";
 import { isLessonNodeId } from "@/lib/lesson-runtime/lesson-definition";
 import { resolveLessonDefinition } from "@/lib/lesson-runtime/lesson-registry";
 import { classifyConversationStateWithDiagnostics } from "@/lib/lesson-runtime/jev-conversation-state-classifier";
@@ -11,8 +12,11 @@ export const runtime = "nodejs";
 const json = (body: object, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 
 export async function POST(request: Request) {
-  if (!isLocalRequest(request))
-    return json({ error: "Use the local Sprout window.", code: "local_request_rejected" }, 403);
+  if (!(await isAllowedRequest(request)))
+    return json(
+      { error: "Use the local Sprout window, or enter the family passcode.", code: "local_request_rejected" },
+      403,
+    );
   if (!request.headers.get("content-type")?.startsWith("application/json"))
     return json({ error: "Invalid classification request.", code: "invalid_request" }, 415);
   const body = await readJsonBody(request, 65_536);

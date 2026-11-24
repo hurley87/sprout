@@ -15,8 +15,20 @@ npm run dev
 
 Open [http://127.0.0.1:3000](http://127.0.0.1:3000) in a microphone-capable browser.
 Configure server-only `OPENAI_API_KEY` and `TYPESAFE_API_KEY` in your local environment.
+Lessons use `gpt-live-1.1`; set `SPROUT_LIVE_MODEL=gpt-live-1` to roll back or compare
+(unknown values fall back to the default).
 Never expose these credentials through `NEXT_PUBLIC_*` variables. Provider routes
 accept loopback requests from the local page.
+
+### Hosting (for example on Vercel)
+
+Away from loopback, Sprout is locked behind a family passcode. Set `SPROUT_PASSCODE`
+(at least 6 characters) with the provider keys in the host's environment variables. Visitors
+are sent to `/unlock`; the right passcode sets a signed, HttpOnly cookie for 30 days, and
+API routes then accept only same-origin HTTPS requests that carry it (`lib/access.ts`,
+`proxy.ts`). Without `SPROUT_PASSCODE`, remote access stays closed. Changing the passcode
+signs everyone out. There is no per-client rate limit beyond a short delay after a wrong
+passcode, so use a passcode that is hard to guess and set a spending limit on the provider keys.
 
 The canonical counting lesson is served at `/`. `/api/live` accepts `{ sdp, lessonId }` and
 uses the Sprout tutor configuration; `/api/classify` returns semantic proposals

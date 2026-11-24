@@ -1,4 +1,5 @@
-import { isLocalRequest, readJsonBody } from "@/lib/local-request";
+import { isAllowedRequest } from "@/lib/access";
+import { readJsonBody } from "@/lib/local-request";
 import {
   EXTRACTION_LIMITS,
   createResponsesWorkProvider,
@@ -18,7 +19,7 @@ const STATUS: Record<WorkExtractionResult["status"], number> = {
 };
 const json = (body: object, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 export async function POST(request: Request) {
-  if (!isLocalRequest(request)) return json({ status: "malformed" }, 403);
+  if (!(await isAllowedRequest(request))) return json({ status: "malformed" }, 403);
   if (request.headers.get("content-type")?.split(";")[0].trim() !== "application/json")
     return json({ status: "malformed" }, 415);
   // Bound body reading as well as provider I/O, including a stalled local client.

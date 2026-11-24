@@ -6,6 +6,7 @@ import { currentNodeContext, lessonNodeOrder, validateLessonDefinition } from ".
 import { resolveLessonDefinition } from "../lib/lesson-runtime/lesson-registry";
 import { acceptsLearnerAnswerIndependently } from "../lib/lesson-runtime/counting-answer-policy";
 import { classificationSource, runtimeSource } from "../lib/lesson-runtime/lesson-runtime-reducer";
+import { createLiveSessionConfig } from "../lib/lesson-runtime/live-context";
 import { classifierProposal } from "./helpers/runtime-classifier";
 import { createReducerHarness, prepareLearnerClassification } from "./helpers/runtime-harness";
 
@@ -45,7 +46,7 @@ describe("dino car crunch lesson", () => {
     }
     expect(resolveLessonDefinition("dino-car-crunch")).toBe(lesson);
     expect(acceptsLearnerAnswerIndependently(lesson)).toBe(true);
-    expect(lesson.addressLearnerByName).toBe(true);
+    expect(lesson.addressLearnerByName).toBeUndefined();
   });
 
   it("does not disclose answers in questions, briefs, or tutor guidance", () => {
@@ -59,6 +60,12 @@ describe("dino car crunch lesson", () => {
       expect(lesson.tutor.nodeInstruction).not.toMatch(pattern);
     }
     expect(lesson.tutor.sessionGuidance).toContain("twenty, twenty-one, twenty-two");
+  });
+
+  it("never greets the child by the configured name", () => {
+    expect(createLiveSessionConfig(lesson, "Evie")).toEqual(createLiveSessionConfig(lesson));
+    expect(JSON.stringify(createLiveSessionConfig(lesson, "Evie"))).not.toContain("Evie");
+    expect(lesson.tutor.startInstruction).toContain("Don't greet the child by name");
   });
 });
 

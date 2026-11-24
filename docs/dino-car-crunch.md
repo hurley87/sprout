@@ -21,9 +21,11 @@ In one local live session, the child answered the warm-up and the first two truc
 
 The lesson alone opts into a deterministic reader and server-side check after the classifier. The reader finds the latest child-owned number, including counting on, corrections, pauses and a short tutor interjection. The check vetoes a proposed correct answer if the reader disagrees, and rescues an abstained or unclear decision only when the child clearly supplied the matching answer. It never rescues a confident incorrect, no-attempt or unresolved-help judgment. The reducer remains responsible for acceptance. Tutor guidance now asks for silence while the child counts or pauses at a tens word, including after a hint, and prohibits praise or confirmation until a complete number is finished.
 
+The reader also joins counting on said with bare ones ("twenty, one, two, three" is 23). Ownership follows the child's first attempt at the answer: a number is an echo only when the tutor said it before the child first tried it. A tutor talking over a child mid-number ("fifty" / "Yes! Fifty-six" / "-six") does not take the answer away, and neither do the tutor's later confirmations; a live session stalled on fifty-six that way. When the tutor did disclose the answer first, one repeat stays an echo, but the child's second separate repeat is accepted as `assisted` (`diagnostic.spokenNumber.action`), so a tutor slip cannot trap the child on a scene. It is still never accepted over a confident incorrect, no-attempt or unresolved-help judgement. GPT-Live-1.1 still sometimes says "Yes" or the total at a tens word despite the tutor guidance.
+
 Unnormalised pronunciations such as “firty-five” remain unresolved and the tutor asks again; they are not silently interpreted as the target. Teen/-ty recognition still needs more live data in #118. This repository documents local VAD but no GPT-Live `gpt-live-1` turn-detection, VAD or eagerness tuning field in the session configuration; investigate supported provider tuning as a follow-up rather than assuming an API setting.
 
-In `/dinos?debug=1`, export diagnostics and inspect classification entries for `diagnostic.spokenNumber`: `action` is `agree`, `veto`, `rescue` or `none`; `reader` describes the parsed number, ownership and status; `classifierOutcome` records the original proposal outcome (or null for an abstention). The exported provider scores remain the original scores, including when a rescue occurs.
+In `/dinos?debug=1`, export diagnostics and inspect classification entries for `diagnostic.spokenNumber`: `action` is `agree`, `veto`, `rescue`, `assisted` or `none`; `reader` describes the parsed number, ownership and status; `classifierOutcome` records the original proposal outcome (or null for an abstention). The exported provider scores remain the original scores, including when a rescue occurs.
 
 ## Assets and sources
 
@@ -31,7 +33,6 @@ The PNG/JPG art in `public/dinos/` is original artwork generated for this projec
 
 The sounds are synthesized by `scripts/generate-dino-sfx.mjs`:
 
-- Crunch: three rapidly decaying bursts of seeded noise through a low-pass filter make a soft cartoon chomp.
 - Horn: two short, gently enveloped pairs of sine tones make a friendly toy truck beep-beep with harmonic warmth.
 - Truck rumble: a low sine and heavily filtered seeded noise fade in and out like a soft engine.
 - Success: a rising C-E-G-C sequence of softly decaying sine tones overlaps into a rounded arpeggio.
@@ -42,12 +43,12 @@ Run `node scripts/generate-dino-sfx.mjs` to regenerate the WAV files, or pass an
 
 An effect opens a window for its duration plus `EFFECT_TAIL_MS` (1200 ms), allowing for room echo and the local detector's 900 ms quiet period. During the window microphone activity is logged as `microphone.ignored_effect` and does not reach the reducer; provider input tracks are also suspended. The gate refuses effects over tutor output, child speech or a candidate, outside active or complete phases, during another effect, or for invalid durations. Browser echo cancellation is not relied on. The 2.2-second scene hold lets the chomp and crunch window finish before the next scene.
 
-The trade-off is that child speech during the roughly 1.7–2 second window after an effect is ignored. Effects occur at scene arrivals and during the chomp. The finale's success sound is the exception: completing the lesson stops the session, which closes the microphone and tutor audio, so it plays without a window (the stage marks it with `data-finale-sound`).
+The trade-off is that child speech during the roughly 1.7–2 second window after an effect is ignored. Effects occur only at scene arrivals; the chomp is silent (a generated noise crunch was removed as harsh). The finale's success sound is the exception: completing the lesson stops the session, which closes the microphone and tutor audio, so it plays without a window (the stage marks it with `data-finale-sound`).
 
 ## Known limitations
 
-- **Late provider transcripts.** The window ignores microphone events but not provider input transcripts. With input tracks suspended the provider hears silence, so none should arrive; but a browser test that injected an input transcript during the crunch window left the lesson waiting on the answered scene. Watch for a stall after a chomp during the #118 live run.
-- **Portrait sizing.** The stage reserves room for 5 trucks and 9 loose cars in every scene, so in phone portrait Rex and the cars are small (truck cars about 23 px wide at 390 px). Prefer a tablet or a landscape phone for the playtest.
+- **Late provider transcripts.** The window ignores microphone events but not provider input transcripts. With input tracks suspended the provider hears silence, so none should arrive; but a browser test that injected an input transcript during an effect window (then the chomp's crunch, since removed) left the lesson waiting on the answered scene. Arrival sounds still open windows, so watch for a stall at scene arrivals during the #118 live run.
+- **Portrait sizing.** Rex and the cars stand together on the road edge, sized to the scene, with the warm-up's first and joining cars as two separate groups. In phone portrait the five-truck scene is still small (about a fifth of the width per truck). Prefer a tablet or a landscape phone for the playtest.
 
 ## Validation and phone check
 

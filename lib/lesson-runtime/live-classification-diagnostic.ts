@@ -178,7 +178,8 @@ export function parseLiveClassificationDiagnostic(
       return null;
     spokenNumber = checked.spokenNumber;
   }
-  const overridden = spokenNumber?.action === "rescue" || spokenNumber?.action === "veto";
+  const overridden =
+    spokenNumber?.action === "rescue" || spokenNumber?.action === "veto" || spokenNumber?.action === "assisted";
   if (
     value.labelCompletionEligible !== labelCompletionEligible ||
     (value.decision === "accepted" &&

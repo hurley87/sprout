@@ -28,6 +28,10 @@ describe("generated dinosaur sounds", () => {
     expect(Math.ceil(duration)).toBe(DINO_SFX[name].durationMs);
   });
 
+  it("has no eating sound", () => {
+    expect(names).toEqual(["horn", "truck-rumble", "success"]);
+  });
+
   it("reproduces the committed files byte for byte", () => {
     const directory = mkdtempSync(join(tmpdir(), "dino-sfx-"));
     try {
@@ -68,17 +72,17 @@ describe("dinosaur sound player", () => {
     const { context, source, gain, start, AudioContextMock } = setup();
     const player = createDinoSfx();
     const gate = vi.fn().mockReturnValue(false);
-    expect(player.play("crunch", gate)).toBe(false);
+    expect(player.play("success", gate)).toBe(false);
     expect(gate).not.toHaveBeenCalled();
     await player.unlock();
     await player.unlock();
     expect(AudioContextMock).toHaveBeenCalledTimes(1);
-    expect(context.decodeAudioData).toHaveBeenCalledTimes(4);
-    expect(player.play("crunch", gate)).toBe(false);
+    expect(context.decodeAudioData).toHaveBeenCalledTimes(3);
+    expect(player.play("success", gate)).toBe(false);
     expect(start).not.toHaveBeenCalled();
     gate.mockReturnValue(true);
-    expect(player.play("crunch", gate)).toBe(true);
-    expect(gate).toHaveBeenLastCalledWith("crunch", 450);
+    expect(player.play("success", gate)).toBe(true);
+    expect(gate).toHaveBeenLastCalledWith("success", 700);
     expect(start).toHaveBeenCalledTimes(1);
     expect(gain.gain.value).toBeCloseTo(0.6);
     expect(player.play("horn", gate)).toBe(false);
