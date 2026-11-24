@@ -2,7 +2,7 @@
 export type SpokenNumber = { kind: "number"; value: number; source: string } | { kind: "malformed"; source: string };
 
 export type LatestChildNumber =
-  | { status: "number"; value: number; owner: "child" | "echo"; source: string }
+  | { status: "number"; value: number; owner: "child" | "echo" | "assisted"; source: string }
   | { status: "none" }
   | { status: "ambiguous"; reason: string }
   | { status: "malformed" };
@@ -130,16 +130,13 @@ export function parseSpokenNumbers(text: string): SpokenNumber[] {
   return readNumbers(text).map(({ item }) => item);
 }
 
-export function latestChildNumber(transcript: string, options?: { answer?: number }): LatestChildNumber {
-  const turns = [
-    ...transcript.matchAll(
-      /(?:^|\n|(?=\b(?:Child|Tutor):))\s*(Child|Tutor):\s*([\s\S]*?)(?=\n\s*(?:Child|Tutor):|\b(?:Child|Tutor):|$)/gi,
-    ),
-  ].map(match => ({ speaker: match[1].toLowerCase(), text: match[2].trim() }));
-  const index = turns.findLastIndex(turn => turn.speaker === "child");
-  if (index < 0) return { status: "none" };
-  let text = turns[index].text;
-  let candidateIndex = index;
+type Turn = { speaker: string; text: string };
+type Attempt = { text: string; numbers: Match[]; joinedFrom?: number };
+
+/** A child turn's numbers, joined with the child's previous turn when a short tutor interjection split a
+ * two-digit number (Child: fifty / Tutor: Yes, / Child: -six). */
+function childAttempt(turns: Turn[], index: number): Attempt {
+  const text = turns[index].text;
   const previous = turns[index - 2];
   const middle = turns[index - 1];
   if (
@@ -149,10 +146,43 @@ export function latestChildNumber(transcript: string, options?: { answer?: numbe
     /\b(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)\s*[.…-]*$/i.test(previous.text) &&
     /^[\s.…-]*(?:one|two|three|four|five|six|seven|eight|nine)\b/i.test(text)
   ) {
-    text = `${previous.text} ${text.replace(/^[\s.…-]*/, "")}`;
-    candidateIndex = index;
+    const joined = `${previous.text} ${text.replace(/^[\s.…-]*/, "")}`;
+    return { text: joined, numbers: readNumbers(joined), joinedFrom: index - 2 };
   }
-  const numbers = readNumbers(text);
+  return { text, numbers: readNumbers(text) };
+}
+
+/** Turn indexes where the child starts saying `value`: a split number starts at its tens-word turn. */
+function childAttemptStarts(turns: Turn[], value: number, through: number): number[] {
+  const starts = new Set<number>();
+  for (let index = 0; index <= through; index++) {
+    if (turns[index].speaker !== "child") continue;
+    const attempt = childAttempt(turns, index);
+    for (const match of attempt.numbers) {
+      if (match.item.kind !== "number" || match.item.value !== value) continue;
+      const fromPrevious = attempt.joinedFrom !== undefined && match.start < turns[attempt.joinedFrom].text.length;
+      starts.add(fromPrevious ? attempt.joinedFrom! : index);
+    }
+  }
+  return [...starts].sort((a, b) => a - b);
+}
+
+/**
+ * The latest child number in a scene transcript. Ownership follows the child's first attempt at the answer:
+ * it is an echo only when the tutor said the answer before the child first tried it. A tutor talking over a
+ * child mid-number (Child: fifty / Tutor: Yes! Fifty-six / Child: -six) therefore does not take the answer
+ * away, nor do the tutor's later confirmations. When the tutor did disclose the answer first, the child's
+ * second separate repeat after that is "assisted", so a tutor slip cannot trap the child on the scene.
+ */
+export function latestChildNumber(transcript: string, options?: { answer?: number }): LatestChildNumber {
+  const turns: Turn[] = [
+    ...transcript.matchAll(
+      /(?:^|\n|(?=\b(?:Child|Tutor):))\s*(Child|Tutor):\s*([\s\S]*?)(?=\n\s*(?:Child|Tutor):|\b(?:Child|Tutor):|$)/gi,
+    ),
+  ].map(match => ({ speaker: match[1].toLowerCase(), text: match[2].trim() }));
+  const index = turns.findLastIndex(turn => turn.speaker === "child");
+  if (index < 0) return { status: "none" };
+  const { text, numbers } = childAttempt(turns, index);
   const last = numbers.at(-1);
   if (!last) return { status: "none" };
   if (last.item.kind === "malformed") return { status: "malformed" };
@@ -160,14 +190,16 @@ export function latestChildNumber(transcript: string, options?: { answer?: numbe
   const prior = numbers.at(-2);
   if (prior && /\bor\b/i.test(text.slice(prior.end, last.start)))
     return { status: "ambiguous", reason: "alternatives" };
-  const echo =
-    options?.answer !== undefined &&
-    turns
-      .slice(0, candidateIndex)
-      .some(
-        turn =>
-          turn.speaker === "tutor" &&
-          parseSpokenNumbers(turn.text).some(number => number.kind === "number" && number.value === options.answer),
-      );
-  return { status: "number", value: last.item.value, owner: echo ? "echo" : "child", source: last.item.source };
+  const value = last.item.value;
+  const result = { status: "number" as const, value, source: last.item.source };
+  const answer = options?.answer;
+  if (answer === undefined || value !== answer) return { ...result, owner: "child" };
+  const disclosure = turns.findIndex(
+    turn =>
+      turn.speaker === "tutor" &&
+      parseSpokenNumbers(turn.text).some(number => number.kind === "number" && number.value === answer),
+  );
+  const starts = childAttemptStarts(turns, answer, index);
+  if (disclosure < 0 || starts[0] < disclosure) return { ...result, owner: "child" };
+  return { ...result, owner: starts.filter(start => start > disclosure).length >= 2 ? "assisted" : "echo" };
 }

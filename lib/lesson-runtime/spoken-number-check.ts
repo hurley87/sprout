@@ -7,7 +7,8 @@ import type { ConversationStateClassifierInput } from "./conversation-state-clas
 import { latestChildNumber, type LatestChildNumber } from "./spoken-number";
 
 export type SpokenNumberDiagnostic = {
-  action: "agree" | "veto" | "rescue" | "none";
+  /** "assisted": the child repeated an answer the tutor disclosed first, on a second try, so the scene moves on. */
+  action: "agree" | "veto" | "rescue" | "assisted" | "none";
   reader: LatestChildNumber;
   classifierOutcome: "correct" | "incorrect" | "unclear" | "none" | null;
 };
@@ -22,11 +23,12 @@ export function applySpokenNumberCheck(
   if (!lesson?.spokenNumberCheck || typeof answer !== "number") return decision;
   const reader = latestChildNumber(transcript, { answer });
   const classifierOutcome = decision.proposal?.answerOutcome ?? null;
-  const matches = reader.status === "number" && reader.owner === "child" && reader.value === answer;
+  const matches = reader.status === "number" && reader.owner !== "echo" && reader.value === answer;
+  const assisted = reader.status === "number" && reader.owner === "assisted";
   let action: SpokenNumberDiagnostic["action"] = "none";
   let result = decision;
   if (classifierOutcome === "correct") {
-    if (matches) action = "agree";
+    if (matches) action = assisted ? "assisted" : "agree";
     else {
       action = "veto";
       const outcome =
@@ -79,7 +81,7 @@ export function applySpokenNumberCheck(
       },
     });
     if (mapped.proposal) {
-      action = "rescue";
+      action = assisted ? "assisted" : "rescue";
       result = {
         ...decision,
         reason: undefined,

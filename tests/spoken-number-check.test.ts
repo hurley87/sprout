@@ -55,6 +55,43 @@ const uncertain: ConversationStateOutputs = {
     },
   },
 };
+// Session a25c1317: GPT-Live said the total over the child's "fifty… six", and every later repeat was read as an
+// echo until the parent stopped the lesson. These are the transcript and scores of the first stalled check.
+const liveTalkedOver = `Tutor: Rex is hungry again! Big car-carrier trucks and some loose cars are here. How many cars does Rex get to eat in all?
+Child: one, two, three, four, five
+Tutor: Let's
+Tutor: try starting
+Child: , five, um, five, one, two, three, four, five
+Tutor: Try starting
+Child: , six
+Tutor: from the trucks. Fifty, fifty-one, fifty-two, fifty-three, fifty-four, fifty-five...
+Child: fifty
+Tutor: Yes! Fifty-six
+Child: -six
+Tutor: cars. Rex can't wait to chomp them.`;
+const liveTalkedOverScores: ConversationStateOutputs = {
+  objectiveState: {
+    choice: "completed",
+    confidence: 0.25,
+    probabilities: {
+      completed: 0.4,
+      incorrect: 0.22,
+      unclear_or_incomplete: 0.23,
+      unresolved_help: 0.01,
+      no_attempt: 0.14,
+    },
+  },
+  tutorState: {
+    choice: "confirmed_completion",
+    confidence: 0.5,
+    probabilities: { confirmed_completion: 0.6, clarifying: 0.02, helping: 0.17, asking: 0.01, other: 0.2 },
+  },
+  answerCommitment: {
+    choice: "committed",
+    confidence: 0.27,
+    probabilities: { committed: 0.45, unresolved: 0.33, withdrawn: 0, no_answer: 0.22 },
+  },
+};
 function check(transcript: string, scores = outputs) {
   const snapshot = input(transcript);
   return applySpokenNumberCheck(mapConversationObservation(snapshot, scores), snapshot);
@@ -222,6 +259,33 @@ it.each([
     "rescue",
     true,
     "forty-two",
+  ],
+  [
+    "tutor talking over the split answer",
+    "fifty-six",
+    liveTalkedOver,
+    liveTalkedOverScores,
+    "rescue",
+    true,
+    "thirty-five",
+  ],
+  [
+    "second repeat of a disclosed answer",
+    "fifty-six",
+    "Tutor: It's fifty-six.\nChild: fifty-six\nTutor: Can you say that again?\nChild: fifty-six",
+    uncertain,
+    "assisted",
+    true,
+    "thirty-five",
+  ],
+  [
+    "first repeat of a disclosed answer",
+    "fifty-six",
+    "Tutor: It's fifty-six.\nChild: fifty-six",
+    outputs,
+    "veto",
+    false,
+    null,
   ],
   ["self-correction", "twenty-three", "Child: twenty-three... no, twenty-four", outputs, "veto", false, null],
   [
