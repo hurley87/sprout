@@ -11,14 +11,17 @@ export function useVoiceDemo({
   lesson,
   exportReport,
   exportPrefix,
+  saveSession = false,
 }: {
   lesson: LessonDefinition;
   exportReport: (runtime: LessonRuntime) => unknown;
   exportPrefix: string;
+  saveSession?: boolean;
 }) {
   const audio = useRef<HTMLAudioElement>(null);
   const sceneRef = useRef<HTMLDivElement>(null);
   const runtime = useRef<LessonRuntime | null>(null);
+  const uploadedSessions = useRef(new Set<string>());
   const playEffect = useCallback(
     (name: string, durationMs: number) => runtime.current?.beginEffect(name, durationMs) ?? false,
     [],
@@ -84,6 +87,11 @@ export function useVoiceDemo({
       audio.current,
       value => {
         if (runtime.current === current) setSnapshot(value);
+        const runtimeId = value.runtime?.runtimeId;
+        if (!saveSession || value.status !== "ended" || !runtimeId || uploadedSessions.current.has(runtimeId)) return;
+        uploadedSessions.current.add(runtimeId);
+        // Start the request before pagehide returns, without waiting for a React effect.
+        void uploadSession(lesson.id, runtimeId, () => buildReport(current));
       },
       lesson,
     );
@@ -91,9 +99,13 @@ export function useVoiceDemo({
     setSnapshot(current.snapshot());
   }
 
+  function buildReport(current: LessonRuntime) {
+    return scrubSecrets(exportReport(current));
+  }
+
   function download() {
     if (!runtime.current) return;
-    const report = scrubSecrets(exportReport(runtime.current));
+    const report = buildReport(runtime.current);
     const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }));
     const link = document.createElement("a");
     link.href = url;
@@ -132,6 +144,22 @@ export function useVoiceDemo({
     scribeAction,
     playEffect,
   };
+}
+
+async function uploadSession(lessonId: string, runtimeId: string, buildReport: () => unknown) {
+  try {
+    const body = JSON.stringify({ lessonId, runtimeId, report: buildReport() });
+    const response = await fetch("/api/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      credentials: "same-origin",
+      body,
+      ...(new TextEncoder().encode(body).byteLength < 60_000 ? { keepalive: true } : {}),
+    });
+    if (!response.ok) console.warn(`Could not save the Sprout session (HTTP ${response.status}).`);
+  } catch {
+    console.warn("Could not save the Sprout session.");
+  }
 }
 
 function liveSnapshotReady(snapshot: LessonSnapshot | null) {

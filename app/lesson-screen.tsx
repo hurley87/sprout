@@ -56,6 +56,7 @@ export function LessonScreen({
   presentationCopy,
   exportReport = runtime => runtime.report(),
   exportPrefix = "sprout-lesson",
+  saveSession,
   startButtonClassName,
   onStart,
 }: {
@@ -65,9 +66,10 @@ export function LessonScreen({
   renderDebug?: (snapshot: LessonSnapshot | null) => ReactNode;
   presentationCopy?: (snapshot: LessonSnapshot | null) => PresentationCopy;
   progressOutcome?: (snapshot: LessonSnapshot | null, id: string) => "succeeded" | "released" | undefined;
-  /** Builds the diagnostics download; runs only when the export is requested. */
+  /** Builds diagnostics for downloads and opt-in session uploads. */
   exportReport?: (runtime: LessonRuntime) => unknown;
   exportPrefix?: string;
+  saveSession?: boolean;
   startButtonClassName?: string;
   onStart?: () => void;
 }) {
@@ -76,6 +78,7 @@ export function LessonScreen({
     lesson: lessonDefinition,
     exportReport,
     exportPrefix,
+    saveSession,
   });
   const display = snapshot?.display;
   const status = snapshot?.status;
