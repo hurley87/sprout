@@ -51,7 +51,7 @@ describe("dino stage effects", () => {
       ),
     );
   }
-  it("requests arrivals once and waits for quiet before chomping once per visit", () => {
+  it("requests arrivals once and waits for quiet before a silent chomp once per visit", () => {
     // The runtime refuses effects while the scene is still rendering, so the arrival waits for "active".
     render("calm", "quiet", "visit", false, "rendering");
     expect(play).not.toHaveBeenCalled();
@@ -62,14 +62,14 @@ describe("dino stage effects", () => {
     expect(play).toHaveBeenCalledTimes(1);
     render("success", "quiet");
     expect(container.firstElementChild?.getAttribute("data-chomp")).toBe("eating");
-    expect(play).toHaveBeenLastCalledWith("crunch", gate);
     render("success", "quiet");
-    expect(play).toHaveBeenCalledTimes(2);
+    expect(play).toHaveBeenCalledExactlyOnceWith("truck-rumble", gate);
     act(() => vi.advanceTimersByTime(1500));
     expect(container.firstElementChild?.getAttribute("data-chomp")).toBe("done");
     expect(container.firstElementChild?.getAttribute("data-rex")).toBe("hungry");
     render("success", "quiet", "next");
-    expect(play).toHaveBeenCalledTimes(4);
+    expect(play).toHaveBeenCalledTimes(2);
+    expect(play).not.toHaveBeenCalledWith("crunch", expect.anything());
   });
   it("requests the finale once", () => {
     render("celebrate", "active", "finale", true);

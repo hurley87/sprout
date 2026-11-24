@@ -1,7 +1,4 @@
 /**
- * Crunch: three rapidly decaying bursts of seeded noise pass through a simple
- * low-pass filter, creating a soft, cartoon-like chomp.
- *
  * Horn: two short, gently enveloped pairs of sine tones make a friendly toy
  * truck beep-beep, with a little harmonic warmth.
  *
@@ -26,10 +23,6 @@ function noise() {
 }
 function sine(frequency, time) {
   return Math.sin(2 * Math.PI * frequency * time);
-}
-function burst(time, start, duration) {
-  const elapsed = time - start;
-  return elapsed >= 0 && elapsed < duration ? Math.exp(-elapsed * 24) : 0;
 }
 function writeSound(name, ms, sample) {
   const count = Math.floor((rate * ms) / 1000);
@@ -58,17 +51,12 @@ function writeSound(name, ms, sample) {
 }
 mkdirSync(output, { recursive: true });
 let filtered = 0;
-writeSound("crunch", 450, t => {
-  filtered += 0.17 * (noise() - filtered);
-  return filtered * (burst(t, 0.025, 0.14) + burst(t, 0.145, 0.14) + burst(t, 0.255, 0.16));
-});
 writeSound("horn", 500, t => {
   const elapsed = t < 0.23 ? t - 0.025 : t - 0.265;
   if (elapsed < 0 || elapsed > 0.18) return 0;
   const envelope = Math.min(1, elapsed / 0.012, (0.18 - elapsed) / 0.025);
   return envelope * (sine(440, elapsed) + 0.45 * sine(554.37, elapsed));
 });
-filtered = 0;
 writeSound("truck-rumble", 800, t => {
   filtered += 0.025 * (noise() - filtered);
   const envelope = Math.min(1, t / 0.12, (0.8 - t) / 0.2);

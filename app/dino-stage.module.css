@@ -6,7 +6,14 @@
   overflow: hidden;
   background: #cbe8ed;
   container-type: size;
-  --room: calc(100cqh - var(--stage-top, 0px) - var(--stage-bottom, 0px));
+  /* The road's top edge sits 22% up road.jpg, which is cover-fitted to the stage bottom. Rex and the cars
+   * stand just over it, so they share one ground line at any aspect ratio, above the page's bottom controls. */
+  --floor: max(calc(max(100cqh, 56.25cqw) * 0.2), var(--stage-bottom, 0px));
+  --room: calc(100cqh - var(--stage-top, 0px) - var(--floor));
+  --gap: 2.5cqw;
+  --rex: min(20cqw, var(--room) * 0.62);
+  --truck: min(15.5cqw, var(--room) * 0.98);
+  --car: min(5.5cqw, var(--room) * 0.17);
 }
 .background,
 .background img {
@@ -19,13 +26,29 @@
   object-fit: cover;
   object-position: center bottom;
 }
+/* Rex and everything he can eat stand together on the ground, centred as one group. */
 .layout {
   position: absolute;
-  inset: var(--stage-top, 0px) 2% var(--stage-bottom, 0px);
-  display: grid;
-  grid-template-columns: 22% 55% 19%;
-  gap: 2%;
-  align-items: center;
+  top: var(--stage-top, 0px);
+  bottom: var(--floor);
+  left: 3%;
+  right: 3%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: calc(var(--gap) * 1.6);
+}
+.layout[data-trucks="0"] {
+  --car: min(8cqw, var(--room) * 0.25);
+  gap: calc(var(--gap) * 2);
+}
+/* A clear space between the first cars and the cars that join them. */
+.layout[data-trucks="0"] .food {
+  gap: var(--car);
+}
+.rex {
+  flex: none;
+  width: var(--rex);
 }
 .rex img,
 .truck > img,
@@ -37,18 +60,40 @@
 .rex img:not([data-shown]) {
   display: none;
 }
+.food {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--gap);
+  min-width: 0;
+}
+/* Rows fill from the ground up, so a partly filled row sits on top. */
+.trucks,
+.group {
+  display: flex;
+  flex-wrap: wrap-reverse;
+  align-content: flex-start;
+  flex: none;
+}
 .trucks {
-  display: grid;
-  grid-template-columns: 1fr;
-  grid-template-rows: repeat(5, 1fr);
-  height: 100%;
-  align-items: center;
-  justify-items: center;
+  --per-row: min(var(--count), 3);
+  gap: 1cqh 1cqw;
+  width: calc(var(--truck) * var(--per-row) + 1cqw * (var(--per-row) - 1));
 }
 .truck {
   position: relative;
-  width: min(100%, var(--room) * 0.45);
+  width: var(--truck);
   aspect-ratio: 900 / 392;
+}
+.group {
+  --per-row: min(var(--count), 3);
+  gap: calc(var(--car) * 0.12) calc(var(--car) * 0.08);
+  width: calc(var(--car) * var(--per-row) + var(--car) * 0.08 * (var(--per-row) - 1));
+}
+.group[data-group="arriving"] {
+  --per-row: min(var(--count), 4);
+}
+.group .car {
+  width: var(--car);
 }
 .car {
   aspect-ratio: 400 / 219;
@@ -57,28 +102,23 @@
   position: absolute;
   transform: translate(-50%, -100%);
 }
-.loose {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 0.5rem 0.15rem;
-  align-content: center;
-}
 .arriving {
   animation: arrive 700ms 500ms ease-out both;
 }
 .truck {
   animation: arrive 800ms ease-out both;
 }
+/* --dx/--dy are measured to Rex's mouth when the chomp starts; the fallbacks only aim roughly left. */
 .truck[data-eaten="true"] {
-  animation: chomp-truck 1200ms var(--stagger, 0ms) ease-in both;
+  animation: chomp 1200ms var(--stagger, 0ms) ease-in both;
 }
-.loose .car[data-eaten="true"] {
-  animation: chomp-car 1200ms ease-in both;
+.group .car[data-eaten="true"] {
+  animation: chomp 1200ms ease-in both;
 }
-.loose .car[data-eaten="true"]:nth-child(2n) {
+.group .car[data-eaten="true"]:nth-child(2n) {
   animation-delay: 80ms;
 }
-.loose .car[data-eaten="true"]:nth-child(3n) {
+.group .car[data-eaten="true"]:nth-child(3n) {
   animation-delay: 160ms;
 }
 .stage[data-motion="celebrate"] .rex {
@@ -119,15 +159,9 @@
     opacity: 1;
   }
 }
-@keyframes chomp-truck {
+@keyframes chomp {
   to {
-    transform: translate(-35cqw, -5cqh) scale(0);
-    opacity: 0;
-  }
-}
-@keyframes chomp-car {
-  to {
-    transform: translate(-65cqw, -5cqh) scale(0);
+    transform: translate(var(--dx, -40cqw), var(--dy, -5cqh)) scale(0);
     opacity: 0;
   }
 }
@@ -145,19 +179,14 @@
     transform: translateY(0) rotate(4deg);
   }
 }
-@media (orientation: landscape) {
-  .layout {
-    grid-template-columns: 19% 59% 18%;
+@media (orientation: portrait) {
+  .stage {
+    --rex: min(21cqw, var(--room) * 0.62);
+    --truck: min(22cqw, var(--room) * 0.98);
+    --car: min(6.5cqw, var(--room) * 0.17);
   }
   .trucks {
-    grid-template-columns: repeat(3, 1fr);
-    grid-template-rows: repeat(2, 1fr);
-  }
-  .truck {
-    width: min(100%, var(--room) * 0.95);
-  }
-  .loose {
-    grid-template-columns: repeat(3, 1fr);
+    --per-row: min(var(--count), 2);
   }
 }
 @media (prefers-reduced-motion: reduce) {

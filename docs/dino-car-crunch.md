@@ -31,7 +31,6 @@ The PNG/JPG art in `public/dinos/` is original artwork generated for this projec
 
 The sounds are synthesized by `scripts/generate-dino-sfx.mjs`:
 
-- Crunch: three rapidly decaying bursts of seeded noise through a low-pass filter make a soft cartoon chomp.
 - Horn: two short, gently enveloped pairs of sine tones make a friendly toy truck beep-beep with harmonic warmth.
 - Truck rumble: a low sine and heavily filtered seeded noise fade in and out like a soft engine.
 - Success: a rising C-E-G-C sequence of softly decaying sine tones overlaps into a rounded arpeggio.
@@ -42,12 +41,12 @@ Run `node scripts/generate-dino-sfx.mjs` to regenerate the WAV files, or pass an
 
 An effect opens a window for its duration plus `EFFECT_TAIL_MS` (1200 ms), allowing for room echo and the local detector's 900 ms quiet period. During the window microphone activity is logged as `microphone.ignored_effect` and does not reach the reducer; provider input tracks are also suspended. The gate refuses effects over tutor output, child speech or a candidate, outside active or complete phases, during another effect, or for invalid durations. Browser echo cancellation is not relied on. The 2.2-second scene hold lets the chomp and crunch window finish before the next scene.
 
-The trade-off is that child speech during the roughly 1.7–2 second window after an effect is ignored. Effects occur at scene arrivals and during the chomp. The finale's success sound is the exception: completing the lesson stops the session, which closes the microphone and tutor audio, so it plays without a window (the stage marks it with `data-finale-sound`).
+The trade-off is that child speech during the roughly 1.7–2 second window after an effect is ignored. Effects occur only at scene arrivals; the chomp is silent (a generated noise crunch was removed as harsh). The finale's success sound is the exception: completing the lesson stops the session, which closes the microphone and tutor audio, so it plays without a window (the stage marks it with `data-finale-sound`).
 
 ## Known limitations
 
-- **Late provider transcripts.** The window ignores microphone events but not provider input transcripts. With input tracks suspended the provider hears silence, so none should arrive; but a browser test that injected an input transcript during the crunch window left the lesson waiting on the answered scene. Watch for a stall after a chomp during the #118 live run.
-- **Portrait sizing.** The stage reserves room for 5 trucks and 9 loose cars in every scene, so in phone portrait Rex and the cars are small (truck cars about 23 px wide at 390 px). Prefer a tablet or a landscape phone for the playtest.
+- **Late provider transcripts.** The window ignores microphone events but not provider input transcripts. With input tracks suspended the provider hears silence, so none should arrive; but a browser test that injected an input transcript during an effect window (then the chomp's crunch, since removed) left the lesson waiting on the answered scene. Arrival sounds still open windows, so watch for a stall at scene arrivals during the #118 live run.
+- **Portrait sizing.** Rex and the cars stand together on the road edge, sized to the scene, with the warm-up's first and joining cars as two separate groups. In phone portrait the five-truck scene is still small (about a fifth of the width per truck). Prefer a tablet or a landscape phone for the playtest.
 
 ## Validation and phone check
 

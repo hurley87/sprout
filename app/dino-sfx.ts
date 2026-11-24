@@ -1,6 +1,5 @@
 /** Generated sounds and their rounded-up durations in milliseconds. */
 export const DINO_SFX = {
-  crunch: { src: "/dinos/sfx/crunch.wav", durationMs: 450 },
   horn: { src: "/dinos/sfx/horn.wav", durationMs: 500 },
   "truck-rumble": { src: "/dinos/sfx/truck-rumble.wav", durationMs: 800 },
   success: { src: "/dinos/sfx/success.wav", durationMs: 700 },

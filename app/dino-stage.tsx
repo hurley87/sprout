@@ -1,12 +1,15 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import type { LessonStageProps } from "./lesson-screen";
 import { DINO_ART, dinoCarSrc, TRUCK_CAR_WIDTH, TRUCK_SPOTS, type DinoCarColour } from "./dino-art";
 import { DINO_FINALE, dinoScene } from "./dino-scenes";
 import type { createDinoSfx } from "./dino-sfx";
 import styles from "./dino-stage.module.css";
+
+/** Rex's mouth as a fraction of his square pose images, where chomped cars fly to. */
+const REX_MOUTH = { x: 0.84, y: 0.42 } as const;
 
 export function DinoStage({
   node,
@@ -51,14 +54,27 @@ export function DinoStage({
   useEffect(() => {
     if (!node || !renderToken || motion !== "success" || !quiet || started.current.has(renderToken)) return;
     started.current.add(renderToken);
-    sfx?.play("crunch", playEffect ?? (() => false));
+    // The chomp is silent: the generated crunch was harsh, and there is no munching sound.
     setChomp({ token: renderToken, phase: "eating" });
-  }, [node, renderToken, motion, quiet, sfx, playEffect]);
+  }, [node, renderToken, motion, quiet]);
   useEffect(() => {
     if (phase !== "eating") return;
     const timer = setTimeout(() => setChomp({ token: renderToken, phase: "done" }), 1500);
     return () => clearTimeout(timer);
   }, [phase, renderToken]);
+  const layout = useRef<HTMLDivElement>(null);
+  // Aim every truck and loose car at Rex's mouth before the first chomp frame paints.
+  useLayoutEffect(() => {
+    const root = layout.current;
+    const rexBox = root?.querySelector(`.${styles.rex}`)?.getBoundingClientRect();
+    if (phase !== "eating" || !root || !rexBox) return;
+    const mouth = { x: rexBox.left + rexBox.width * REX_MOUTH.x, y: rexBox.top + rexBox.height * REX_MOUTH.y };
+    for (const item of root.querySelectorAll<HTMLElement>(`[data-truck], .${styles.group} [data-car]`)) {
+      const box = item.getBoundingClientRect();
+      item.style.setProperty("--dx", `${mouth.x - (box.left + box.width / 2)}px`);
+      item.style.setProperty("--dy", `${mouth.y - (box.top + box.height / 2)}px`);
+    }
+  }, [phase]);
   const rex = !node ? "full" : phase === "eating" ? "chomp" : "hungry";
   // Load both lesson poses up front so the chomp never waits on (or flashes the loading overlay for) a new image.
   const rexPoses = node ? (["hungry", "chomp"] as const) : (["full"] as const);
@@ -124,7 +140,7 @@ export function DinoStage({
           {...events(background)}
         />
       </div>
-      <div className={styles.layout} aria-hidden="true">
+      <div className={styles.layout} ref={layout} data-trucks={scene.trucks.length} aria-hidden="true">
         <div className={styles.rex}>
           {rexPoses.map(pose => (
             <Image
@@ -140,36 +156,54 @@ export function DinoStage({
             />
           ))}
         </div>
-        <div className={styles.trucks} key={`trucks-${renderToken}`}>
-          {scene.trucks.map((truck, index) => (
+        <div className={styles.food}>
+          {scene.trucks.length > 0 && (
             <div
-              className={styles.truck}
-              data-truck
-              data-eaten={phase !== "idle" ? "true" : undefined}
-              key={index}
-              style={{ "--stagger": `${index * 70}ms` } as CSSProperties}
+              className={styles.trucks}
+              key={`trucks-${renderToken}`}
+              style={{ "--count": scene.trucks.length } as CSSProperties}
             >
-              <Image
-                src={DINO_ART.truck.src}
-                alt=""
-                width={DINO_ART.truck.width}
-                height={DINO_ART.truck.height}
-                preload
-                {...events(DINO_ART.truck.src)}
-              />
-              {truck.map((colour, spot) =>
-                car(colour, "truck", spot, {
-                  left: `${TRUCK_SPOTS[spot].x * 100}%`,
-                  top: `${TRUCK_SPOTS[spot].bottom * 100}%`,
-                  width: `${TRUCK_CAR_WIDTH * 100}%`,
-                }),
-              )}
+              {scene.trucks.map((truck, index) => (
+                <div
+                  className={styles.truck}
+                  data-truck
+                  data-eaten={phase !== "idle" ? "true" : undefined}
+                  key={index}
+                  style={{ "--stagger": `${index * 70}ms` } as CSSProperties}
+                >
+                  <Image
+                    src={DINO_ART.truck.src}
+                    alt=""
+                    width={DINO_ART.truck.width}
+                    height={DINO_ART.truck.height}
+                    preload
+                    {...events(DINO_ART.truck.src)}
+                  />
+                  {truck.map((colour, spot) =>
+                    car(colour, "truck", spot, {
+                      left: `${TRUCK_SPOTS[spot].x * 100}%`,
+                      top: `${TRUCK_SPOTS[spot].bottom * 100}%`,
+                      width: `${TRUCK_CAR_WIDTH * 100}%`,
+                    }),
+                  )}
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-        <div className={styles.loose} key={`loose-${renderToken}`}>
-          {scene.loose.map((colour, index) => car(colour, "loose", index))}
-          {scene.arriving.map((colour, index) => car(colour, "arriving", index))}
+          )}
+          {/* The warm-up's first cars and the cars that join them stay as two groups the child can see. */}
+          {(["loose", "arriving"] as const).map(
+            location =>
+              scene[location].length > 0 && (
+                <div
+                  className={styles.group}
+                  data-group={location}
+                  key={`${location}-${renderToken}`}
+                  style={{ "--count": scene[location].length } as CSSProperties}
+                >
+                  {scene[location].map((colour, index) => car(colour, location, index))}
+                </div>
+              ),
+          )}
         </div>
       </div>
       {!node && <p className={styles.complete}>Rex is full! Thanks for counting the cars.</p>}

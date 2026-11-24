@@ -14,13 +14,11 @@ export const DINO_CAR_CRUNCH_LESSON: LessonDefinition = validateLessonDefinition
   initialNodeId: "warm-up",
   answerAcceptance: "learner_evidence",
   spokenNumberCheck: true,
-  // The chomp (~1.5 s) and the crunch's mic-safe window (450 ms + EFFECT_TAIL_MS) must finish before the next
-  // scene, or the chomp is cut short and the next arrival sound is refused. The chomp starts once the answer is
+  // The chomp (~1.5 s) must finish before the next scene, or it is cut short. The chomp starts once the answer is
   // accepted and the tutor is quiet, so hold both from the tutor going quiet (transitionQuietMs) and from the
   // accepted success appearing (successHoldMs): live, the classifier often accepts after the tutor has finished.
   transitionQuietMs: 2_200,
   successHoldMs: 2_200,
-  addressLearnerByName: true,
   recovery: {
     supportClarificationInstruction:
       "One-time clarification for the still-rendered current scene: if the child is still waiting and has not spoken again, briefly ask whether they have finished or would like help. If they are speaking or have responded since this request, ignore it and follow their response. Ask at most once. Do not supply or repeat an answer, method or hint, or imply success. A settled correct answer or reaffirmation without renewed help or uncertainty needs a fresh explicit confirmation with its number and object, then pause. Generic yes or finished alone is insufficient. For renewed help, unresolved alternatives or uncertainty, help, wait or clarify without giving the answer. Never change scenes. This request grants no completion authority.",
@@ -33,7 +31,7 @@ export const DINO_CAR_CRUNCH_LESSON: LessonDefinition = validateLessonDefinition
       presentation: { sceneId: "warm-up", answerKind: "count", answer: 7, object: "car", firstCars: 3, moreCars: 4 },
       learningObjective: "Combine two small groups of cars by counting on.",
       tutorBrief:
-        "Rex the dinosaur is hungry, and some cars arrive followed by more cars. How many cars does Rex get to eat altogether? Success story idea: Rex can't wait to chomp them. Never claim Rex has eaten before the application shows it.",
+        "Some cars have parked by Rex, and more cars have driven up to join them. How many cars can Rex eat? Success story idea: Rex can't wait to chomp them. Never claim Rex has eaten before the application shows it.",
       onSuccess: { kind: "node", nodeId: "twenty-three" },
     },
     "twenty-three": {
@@ -90,7 +88,7 @@ export const DINO_CAR_CRUNCH_LESSON: LessonDefinition = validateLessonDefinition
     sessionGuidance:
       "Ask one question per turn. Never disclose the tested answer before the child gives it. If speech is unclear or inaudible, ask the child to repeat without suggesting an answer. When the child is counting aloud or pauses on a tens word mid-number, wait silently for them to finish. Never say yes, praise or confirm until the child has clearly stopped with a complete number. Let the child finish and self-correct. For a wrong answer, gently invite another try. When the child is stuck or asks for help on a truck scene, say the tens from the trucks, then count on through the loose cars together (for example, twenty, twenty-one, twenty-two), stopping before the last number so the child says the total. After the hint, let the child carry the count all the way; if they stop on a tens word, wait silently rather than prompting. On the warm-up, count on from the first group in the same way, stopping before the last number. Never state the total as a hint. Give one hint at a time, then wait. Confirm a settled correct answer explicitly using the child's number and object, then pause. Generic yes or finished is never an answer. Never claim to see pointing or touching. Only the application changes scenes or makes Rex chomp; never say Rex ate before the application shows it.",
     startInstruction:
-      "The parent pressed Start lesson. Speak first now in English, introduce the displayed scene and ask its question, then pause and listen. Let the child supply the answer.",
+      'The parent pressed Start lesson. Speak first now in English, with excitement, in two short sentences: introduce Rex as a hungry dinosaur who loves to munch cars, then ask how many cars Rex can eat. For example: "This is Rex, and he\'s a hungry dinosaur who loves to munch cars! How many cars can Rex eat?" Don\'t greet the child by name, narrate the cars arriving or say "altogether". Then pause and listen. Let the child supply the answer.',
     nodeInstruction:
       "Stay with the current scene and follow its brief and session guidance. Introduce it and ask naturally, then listen. When the child counts aloud or pauses on a tens word mid-number, wait silently for them to finish; never say yes, praise or confirm until they have clearly stopped with a complete number. If the child is stuck or asks for help, say the tens from the trucks and count on through the loose cars together, stopping before the last number for the child to say; for the warm-up count on from the first group instead. After the hint, let the child carry the count all the way; if they stop on a tens word, wait silently rather than prompting. Never state the total as a hint. Give one hint at a time, then wait. Confirm settled success with the child's number and object, then pause. Only the application changes scenes or makes Rex chomp; never say Rex ate before the application shows it.",
   },
