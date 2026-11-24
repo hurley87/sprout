@@ -69,7 +69,7 @@ describe("local Live session endpoint", () => {
     expect(response.status).toBe(503);
     expect((await response.json()).error).toContain("OPENAI_API_KEY");
   });
-  it("uses exactly GPT-Live-1 with the canonical tutor config and returns only SDP/session ID", async () => {
+  it("uses GPT-Live-1.1 with the canonical tutor config and returns only SDP/session ID", async () => {
     vi.stubEnv("OPENAI_API_KEY", "synthetic-test-key");
     const fetch = vi.fn(async () =>
       Response.json({ session: { id: "live_test", private: "omit" }, transport: { sdp: "answer" }, secret: "omit" }),
@@ -84,7 +84,24 @@ describe("local Live session endpoint", () => {
     const calls = fetch.mock.calls as unknown as [string, RequestInit][];
     expect(calls[0][0]).toBe("https://api.openai.com/v1/live/sessions");
     expect(JSON.parse(calls[0][1].body as string).session).toEqual(SPROUT_LIVE_CONFIG);
+    expect(JSON.parse(calls[0][1].body as string).session.model).toBe("gpt-live-1.1");
     expect(JSON.parse(calls[0][1].body as string).session).not.toHaveProperty("delegation");
+  });
+  it.each([
+    ["gpt-live-1", "gpt-live-1"],
+    [" gpt-live-1.1 ", "gpt-live-1.1"],
+    ["gpt-live-9", "gpt-live-1.1"],
+    ["", "gpt-live-1.1"],
+  ])("SPROUT_LIVE_MODEL=%j selects %s and never forwards unknown models", async (value, model) => {
+    vi.stubEnv("OPENAI_API_KEY", "synthetic-test-key");
+    vi.stubEnv("SPROUT_LIVE_MODEL", value);
+    const fetch = vi.fn(async () => Response.json({ session: { id: "live_test" }, transport: { sdp: "answer" } }));
+    vi.stubGlobal("fetch", fetch);
+    expect((await POST(request())).status).toBe(201);
+    const calls = fetch.mock.calls as unknown as [string, RequestInit][];
+    const session = JSON.parse(calls[0][1].body as string).session;
+    expect(session.model).toBe(model);
+    expect({ ...session, model: SPROUT_LIVE_CONFIG.model }).toEqual(SPROUT_LIVE_CONFIG);
   });
   it("does not leak provider errors or retry paid creation", async () => {
     vi.stubEnv("OPENAI_API_KEY", "synthetic-test-key");

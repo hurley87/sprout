@@ -1,5 +1,5 @@
 import { isLocalRequest, readJsonBody } from "@/lib/local-request";
-import { configuredLearnerName, createLiveSessionConfig } from "@/lib/lesson-runtime/live-context";
+import { configuredLearnerName, configuredLiveModel, createLiveSessionConfig } from "@/lib/lesson-runtime/live-context";
 import { resolveLessonDefinition } from "@/lib/lesson-runtime/lesson-registry";
 
 export const runtime = "nodejs";
@@ -42,7 +42,11 @@ export async function POST(request: Request) {
       method: "POST",
       headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        session: createLiveSessionConfig(lesson, configuredLearnerName(process.env.SPROUT_CHILD_NAME)),
+        session: createLiveSessionConfig(
+          lesson,
+          configuredLearnerName(process.env.SPROUT_CHILD_NAME),
+          configuredLiveModel(process.env.SPROUT_LIVE_MODEL),
+        ),
         transport: { type: "webrtc", sdp },
       }),
       signal: AbortSignal.any([request.signal, AbortSignal.timeout(20_000)]),
@@ -53,7 +57,7 @@ export async function POST(request: Request) {
         {
           error:
             response.status === 401 || response.status === 403
-              ? "OpenAI could not authorize GPT-Live-1. Ask the parent to check the API key and model access."
+              ? "OpenAI could not authorize GPT-Live. Ask the parent to check the API key and model access."
               : "Sprout could not connect to the voice service. Please try a new lesson later.",
         },
         502,

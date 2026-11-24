@@ -15,6 +15,8 @@ npm run dev
 
 Open [http://127.0.0.1:3000](http://127.0.0.1:3000) in a microphone-capable browser.
 Configure server-only `OPENAI_API_KEY` and `TYPESAFE_API_KEY` in your local environment.
+Lessons use `gpt-live-1.1`; set `SPROUT_LIVE_MODEL=gpt-live-1` to roll back or compare
+(unknown values fall back to the default).
 Never expose these credentials through `NEXT_PUBLIC_*` variables. Provider routes
 accept loopback requests from the local page.
 
