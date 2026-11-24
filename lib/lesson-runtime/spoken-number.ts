@@ -94,7 +94,36 @@ function readNumbers(text: string): Match[] {
     }
     if (item) matches.push({ item, start, end });
   }
-  return matches;
+  return joinCountingOn(text, matches);
+}
+
+/** Children often count on from a tens number by saying only the ones: "twenty, one, two, three" is
+ * 21, 22, 23, and "forty-one, two" is 41, 42. Bare ones that continue a two-digit number one at a time,
+ * separated only by pauses or punctuation, take its tens. Anything else, such as "fifty, six", is unchanged. */
+function joinCountingOn(text: string, matches: Match[]): Match[] {
+  const joined = [...matches];
+  for (let i = 0; i < joined.length; i++) {
+    const base = joined[i];
+    if (base.item.kind !== "number" || base.item.value < 20) continue;
+    const tensValue = base.item.value - (base.item.value % 10);
+    let ones = base.item.value % 10;
+    for (let j = i + 1; j < joined.length && ones < 9; j++, i++) {
+      const next = joined[j];
+      if (
+        next.item.kind !== "number" ||
+        !/^(?:[a-z]+|\d)$/i.test(next.item.source) ||
+        next.item.value !== ones + 1 ||
+        !/^[\s,.…-]*$/.test(text.slice(joined[j - 1].end, next.start))
+      )
+        break;
+      ones = next.item.value;
+      joined[j] = {
+        ...next,
+        item: { kind: "number", value: tensValue + ones, source: text.slice(base.start, next.end) },
+      };
+    }
+  }
+  return joined;
 }
 
 export function parseSpokenNumbers(text: string): SpokenNumber[] {

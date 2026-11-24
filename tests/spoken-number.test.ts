@@ -23,11 +23,36 @@ describe("spoken number reader", () => {
     ["23", 23],
     ["twenty, twenty-one, twenty-two, twenty-three", 23],
     ["twenty-three… no, twenty-four", 24],
+    ["Twenty, one, two, three", 23],
+    ["ten, twenty, one, two, three", 23],
+    ["twenty… one, two, three", 23],
+    ["twenty-one, two, three", 23],
+    ["twenty, 1, 2, 3", 23],
   ])("reads %s", (speech, value) => {
     expect(latestChildNumber(`Child: ${speech}`, { answer: 23 })).toMatchObject({
       status: "number",
       value,
       owner: "child",
+    });
+  });
+  it.each([
+    ["fifty, six", 6],
+    ["twenty, two, three", 3],
+    ["twenty, one, three", 3],
+    ["twenty, one, two, ten", 10],
+    ["one, two, three, four, five", 5],
+  ])("only joins ones that count on one at a time: %s", (speech, value) => {
+    expect(latestChildNumber(`Child: ${speech}`)).toMatchObject({ status: "number", value });
+  });
+  it("reads counting on from the tens after a hint (live session)", () => {
+    const live = `Tutor: Take a peek at the big trucks. Each one holds ten cars. Say twenty, then keep counting for the loose cars.
+Child: Twenty, one, two, three
+Tutor: You got it, twenty-three cars! Rex can't wait to chomp them.`;
+    expect(latestChildNumber(live, { answer: 23 })).toMatchObject({
+      status: "number",
+      value: 23,
+      owner: "child",
+      source: "Twenty, one, two, three",
     });
   });
   it.each(["firty-five", "fordy-two"])("does not guess %s", speech => {

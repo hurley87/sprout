@@ -214,6 +214,15 @@ it.each([
   ["live split number", "fifty-six", real, uncertain, "rescue", true, "thirty-five"],
   ["teen for thirty-five", "thirty-five", "Child: thirteen", outputs, "veto", false, null],
   ["paused number", "twenty-three", "Child: twenty... three", uncertain, "rescue", true, "forty-two"],
+  [
+    "counting on with bare ones",
+    "twenty-three",
+    "Child: Twenty, one, two, three",
+    uncertain,
+    "rescue",
+    true,
+    "forty-two",
+  ],
   ["self-correction", "twenty-three", "Child: twenty-three... no, twenty-four", outputs, "veto", false, null],
   [
     "counting on",
@@ -257,4 +266,45 @@ it.each([
   harness.send({ type: "clock.tick", source: runtimeSource(harness.state) }, lesson.successHoldMs!);
   expect(harness.state.phase === "rendering").toBe(accepted);
   expect(harness.state.pendingRender?.identity.nodeId ?? null).toBe(next);
+});
+
+it("rescues counting on from the tens that the live classifier was unsure about", () => {
+  // Session d981a120: after the count-on hint the child said "Twenty, one, two, three". The classifier leaned
+  // correct (0.86) but below threshold, and the reader read 3, so the scene stalled until the parent stopped it.
+  const transcript = `Tutor: Big car-carrier trucks rumbled in with some loose cars, and Rex is getting hungry! How many cars does Rex get to eat?
+Child: One, two, three, four, five
+Tutor: Take a peek at the big trucks. Each one holds ten cars. Say twenty, then keep counting for the loose cars.
+Child: Twenty, one, two, three
+Tutor: You got it, twenty-three cars! Rex can't wait to chomp them.`;
+  const live: ConversationStateOutputs = {
+    objectiveState: {
+      choice: "completed",
+      confidence: 0.82,
+      probabilities: {
+        completed: 0.86,
+        incorrect: 0.08,
+        unclear_or_incomplete: 0.03,
+        unresolved_help: 0.01,
+        no_attempt: 0.02,
+      },
+    },
+    tutorState: {
+      choice: "confirmed_completion",
+      confidence: 0.74,
+      probabilities: { confirmed_completion: 0.79, clarifying: 0.02, helping: 0.18, asking: 0, other: 0.01 },
+    },
+    answerCommitment: {
+      choice: "committed",
+      confidence: 0.35,
+      probabilities: { committed: 0.51, unresolved: 0.24, withdrawn: 0.01, no_answer: 0.24 },
+    },
+  };
+  const snapshot = { lesson, nodeId: "twenty-three", transcriptRevision: 90, transcript };
+  const mapped = mapConversationObservation(snapshot, live);
+  expect(mapped.proposal).toBeNull();
+  expect(applySpokenNumberCheck(mapped, snapshot)).toMatchObject({
+    outcome: "allow_semantic_completion_evidence",
+    proposal: { answerOutcome: "correct", answerCommitment: "committed" },
+    spokenNumber: { action: "rescue", reader: { value: 23, owner: "child" } },
+  });
 });
