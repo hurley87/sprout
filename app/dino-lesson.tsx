@@ -12,6 +12,7 @@ export default function DinoLesson({ debug = false }: { debug?: boolean }) {
     <LessonScreen
       theme={DINO_THEME}
       debug={debug}
+      saveSession
       onStart={() => void sfx.unlock()}
       renderStage={props => <DinoStage {...props} sfx={sfx} />}
     />
