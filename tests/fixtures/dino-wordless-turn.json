@@ -1,0 +1,244 @@
+{
+  "nodeId": "warm-up",
+  "timeline": [
+    {
+      "atMs": 16866,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 16949,
+      "event": {
+        "type": "microphone.speech_started"
+      }
+    },
+    {
+      "atMs": 21345,
+      "event": {
+        "type": "transcript",
+        "speaker": "child",
+        "delta": "One, two, three, four, five, six, seven.",
+        "startMs": 16949,
+        "endMs": 21345
+      }
+    },
+    {
+      "atMs": 21441,
+      "event": {
+        "type": "microphone.speech_stopped",
+        "quietMs": 900.5
+      }
+    },
+    {
+      "atMs": 21775,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 21975,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    },
+    {
+      "atMs": 22576,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 23576,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    },
+    {
+      "atMs": 24075,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 24099,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 24275,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    },
+    {
+      "atMs": 24325,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 24333,
+      "event": {
+        "type": "microphone.activity_discarded"
+      }
+    },
+    {
+      "atMs": 24425,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    },
+    {
+      "atMs": 24475,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 24918,
+      "event": {
+        "type": "transcript",
+        "speaker": "sprout",
+        "delta": "Seven cars. Rex can't wait to chomp them.",
+        "startMs": 22351,
+        "endMs": 24918
+      }
+    },
+    {
+      "atMs": 25425,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    },
+    {
+      "atMs": 25525,
+      "event": {
+        "type": "output.activity",
+        "state": "active"
+      }
+    },
+    {
+      "atMs": 25775,
+      "event": {
+        "type": "output.activity",
+        "state": "quiet"
+      }
+    },
+    {
+      "atMs": 26458,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 26641,
+      "event": {
+        "type": "microphone.activity_discarded"
+      }
+    },
+    {
+      "atMs": 27608,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 27691,
+      "event": {
+        "type": "microphone.speech_started"
+      }
+    },
+    {
+      "atMs": 29725,
+      "event": {
+        "type": "microphone.speech_stopped",
+        "quietMs": 900
+      }
+    },
+    {
+      "atMs": 29849,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 30049,
+      "event": {
+        "type": "microphone.activity_discarded"
+      }
+    },
+    {
+      "atMs": 32183,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 32416,
+      "event": {
+        "type": "microphone.activity_discarded"
+      }
+    },
+    {
+      "atMs": 34383,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 34558,
+      "event": {
+        "type": "microphone.activity_discarded"
+      }
+    },
+    {
+      "atMs": 35341,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 35533,
+      "event": {
+        "type": "microphone.activity_discarded"
+      }
+    },
+    {
+      "atMs": 35583,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 35758,
+      "event": {
+        "type": "microphone.activity_discarded"
+      }
+    },
+    {
+      "atMs": 36767,
+      "event": {
+        "type": "microphone.activity_started"
+      }
+    },
+    {
+      "atMs": 36958,
+      "event": {
+        "type": "microphone.activity_discarded"
+      }
+    }
+  ],
+  "endMs": 39200
+}
