@@ -107,14 +107,19 @@ describe("Christmas tree scene", () => {
       ...Object.values(CHRISTMAS_TREE_ICONS),
       "living-room",
       "snow",
+      "present-pink-bow",
+      "present-gold-bow",
     ]);
     for (const asset of assets) {
       const { documentElement, width, height } = readSvg(asset);
       for (const placement of placements.filter(placement => placement.asset === asset)) {
         expect(placement.aspect, asset).toBeCloseTo(height / width);
       }
-      if (asset.startsWith("present-")) {
+      if (asset.endsWith("-bow")) {
+        const body = readSvg(asset.slice(0, -4));
         expect(documentElement.querySelector("g#bow"), asset).not.toBeNull();
+        expect(body.documentElement.querySelector("g#bow"), asset).toBeNull();
+        expect([width, height], asset).toEqual([body.width, body.height]);
       }
     }
   });
