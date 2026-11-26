@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 82">
+  <defs>
+    <path id="hook" d="M16 33v-4a20 20 0 0 1 40 0v39"/>
+    <mask id="stripes">
+      <use href="#hook" fill="none" stroke="white" stroke-width="15" stroke-linecap="round"/>
+    </mask>
+  </defs>
+  <g fill="none" stroke-linecap="round">
+    <use href="#hook" stroke="#9d4268" stroke-width="22"/>
+    <use href="#hook" stroke="#fff6ed" stroke-width="15"/>
+    <path d="M6 32l21 7M8 17l22 5M28 2l12 18M51 7l-3 19M47 32l20-8M46 46l20-8M46 61l20-8M46 76l20-8"
+          stroke="#ed7ba9" stroke-width="6" mask="url(#stripes)"/>
+  </g>
+</svg>

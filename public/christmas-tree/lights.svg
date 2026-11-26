@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500">
+  <g fill="none" stroke="#30654c" stroke-width="2.2" stroke-linecap="round">
+    <path d="M316 156q84 5 168 0M243 236q157 3 314 0M173 316q227 3 454 0M100 396q300 9 600 0"/>
+  </g>
+  <g fill="#ffedbe" id="bulbs">
+    <rect x="329" y="157" width="3" height="5" rx="1.5"/>
+    <rect x="363" y="157" width="3" height="5" rx="1.5"/>
+    <rect x="399" y="158" width="3" height="5" rx="1.5"/>
+    <rect x="435" y="157" width="3" height="5" rx="1.5"/>
+    <rect x="469" y="157" width="3" height="5" rx="1.5"/>
+    <rect x="257" y="236" width="3" height="5" rx="1.5"/>
+    <rect x="302" y="236" width="3" height="5" rx="1.5"/>
+    <rect x="348" y="236" width="3" height="5" rx="1.5"/>
+    <rect x="398" y="236" width="3" height="5" rx="1.5"/>
+    <rect x="448" y="236" width="3" height="5" rx="1.5"/>
+    <rect x="494" y="236" width="3" height="5" rx="1.5"/>
+    <rect x="539" y="236" width="3" height="5" rx="1.5"/>
+    <rect x="191" y="316" width="3" height="5" rx="1.5"/>
+    <rect x="244" y="316" width="3" height="5" rx="1.5"/>
+    <rect x="297" y="316" width="3" height="5" rx="1.5"/>
+    <rect x="348" y="316" width="3" height="5" rx="1.5"/>
+    <rect x="398" y="316" width="3" height="5" rx="1.5"/>
+    <rect x="450" y="316" width="3" height="5" rx="1.5"/>
+    <rect x="503" y="316" width="3" height="5" rx="1.5"/>
+    <rect x="556" y="316" width="3" height="5" rx="1.5"/>
+    <rect x="609" y="316" width="3" height="5" rx="1.5"/>
+    <rect x="118" y="397" width="3" height="5" rx="1.5"/>
+    <rect x="172" y="397" width="3" height="5" rx="1.5"/>
+    <rect x="228" y="398" width="3" height="5" rx="1.5"/>
+    <rect x="284" y="399" width="3" height="5" rx="1.5"/>
+    <rect x="341" y="399" width="3" height="5" rx="1.5"/>
+    <rect x="398" y="400" width="3" height="5" rx="1.5"/>
+    <rect x="455" y="399" width="3" height="5" rx="1.5"/>
+    <rect x="515" y="399" width="3" height="5" rx="1.5"/>
+    <rect x="571" y="398" width="3" height="5" rx="1.5"/>
+    <rect x="626" y="397" width="3" height="5" rx="1.5"/>
+    <rect x="681" y="397" width="3" height="5" rx="1.5"/>
+  </g>
+</svg>
