@@ -69,6 +69,7 @@ export function christmasTreeLesson(seed: number): LessonDefinition {
     addressLearnerByName: true,
     transitionQuietMs: 1_500,
     successHoldMs: 3_000,
+    trackDifficulties: true,
     recovery: {
       supportClarificationInstruction:
         "One-time clarification for the still-rendered round: if the child is still waiting and has not spoken again, briefly ask whether they have finished counting this kind or would like help. If they are speaking or have responded since this request, ignore it and follow their response. Ask at most once. Do not supply or repeat an answer, method or hint, or imply success. A settled correct answer or reaffirmation without renewed help or uncertainty needs a fresh explicit confirmation with the child's number and the kind, then pause. Generic yes or finished alone is insufficient. For renewed help, unresolved alternatives or uncertainty, help, wait or clarify without giving the answer. Only the application changes rounds. This request grants no completion authority.",

@@ -36,17 +36,31 @@ function position({ x, y, width, aspect }: ChristmasTreePlacement): CSSPropertie
   };
 }
 
+export function christmasTreeMisses(
+  snapshot: LessonStageProps["snapshot"] | undefined,
+  node: LessonStageProps["node"],
+) {
+  const runtime = snapshot?.runtime;
+  if (!runtime || !node || runtime.nodeId !== node.id || runtime.pendingRender) return 0;
+  return (
+    runtime.difficulties?.filter(record => record.kind === "incorrect" && record.source.visitId === runtime.visitId)
+      .length ?? 0
+  );
+}
+
 export function ChristmasTreeStage({
   seed,
   node,
   renderToken,
+  snapshot,
   sceneRef,
   motion = "idle",
 }: Pick<LessonStageProps, "node" | "renderToken"> &
-  Partial<Pick<LessonStageProps, "sceneRef" | "motion">> & {
+  Partial<Pick<LessonStageProps, "snapshot" | "sceneRef" | "motion">> & {
     seed: number;
   }) {
   const placements = useMemo(() => christmasTreePlacements(christmasTreeArrangement(seed)), [seed]);
+  const misses = christmasTreeMisses(snapshot, node);
   const kind = node?.presentation.kind as ChristmasTreeKind | undefined;
   const icon = kind && CHRISTMAS_TREE_ICONS[kind];
   const iconBow = icon && bowAsset(icon);
@@ -94,6 +108,7 @@ export function ChristmasTreeStage({
         data-node-id={node?.id ?? "complete"}
         data-scene-id={node?.presentation.sceneId ?? "complete"}
         data-motion={motion}
+        data-hint={misses >= 1 && motion !== "success" ? "glow" : undefined}
       >
         <div className={styles.background} aria-hidden="true">
           {artwork(background, 1600, 900)}

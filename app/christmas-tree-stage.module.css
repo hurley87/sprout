@@ -104,6 +104,22 @@
   }
 }
 
+/* Dim with a filter, not opacity, so the room never shows through the tree. */
+.stage[data-hint="glow"] :is(.background, .tree, .lights, [data-asked="false"]) {
+  filter: brightness(0.78) saturate(0.7);
+  transition: filter 300ms ease-out;
+}
+
+.stage[data-hint="glow"] [data-asked="true"] .item {
+  filter: drop-shadow(0 0 0.45rem #ffd878);
+}
+
+@keyframes hint-glow {
+  50% {
+    filter: drop-shadow(0 0 0.8rem #ffdc83);
+  }
+}
+
 .stage[data-motion="success"] [data-asked="true"] {
   --delay: calc(var(--order) * 650ms);
   --move-duration: 400ms;
@@ -115,6 +131,10 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
+  .stage[data-hint="glow"] [data-asked="true"] .item {
+    animation: hint-glow 1.8s ease-in-out infinite;
+  }
+
   .stage[data-motion="success"] [data-asked="true"][data-kind="bauble"] .item {
     animation-name: swing;
   }

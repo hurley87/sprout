@@ -20,9 +20,18 @@ import {
   type ConversationStateOutputs,
 } from "../lib/lesson-runtime/conversation-observer-contract";
 import { acceptsLearnerAnswerIndependently } from "../lib/lesson-runtime/counting-answer-policy";
-import { currentNodeContext, lessonNodeOrder, validateLessonDefinition } from "../lib/lesson-runtime/lesson-definition";
+import { COUNTING_LESSON } from "../lib/lesson-runtime/counting-lesson";
+import {
+  currentNodeContext,
+  lessonNodeOrder,
+  validateLessonDefinition,
+  type LessonDefinition,
+} from "../lib/lesson-runtime/lesson-definition";
 import { resolveLessonDefinition } from "../lib/lesson-runtime/lesson-registry";
+import { runtimeSource } from "../lib/lesson-runtime/lesson-runtime-reducer";
 import { applySpokenNumberCheck } from "../lib/lesson-runtime/spoken-number-check";
+import { classifierProposal } from "./helpers/runtime-classifier";
+import { createReducerHarness, prepareLearnerClassification } from "./helpers/runtime-harness";
 
 const seeds = Array.from(
   { length: CHRISTMAS_TREE_SEED_MAX - CHRISTMAS_TREE_SEED_MIN + 1 },
@@ -52,6 +61,7 @@ describe("Christmas tree lesson definitions", () => {
       addressLearnerByName: true,
       transitionQuietMs: 1_500,
       successHoldMs: 3_000,
+      trackDifficulties: true,
     });
     expect(validateLessonDefinition(lesson)).toBe(lesson);
     expect(lessonNodeOrder(lesson)).toEqual(CHRISTMAS_TREE_NODE_IDS);
@@ -110,6 +120,12 @@ describe("Christmas tree lesson definitions", () => {
     }
   });
 
+  it.each([false, null, "true", 1])("rejects an invalid trackDifficulties value of %j", trackDifficulties => {
+    expect(() =>
+      validateLessonDefinition({ ...christmasTreeLesson(0), trackDifficulties } as unknown as LessonDefinition),
+    ).toThrow(/trackDifficulties must be true or omitted/);
+  });
+
   it("still resolves the static lessons", () => {
     for (const id of [
       "calculus",
@@ -128,6 +144,74 @@ describe("Christmas tree lesson definitions", () => {
       expect(resolveLessonDefinition(id)?.id).toBe(id);
     }
     expect(resolveLessonDefinition("unknown-lesson")).toBeNull();
+  });
+});
+
+describe("Christmas tree difficulty tracking", () => {
+  const lesson = christmasTreeLesson(0);
+  const newHarness = (definition = lesson) =>
+    createReducerHarness("difficulty-tracking", { lesson: definition, quietDrainMs: 1_500 });
+
+  function attempt(
+    h: ReturnType<typeof newHarness>,
+    revision: number,
+    answerOutcome: "correct" | "incorrect" | "none",
+    text: string,
+  ) {
+    const source = prepareLearnerClassification(h, revision);
+    const result = h.send({
+      type: "proposal.received",
+      source,
+      transcriptSnapshot: `Child: ${text}`,
+      proposal: classifierProposal(source, {
+        answerOutcome,
+        answerCommitment: answerOutcome === "none" ? "no_answer" : "committed",
+        tutorState: "unknown",
+        supportState: answerOutcome === "none" ? "needs_help" : "none",
+      }),
+    });
+    return { source, result };
+  }
+
+  it("records repeated committed misses for the current visit and still advances after success", () => {
+    const h = newHarness();
+    expect(h.state.difficulties).toEqual([]);
+
+    const misses = Array.from({ length: 6 }, (_, index) => attempt(h, index + 1, "incorrect", "Six"));
+    expect(h.state.difficulties).toEqual(misses.map(({ source }) => ({ source, kind: "incorrect" })));
+    for (const { source, result } of misses) {
+      expect(source.visitId).toBe(h.state.visitId);
+      expect(result.effects).not.toContainEqual(expect.objectContaining({ type: "support.limit.reached" }));
+    }
+    expect(h.state).toMatchObject({ phase: "active", nodeId: "round-1", answerAccepted: false });
+    expect(h.state).not.toHaveProperty("supportLimitReached");
+    expect(h.state).not.toHaveProperty("visitOutcomes");
+
+    const answer = lesson.nodes["round-1"].presentation.answer;
+    attempt(h, 7, "correct", String(answer));
+    expect(h.state.answerAccepted).toBe(true);
+    h.send({ type: "output.activity", source: runtimeSource(h.state), state: "active" });
+    h.send({ type: "output.activity", source: runtimeSource(h.state), state: "quiet" });
+    h.send({ type: "clock.tick", source: runtimeSource(h.state) }, lesson.successHoldMs);
+    const identity = h.state.pendingRender?.identity;
+    expect(identity?.nodeId).toBe("round-2");
+    h.send({ type: "render.confirmed", runtimeId: h.state.runtimeId, identity: identity! });
+    expect(h.state).toMatchObject({ phase: "active", nodeId: "round-2", visitId: 2 });
+    expect(h.state).not.toHaveProperty("visitOutcomes");
+  });
+
+  it("tracks explicit help requests", () => {
+    const h = newHarness();
+    attempt(h, 1, "none", "I'm not sure");
+    const { source } = attempt(h, 2, "none", "Can you help?");
+    expect(h.state.difficulties).toEqual([{ source, kind: "help_request" }]);
+  });
+
+  it("keeps difficulties absent for lessons without either option", () => {
+    const h = newHarness(COUNTING_LESSON);
+    expect(h.state).not.toHaveProperty("difficulties");
+    attempt(h, 1, "incorrect", "Six");
+    expect(h.state).not.toHaveProperty("difficulties");
   });
 });
 

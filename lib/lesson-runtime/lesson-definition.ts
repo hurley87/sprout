@@ -53,6 +53,9 @@ export type LessonDefinition = {
   /** Minimum time an accepted success stays on the answered scene, measured from when it becomes
    * visible, before the next scene is requested. Lets authored success feedback finish playing. */
   readonly successHoldMs?: number;
+  /** Record current-visit incorrect answers and explicit help requests for presentation.
+   * Tracking alone imposes no support limit and grants no transition or answer authority. */
+  readonly trackDifficulties?: true;
   readonly supportLimit?: { readonly maxDifficulties: number; readonly instruction: string };
   /** Greet the learner by the server-configured first name (SPROUT_CHILD_NAME), when one is set. */
   readonly addressLearnerByName?: boolean;
@@ -150,6 +153,8 @@ export function validateLessonDefinition(value: LessonDefinition): LessonDefinit
     (!Number.isSafeInteger(value.successHoldMs) || value.successHoldMs <= 0 || value.successHoldMs > 5_000)
   )
     throw new Error("Success hold must be a positive whole number of milliseconds up to 5000");
+  if (value.trackDifficulties !== undefined && value.trackDifficulties !== true)
+    throw new Error("trackDifficulties must be true or omitted");
   if (
     value.supportLimit !== undefined &&
     (value.supportLimit === null ||

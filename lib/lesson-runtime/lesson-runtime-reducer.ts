@@ -337,7 +337,8 @@ export function createLessonRuntime(
       : {}),
     ...(lesson.id === "mae386" ? { questionAttempts: {}, questionObservations: {} } : {}),
     conceptEvidence: {},
-    ...(lesson.supportLimit ? { difficulties: [], supportLimitReached: null, visitOutcomes: [] } : {}),
+    ...(lesson.supportLimit || lesson.trackDifficulties ? { difficulties: [] } : {}),
+    ...(lesson.supportLimit ? { supportLimitReached: null, visitOutcomes: [] } : {}),
     pendingRender: null,
   };
 }
@@ -1126,7 +1127,7 @@ export function reduceLessonRuntime(
             ? "help_request"
             : null;
       if (
-        lesson.supportLimit &&
+        (lesson.supportLimit || lesson.trackDifficulties) &&
         state.transcriptSource === "child" &&
         kind &&
         !state.difficulties?.some(
@@ -1136,6 +1137,7 @@ export function reduceLessonRuntime(
         const difficulties = [...(state.difficulties ?? []), { source: event.source, kind }];
         next = { ...next, difficulties };
         if (
+          lesson.supportLimit &&
           !state.supportLimitReached &&
           difficulties.filter(record => record.source.visitId === state.visitId).length >=
             lesson.supportLimit.maxDifficulties
