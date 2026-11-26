@@ -10,6 +10,7 @@ import { DINO_CAR_CRUNCH_LESSON } from "./dino-car-crunch-lesson";
 import { GARDEN_RESCUE_LESSON } from "./garden-rescue-lesson";
 import { CATCHING_UNICORNS_LESSON } from "./catching-unicorns-lesson";
 import { MAE386_LESSON } from "./mae386-lesson";
+import { christmasTreeLesson, parseChristmasTreeLessonId } from "./christmas-tree-lesson";
 import type { LessonDefinition } from "./lesson-definition";
 
 /** Application-owned allowlist. Keep additions explicit and small. */
@@ -29,5 +30,7 @@ const APPLICATION_LESSONS: Readonly<Record<string, LessonDefinition>> = {
 };
 
 export function resolveLessonDefinition(value: unknown): LessonDefinition | null {
-  return typeof value === "string" && Object.hasOwn(APPLICATION_LESSONS, value) ? APPLICATION_LESSONS[value] : null;
+  if (typeof value === "string" && Object.hasOwn(APPLICATION_LESSONS, value)) return APPLICATION_LESSONS[value];
+  const seed = parseChristmasTreeLessonId(value);
+  return seed === null ? null : christmasTreeLesson(seed);
 }
