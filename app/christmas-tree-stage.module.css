@@ -331,28 +331,11 @@ section:has([data-voice-activity="your-turn"], [data-voice-activity="listening"]
     left: clamp(1rem, 4vw, 3rem);
     translate: none;
   }
-
-  /* Keep Play clear of the objects in the scene preview. */
-  .play.play {
-    top: auto;
-    left: auto;
-    right: 1rem;
-    bottom: 1rem;
-    translate: none;
-    min-width: 0;
-    min-height: 0;
-    padding: 0.55rem 1.5rem;
-    font-size: 1.5rem;
-  }
-
-  .play.play:active {
-    translate: 0 4px;
-  }
 }
 
 @media (orientation: portrait) {
   .stage {
-    --background-align: 0.69;
+    --background-align: 0.64;
   }
 
   .objects {
