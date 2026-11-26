@@ -5,6 +5,7 @@ The production prototype is the realtime counting lesson at `/`, backed by
 
 | Document | Purpose |
 | --- | --- |
+| [Christmas Tree counting](christmas-tree-counting.md) | Seeded counting scene, picture cues and verification limits |
 | [Halloween counting](halloween-counting.md) | Interest-led counting adventure and verification limits |
 | [Dino Car Crunch](dino-car-crunch.md) | Tens-plus-ones lesson, assets and mic-safe effects |
 | [Ice cream shop](ice-cream-shop.md) | Mixed-skill lesson, answer authority and playtest checklist |
