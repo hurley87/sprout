@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 71">
+  <defs>
+    <path id="cane" d="M5 15.8V11a6 6 0 0 1 12 0v55"/>
+    <mask id="stripes">
+      <use href="#cane" fill="none" stroke="white" stroke-width="4.8" stroke-linecap="round"/>
+    </mask>
+  </defs>
+  <g fill="none" stroke-linecap="round">
+    <use href="#cane" stroke="#9d4268" stroke-width="8"/>
+    <use href="#cane" stroke="#fff6ed" stroke-width="4.8"/>
+    <path d="M8.7 10.1L2.6 3.9M9.8 8.8L9.5 0.1M11.7 8.6L17.6 2.2M13.2 9.8L21.9 9.5M0 18.5l10-4.5M12 22l10-5.5M12 29.5l10-5.5M12 37l10-5.5M12 44.5l10-5.5M12 52l10-5.5M12 59.5l10-5.5M12 67l10-5.5" stroke="#ed7ba9" stroke-width="3" mask="url(#stripes)"/>
+  </g>
+</svg>

@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900">
+  <!-- Centre-safe band: x 592-1008 (the 390 x 844 portrait crop). The mantel, stocking frieze,
+       firebox and hearth all sit inside it; the window and the toy-pile floor are landscape-only. -->
+  <defs>
+    <radialGradient id="wall" cx=".5" cy=".45" r=".75">
+      <stop stop-color="#fae9d6"/>
+      <stop offset="1" stop-color="#e8bdac"/>
+    </radialGradient>
+    <linearGradient id="floor" x2="0" y2="1">
+      <stop stop-color="#d5a88a"/>
+      <stop offset="1" stop-color="#bd8973"/>
+    </linearGradient>
+    <linearGradient id="sky" x2="0" y2="1">
+      <stop stop-color="#253a68"/>
+      <stop offset="1" stop-color="#57769c"/>
+    </linearGradient>
+    <linearGradient id="firebox" x2="0" y2="1">
+      <stop stop-color="#2c2934"/>
+      <stop offset="1" stop-color="#4a3639"/>
+    </linearGradient>
+    <pattern id="brick" x="602" y="0" width="72" height="68" patternUnits="userSpaceOnUse">
+      <path d="M0 0H72M0 34H72M36 0V34M0 34V68M72 34V68" fill="none" stroke="#c98f7e" stroke-width="3"/>
+    </pattern>
+    <clipPath id="pane">
+      <rect x="252" y="168" width="232" height="262" rx="12"/>
+    </clipPath>
+  </defs>
+
+  <rect width="1600" height="900" fill="url(#wall)"/>
+  <path d="M0 94h1600M0 104h1600M85 0v650m1430-650v650" fill="none" stroke="#e0b6a4" stroke-width="3" opacity=".55"/>
+  <path d="M0 598h1600v24H0z" fill="#eac8b2"/>
+  <path d="M0 599h1600M0 620h1600" fill="none" stroke="#d7b39c" stroke-width="4"/>
+
+  <!-- Floor and skirting -->
+  <path d="M0 760h1600v140H0z" fill="url(#floor)"/>
+  <path d="M0 738h1600v24H0z" fill="#eccbb5" stroke="#cfa58f" stroke-width="4"/>
+  <g fill="none" stroke="#a97864" stroke-width="2.5" opacity=".26">
+    <path d="M0 792h1600M0 838h1600M180 762l-30 30m420-30-12 30m720-30 18 30m200-30 34 30M70 792l-44 46m610-46-14 46m790-46 40 46M330 838l-40 62m1010-62 50 62"/>
+    <path d="M1180 812q40-6 96-4M210 860q50 4 110 0"/>
+  </g>
+
+  <!-- Window with a snowy night; the pane (x 252-484, y 168-430) is free for a snowfall layer -->
+  <path d="M206 140q50 4 70-22h182q22 26 72 22v320q-40-10-62-46H270q-22 36-64 46z" fill="#ddafa8"/>
+  <path d="M222 150q6 60 6 110m-2 40q0 70-8 130m312-280q-6 60-6 110m2 40q0 70 8 130" fill="none" stroke="#c99490" stroke-width="4" opacity=".58"/>
+  <rect x="238" y="154" width="260" height="290" rx="22" fill="#e9d8ca" stroke="#bc9b8f" stroke-width="6"/>
+  <g clip-path="url(#pane)">
+    <rect x="252" y="168" width="232" height="262" fill="url(#sky)"/>
+    <circle cx="430" cy="214" r="22" fill="#fff3d7" opacity=".9"/>
+    <circle cx="441" cy="207" r="20" fill="#3a5280"/>
+    <g fill="#fff3d7" opacity=".75">
+      <circle cx="290" cy="196" r="2.5"/>
+      <circle cx="352" cy="230" r="2"/>
+      <circle cx="318" cy="268" r="2"/>
+      <circle cx="466" cy="282" r="2.5"/>
+    </g>
+    <path d="M244 352q60-26 112-8 50 18 136-10v100H244z" fill="#cfdde3"/>
+    <path d="M244 384q90-34 170-10 40 12 78 0v60H244z" fill="#eef3f1"/>
+    <path d="M368 135v300m-124-136h248" fill="none" stroke="#d4c1b4" stroke-width="11"/>
+    <path d="M366 135v300m-122-138h248" fill="none" stroke="#eee4d8" stroke-width="4"/>
+  </g>
+  <rect x="228" y="432" width="280" height="20" rx="7" fill="#e8ccba" stroke="#be9b89" stroke-width="4"/>
+  <path d="M190 122h356" fill="none" stroke="#bb9686" stroke-width="7" stroke-linecap="round"/>
+
+  <!-- A framed snowy picture balances the window -->
+  <rect x="1150" y="196" width="190" height="150" rx="12" fill="#e9d8ca" stroke="#bc9b8f" stroke-width="6"/>
+  <rect x="1166" y="212" width="158" height="118" rx="6" fill="#dfebea"/>
+  <path d="M1166 296q50-30 96-14 36 12 62-4v52h-158z" fill="#f9f3e8" stroke="#cfd9d8" stroke-width="3"/>
+  <path d="M1232 288l22-50 22 50z" fill="#569a72" stroke="#286248" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M1254 288v12" stroke="#704a3c" stroke-width="5" stroke-linecap="round"/>
+
+  <!-- Brick chimney breast, floor to ceiling -->
+  <path d="M594 0h6v762h-6zM998 0h8v762h-8z" fill="#c99d8e" opacity=".55"/>
+  <rect x="602" y="-6" width="396" height="770" fill="#b0715f" stroke="#956254" stroke-width="5"/>
+  <rect x="602" y="0" width="396" height="762" fill="url(#brick)" opacity=".8"/>
+
+  <!-- Wreath on the breast: a single shape with nothing to count -->
+  <g transform="translate(0 -26)">
+    <circle cx="800" cy="168" r="58" fill="none" stroke="#286248" stroke-width="34"/>
+    <circle cx="800" cy="168" r="58" fill="none" stroke="#4b906c" stroke-width="26"/>
+    <path d="M760 136q18-20 40-24m30 18q14 14 16 34m-6 40q-12 18-34 22m-64-24q-8-14-6-30" fill="none" stroke="#6eae84" stroke-width="5" stroke-linecap="round"/>
+    <path d="M797 224l-17 32 13-3 6 11 4-38zm6 0 17 32-13-3-6 11-4-38z" fill="#c95455" stroke="#803f47" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M800 222c-18-16-34-10-30 2s22 6 30-2c8 8 26 14 30 2s-12-18-30-2z" fill="#c95455" stroke="#803f47" stroke-width="4" stroke-linejoin="round"/>
+    <circle cx="800" cy="222" r="7" fill="#d96765" stroke="#803f47" stroke-width="4"/>
+  </g>
+
+  <!-- Mantel: shelf plus a plain frieze; the stockings hang from its lower edge (y 362) -->
+  <rect x="600" y="288" width="400" height="74" fill="#cb936f" stroke="#a46e57" stroke-width="5"/>
+  <path d="M608 304h384M608 346h384" fill="none" stroke="#d9a582" stroke-width="3" opacity=".7"/>
+  <rect x="594" y="268" width="412" height="24" rx="8" fill="#e6b490" stroke="#a46e57" stroke-width="5"/>
+  <path d="M604 275h392" stroke="#f2c9a6" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- Firebox and hearth -->
+  <path d="M676 772V630a124 96 0 0 1 248 0v142z" fill="#e2b19e" stroke="#9c6a5f" stroke-width="5"/>
+  <path d="M700 772V634a100 76 0 0 1 200 0v138z" fill="url(#firebox)" stroke="#8a5d55" stroke-width="4"/>
+  <path d="M730 606h140M712 646h176M704 690h192M702 732h196" fill="none" stroke="#5a454a" stroke-width="3" opacity=".55"/>
+  <path d="M712 772q88-16 176 0z" fill="#6f5552"/>
+  <path d="M742 764l112-16m-104 0 108 16" stroke="#805c54" stroke-width="12" stroke-linecap="round"/>
+  <path d="M590 770h420l14 18q4 8-6 8H582q-10 0-6-8z" fill="#d9ad98" stroke="#a87e6c" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M598 776h404" stroke="#eac2ad" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- Rug in front of the hearth -->
+  <ellipse cx="800" cy="858" rx="250" ry="42" fill="#cb968b" stroke="#ac7d75" stroke-width="4"/>
+  <ellipse cx="800" cy="858" rx="224" ry="32" fill="#d8a89a" stroke="#e8c3ad" stroke-width="3"/>
+</svg>
