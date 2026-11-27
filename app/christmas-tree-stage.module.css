@@ -1,0 +1,358 @@
+.frame,
+.stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.stage {
+  isolation: isolate;
+  overflow: hidden;
+  background: #fae9d6;
+  container-type: size;
+  --room: calc(100cqh - var(--stage-top, 0px) - var(--stage-bottom, 0px));
+  --background-align: 0.5;
+  --background-width: max(100cqw, 100cqh * 16 / 9);
+  --background-height: max(100cqh, 100cqw * 9 / 16);
+}
+
+.background {
+  position: absolute;
+  inset: 0;
+}
+
+.background img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: calc(var(--background-align) * 100%) bottom;
+}
+
+.objects {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--stage-top, 0px) + var(--room) / 2);
+  width: min(100cqw - 2rem, var(--room) * 1.6);
+  aspect-ratio: 8 / 5;
+  translate: -50% -50%;
+}
+
+.object {
+  position: absolute;
+  translate: -50% -50%;
+}
+
+.item {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.object img,
+.bubble img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.bow {
+  position: absolute;
+  inset: 0;
+}
+
+.bubble {
+  position: absolute;
+  top: var(--stage-top, 1rem);
+  right: clamp(1rem, 4vw, 3rem);
+  display: grid;
+  place-items: center;
+  width: clamp(3.75rem, 10vmin, 6rem);
+  aspect-ratio: 1;
+  padding: clamp(0.55rem, 1.4vmin, 0.85rem);
+  border: 3px solid #d28b9f;
+  border-radius: 50%;
+  background: #fff8ee;
+  box-shadow: 0 4px 0 #a6596b40;
+  animation: bubble-pop 360ms 400ms ease-out both;
+}
+
+.bubble[data-opening-cue] {
+  animation-delay: 2.5s;
+}
+
+.stage:is(:not([data-render-token]), [aria-busy="true"]) + .bubble {
+  visibility: hidden;
+  animation: none;
+}
+
+@keyframes bubble-pop {
+  from {
+    visibility: hidden;
+    opacity: 0;
+    scale: 0.65;
+  }
+
+  70% {
+    scale: 1.08;
+  }
+
+  to {
+    visibility: visible;
+    opacity: 1;
+    scale: 1;
+  }
+}
+
+/* Dim with a filter, not opacity, so the room never shows through the tree. */
+.stage[data-hint="glow"] :is(.background, .tree, .lights, [data-asked="false"]) {
+  filter: brightness(0.78) saturate(0.7);
+  transition: filter 300ms ease-out;
+}
+
+.stage[data-hint="glow"] [data-asked="true"] .item {
+  filter: drop-shadow(0 0 0.45rem #ffd878);
+}
+
+@keyframes hint-glow {
+  50% {
+    filter: drop-shadow(0 0 0.8rem #ffdc83);
+  }
+}
+
+.stage[data-motion="success"] [data-asked="true"] {
+  --delay: calc(var(--order) * 650ms);
+  --move-duration: 400ms;
+}
+
+.stage[data-motion="success"] [data-asked="true"] .item {
+  transform-origin: center 12%;
+  animation: highlight var(--move-duration) var(--delay) ease-in-out;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .stage[data-hint="glow"] [data-asked="true"] .item {
+    animation: hint-glow 1.8s ease-in-out infinite;
+  }
+
+  .stage[data-motion="success"] [data-asked="true"][data-kind="bauble"] .item {
+    animation-name: swing;
+  }
+
+  .stage[data-motion="success"] [data-asked="true"][data-kind="candy-cane"] .item {
+    animation-name: wiggle;
+  }
+
+  .stage[data-motion="success"] [data-asked="true"][data-kind="gingerbread"] .item {
+    animation-name: rock;
+  }
+
+  .stage[data-motion="success"] [data-asked="true"][data-kind="present"] .item {
+    animation-name: bounce;
+  }
+
+  .stage[data-motion="success"] [data-asked="true"] .bow {
+    animation: bow-pop var(--move-duration) var(--delay) ease-out;
+  }
+}
+
+@keyframes swing {
+  28% {
+    rotate: -12deg;
+  }
+
+  56% {
+    rotate: 10deg;
+    filter: brightness(1.28) drop-shadow(0 0 0.35rem #ffe8a1);
+  }
+
+  82% {
+    rotate: -4deg;
+  }
+}
+
+@keyframes wiggle {
+  24%,
+  70% {
+    rotate: 12deg;
+  }
+
+  46% {
+    rotate: -12deg;
+  }
+}
+
+@keyframes rock {
+  32% {
+    rotate: -10deg;
+  }
+
+  65% {
+    rotate: 8deg;
+  }
+}
+
+@keyframes bounce {
+  42% {
+    translate: 0 -12%;
+  }
+}
+
+@keyframes bow-pop {
+  48% {
+    translate: 0 -12%;
+    scale: 1.08;
+  }
+}
+
+@keyframes highlight {
+  50% {
+    filter: brightness(1.22) drop-shadow(0 0 0.4rem #ffdf80);
+  }
+}
+
+/* Keep the shared status text for screen readers and use the scene's star as its visual cue. */
+section[data-palette]:has(.frame) [data-status-cue="glow"]:has([data-voice-activity]) {
+  background: transparent;
+  box-shadow: none;
+}
+
+section:has(.frame) [data-status-cue="glow"] [data-voice-activity] {
+  visibility: hidden;
+}
+
+section:has([data-voice-activity="speaking"]) .stage .star img {
+  filter: drop-shadow(0 0 0.65rem #ffcf56);
+}
+
+section:has([data-voice-activity="your-turn"], [data-voice-activity="listening"]) .stage .star img {
+  filter: drop-shadow(0 0 0.35rem #fff0ae);
+}
+
+.stage[data-motion="celebrate"] .star img {
+  filter: drop-shadow(0 0 0.5rem #ffd365);
+  animation: shine 2.4s ease-in-out infinite;
+}
+
+.stage[data-motion="celebrate"] .lights img {
+  animation: twinkle 1.8s ease-in-out infinite;
+}
+
+/* The window pane in the 1600 × 900 backdrop starts at (983, 136). Follow its cover crop. */
+.snow {
+  position: absolute;
+  left: calc((100% - var(--background-width)) * var(--background-align) + var(--background-width) * 983 / 1600);
+  top: calc(100% - var(--background-height) * 764 / 900);
+  width: calc(var(--background-width) * 286 / 1600);
+  height: calc(var(--background-height) * 242 / 900);
+  overflow: hidden;
+  border-radius: 5%;
+  visibility: hidden;
+}
+
+.snow img {
+  position: absolute;
+  bottom: 100%;
+  width: clamp(0.5rem, 1.3cqw, 0.9rem);
+  height: auto;
+}
+
+.stage[data-motion="celebrate"] .snow {
+  visibility: visible;
+}
+
+.stage[data-motion="celebrate"] .snow img {
+  animation: snowfall 4s linear infinite;
+}
+
+.snow img:nth-child(1) {
+  left: 23%;
+}
+
+.stage[data-motion="celebrate"] .snow img:nth-child(2) {
+  left: 48%;
+  animation-delay: -2.65s;
+}
+
+.stage[data-motion="celebrate"] .snow img:nth-child(3) {
+  left: 74%;
+  animation-delay: -1.3s;
+}
+
+@keyframes shine {
+  50% {
+    filter: drop-shadow(0 0 1.1rem #ffc851);
+    scale: 1.08;
+  }
+}
+
+@keyframes twinkle {
+  50% {
+    filter: brightness(1.2) drop-shadow(0 0 0.22rem #ffe6a0);
+  }
+}
+
+@keyframes snowfall {
+  to {
+    bottom: -12%;
+    translate: 0.9rem;
+  }
+}
+
+.complete,
+.loading {
+  position: absolute;
+  color: #573638;
+  font-size: clamp(1rem, 2.5vw, 1.5rem);
+  text-align: center;
+}
+
+.complete {
+  left: 50%;
+  top: var(--stage-top, 1rem);
+  translate: -50% 0;
+  width: max-content;
+  max-width: 90%;
+  padding: 0.35em 0.85em;
+  border-radius: 999px;
+  background: #fff8eeed;
+}
+
+.loading {
+  inset: 0;
+  display: grid;
+  place-content: center;
+  padding: 1rem;
+  background: #fff8f1f2;
+}
+
+@media (orientation: landscape) {
+  .complete {
+    left: clamp(1rem, 4vw, 3rem);
+    translate: none;
+  }
+}
+
+@media (orientation: portrait) {
+  .stage {
+    --background-align: 0.64;
+  }
+
+  .objects {
+    width: min(108cqw, var(--room) * 1.6);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bubble {
+    animation-duration: 0s;
+  }
+
+  .stage[data-motion="celebrate"] :is(.star, .lights, .snow) img {
+    animation: none;
+  }
+
+  .stage[data-motion="celebrate"] .snow {
+    visibility: hidden;
+  }
+}

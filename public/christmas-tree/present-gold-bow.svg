@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 86">
+  <g id="bow" stroke="#9d476a" stroke-width="3.5" stroke-linejoin="round">
+    <path d="M54 27C43 9 31 0 23 6c-8 7-2 23 31 21zm0 0C65 9 77 0 85 6c8 7 2 23-31 21z" fill="#f48eb2"/>
+    <path d="M27 13q10-2 23 13M81 13q-10-2-23 13" fill="none" stroke="#cd5d8b" stroke-width="2.8" stroke-linecap="round"/>
+    <rect x="47" y="19" width="14" height="13" rx="5" fill="#ffbdd4"/>
+  </g>
+</svg>
