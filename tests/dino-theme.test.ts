@@ -7,11 +7,13 @@ describe("Dino Car Crunch theme", () => {
     expect(DINO_THEME.lesson).toBe(DINO_CAR_CRUNCH_LESSON);
     expect(DINO_THEME.copy).toEqual({
       welcome: "Rex is hungry! Let's count the cars.",
-      ready: "Your turn!",
+      ready: "Say it out loud!",
       complete: "Rex is full!",
     });
-    // Same voice indicator as /halloween: the glow replaces the "Sprout is talking…" pill.
+    // Same voice indicator as /halloween: the glow replaces the "Sprout is talking…" pill,
+    // but the child's turn keeps its words so players know to answer aloud.
     expect(DINO_THEME.statusCue).toBe("glow");
+    expect(DINO_THEME.showReadyCopy).toBe(true);
   });
 
   it("labels success with each node's answer", () => {

@@ -8,9 +8,11 @@ export function dinoSuccessLabel(node: LessonNodeDefinition): string {
 
 export const DINO_THEME: LessonScreenTheme = {
   lesson: DINO_CAR_CRUNCH_LESSON,
-  copy: { welcome: "Rex is hungry! Let's count the cars.", ready: "Your turn!", complete: "Rex is full!" },
+  // A tester didn't know to answer Rex out loud: the glow alone doesn't say so, so keep these words up.
+  copy: { welcome: "Rex is hungry! Let's count the cars.", ready: "Say it out loud!", complete: "Rex is full!" },
   successLabel: dinoSuccessLabel,
   statusCue: "glow",
+  showReadyCopy: true,
   palette: "pastel",
   progress: {
     base: "border-2 border-teal-800",
