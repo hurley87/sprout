@@ -1,0 +1,302 @@
+.frame,
+.stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+.stage {
+  isolation: isolate;
+  overflow: hidden;
+  container-type: size;
+  background: #4a2c36;
+  --align: var(--align-landscape);
+  --bg-width: max(100cqw, 100cqh * 16 / 9);
+  --bg-height: max(100cqh, 100cqw * 9 / 16);
+}
+@media (orientation: portrait) {
+  .stage {
+    --align: var(--align-portrait);
+  }
+}
+.background {
+  position: absolute;
+  inset: 0;
+}
+.background img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: calc(var(--align) * 100%) bottom;
+}
+/* Follows the background's cover crop, so placements are fractions of the 1600 × 900 artwork. */
+.layer {
+  position: absolute;
+  left: calc((100% - var(--bg-width)) * var(--align));
+  bottom: 0;
+  width: var(--bg-width);
+  height: var(--bg-height);
+}
+.object {
+  position: absolute;
+  translate: -50% -50%;
+}
+.object img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.preload {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+.preload img {
+  width: 1px;
+  height: 1px;
+}
+
+/* A stocking and its canes, the size of the layer so their placements share its coordinates. */
+.stocking {
+  position: absolute;
+  inset: 0;
+}
+.fan {
+  position: absolute;
+  inset: 0;
+}
+.cane img {
+  transition:
+    filter 250ms ease-out,
+    transform 250ms ease-out;
+}
+
+/* Counting her pick, or every stocking after a second miss: the cane brightens and grows a little. */
+.lit img {
+  filter: brightness(1.2) drop-shadow(0 0 0.5rem #fff09a) drop-shadow(0 0 0.2rem #ffc93c);
+  transform: scale(1.15);
+}
+
+/* After the second miss's sweep: the right stocking glows until the round ends. */
+.stocking[data-hint="glow"] .sock img {
+  filter: drop-shadow(0 0 0.7rem #fff0a0) drop-shadow(0 0 0.25rem #ffd65c);
+  animation: hint-pulse 1.8s ease-in-out infinite;
+}
+@keyframes hint-pulse {
+  50% {
+    filter: drop-shadow(0 0 1.1rem #fff0a0) drop-shadow(0 0 0.35rem #ffd65c);
+  }
+}
+
+/* Success: jiggle, then the canes pop out one at a time, then a toy drops onto the pile. */
+.jiggle {
+  animation: jiggle 400ms ease-in-out;
+}
+@keyframes jiggle {
+  25% {
+    transform: rotate(3deg);
+  }
+  75% {
+    transform: rotate(-3deg);
+  }
+}
+.pop img {
+  animation: pop 600ms var(--pop-at) ease-out both;
+}
+@keyframes pop {
+  0% {
+    transform: none;
+    filter: none;
+  }
+  45% {
+    transform: translateY(-32%) scale(1.15);
+    filter: brightness(1.25) drop-shadow(0 0 0.55rem #fff09a) drop-shadow(0 0 0.2rem #ffc93c);
+  }
+  100% {
+    transform: translateY(-20%);
+    filter: brightness(1.12) drop-shadow(0 0 0.3rem #fff09a);
+  }
+}
+.drop {
+  animation: toy-drop 700ms var(--toy-at) cubic-bezier(0.4, 0, 0.8, 0.6) both;
+}
+@keyframes toy-drop {
+  0% {
+    opacity: 0;
+    transform: translateY(-180%);
+  }
+  20% {
+    opacity: 1;
+  }
+  70% {
+    transform: translateY(0);
+  }
+  85% {
+    transform: translateY(-8%);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Voice cue: the hearth glows in place of the status pill. The status text stays for screen readers. */
+.hearthGlow {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, #ffcf7aa6, #ffb35f40 60%, transparent);
+  opacity: 0;
+  transition: opacity 600ms ease-in-out;
+  pointer-events: none;
+}
+.fire img {
+  transition: filter 600ms ease-in-out;
+}
+section[data-palette]:has(.frame) [data-status-cue="glow"]:has([data-voice-activity]) {
+  background: transparent;
+  box-shadow: none;
+}
+section:has(.frame) [data-status-cue="glow"] [data-voice-activity] {
+  visibility: hidden;
+}
+section:has([data-voice-activity="speaking"]) .stage .hearthGlow {
+  opacity: 1;
+}
+section:has([data-voice-activity="speaking"]) .stage .fire img {
+  filter: brightness(1.25) drop-shadow(0 0 0.9rem #ffcf73);
+}
+section:has([data-voice-activity="your-turn"], [data-voice-activity="listening"]) .stage .hearthGlow {
+  opacity: 0.6;
+}
+section:has([data-voice-activity="your-turn"], [data-voice-activity="listening"]) .stage .fire img {
+  filter: brightness(1.12) drop-shadow(0 0 0.5rem #ffe3a6);
+}
+
+/* Finale: the stockings fill, the fire crackles and snow falls past the window. */
+.fill img {
+  animation: fill 700ms calc(var(--order) * 180ms) ease-out both;
+}
+@keyframes fill {
+  from {
+    opacity: 0;
+    transform: translateY(30%);
+  }
+}
+.crackle img {
+  animation: crackle 1.6s ease-in-out infinite;
+}
+@keyframes crackle {
+  30% {
+    filter: brightness(1.15);
+    transform: scaleY(1.03);
+  }
+  55% {
+    filter: brightness(0.96);
+  }
+  80% {
+    filter: brightness(1.1);
+    transform: scaleY(1.015);
+  }
+}
+.snow {
+  position: absolute;
+  overflow: hidden;
+}
+.snow span {
+  position: absolute;
+  bottom: 100%;
+  left: calc(8% + var(--flake) * 19%);
+  width: 7%;
+  animation: snowfall 4.5s calc(var(--flake) * -0.9s) linear infinite;
+}
+.snow img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+@keyframes snowfall {
+  to {
+    bottom: -12%;
+    translate: 1rem;
+  }
+}
+
+.complete {
+  position: absolute;
+  bottom: calc(var(--stage-bottom, 1rem) + 1rem);
+  left: 50%;
+  translate: -50%;
+  padding: 0.5rem 1rem;
+  border-radius: 1rem;
+  background: #fff8eedb;
+  color: #5b2f3c;
+  text-align: center;
+  white-space: nowrap;
+}
+.loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #4a2c36;
+  color: white;
+}
+
+/* Reduced motion: no movement. Highlights, pops and the glow become brightness only, the toy fades in
+ * and the snow is hidden. */
+@media (prefers-reduced-motion: reduce) {
+  .cane img,
+  .fire img,
+  .hearthGlow {
+    transition: none;
+  }
+  .lit img {
+    transform: none;
+  }
+  .stocking[data-hint="glow"] .sock img {
+    animation: none;
+  }
+  .jiggle {
+    animation: none;
+  }
+  .jiggle .sock img {
+    animation: flash 400ms ease-in-out;
+  }
+  @keyframes flash {
+    50% {
+      filter: brightness(1.2) drop-shadow(0 0 0.5rem #fff0a0);
+    }
+  }
+  .pop img {
+    animation: pop-still 400ms var(--pop-at) ease-out both;
+  }
+  @keyframes pop-still {
+    from {
+      filter: none;
+    }
+    to {
+      filter: brightness(1.2) drop-shadow(0 0 0.45rem #fff09a) drop-shadow(0 0 0.2rem #ffc93c);
+    }
+  }
+  .drop {
+    animation: fade-in 400ms var(--toy-at) linear both;
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+  .fill img,
+  .crackle img {
+    animation: none;
+  }
+  .snow {
+    visibility: hidden;
+  }
+  .snow span {
+    animation: none;
+  }
+}
