@@ -62,6 +62,37 @@ describe("dino car crunch lesson", () => {
     expect(lesson.tutor.sessionGuidance).toContain("twenty, twenty-one, twenty-two");
   });
 
+  it.each(["sessionGuidance", "nodeInstruction"] as const)(
+    "%s ends count-on hints with an open next-number prompt",
+    field => {
+      const guidance = lesson.tutor[field];
+      expect(guidance).toContain("stopping before the last number");
+      expect(guidance).toContain("End the hint on a rising next-number prompt such as “and then…?” and wait.");
+      expect(guidance).toContain("Never hand off with “now you,” “your turn” or “you try.”");
+    },
+  );
+
+  it.each(["sessionGuidance", "nodeInstruction"] as const)(
+    "%s treats a copied partial count as unfinished and gives a smaller hint",
+    field => {
+      const guidance = lesson.tutor[field];
+      expect(guidance).toContain(
+        "If the child repeats your partial count and stops where you stopped, treat it as unfinished.",
+      );
+      expect(guidance).toContain(
+        "After a count-on hint, a copied partial count or another wrong answer calls for a smaller hint. Do not repeat the count.",
+      );
+      expect(guidance).toContain("On the warm-up, ask what comes after the last number you said");
+      expect(guidance).toContain("What comes after six?");
+      expect(guidance).toContain("On a truck scene, ask what comes after the last ones number");
+      expect(guidance).toContain("What comes after one?");
+      expect(guidance).toContain("So after forty-one comes…?");
+      expect(guidance).toContain(
+        "Never follow an unfinished or wrong count with agreement like “mm-hmm,” “uh-huh” or “yes.”",
+      );
+    },
+  );
+
   it("nudges a silent learner to answer out loud, then checks in once, without hints", () => {
     expect(lesson.silenceNudges?.map(nudge => nudge.afterQuietMs)).toEqual([5_000, 10_000]);
     const [reAsk, checkIn] = lesson.silenceNudges!.map(nudge => nudge.instruction);
