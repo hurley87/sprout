@@ -25,6 +25,20 @@ export const DINO_CAR_CRUNCH_LESSON: LessonDefinition = validateLessonDefinition
     answerRecoveryInstruction:
       "One-time clarification for the still-rendered current scene: the application cannot yet establish a settled child answer. If the child is still waiting and has not spoken again, briefly ask them to repeat it. If they are speaking or have responded since this request, ignore it and follow their response. Ask at most once. Do not supply or repeat an answer, method or hint, or imply success. Wait for a fresh answer; if it establishes settled correct current-scene success, explicitly confirm its number and object, then pause. For unfinished or uncertain answers, wait or clarify without giving the answer. Never change scenes. This request grants no completion authority.",
   },
+  // A first-time player may not know to answer out loud (see the Nov 26 tester session): re-ask in a
+  // way that says how to answer, then check in once and wait. Neither nudge may hint or count.
+  silenceNudges: [
+    {
+      afterQuietMs: 7_000,
+      instruction:
+        "One-time nudge for the still-rendered current scene: the child has not said anything since your question, perhaps because they don't know to answer out loud. If the child is speaking or has responded since this request, ignore it and follow their response. Otherwise, in one or two short, warm sentences, tell them they can say their answer out loud to Rex, then ask the current question again in a different, simpler way. You may offer to count the cars together, but do not start counting, give a hint or say any number until the child asks or tries. Do not imply success. Never change scenes. This request grants no completion authority.",
+    },
+    {
+      afterQuietMs: 12_000,
+      instruction:
+        "Second and final nudge for the still-rendered current scene: the child has still not said anything. If the child is speaking or has responded since this request, ignore it and follow their response. Otherwise, in one short, warm sentence, check whether they are still there and remind them they can say a number out loud whenever they are ready, for example: “Are you still there? Just tell Rex a number when you're ready!” Do not repeat the question, give a hint or say any number. Then wait silently and do not prompt again. Never change scenes. This request grants no completion authority.",
+    },
+  ],
   nodes: {
     "warm-up": {
       id: "warm-up",

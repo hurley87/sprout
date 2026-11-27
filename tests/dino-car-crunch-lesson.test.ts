@@ -62,6 +62,24 @@ describe("dino car crunch lesson", () => {
     expect(lesson.tutor.sessionGuidance).toContain("twenty, twenty-one, twenty-two");
   });
 
+  it("nudges a silent learner to answer out loud, then checks in once, without hints", () => {
+    expect(lesson.silenceNudges?.map(nudge => nudge.afterQuietMs)).toEqual([7_000, 12_000]);
+    const [reAsk, checkIn] = lesson.silenceNudges!.map(nudge => nudge.instruction);
+    expect(reAsk).toContain("say their answer out loud to Rex");
+    expect(reAsk).toContain("ask the current question again in a different, simpler way");
+    expect(checkIn).toContain("Are you still there?");
+    expect(checkIn).toContain("do not prompt again");
+    for (const instruction of [reAsk, checkIn]) {
+      expect(instruction).not.toMatch(/\d/);
+      for (const [index, id] of ids.entries())
+        expect(instruction).not.toMatch(
+          answerPattern(Number(lesson.nodes[id].presentation.answer), answerWords[index]),
+        );
+      expect(instruction).toContain("give a hint");
+      expect(instruction).toContain("Never change scenes");
+    }
+  });
+
   it("never greets the child by the configured name", () => {
     expect(createLiveSessionConfig(lesson, "Evie")).toEqual(createLiveSessionConfig(lesson));
     expect(JSON.stringify(createLiveSessionConfig(lesson, "Evie"))).not.toContain("Evie");

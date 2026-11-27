@@ -17,7 +17,13 @@ import {
 } from "@/lib/lesson-runtime/lesson-runtime";
 import { useVoiceDemo } from "@/components/voice-demo/use-voice-demo";
 import { VoiceDemoControls } from "@/components/voice-demo/controls";
-import { lessonPresentation, showsSuccessFeedback, stageMotion, voiceActivity } from "./lesson-presentation";
+import {
+  lessonPresentation,
+  showsSuccessFeedback,
+  stageMotion,
+  statusCopyVisible,
+  voiceActivity,
+} from "./lesson-presentation";
 import { VoiceCue } from "./voice-cue";
 import { GlowCue, useHeldVoiceActivity } from "./glow-cue";
 import styles from "./lesson.module.css";
@@ -26,6 +32,8 @@ export type LessonScreenTheme = {
   readonly lesson: LessonDefinition;
   readonly copy: PresentationCopy;
   readonly statusCue?: "glow";
+  /** With the glow cue, keep the ready copy visible on the child's turn. */
+  readonly showReadyCopy?: true;
   /** "night": dark controls for a night-time scene. "pastel": light plum controls for a pastel stage. */
   readonly palette?: "night" | "pastel";
   readonly progressIcons?: Readonly<Record<string, string>>;
@@ -126,7 +134,10 @@ export function LessonScreen({
           <h1 className={styles.title}>Sprout</h1>
           <div className={styles.status} data-status-cue={glowing ? "glow" : undefined}>
             {glow ? <GlowCue activity={activity} palette={theme.palette} /> : <VoiceCue activity={activity} />}
-            <p role={shown.kind === "error" ? "alert" : "status"} className={glowing ? "sr-only" : undefined}>
+            <p
+              role={shown.kind === "error" ? "alert" : "status"}
+              className={statusCopyVisible(activity, glow, theme.showReadyCopy) ? undefined : "sr-only"}
+            >
               {shown.message}
             </p>
           </div>
