@@ -115,7 +115,7 @@ it("gives a new visit its own budget", async () => {
 it("does nothing for a lesson without authored nudges", async () => {
   vi.useFakeTimers();
   const request = vi.fn();
-  asked(new SilenceNudge(DINO_CAR_CRUNCH_LESSON, request, vi.fn()));
+  asked(new SilenceNudge({ ...lesson, silenceNudges: undefined }, request, vi.fn()));
   await vi.advanceTimersByTimeAsync(60_000);
   expect(request).not.toHaveBeenCalled();
 });

@@ -109,7 +109,7 @@ it("cancels a pending nudge when the lesson stops", async () => {
 });
 
 it("leaves lessons without authored nudges unchanged", async () => {
-  start(DINO_CAR_CRUNCH_LESSON);
+  start({ ...lesson, silenceNudges: undefined });
   await vi.advanceTimersByTimeAsync(60_000);
   expect(nudges()).toEqual([]);
 });
