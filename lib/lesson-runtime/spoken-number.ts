@@ -130,7 +130,24 @@ export function parseSpokenNumbers(text: string): SpokenNumber[] {
   return readNumbers(text).map(({ item }) => item);
 }
 
-type Turn = { speaker: string; text: string };
+export type TranscriptTurn = { speaker: "child" | "tutor"; text: string };
+type Turn = TranscriptTurn;
+
+/** A scene transcript's Child/Tutor turns, in order. Turns may also start mid-line ("Tutor: six. Child: six"). */
+export function transcriptTurns(transcript: string): TranscriptTurn[] {
+  return (
+    [
+      ...transcript.matchAll(
+        /(?:^|\n|(?=\b(?:Child|Tutor):))\s*(Child|Tutor):\s*([\s\S]*?)(?=\n\s*(?:Child|Tutor):|\b(?:Child|Tutor):|$)/gi,
+      ),
+    ]
+      .map(match => ({ speaker: match[1].toLowerCase() as TranscriptTurn["speaker"], text: match[2].trim() }))
+      // A wordless child fragment ("Child: .", a microphone turn that produced no words) is not a newer
+      // attempt, so it must not hide the answer the child actually spoke.
+      .filter(turn => turn.speaker !== "child" || /[\p{L}\p{N}]/u.test(turn.text))
+  );
+}
+
 type Attempt = { text: string; numbers: Match[]; joinedFrom?: number };
 
 /** A child turn's numbers, joined with the child's previous turn when a short tutor interjection split a
@@ -175,15 +192,7 @@ function childAttemptStarts(turns: Turn[], value: number, through: number): numb
  * second separate repeat after that is "assisted", so a tutor slip cannot trap the child on the scene.
  */
 export function latestChildNumber(transcript: string, options?: { answer?: number }): LatestChildNumber {
-  const turns: Turn[] = [
-    ...transcript.matchAll(
-      /(?:^|\n|(?=\b(?:Child|Tutor):))\s*(Child|Tutor):\s*([\s\S]*?)(?=\n\s*(?:Child|Tutor):|\b(?:Child|Tutor):|$)/gi,
-    ),
-  ]
-    .map(match => ({ speaker: match[1].toLowerCase(), text: match[2].trim() }))
-    // A wordless child fragment ("Child: .", a microphone turn that produced no words) is not a newer
-    // attempt, so it must not hide the answer the child actually spoke.
-    .filter(turn => turn.speaker !== "child" || /[\p{L}\p{N}]/u.test(turn.text));
+  const turns = transcriptTurns(transcript);
   const index = turns.findLastIndex(turn => turn.speaker === "child");
   if (index < 0) return { status: "none" };
   const { text, numbers } = childAttempt(turns, index);

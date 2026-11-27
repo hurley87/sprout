@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 90">
+  <ellipse cx="50" cy="84" rx="42" ry="4.5" fill="#634538" opacity=".18"/>
+  <defs><clipPath id="top"><path d="M12 40q0-14 38-14t38 14q-4 18-38 42-34-24-38-42z"/></clipPath></defs>
+  <path d="M46 6h8v24h-8z" fill="#e6b490" stroke="#a46e57" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M12 40q0-14 38-14t38 14q-4 18-38 42-34-24-38-42z" fill="#f58ab1"/>
+  <g clip-path="url(#top)">
+    <path d="M0 44q50 10 100 0v12q-50 10-100 0z" fill="#8f63c7"/>
+    <path d="M0 34q50 10 100 0v4q-50 10-100 0z" fill="#fff6ed"/>
+  </g>
+  <path d="M12 40q0-14 38-14t38 14q-4 18-38 42-34-24-38-42z" fill="none" stroke="#963f65" stroke-width="3.5" stroke-linejoin="round"/>
+  <path d="M24 34q12-4 22-4" fill="none" stroke="#ffd1df" stroke-width="4" stroke-linecap="round"/>
+</svg>

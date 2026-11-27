@@ -222,6 +222,7 @@ export type ConversationStateOutputs = {
 };
 export type ConversationStateDecision = {
   spokenNumber?: import("./spoken-number-check").SpokenNumberDiagnostic;
+  spokenColour?: import("./spoken-colour-check").SpokenColourDiagnostic;
   /** App-owned second-stage execution status; never a model claim. */
   rewriteAssessment?: "complete" | "unavailable" | "not_requested";
   status: "accepted" | "abstained";

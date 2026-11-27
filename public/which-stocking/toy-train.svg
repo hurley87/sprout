@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 90">
+  <ellipse cx="50" cy="84" rx="42" ry="4.5" fill="#634538" opacity=".18"/>
+  <g stroke="#3f5f8a" stroke-width="3.5" stroke-linejoin="round">
+    <rect x="66" y="14" width="12" height="20" rx="3" fill="#4b3a40" stroke="#3c2f35"/>
+    <rect x="8" y="16" width="34" height="50" rx="4" fill="#7fa9d6"/>
+    <rect x="15" y="24" width="20" height="16" rx="3" fill="#ffe4a3"/>
+    <rect x="4" y="10" width="42" height="10" rx="4" fill="#c95455" stroke="#803f47"/>
+    <path d="M42 36h44q8 0 8 8v22H42z" fill="#7fa9d6"/>
+    <rect x="80" y="40" width="10" height="10" rx="3" fill="#ffd37b" stroke="#a56936" stroke-width="3"/>
+    <path d="M4 66h92" stroke="#c95455" stroke-width="7" stroke-linecap="round"/>
+  </g>
+  <g fill="#4b3a40" stroke="#3c2f35" stroke-width="3">
+    <circle cx="22" cy="72" r="10"/>
+    <circle cx="56" cy="74" r="8"/>
+    <circle cx="80" cy="74" r="8"/>
+  </g>
+  <g fill="#ffd37b">
+    <circle cx="22" cy="72" r="3.5"/>
+    <circle cx="56" cy="74" r="3"/>
+    <circle cx="80" cy="74" r="3"/>
+  </g>
+</svg>

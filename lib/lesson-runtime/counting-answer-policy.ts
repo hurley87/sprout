@@ -1,5 +1,6 @@
 import { parseChristmasTreeLessonId } from "./christmas-tree-lesson";
 import { parseDownTheChimneyLessonId } from "./down-the-chimney-lesson";
+import { parseWhichStockingLessonId } from "./which-stocking-lesson";
 import type { LessonDefinition } from "./lesson-definition";
 
 export const ANSWER_COMMITMENTS = ["committed", "unresolved", "withdrawn", "no_answer"] as const;
@@ -21,7 +22,8 @@ export function acceptsLearnerAnswerIndependently(lesson?: LessonDefinition) {
     !!lesson &&
     (LEARNER_EVIDENCE_LESSON_IDS.has(lesson.id) ||
       parseChristmasTreeLessonId(lesson.id) !== null ||
-      parseDownTheChimneyLessonId(lesson.id) !== null) &&
+      parseDownTheChimneyLessonId(lesson.id) !== null ||
+      parseWhichStockingLessonId(lesson.id) !== null) &&
     lesson.answerAcceptance === "learner_evidence" &&
     !lesson.conversationFirst
   );

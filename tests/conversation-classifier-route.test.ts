@@ -180,3 +180,21 @@ it.each([
   expect((await POST(request(fields))).status).toBe(400);
   expect(fetch).not.toHaveBeenCalled();
 });
+it("exports the spoken-colour diagnostic beside the spoken-number one", async () => {
+  const spokenColour = {
+    action: "veto" as const,
+    reader: { status: "colour" as const, value: "pink", owner: "child" as const, source: "pink" },
+    classifierOutcome: "correct" as const,
+    picked: "pink",
+    pickedCount: 4,
+    target: 3,
+    nearMiss: true,
+  };
+  vi.spyOn(canonical, "classifyConversationStateWithDiagnostics").mockResolvedValue({
+    ...mapSimplifiedObservation(input, outputs),
+    spokenColour,
+  } as canonical.ConversationStateDecision);
+  const body = await (await POST(request())).json();
+  expect(body.diagnostic.spokenColour).toEqual(spokenColour);
+  expect(body.diagnostic).not.toHaveProperty("spokenNumber");
+});

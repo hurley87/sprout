@@ -31,6 +31,11 @@ export type SilenceNudgeDefinition = {
   readonly instruction: string;
 };
 
+export type SpokenColourCheckDefinition = {
+  /** Other words for an on-screen colour, e.g. { yellow: "gold", golden: "gold" }. Lowercase. */
+  readonly aliases?: Readonly<Record<string, string>>;
+};
+
 export type QuestionGroupDefinition = {
   readonly questionId: string;
   readonly nodeIds: readonly string[];
@@ -49,6 +54,8 @@ export type LessonDefinition = {
   readonly conversationFirst?: boolean;
   /** Apply deterministic spoken-number checks to count answers. */
   readonly spokenNumberCheck?: true;
+  /** Apply deterministic spoken-colour checks to colour answers. `{}` opts in with no aliases. */
+  readonly spokenColourCheck?: SpokenColourCheckDefinition;
   /** Opt in to ordered subpart/parent navigation and counted question progress. */
   readonly questionGroups?: readonly QuestionGroupDefinition[];
   /** Counting may accept learner answers independently of tutor confirmation. */
@@ -103,6 +110,37 @@ export const OBJECTIVE_CRITERIA_IDS = [
 ] as const;
 export const TUTOR_CRITERIA_IDS = ["confirmed_completion", "clarifying", "helping", "asking", "other"] as const;
 
+const COLOUR_WORD = /^[a-z]+$/;
+
+/** Every node is a colour question with ≥ 2 distinct on-screen colours, one of them the answer; aliases
+ * name other words for those colours and never shadow one. */
+function validSpokenColourCheck(value: LessonDefinition): boolean {
+  const check = value.spokenColourCheck;
+  if (!check || typeof check !== "object" || Array.isArray(check) || value.conversationFirst) return false;
+  if (Object.keys(check).some(key => key !== "aliases")) return false;
+  const canonical = new Set<string>();
+  for (const node of Object.values(value.nodes)) {
+    const { answerKind, answer, colours } = node.presentation;
+    if (answerKind !== "colour" || typeof answer !== "string" || !answer || typeof colours !== "string") return false;
+    const shown = colours.split(",").map(colour => colour.trim());
+    if (
+      shown.length < 2 ||
+      new Set(shown).size !== shown.length ||
+      shown.some(colour => !COLOUR_WORD.test(colour)) ||
+      !shown.includes(answer)
+    )
+      return false;
+    for (const colour of shown) canonical.add(colour);
+  }
+  const aliases = check.aliases;
+  if (aliases === undefined) return true;
+  if (!aliases || typeof aliases !== "object" || Array.isArray(aliases)) return false;
+  return Object.entries(aliases).every(
+    ([word, colour]) =>
+      COLOUR_WORD.test(word) && !canonical.has(word) && typeof colour === "string" && canonical.has(colour),
+  );
+}
+
 function validNudge(nudge: SilenceNudgeDefinition) {
   return (
     !!nudge &&
@@ -129,6 +167,10 @@ export function validateLessonDefinition(value: LessonDefinition): LessonDefinit
       ))
   )
     throw new Error("Spoken-number check requires numeric count nodes and cannot use conversationFirst");
+  if (value.spokenColourCheck !== undefined && !validSpokenColourCheck(value))
+    throw new Error(
+      "Spoken-colour check requires colour nodes whose answer is one of at least two distinct lowercase colours, aliases for those colours only, and cannot use conversationFirst",
+    );
   for (const [id, node] of Object.entries(value.nodes)) {
     if (node.evidenceRole !== undefined && node.evidenceRole !== "rehearsal" && node.evidenceRole !== "transfer")
       throw new Error(`Lesson node ${id} has an invalid evidence role`);

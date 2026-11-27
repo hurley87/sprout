@@ -12,6 +12,7 @@ import { CATCHING_UNICORNS_LESSON } from "./catching-unicorns-lesson";
 import { MAE386_LESSON } from "./mae386-lesson";
 import { christmasTreeLesson, parseChristmasTreeLessonId } from "./christmas-tree-lesson";
 import { downTheChimneyLesson, parseDownTheChimneyLessonId } from "./down-the-chimney-lesson";
+import { parseWhichStockingLessonId, whichStockingLesson } from "./which-stocking-lesson";
 import type { LessonDefinition } from "./lesson-definition";
 
 /** Application-owned allowlist. Keep additions explicit and small. */
@@ -35,5 +36,7 @@ export function resolveLessonDefinition(value: unknown): LessonDefinition | null
   const seed = parseChristmasTreeLessonId(value);
   if (seed !== null) return christmasTreeLesson(seed);
   const chimneySeed = parseDownTheChimneyLessonId(value);
-  return chimneySeed === null ? null : downTheChimneyLesson(chimneySeed);
+  if (chimneySeed !== null) return downTheChimneyLesson(chimneySeed);
+  const stockingSeed = parseWhichStockingLessonId(value);
+  return stockingSeed === null ? null : whichStockingLesson(stockingSeed);
 }

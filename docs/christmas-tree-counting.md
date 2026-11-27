@@ -52,6 +52,7 @@ state shape.
 [Reducer](../lib/lesson-runtime/lesson-runtime-reducer.ts)
 
 Down the Chimney uses the separate opt-in [count-along window](down-the-chimney-counting.md#count-along-window) to defer judgement while listening.
+Which Stocking uses the opt-in [spoken colour check](which-stocking-counting.md#spoken-colour-check) to read colour answers.
 
 In development, Next.js can log “Image with src … has either width or height
 modified, but not the other” for item SVGs when one rendered dimension matches

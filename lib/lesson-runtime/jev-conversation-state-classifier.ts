@@ -1,6 +1,7 @@
 /** Canonical server-only classifier. Q10 opts into locate-then-assess; no retries or fallback. */
 import { REWRITE_CRITERIA, interpretRewrite, locateRewriteSpan } from "./mae386/rewrite-proposal";
 import { applySpokenNumberCheck } from "./spoken-number-check";
+import { applySpokenColourCheck } from "./spoken-colour-check";
 import { JEV_MODEL } from "../jev";
 import type { ConversationStateClassifierInput } from "./conversation-state-classifier";
 import {
@@ -24,7 +25,9 @@ export async function classifyConversationStateWithDiagnostics(
     state: conversationObserverState(input),
     questions: conversationStateQuestions(input.lesson, input.nodeId, input.transcript),
   });
-  return applySpokenNumberCheck(decision, input);
+  // A lesson opts into at most one: the number check needs count nodes and the colour check colour nodes,
+  // and each leaves other nodes alone, so the order does not matter.
+  return applySpokenColourCheck(applySpokenNumberCheck(decision, input), input);
 }
 
 /** Explicit request execution shared with offline comparisons; never retries or falls back. */
