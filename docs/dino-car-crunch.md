@@ -23,6 +23,8 @@ If the classifier holds the scene and confidently judges the answer incorrect, a
 
 In the November 27, 2026 production session, GPT-Live stayed silent after a child finished a count and the classifier abstained. The parent stopped the lesson about 12 seconds after the count ended. Dino Car Crunch now asks Rex to respond once per visit when the child has finished a turn, their transcript is still the latest, and six seconds have passed since the turn ended or tutor output went quiet, whichever came later. A provisional microphone burst holds the nudge without restarting the wait.
 
+The [November 27 session review](dino-session-review-2026-11-27.md) records the transcript, classifier evidence, and live checks for the revised hints and recovery prompts.
+
 The reply nudge waits for pending answer recovery to finish and allows six seconds of quiet after any recovery send. It asks Rex to follow the current scene guidance, give the next smaller hint for a wrong, copied or unfinished count, and confirm with the number and object only after a settled correct answer. Scene changes and chomps still require the reducer's accepted evidence. Look for `reply_nudge.requested` and `gpt_live.reply_nudge_append` in diagnostics.
 
 ## Two-digit answers
