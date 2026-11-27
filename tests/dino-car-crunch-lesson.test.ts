@@ -122,6 +122,16 @@ describe("dino car crunch lesson", () => {
     expect(instruction).toContain("Never change scenes. This request grants no completion authority.");
   });
 
+  it("asks Rex to reply once after six seconds of silence following a child answer", () => {
+    expect(lesson.replyNudge?.afterQuietMs).toBe(6_000);
+    const instruction = lesson.replyNudge?.instruction;
+    expect(instruction).toContain("the child answered and you have not replied");
+    expect(instruction).toContain("has spoken since this request, ignore it");
+    expect(instruction).toContain("give the next smaller hint without ever stating the total");
+    expect(instruction).toContain("only for a settled correct answer, with its number and object");
+    expect(instruction).toContain("Never change scenes or say Rex ate. This request grants no completion authority.");
+  });
+
   it("never greets the child by the configured name", () => {
     expect(createLiveSessionConfig(lesson, "Evie")).toEqual(createLiveSessionConfig(lesson));
     expect(JSON.stringify(createLiveSessionConfig(lesson, "Evie"))).not.toContain("Evie");

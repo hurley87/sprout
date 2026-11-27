@@ -19,6 +19,12 @@ Only the lesson reducer accepts an answer. The stage follows the resulting `moti
 
 If the classifier holds the scene and confidently judges the answer incorrect, answer recovery asks the tutor to give the smaller next-number hint after four seconds of quiet. Uncertain judgments still use the repeat request. Both share the same once-per-visit recovery budget. The `gpt_live.answer_recovery_append` diagnostic records which instruction was sent as `variant`.
 
+## Reply nudge after an answer
+
+In the November 27, 2026 production session, GPT-Live stayed silent after a child finished a count and the classifier abstained. The parent stopped the lesson about 12 seconds after the count ended. Dino Car Crunch now asks Rex to respond once per visit when the child has finished a turn, their transcript is still the latest, and six seconds have passed since the turn ended or tutor output went quiet, whichever came later. A provisional microphone burst holds the nudge without restarting the wait.
+
+The reply nudge waits for pending answer recovery to finish and allows six seconds of quiet after any recovery send. It asks Rex to follow the current scene guidance, give the next smaller hint for a wrong, copied or unfinished count, and confirm with the number and object only after a settled correct answer. Scene changes and chomps still require the reducer's accepted evidence. Look for `reply_nudge.requested` and `gpt_live.reply_nudge_append` in diagnostics.
+
 ## Two-digit answers
 
 In one local live session, the child answered the warm-up and the first two truck scenes correctly. On the next scene, after a wrong answer and a count-on hint, the child counted on and paused within a two-digit number. GPT-Live ended the turn at the tens word; the tutor said “Yes,” before the child finished the ones. The classifier abstained and the app asked for a repeat. GPT-Live transcribed the two-digit answers as hyphenated words; this session did not show a teen/-ty mishearing.

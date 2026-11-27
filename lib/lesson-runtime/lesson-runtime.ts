@@ -24,7 +24,7 @@ import {
 } from "./live-context";
 import { SupportClarification } from "./support-clarification";
 import { AnswerRecovery } from "./answer-recovery";
-import { SilenceNudge } from "./silence-nudge";
+import { ReplyNudge, SilenceNudge } from "./silence-nudge";
 import { TutorStabilizationGate } from "./tutor-stabilization";
 import { parseClassifierEndpointCode } from "./classifier-failure";
 import { DiagnosticJournal, type LessonDiagnostic, type LessonEventCursor } from "./diagnostic-journal";
@@ -151,6 +151,7 @@ export class LessonRuntime {
   private readonly answerRecovery: AnswerRecovery;
   private readonly terminalTranscriptRecovery: AnswerRecovery;
   private readonly silenceNudge: SilenceNudge;
+  private readonly replyNudge?: ReplyNudge;
   private clarificationRequest?: { eventId: string; source: ClassificationSource };
   private stabilizationTimer?: ReturnType<typeof setTimeout>;
   private clockTimer?: ReturnType<typeof setTimeout>;
@@ -293,6 +294,7 @@ export class LessonRuntime {
             }
           : undefined,
       this.lessonDefinition.conversationFirst === true,
+      this.lessonDefinition.replyNudge ? () => this.observeNudges() : undefined,
     );
     // Local VAD stop is not a provider transcript boundary. Reuse the existing
     // quiet missing-transcript window, resolving terminal speech without prompts
@@ -327,6 +329,26 @@ export class LessonRuntime {
       },
       (type, source, detail) => this.log(type, detail, source),
     );
+    if (this.lessonDefinition.replyNudge) {
+      this.replyNudge = new ReplyNudge(
+        this.lessonDefinition,
+        (source, nudge) => {
+          const eventId = `${this.runtimeId}:reply-nudge:${source.visitId}`;
+          try {
+            this.sendInstruction({
+              type: "session.instructions.append",
+              event_id: eventId,
+              delegation_id: null,
+              content: nudge.instruction,
+            });
+            this.log("gpt_live.reply_nudge_append", { eventId, content: nudge.instruction }, source);
+          } catch {
+            this.log("reply_nudge.send_failed", { eventId, message: "Nudge budget spent." }, source);
+          }
+        },
+        (type, source, detail) => this.log(type, detail, source),
+      );
+    }
     this.transport = new BrowserTransport(audio, true);
     this.transport.setPlaybackDiagnosticSink?.(event => {
       if (!this.state) return;
@@ -410,13 +432,15 @@ export class LessonRuntime {
   }
 
   private publish() {
-    this.observeSilence();
+    this.observeNudges();
     this.changed(this.snapshot());
   }
 
-  /** Every runtime change publishes, so this sees each learner/tutor activity edge. */
-  private observeSilence() {
-    this.silenceNudge.observe(this.state, this.status === "live" && !this.steering && !this.effect && !this.mathPlugin);
+  /** Observe learner/tutor activity and answer recovery's timer settling without a send. */
+  private observeNudges() {
+    const enabled = this.status === "live" && !this.steering && !this.effect && !this.mathPlugin;
+    this.silenceNudge.observe(this.state, enabled);
+    this.replyNudge?.observe(this.state, enabled, this.answerRecovery.activity);
   }
 
   /** Open a window for a page sound effect: microphone events are ignored and provider input is paused
@@ -448,7 +472,7 @@ export class LessonRuntime {
       timer: setTimeout(() => this.endEffect(), durationMs + EFFECT_TAIL_MS),
     };
     this.log("effect.started", { name, durationMs });
-    this.observeSilence();
+    this.observeNudges();
     return true;
   }
 
@@ -459,7 +483,7 @@ export class LessonRuntime {
     this.effect = undefined;
     this.transport.resumeInput();
     this.log("effect.ended", { name: effect.name, durationMs: effect.durationMs });
-    this.observeSilence();
+    this.observeNudges();
   }
 
   snapshot(): LessonSnapshot {
@@ -528,6 +552,7 @@ export class LessonRuntime {
     const before = this.state;
     const result = reduceLessonRuntime(before, event, this.lessonDefinition);
     this.state = result.state;
+    if (event.type === "child.turn.ended" && before !== this.state) this.replyNudge?.childTurnEnded(event.source);
     if (
       this.supportCloseTimer &&
       (this.state.tutorOutputObserved || !this.state.supportLimitReached?.closeSent || this.state.phase !== "active")
@@ -767,8 +792,10 @@ export class LessonRuntime {
               this.state.terminalLearnerPending
             )
               this.terminalTranscriptRecovery.arm(this.state, !this.steering);
-            else if (!this.mathPlugin && (!this.lessonDefinition.conversationFirst || !this.requestedNavigation()))
+            else if (!this.mathPlugin && (!this.lessonDefinition.conversationFirst || !this.requestedNavigation())) {
               this.answerRecovery.arm(this.state, !this.steering);
+              if (this.replyNudge) this.observeNudges();
+            }
           }
           this.scheduleClassification(event.type);
         }
@@ -1593,6 +1620,7 @@ export class LessonRuntime {
     this.answerRecovery.cancel(reason);
     this.terminalTranscriptRecovery.cancel(reason);
     this.silenceNudge.cancel(reason);
+    this.replyNudge?.cancel(reason);
     clearTimeout(this.clockTimer);
     clearTimeout(this.startupTimer);
     clearTimeout(this.terminalTimer);

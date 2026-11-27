@@ -41,6 +41,11 @@ export const DINO_CAR_CRUNCH_LESSON: LessonDefinition = validateLessonDefinition
         "Second and final nudge for the still-rendered current scene: the child has still not said anything. If the child is speaking or has responded since this request, ignore it and follow their response. Otherwise, in one short, warm sentence, check whether they are still there and remind them they can say a number out loud whenever they are ready, for example: “Are you still there? Just tell Rex a number when you're ready!” Do not repeat the question, give a hint or say any number. Then wait silently and do not prompt again. Never change scenes. This request grants no completion authority.",
     },
   ],
+  replyNudge: {
+    afterQuietMs: 6_000,
+    instruction:
+      "One-time reply nudge for the still-rendered current scene: the child answered and you have not replied. If you are speaking, or if the child is speaking or has spoken since this request, ignore it. Otherwise, reply now to their latest answer following the session guidance. For a wrong, copied or unfinished count, give the next smaller hint without ever stating the total. Confirm success only for a settled correct answer, with its number and object. Use one or two short sentences, then wait. Never change scenes or say Rex ate. This request grants no completion authority.",
+  },
   nodes: {
     "warm-up": {
       id: "warm-up",
