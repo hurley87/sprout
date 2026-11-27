@@ -62,6 +62,37 @@ describe("dino car crunch lesson", () => {
     expect(lesson.tutor.sessionGuidance).toContain("twenty, twenty-one, twenty-two");
   });
 
+  it.each(["sessionGuidance", "nodeInstruction"] as const)(
+    "%s ends count-on hints with an open next-number prompt",
+    field => {
+      const guidance = lesson.tutor[field];
+      expect(guidance).toContain("stopping before the last number");
+      expect(guidance).toContain("End the hint on a rising next-number prompt such as “and then…?” and wait.");
+      expect(guidance).toContain("Never hand off with “now you,” “your turn” or “you try.”");
+    },
+  );
+
+  it.each(["sessionGuidance", "nodeInstruction"] as const)(
+    "%s treats a copied partial count as unfinished and gives a smaller hint",
+    field => {
+      const guidance = lesson.tutor[field];
+      expect(guidance).toContain(
+        "If the child repeats your partial count and stops where you stopped, treat it as unfinished.",
+      );
+      expect(guidance).toContain(
+        "After a count-on hint, a copied partial count or another wrong answer calls for a smaller hint. Do not repeat the count.",
+      );
+      expect(guidance).toContain("On the warm-up, ask what comes after the last number you said");
+      expect(guidance).toContain("What comes after six?");
+      expect(guidance).toContain("On a truck scene, ask what comes after the last ones number");
+      expect(guidance).toContain("What comes after one?");
+      expect(guidance).toContain("So after forty-one comes…?");
+      expect(guidance).toContain(
+        "Never follow an unfinished or wrong count with agreement like “mm-hmm,” “uh-huh” or “yes.”",
+      );
+    },
+  );
+
   it("nudges a silent learner to answer out loud, then checks in once, without hints", () => {
     expect(lesson.silenceNudges?.map(nudge => nudge.afterQuietMs)).toEqual([5_000, 10_000]);
     const [reAsk, checkIn] = lesson.silenceNudges!.map(nudge => nudge.instruction);
@@ -78,6 +109,27 @@ describe("dino car crunch lesson", () => {
       expect(instruction).toContain("give a hint");
       expect(instruction).toContain("Never change scenes");
     }
+  });
+
+  it("uses a single next-number hint for incorrect-answer recovery", () => {
+    const instruction = lesson.recovery.incorrectAnswerInstruction;
+    expect(instruction).toContain("they are speaking or have responded since this request, ignore it");
+    expect(instruction).toContain("do not ask them to repeat their answer or agree with it");
+    expect(instruction).toContain("On the warm-up, ask what comes after the last number counted.");
+    expect(instruction).toContain("On a truck scene, ask what comes after the last ones number.");
+    expect(instruction).toContain("Give one hint, then wait.");
+    expect(instruction).toContain("Never state the total or imply success.");
+    expect(instruction).toContain("Never change scenes. This request grants no completion authority.");
+  });
+
+  it("asks Rex to reply once after six seconds of silence following a child answer", () => {
+    expect(lesson.replyNudge?.afterQuietMs).toBe(6_000);
+    const instruction = lesson.replyNudge?.instruction;
+    expect(instruction).toContain("the child answered and you have not replied");
+    expect(instruction).toContain("has spoken since this request, ignore it");
+    expect(instruction).toContain("give the next smaller hint without ever stating the total");
+    expect(instruction).toContain("only for a settled correct answer, with its number and object");
+    expect(instruction).toContain("Never change scenes or say Rex ate. This request grants no completion authority.");
   });
 
   it("never greets the child by the configured name", () => {

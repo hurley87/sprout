@@ -403,7 +403,7 @@ export function abstain(
   return { status: "abstained", outcome: "unresolved", reason, outputs, labelCompletionEligible, proposal: null };
 }
 
-function confidentlyClassified(answer: ChoiceOutput<string>) {
+export function confidentlyClassified(answer: ChoiceOutput<string>) {
   const { HIGH, COMPETITOR_CEILING, MIN_MARGIN } = CONVERSATION_CLASSIFICATION_THRESHOLDS;
   const selected = answer.probabilities[answer.choice];
   return (

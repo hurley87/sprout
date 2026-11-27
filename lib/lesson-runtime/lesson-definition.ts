@@ -26,7 +26,7 @@ export type ConceptCriterionDefinition = {
 };
 
 export type SilenceNudgeDefinition = {
-  /** Silence after the tutor goes quiet, with no learner activity, before this prompt is sent. */
+  /** Sustained quiet before this prompt is sent. */
   readonly afterQuietMs: number;
   readonly instruction: string;
 };
@@ -63,6 +63,8 @@ export type LessonDefinition = {
   /** Ordered tutor prompts for a learner who has not spoken since the tutor asked. Each fires at most
    * once per visit, after its own sustained silence; any learner activity restarts the wait. */
   readonly silenceNudges?: readonly SilenceNudgeDefinition[];
+  /** One prompt per visit when the learner has answered and the tutor has stayed quiet. */
+  readonly replyNudge?: SilenceNudgeDefinition;
   /** Greet the learner by the server-configured first name (SPROUT_CHILD_NAME), when one is set. */
   readonly addressLearnerByName?: boolean;
   /** Concise topic labels for an accepted-evidence terminal close. No answer text. */
@@ -71,6 +73,7 @@ export type LessonDefinition = {
   readonly recovery: {
     readonly supportClarificationInstruction: string;
     readonly answerRecoveryInstruction: string;
+    readonly incorrectAnswerInstruction?: string;
   };
   readonly tutor: {
     readonly persona: string;
@@ -94,6 +97,17 @@ export const OBJECTIVE_CRITERIA_IDS = [
   "no_attempt",
 ] as const;
 export const TUTOR_CRITERIA_IDS = ["confirmed_completion", "clarifying", "helping", "asking", "other"] as const;
+
+function validNudge(nudge: SilenceNudgeDefinition) {
+  return (
+    !!nudge &&
+    Number.isSafeInteger(nudge.afterQuietMs) &&
+    nudge.afterQuietMs >= 3_000 &&
+    nudge.afterQuietMs <= 60_000 &&
+    typeof nudge.instruction === "string" &&
+    !!nudge.instruction.trim()
+  );
+}
 
 export function validateLessonDefinition(value: LessonDefinition): LessonDefinition {
   if (!value.id || !Object.hasOwn(value.nodes, value.initialNodeId))
@@ -170,20 +184,19 @@ export function validateLessonDefinition(value: LessonDefinition): LessonDefinit
   )
     throw new Error("Support limit needs a positive whole number and a close instruction");
   if (
+    value.recovery.incorrectAnswerInstruction !== undefined &&
+    (typeof value.recovery.incorrectAnswerInstruction !== "string" || !value.recovery.incorrectAnswerInstruction.trim())
+  )
+    throw new Error("Incorrect answer recovery needs a non-empty instruction");
+  if (
     value.silenceNudges !== undefined &&
     (!Array.isArray(value.silenceNudges) ||
       value.silenceNudges.length > 3 ||
-      value.silenceNudges.some(
-        nudge =>
-          !nudge ||
-          !Number.isSafeInteger(nudge.afterQuietMs) ||
-          nudge.afterQuietMs < 3_000 ||
-          nudge.afterQuietMs > 60_000 ||
-          typeof nudge.instruction !== "string" ||
-          !nudge.instruction.trim(),
-      ))
+      value.silenceNudges.some(nudge => !validNudge(nudge)))
   )
     throw new Error("Silence nudges need at most three instructions, each after 3000–60000 ms of silence");
+  if (value.replyNudge !== undefined && !validNudge(value.replyNudge))
+    throw new Error("Reply nudge needs an instruction after 3000–60000 ms of silence");
   if (value.questionGroups) {
     const groups = value.questionGroups;
     const ids = groups.flatMap(group => group.nodeIds);

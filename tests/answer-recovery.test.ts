@@ -16,11 +16,11 @@ it("recovers a current semantic hold with the same one-request visit budget as m
   const diagnostics = vi.fn();
   const recovery = new AnswerRecovery(request, diagnostics);
   const held = { ...state(), hasChildTranscript: true, transcriptRevision: 3, transcriptSource: "child" as const };
-  recovery.armSemanticHold(held, true, classificationSource(held)!);
+  recovery.armSemanticHold(held, true, classificationSource(held)!, { confidentlyIncorrect: true });
   await vi.advanceTimersByTimeAsync(3999);
   expect(request).not.toHaveBeenCalled();
   await vi.advanceTimersByTimeAsync(1);
-  expect(request).toHaveBeenCalledExactlyOnceWith(classificationSource(held));
+  expect(request).toHaveBeenCalledExactlyOnceWith(classificationSource(held), true);
   expect(diagnostics).toHaveBeenCalledWith("answer_recovery.requested", classificationSource(held), {
     reason: "semantic_hold",
     waitMs: 4000,
@@ -49,7 +49,7 @@ it("keeps one conversation recovery after a connection check, including when tha
   expect(request).toHaveBeenCalledOnce();
   await vi.advanceTimersByTimeAsync(1);
   expect(request).toHaveBeenCalledTimes(2);
-  expect(request).toHaveBeenLastCalledWith(classificationSource(held));
+  expect(request).toHaveBeenLastCalledWith(classificationSource(held), false);
   const repeated = { ...held, childTurnId: 5, transcriptRevision: 4 };
   recovery.armSemanticHold(repeated, true, classificationSource(repeated)!);
   await vi.advanceTimersByTimeAsync(5000);
@@ -66,11 +66,15 @@ it("rejects a stale held response and cancels a pending semantic recovery on a n
   recovery.armSemanticHold(held, true, { ...classificationSource(held)!, transcriptRevision: 2 });
   await vi.advanceTimersByTimeAsync(5000);
   expect(request).not.toHaveBeenCalled();
-  recovery.armSemanticHold(held, true, classificationSource(held)!);
+  recovery.armSemanticHold(held, true, classificationSource(held)!, { confidentlyIncorrect: true });
   await vi.advanceTimersByTimeAsync(3999);
   recovery.observe({ ...held, transcriptRevision: 4 }, true);
   await vi.advanceTimersByTimeAsync(5000);
   expect(request).not.toHaveBeenCalled();
+  const missing = { ...state(), childTurnId: 3, transcriptRevision: 4 };
+  recovery.arm(missing, true);
+  await vi.advanceTimersByTimeAsync(ANSWER_RECOVERY_WAIT_MS);
+  expect(request).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ childTurnId: 3 }), false);
 });
 
 it("waits for sustained quiet, follows tutor revisions, and requests once per visit", async () => {
@@ -88,7 +92,10 @@ it("waits for sustained quiet, follows tutor revisions, and requests once per vi
   await vi.advanceTimersByTimeAsync(3999);
   expect(request).not.toHaveBeenCalled();
   await vi.advanceTimersByTimeAsync(1);
-  expect(request).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ childTurnId: 2, transcriptRevision: 4 }));
+  expect(request).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ childTurnId: 2, transcriptRevision: 4 }),
+    false,
+  );
   recovery.arm({ ...quiet, childTurnId: 3 }, true);
   await vi.advanceTimersByTimeAsync(5000);
   expect(request).toHaveBeenCalledOnce();
@@ -149,13 +156,14 @@ it("allows one faster completion prompt after the visit's support recovery was s
   await vi.advanceTimersByTimeAsync(ANSWER_RECOVERY_WAIT_MS);
   expect(request).toHaveBeenCalledOnce();
   const completed = { ...held, childTurnId: 3, transcriptRevision: 4 };
-  recovery.armSemanticHold(completed, true, classificationSource(completed)!, true);
+  recovery.armSemanticHold(completed, true, classificationSource(completed)!, { completionReady: true });
   await vi.advanceTimersByTimeAsync(ANSWER_COMPLETION_WAIT_MS - 1);
   expect(request).toHaveBeenCalledOnce();
   await vi.advanceTimersByTimeAsync(1);
   expect(request).toHaveBeenCalledTimes(2);
-  expect(request).toHaveBeenLastCalledWith(classificationSource(completed));
-  recovery.armSemanticHold({ ...completed, transcriptRevision: 5 }, true, classificationSource({ ...completed, transcriptRevision: 5 })!, true);
+  expect(request).toHaveBeenLastCalledWith(classificationSource(completed), false);
+  const updated = { ...completed, transcriptRevision: 5 };
+  recovery.armSemanticHold(updated, true, classificationSource(updated)!, { completionReady: true });
   await vi.advanceTimersByTimeAsync(5000);
   expect(request).toHaveBeenCalledTimes(2);
 });
@@ -165,13 +173,13 @@ it("cancels completion guidance on new speech and waits for audio quiet before r
   const request = vi.fn();
   const recovery = new AnswerRecovery(request, vi.fn());
   const held = { ...state(), hasChildTranscript: true, transcriptRevision: 3 };
-  recovery.armSemanticHold(held, true, classificationSource(held)!, true);
+  recovery.armSemanticHold(held, true, classificationSource(held)!, { completionReady: true });
   await vi.advanceTimersByTimeAsync(500);
   recovery.observe({ ...held, childSpeaking: true }, true);
   await vi.advanceTimersByTimeAsync(5000);
   expect(request).not.toHaveBeenCalled();
   const active = { ...held, outputActivity: "active" as const };
-  recovery.armSemanticHold(active, true, classificationSource(active)!, true);
+  recovery.armSemanticHold(active, true, classificationSource(active)!, { completionReady: true });
   await vi.advanceTimersByTimeAsync(5000);
   expect(request).not.toHaveBeenCalled();
   recovery.observe(held, true);
@@ -201,10 +209,13 @@ it("keeps missing-text recovery through discarded candidates but never sends dur
   expect(request).not.toHaveBeenCalled();
   recovery.observe({ ...initial, childTurnId: 6 }, true);
   await vi.advanceTimersByTimeAsync(0);
-  expect(request).toHaveBeenCalledExactlyOnceWith({
-    runtimeId: initial.runtimeId, nodeId: initial.nodeId, visitId: initial.visitId,
-    childTurnId: 6, transcriptRevision: initial.transcriptRevision,
-  });
+  expect(request).toHaveBeenCalledExactlyOnceWith(
+    {
+      runtimeId: initial.runtimeId, nodeId: initial.nodeId, visitId: initial.visitId,
+      childTurnId: 6, transcriptRevision: initial.transcriptRevision,
+    },
+    false,
+  );
 });
 
 it("still cancels preserved missing-text recovery on confirmed speech or late child words", async () => {
