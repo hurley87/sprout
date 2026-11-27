@@ -25,6 +25,12 @@ export type ConceptCriterionDefinition = {
   readonly description: string;
 };
 
+export type SilenceNudgeDefinition = {
+  /** Silence after the tutor goes quiet, with no learner activity, before this prompt is sent. */
+  readonly afterQuietMs: number;
+  readonly instruction: string;
+};
+
 export type QuestionGroupDefinition = {
   readonly questionId: string;
   readonly nodeIds: readonly string[];
@@ -54,6 +60,9 @@ export type LessonDefinition = {
    * visible, before the next scene is requested. Lets authored success feedback finish playing. */
   readonly successHoldMs?: number;
   readonly supportLimit?: { readonly maxDifficulties: number; readonly instruction: string };
+  /** Ordered tutor prompts for a learner who has not spoken since the tutor asked. Each fires at most
+   * once per visit, after its own sustained silence; any learner activity restarts the wait. */
+  readonly silenceNudges?: readonly SilenceNudgeDefinition[];
   /** Greet the learner by the server-configured first name (SPROUT_CHILD_NAME), when one is set. */
   readonly addressLearnerByName?: boolean;
   /** Concise topic labels for an accepted-evidence terminal close. No answer text. */
@@ -160,6 +169,21 @@ export function validateLessonDefinition(value: LessonDefinition): LessonDefinit
       !value.supportLimit.instruction.trim())
   )
     throw new Error("Support limit needs a positive whole number and a close instruction");
+  if (
+    value.silenceNudges !== undefined &&
+    (!Array.isArray(value.silenceNudges) ||
+      value.silenceNudges.length > 3 ||
+      value.silenceNudges.some(
+        nudge =>
+          !nudge ||
+          !Number.isSafeInteger(nudge.afterQuietMs) ||
+          nudge.afterQuietMs < 3_000 ||
+          nudge.afterQuietMs > 60_000 ||
+          typeof nudge.instruction !== "string" ||
+          !nudge.instruction.trim(),
+      ))
+  )
+    throw new Error("Silence nudges need at most three instructions, each after 3000–60000 ms of silence");
   if (value.questionGroups) {
     const groups = value.questionGroups;
     const ids = groups.flatMap(group => group.nodeIds);
