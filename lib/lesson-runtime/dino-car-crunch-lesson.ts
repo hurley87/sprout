@@ -29,12 +29,12 @@ export const DINO_CAR_CRUNCH_LESSON: LessonDefinition = validateLessonDefinition
   // way that says how to answer, then check in once and wait. Neither nudge may hint or count.
   silenceNudges: [
     {
-      afterQuietMs: 7_000,
+      afterQuietMs: 5_000,
       instruction:
         "One-time nudge for the still-rendered current scene: the child has not said anything since your question, perhaps because they don't know to answer out loud. If the child is speaking or has responded since this request, ignore it and follow their response. Otherwise, in one or two short, warm sentences, tell them they can say their answer out loud to Rex, then ask the current question again in a different, simpler way. You may offer to count the cars together, but do not start counting, give a hint or say any number until the child asks or tries. Do not imply success. Never change scenes. This request grants no completion authority.",
     },
     {
-      afterQuietMs: 12_000,
+      afterQuietMs: 10_000,
       instruction:
         "Second and final nudge for the still-rendered current scene: the child has still not said anything. If the child is speaking or has responded since this request, ignore it and follow their response. Otherwise, in one short, warm sentence, check whether they are still there and remind them they can say a number out loud whenever they are ready, for example: “Are you still there? Just tell Rex a number when you're ready!” Do not repeat the question, give a hint or say any number. Then wait silently and do not prompt again. Never change scenes. This request grants no completion authority.",
     },
