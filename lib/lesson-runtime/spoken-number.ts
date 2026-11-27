@@ -179,7 +179,11 @@ export function latestChildNumber(transcript: string, options?: { answer?: numbe
     ...transcript.matchAll(
       /(?:^|\n|(?=\b(?:Child|Tutor):))\s*(Child|Tutor):\s*([\s\S]*?)(?=\n\s*(?:Child|Tutor):|\b(?:Child|Tutor):|$)/gi,
     ),
-  ].map(match => ({ speaker: match[1].toLowerCase(), text: match[2].trim() }));
+  ]
+    .map(match => ({ speaker: match[1].toLowerCase(), text: match[2].trim() }))
+    // A wordless child fragment ("Child: .", a microphone turn that produced no words) is not a newer
+    // attempt, so it must not hide the answer the child actually spoke.
+    .filter(turn => turn.speaker !== "child" || /[\p{L}\p{N}]/u.test(turn.text));
   const index = turns.findLastIndex(turn => turn.speaker === "child");
   if (index < 0) return { status: "none" };
   const { text, numbers } = childAttempt(turns, index);

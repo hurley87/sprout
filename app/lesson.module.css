@@ -67,15 +67,6 @@
     0 0 0 1px #ffd98a40;
 }
 
-.status[data-status-cue="glow"] p {
-  color: #fff3cf;
-  font-weight: 600;
-}
-
-.screen[data-palette="pastel"] .status[data-status-cue="glow"] p {
-  color: #482047;
-}
-
 .screen[data-palette="pastel"] .status[data-status-cue="glow"] {
   background: #fff1fa;
   box-shadow:

@@ -63,7 +63,7 @@ describe("dino car crunch lesson", () => {
   });
 
   it("nudges a silent learner to answer out loud, then checks in once, without hints", () => {
-    expect(lesson.silenceNudges?.map(nudge => nudge.afterQuietMs)).toEqual([7_000, 12_000]);
+    expect(lesson.silenceNudges?.map(nudge => nudge.afterQuietMs)).toEqual([5_000, 10_000]);
     const [reAsk, checkIn] = lesson.silenceNudges!.map(nudge => nudge.instruction);
     expect(reAsk).toContain("say their answer out loud to Rex");
     expect(reAsk).toContain("ask the current question again in a different, simpler way");
