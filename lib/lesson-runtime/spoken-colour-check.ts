@@ -16,7 +16,23 @@ export type SpokenColourDiagnostic = {
   target?: number;
   /** A wrong pick holding one more or one fewer than the target. Present when both counts are known. */
   nearMiss?: boolean;
+  /**
+   * The node fact `count_<colour>` for each on-screen colour that has one, in on-screen order, so a
+   * comparison lesson logs both amounts (and their gap) with every answer. Absent without count facts.
+   */
+  choiceCounts?: Record<string, number>;
 };
+
+function choiceCounts(
+  presentation: Readonly<Record<string, string | number | boolean>>,
+): Pick<SpokenColourDiagnostic, "choiceCounts"> {
+  const counts: Record<string, number> = {};
+  for (const colour of presentationColours(presentation)) {
+    const count = presentation[`count_${colour}`];
+    if (typeof count === "number") counts[colour] = count;
+  }
+  return Object.keys(counts).length ? { choiceCounts: counts } : {};
+}
 
 function pickDetails(
   reader: LatestChildColour,
@@ -52,10 +68,12 @@ export function applySpokenColourCheck(
   const answer = presentation?.answer;
   if (!lesson?.spokenColourCheck || !presentation || presentation.answerKind !== "colour" || typeof answer !== "string")
     return decision;
+  const { aliases, childAliases } = lesson.spokenColourCheck;
   const reader = latestChildColour(transcript, {
     answer,
     colours: presentationColours(presentation),
-    aliases: lesson.spokenColourCheck.aliases,
+    aliases,
+    childAliases,
   });
   const classifierOutcome = decision.proposal?.answerOutcome ?? null;
   const { decision: result, action } = applySpokenAnswerReading(decision, input, {
@@ -72,6 +90,12 @@ export function applySpokenColourCheck(
   });
   return {
     ...result,
-    spokenColour: { action, reader, classifierOutcome, ...pickDetails(reader, presentation, answer) },
+    spokenColour: {
+      action,
+      reader,
+      classifierOutcome,
+      ...pickDetails(reader, presentation, answer),
+      ...choiceCounts(presentation),
+    },
   };
 }

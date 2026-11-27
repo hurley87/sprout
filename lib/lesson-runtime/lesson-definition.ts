@@ -32,8 +32,12 @@ export type SilenceNudgeDefinition = {
 };
 
 export type SpokenColourCheckDefinition = {
-  /** Other words for an on-screen colour, e.g. { yellow: "gold", golden: "gold" }. Lowercase. */
+  /** Other words for an on-screen colour, e.g. { yellow: "gold", golden: "gold" }. Lowercase. Read in
+   * child and tutor turns alike, so the tutor saying one can disclose the answer. */
   readonly aliases?: Readonly<Record<string, string>>;
+  /** Words that name an on-screen colour only when the child says them, e.g. { mine: "pink", you: "blue" }.
+   * Lowercase. Never read in tutor turns, where perspective words mean the opposite colour. */
+  readonly childAliases?: Readonly<Record<string, string>>;
 };
 
 export type QuestionGroupDefinition = {
@@ -111,13 +115,28 @@ export const OBJECTIVE_CRITERIA_IDS = [
 export const TUTOR_CRITERIA_IDS = ["confirmed_completion", "clarifying", "helping", "asking", "other"] as const;
 
 const COLOUR_WORD = /^[a-z]+$/;
+/** The colour reader's pointing and pronoun words ("that one", "it"); an alias would hide them. */
+const READER_WORDS = new Set(["that", "this", "there", "here", "it", "him", "her"]);
+
+function validAliasMap(aliases: unknown, canonical: ReadonlySet<string>): aliases is Record<string, string> {
+  if (!aliases || typeof aliases !== "object" || Array.isArray(aliases)) return false;
+  return Object.entries(aliases).every(
+    ([word, colour]) =>
+      COLOUR_WORD.test(word) &&
+      !canonical.has(word) &&
+      !READER_WORDS.has(word) &&
+      typeof colour === "string" &&
+      canonical.has(colour),
+  );
+}
 
 /** Every node is a colour question with ≥ 2 distinct on-screen colours, one of them the answer; aliases
- * name other words for those colours and never shadow one. */
+ * and child aliases name other words for those colours, never shadow one or a reader word, and never
+ * share a word. */
 function validSpokenColourCheck(value: LessonDefinition): boolean {
   const check = value.spokenColourCheck;
   if (!check || typeof check !== "object" || Array.isArray(check) || value.conversationFirst) return false;
-  if (Object.keys(check).some(key => key !== "aliases")) return false;
+  if (Object.keys(check).some(key => key !== "aliases" && key !== "childAliases")) return false;
   const canonical = new Set<string>();
   for (const node of Object.values(value.nodes)) {
     const { answerKind, answer, colours } = node.presentation;
@@ -132,12 +151,11 @@ function validSpokenColourCheck(value: LessonDefinition): boolean {
       return false;
     for (const colour of shown) canonical.add(colour);
   }
-  const aliases = check.aliases;
-  if (aliases === undefined) return true;
-  if (!aliases || typeof aliases !== "object" || Array.isArray(aliases)) return false;
-  return Object.entries(aliases).every(
-    ([word, colour]) =>
-      COLOUR_WORD.test(word) && !canonical.has(word) && typeof colour === "string" && canonical.has(colour),
+  const { aliases = {}, childAliases = {} } = check;
+  return (
+    validAliasMap(aliases, canonical) &&
+    validAliasMap(childAliases, canonical) &&
+    !Object.keys(childAliases).some(word => Object.hasOwn(aliases, word))
   );
 }
 
@@ -169,7 +187,7 @@ export function validateLessonDefinition(value: LessonDefinition): LessonDefinit
     throw new Error("Spoken-number check requires numeric count nodes and cannot use conversationFirst");
   if (value.spokenColourCheck !== undefined && !validSpokenColourCheck(value))
     throw new Error(
-      "Spoken-colour check requires colour nodes whose answer is one of at least two distinct lowercase colours, aliases for those colours only, and cannot use conversationFirst",
+      "Spoken-colour check requires colour nodes whose answer is one of at least two distinct lowercase colours, aliases and child aliases for those colours only (distinct, and never a colour or pointing word), and cannot use conversationFirst",
     );
   for (const [id, node] of Object.entries(value.nodes)) {
     if (node.evidenceRole !== undefined && node.evidenceRole !== "rehearsal" && node.evidenceRole !== "transfer")
