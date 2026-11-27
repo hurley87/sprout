@@ -31,6 +31,9 @@ The lesson opts into `spokenColourCheck`. Every node must ask for one of at
 least two distinct on-screen colours, and aliases may only map to those colours.
 [Validation](../lib/lesson-runtime/lesson-definition.ts)
 
+Snowflake Showdown extends it with child-only aliases and a narrower disclosure
+rule; see its [colour check extension](snowflake-showdown-counting.md#colour-check-extension).
+
 The reader takes the child's latest turn in the scene transcript. It recognises
 on-screen colours, their aliases and common off-screen colours, so “red” is a
 wrong answer rather than silence. In a self-correction the last colour wins:
