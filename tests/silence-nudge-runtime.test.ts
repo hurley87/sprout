@@ -89,12 +89,18 @@ it("does not nudge a learner who answers", async () => {
   expect(nudges()).toEqual([]);
 });
 
-it("restarts the wait after a discarded microphone burst", async () => {
+it("is not pushed back by repeated discarded microphone bursts", async () => {
+  // The Nov 27 test session: room-noise bursts every few seconds each restarted the old 7 s wait,
+  // delaying the first nudge from ~11 s to 30 s.
   start();
-  await vi.advanceTimersByTimeAsync(5_000);
-  emit({ type: "microphone.activity_started" });
-  emit({ type: "microphone.activity_discarded" });
-  await vi.advanceTimersByTimeAsync(6_999);
+  const quietAt = performance.now();
+  for (const atMs of [2_000, 4_000, 5_000]) {
+    await vi.advanceTimersByTimeAsync(quietAt + atMs - performance.now());
+    emit({ type: "microphone.activity_started" });
+    await vi.advanceTimersByTimeAsync(200);
+    emit({ type: "microphone.activity_discarded" });
+  }
+  await vi.advanceTimersByTimeAsync(quietAt + 6_999 - performance.now());
   expect(nudges()).toEqual([]);
   await vi.advanceTimersByTimeAsync(1);
   expect(nudges()).toEqual(["NUDGE ONE"]);

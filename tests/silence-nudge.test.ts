@@ -2,7 +2,11 @@ import { afterEach, expect, it, vi } from "vitest";
 import { DINO_CAR_CRUNCH_LESSON } from "../lib/lesson-runtime/dino-car-crunch-lesson";
 import { validateLessonDefinition, type LessonDefinition } from "../lib/lesson-runtime/lesson-definition";
 import { createLessonRuntime, type LessonRuntimeState } from "../lib/lesson-runtime/lesson-runtime-reducer";
-import { awaitingFirstLearnerTurn, SilenceNudge } from "../lib/lesson-runtime/silence-nudge";
+import {
+  awaitingFirstLearnerTurn,
+  SILENCE_NUDGE_AFTER_BURST_MS,
+  SilenceNudge,
+} from "../lib/lesson-runtime/silence-nudge";
 
 const lesson: LessonDefinition = {
   ...DINO_CAR_CRUNCH_LESSON,
@@ -18,7 +22,7 @@ const waiting = (overrides: Partial<LessonRuntimeState> = {}): LessonRuntimeStat
   transcriptRevision: 1,
   ...overrides,
 });
-const candidate = { hasChildTranscript: false, tutorOutputObserved: true };
+const candidate = { deferredTurn: true, hasChildTranscript: false, tutorOutputObserved: true };
 const setup = () => {
   const request = vi.fn();
   const diagnostics = vi.fn();
@@ -67,13 +71,42 @@ it("sends each authored step once per visit, in order, after its own silence", a
   expect(request).toHaveBeenCalledTimes(2);
 });
 
-it("restarts the wait on any learner activity, including a discarded microphone burst", async () => {
+it("pauses, but does not restart, the wait for a discarded microphone burst", async () => {
+  vi.useFakeTimers();
+  const { request, nudge } = setup();
+  asked(nudge);
+  await vi.advanceTimersByTimeAsync(5_000);
+  // Room noise for 200 ms: the nudge holds while the burst might be an answer, then resumes.
+  nudge.observe(waiting({ childCandidate: candidate, childSpeaking: true }), true);
+  await vi.advanceTimersByTimeAsync(200);
+  nudge.observe(waiting(), true);
+  await vi.advanceTimersByTimeAsync(1_799);
+  expect(request).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(1);
+  expect(request).toHaveBeenCalledOnce();
+});
+
+it("leaves a short gap after a burst that ends past the wait", async () => {
+  vi.useFakeTimers();
+  const { request, nudge } = setup();
+  asked(nudge);
+  await vi.advanceTimersByTimeAsync(6_500);
+  nudge.observe(waiting({ childCandidate: candidate, childSpeaking: true }), true);
+  await vi.advanceTimersByTimeAsync(2_000);
+  expect(request).not.toHaveBeenCalled();
+  nudge.observe(waiting(), true);
+  await vi.advanceTimersByTimeAsync(SILENCE_NUDGE_AFTER_BURST_MS - 1);
+  expect(request).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(1);
+  expect(request).toHaveBeenCalledOnce();
+});
+
+it("restarts the wait when the tutor speaks again", async () => {
   vi.useFakeTimers();
   const { request, diagnostics, nudge } = setup();
   asked(nudge);
   await vi.advanceTimersByTimeAsync(5_000);
-  nudge.observe(waiting({ childCandidate: candidate }), true);
-  nudge.observe(waiting(), true);
+  asked(nudge);
   await vi.advanceTimersByTimeAsync(6_999);
   expect(request).not.toHaveBeenCalled();
   expect(diagnostics).toHaveBeenCalledWith("silence_nudge.cancelled", expect.anything(), {
