@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900">
+  <!-- Centre-safe band: x 592-1008 (the 390 x 844 portrait crop). Inside it there is only smooth sky,
+       one soft snow line and the two mitten shadows: no flakes, dots, stars or other countable shapes.
+       Star strip: y 92-144 across the band. Mittens: x 595-1005, y 225-525. The pines, the sun and the
+       sled are landscape-only decoration. -->
+  <defs>
+    <linearGradient id="sky" x2="0" y2="1">
+      <stop stop-color="#b9d3e4"/>
+      <stop offset=".55" stop-color="#dceaf0"/>
+      <stop offset="1" stop-color="#eef4f3"/>
+    </linearGradient>
+    <linearGradient id="snow" x2="0" y2="1">
+      <stop stop-color="#f8fbf7"/>
+      <stop offset="1" stop-color="#e6eff1"/>
+    </linearGradient>
+    <radialGradient id="sun">
+      <stop stop-color="#fff9e3"/>
+      <stop offset=".55" stop-color="#fff3d2" stop-opacity=".9"/>
+      <stop offset="1" stop-color="#fff3d2" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1600" height="900" fill="url(#sky)"/>
+  <circle cx="1330" cy="170" r="120" fill="url(#sun)"/>
+  <circle cx="1330" cy="170" r="48" fill="#fff8df" stroke="#f3dfae" stroke-width="4"/>
+
+  <!-- Far hills -->
+  <path d="M0 470q140-70 300-48 120 16 220 0 150-26 280-8 140 20 300-4 160-26 300 2 120 24 200-6V560H0z"
+        fill="#d6e5ec" stroke="#c4d7e0" stroke-width="4" stroke-linejoin="round"/>
+
+  <!-- Left pines -->
+  <g stroke-linejoin="round" stroke-linecap="round">
+    <path d="M176 470v34m150-30v26" stroke="#704a3c" stroke-width="14"/>
+    <path d="M176 220l-56 92h26l-50 82h28l-58 84h220l-58-84h28l-50-82h26z" fill="#569a72" stroke="#286248" stroke-width="5"/>
+    <path d="M176 220l-30 50q16 10 30-4 14 14 30 4zM136 330q20 14 40 0 20 14 40 0l-14-18h-52zM120 424q28 16 56 2 28 14 56-2l-14-20h-84z"
+          fill="#f8fbf7" stroke="#c3d6df" stroke-width="3"/>
+    <path d="M326 300l-44 72h20l-40 60h22l-44 46h172l-44-46h22l-40-60h20z" fill="#5f9f7a" stroke="#286248" stroke-width="5"/>
+    <path d="M326 300l-24 40q12 8 24-3 12 11 24 3zM294 386q16 10 32 0 16 10 32 0l-12-14h-40zM280 446q22 12 46 0 24 12 46 0l-12-14h-68z"
+          fill="#f8fbf7" stroke="#c3d6df" stroke-width="3"/>
+  </g>
+
+  <!-- Right pines -->
+  <g stroke-linejoin="round" stroke-linecap="round">
+    <path d="M1300 474v28m150-34v34" stroke="#704a3c" stroke-width="14"/>
+    <path d="M1300 316l-42 70h20l-38 56h22l-42 42h160l-42-42h22l-38-56h20z" fill="#5f9f7a" stroke="#286248" stroke-width="5"/>
+    <path d="M1300 316l-22 38q11 8 22-3 11 11 22 3zM1270 398q15 10 30 0 15 10 30 0l-12-14h-36zM1256 454q22 12 44 0 22 12 44 0l-12-14h-64z"
+          fill="#f8fbf7" stroke="#c3d6df" stroke-width="3"/>
+    <path d="M1450 236l-54 88h24l-48 78h26l-56 74h216l-56-74h26l-48-78h24z" fill="#569a72" stroke="#286248" stroke-width="5"/>
+    <path d="M1450 236l-28 48q14 10 28-4 14 14 28 4zM1412 340q19 13 38 0 19 13 38 0l-14-16h-48zM1398 424q26 16 52 2 26 14 52-2l-14-20h-76z"
+          fill="#f8fbf7" stroke="#c3d6df" stroke-width="3"/>
+  </g>
+
+  <!-- The snowfield: one gentle line behind the mittens, rising to soft drifts at the sides -->
+  <path d="M0 486q130-34 290-10 160 24 310 22 200-4 400 0 150 2 300-24 160-26 300 4V900H0z"
+        fill="url(#snow)" stroke="#c9dbe3" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M0 640q150-40 330-18 120 14 200 50M1600 650q-160-46-330-20-110 16-190 54"
+        fill="none" stroke="#d3e2e9" stroke-width="5" stroke-linecap="round"/>
+  <path d="M70 780q140-30 300 0M1250 800q150-36 290-4" fill="none" stroke="#dbe7ec" stroke-width="5" stroke-linecap="round"/>
+
+  <!-- Mitten shadows, under each cuff -->
+  <ellipse cx="705" cy="524" rx="84" ry="11" fill="#bcd1dc" opacity=".6"/>
+  <ellipse cx="895" cy="524" rx="84" ry="11" fill="#bcd1dc" opacity=".6"/>
+
+  <!-- A sled left in the snow -->
+  <g stroke-linejoin="round" stroke-linecap="round">
+    <ellipse cx="1240" cy="792" rx="104" ry="10" fill="#9fb8c8" opacity=".3"/>
+    <path d="M1150 786h160q26 0 26-24" fill="none" stroke="#8d5a44" stroke-width="7"/>
+    <path d="M1170 786v-22m118 22v-22" stroke="#8d5a44" stroke-width="6"/>
+    <rect x="1150" y="742" width="168" height="24" rx="8" fill="#c95455" stroke="#803f47" stroke-width="5"/>
+    <path d="M1162 750h144" stroke="#d96f6e" stroke-width="4"/>
+    <path d="M1158 742q24-14 52-4 26-12 54-2 26-10 50 4z" fill="#f8fbf7" stroke="#c3d6df" stroke-width="3"/>
+  </g>
+</svg>

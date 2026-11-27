@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 300">
+  <!-- Back side, shown before the flip: mitten-blue-back.svg's outline mirrored, with one knitted
+       heart instead of zigzags, so pink and blue differ in pattern as well as colour. -->
+  <defs>
+    <path id="hand" d="M36 228C30 214 27.5 204 27.5 190V92C27.5 40 64 8 110 8s82.5 32 82.5 84v98c0 14-2.5 24-8.5 38z"/>
+    <clipPath id="inside"><use href="#hand"/></clipPath>
+    <pattern id="knit" width="12" height="10" patternUnits="userSpaceOnUse">
+      <path d="M1.5 1.5 6 8l4.5-6.5" fill="none" stroke="#963f65" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity=".22"/>
+    </pattern>
+  </defs>
+  <g transform="matrix(-1 0 0 1 200 0)">
+    <path d="M46 210C20 210 7 194 8 168l2-46c1-20 12-30 24-26 10 3 13 14 10 28z"
+          fill="#f592b8" stroke="#963f65" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M22 114q-6 30-2 62" fill="none" stroke="#e06f9d" stroke-width="6" stroke-linecap="round" opacity=".6"/>
+    <use href="#hand" fill="#f592b8"/>
+    <g clip-path="url(#inside)">
+      <rect width="200" height="230" fill="url(#knit)"/>
+    </g>
+    <path d="M110 176c-44-28-52-62-32-78 14-10 28-4 32 10 4-14 18-20 32-10 20 16 12 50-32 78z"
+          fill="#fff6ed" stroke="#963f65" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M110 162c-30-20-36-42-24-52" fill="none" stroke="#f7d3e0" stroke-width="5" stroke-linecap="round"/>
+    <path d="M50 52c8-18 26-30 50-32" fill="none" stroke="#ffc4da" stroke-width="6" stroke-linecap="round" opacity=".85"/>
+    <use href="#hand" fill="none" stroke="#963f65" stroke-width="5" stroke-linejoin="round"/>
+    <rect x="34" y="220" width="152" height="72" rx="14" fill="#fff6ed"/>
+    <path d="M48 226v60M62 226v60M76 226v60M90 226v60M104 226v60M118 226v60M132 226v60M146 226v60M160 226v60M174 226v60"
+          fill="none" stroke="#efc1d2" stroke-width="3" stroke-linecap="round"/>
+    <rect x="34" y="220" width="152" height="72" rx="14" fill="none" stroke="#963f65" stroke-width="5"/>
+  </g>
+</svg>
