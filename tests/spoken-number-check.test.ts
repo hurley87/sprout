@@ -13,6 +13,7 @@ import { parseLiveClassificationDiagnostic } from "../lib/lesson-runtime/live-cl
 import { JEV_MODEL } from "../lib/jev";
 import { classificationSource, runtimeSource } from "../lib/lesson-runtime/lesson-runtime-reducer";
 import { classifierProposal } from "./helpers/runtime-classifier";
+import { WORDLESS_FRAGMENT_TRANSCRIPTS } from "./fixtures/wordless-child-fragments";
 import { createReducerHarness, prepareLearnerClassification } from "./helpers/runtime-harness";
 
 const real = `Tutor: Here comes Rex, hungry! Big car-carrier trucks are carrying ten cars each, and some loose ones rolled up too. How many cars does Rex get to eat altogether?
@@ -147,6 +148,13 @@ it("never rescues a confident incorrect proposal", () => {
   expect(check("Child: fifty-six", scores)).toMatchObject({
     proposal: { answerOutcome: "incorrect" },
     spokenNumber: { action: "none" },
+  });
+});
+it.each(WORDLESS_FRAGMENT_TRANSCRIPTS)("agrees despite a trailing wordless child fragment: %#", transcript => {
+  const snapshot = { lesson, nodeId: "warm-up", transcriptRevision: 92, transcript };
+  expect(applySpokenNumberCheck(mapConversationObservation(snapshot, outputs), snapshot)).toMatchObject({
+    proposal: { answerOutcome: "correct", answerCommitment: "committed" },
+    spokenNumber: { action: "agree", reader: { status: "number", value: 7, owner: "child" } },
   });
 });
 it("does not change non-opted-in lessons", () => {

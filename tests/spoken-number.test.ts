@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { latestChildNumber, parseSpokenNumbers } from "../lib/lesson-runtime/spoken-number";
+import { WORDLESS_FRAGMENT_TRANSCRIPTS } from "./fixtures/wordless-child-fragments";
 
 const real = `Tutor: Here comes Rex, hungry! Big car-carrier trucks are carrying ten cars each, and some loose ones rolled up too. How many cars does Rex get to eat altogether?
 Child: Fifty-five
@@ -11,6 +12,16 @@ Child: -six
 Tutor: fifty-six cars. Rex is ready to chomp them.`;
 
 describe("spoken number reader", () => {
+  it.each(WORDLESS_FRAGMENT_TRANSCRIPTS)("skips wordless child fragments: %#", transcript => {
+    expect(latestChildNumber(transcript, { answer: 7 })).toMatchObject({ status: "number", value: 7, owner: "child" });
+  });
+
+  it("still finds no answer when the only child turns are wordless", () => {
+    expect(latestChildNumber("Tutor: How many cars can Rex eat?\nChild: .\nChild: …", { answer: 7 })).toEqual({
+      status: "none",
+    });
+  });
+
   it.each([
     ["twenty-three", 23],
     ["twenty and three", 23],
