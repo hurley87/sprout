@@ -26,6 +26,10 @@ export function useVoiceDemo({
     (name: string, durationMs: number) => runtime.current?.beginEffect(name, durationMs) ?? false,
     [],
   );
+  const beginCountAlong = useCallback(
+    (name: string, durationMs: number) => runtime.current?.beginCountAlong(name, durationMs) ?? false,
+    [],
+  );
   const [snapshot, setSnapshot] = useState<LessonSnapshot | null>(null);
   const [readyQuietKey, setReadyQuietKey] = useState<string | null>(null);
   const state = snapshot?.runtime;
@@ -143,6 +147,7 @@ export function useVoiceDemo({
     skip,
     scribeAction,
     playEffect,
+    beginCountAlong,
   };
 }
 
