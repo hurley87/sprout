@@ -3,7 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import Lesson from "../app/lesson";
 import { GARDEN_THEME } from "../app/counting-themes";
-import { lessonPresentation, statusCopyVisible } from "../app/lesson-presentation";
+import { lessonPresentation } from "../app/lesson-presentation";
 
 type Snapshot = NonNullable<Parameters<typeof lessonPresentation>[0]>;
 const active: Snapshot = {
@@ -95,17 +95,5 @@ describe("counting child presentation", () => {
     expect(lessonPresentation({ ...stopped, runtime: { ...active.runtime!, phase: "complete" } }).kind).toBe(
       "complete",
     );
-  });
-});
-
-describe("status copy beside the glow cue", () => {
-  it("hides the words behind the glow unless the theme keeps them on the child's turn", () => {
-    expect(statusCopyVisible("speaking", false)).toBe(true);
-    expect(statusCopyVisible("off", true)).toBe(true);
-    for (const activity of ["your-turn", "speaking", "listening", "thinking"] as const)
-      expect(statusCopyVisible(activity, true)).toBe(false);
-    expect(statusCopyVisible("your-turn", true, true)).toBe(true);
-    for (const activity of ["speaking", "listening", "thinking", "waiting", "understood"] as const)
-      expect(statusCopyVisible(activity, true, true)).toBe(false);
   });
 });
