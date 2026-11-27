@@ -17,6 +17,8 @@ The 30s come after 20, 40 and 50 because “thirteen” and “thirty” are eas
 
 Only the lesson reducer accepts an answer. The stage follows the resulting `motion` to chomp; sounds are requested through the runtime effect gate. Tutor words alone do not authorize a chomp.
 
+If the classifier holds the scene and confidently judges the answer incorrect, answer recovery asks the tutor to give the smaller next-number hint after four seconds of quiet. Uncertain judgments still use the repeat request. Both share the same once-per-visit recovery budget. The `gpt_live.answer_recovery_append` diagnostic records which instruction was sent as `variant`.
+
 ## Two-digit answers
 
 In one local live session, the child answered the warm-up and the first two truck scenes correctly. On the next scene, after a wrong answer and a count-on hint, the child counted on and paused within a two-digit number. GPT-Live ended the turn at the tens word; the tutor said “Yes,” before the child finished the ones. The classifier abstained and the app asked for a repeat. GPT-Live transcribed the two-digit answers as hyphenated words; this session did not show a teen/-ty mishearing.

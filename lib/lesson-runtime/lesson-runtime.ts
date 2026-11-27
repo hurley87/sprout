@@ -12,6 +12,7 @@ import { BrowserTransport } from "../browser-transport";
 import type { ClientCommand, ProviderEvent } from "../events";
 import { MICROPHONE_ONSET_MS, MICROPHONE_ONSET_QUIET_MS, MICROPHONE_QUIET_MS } from "../microphone-turn";
 import { parseConversationStateProposal } from "./conversation-state-classifier";
+import { confidentlyClassified } from "./conversation-observer-contract";
 import { currentNodeContext, type LessonDefinition } from "./lesson-definition";
 import {
   answerRecoveryInstruction,
@@ -255,7 +256,7 @@ export class LessonRuntime {
       (type, source, detail) => this.log(type, detail, source),
     );
     this.answerRecovery = new AnswerRecovery(
-      source => this.sendAnswerRecovery(source),
+      (source, confidentlyIncorrect) => this.sendAnswerRecovery(source, confidentlyIncorrect),
       (type, source, detail) => this.log(type, detail, source),
       Object.values(this.lessonDefinition.nodes).some(node => node.concepts?.length),
       this.lessonDefinition.conversationFirst
@@ -1296,14 +1297,14 @@ export class LessonRuntime {
               "no_confident_concept_observation",
             ].includes(diagnostic.reason ?? "")))
       ) {
-        this.answerRecovery.armSemanticHold(
-          this.state,
-          this.status === "live" && !this.steering,
-          source,
-          !!this.lessonDefinition.nodes[source.nodeId].concepts?.length &&
+        const objective = diagnostic.outputs.objectiveState;
+        this.answerRecovery.armSemanticHold(this.state, this.status === "live" && !this.steering, source, {
+          completionReady:
+            !!this.lessonDefinition.nodes[source.nodeId].concepts?.length &&
             this.lessonDefinition.nodes[source.nodeId].completionPolicy !== "allow_unresolved" &&
             meetsAuthoredCompletionPolicy(this.state, this.lessonDefinition),
-        );
+          confidentlyIncorrect: objective.choice === "incorrect" && confidentlyClassified(objective),
+        });
       }
     } catch {
       if (!abort.signal.aborted && this.status === "live")
@@ -1343,14 +1344,19 @@ export class LessonRuntime {
     }
   }
 
-  private sendAnswerRecovery(source: ClassificationSource) {
+  private sendAnswerRecovery(source: ClassificationSource, confidentlyIncorrect: boolean) {
     const eventId = `${this.runtimeId}:answer-recovery:${source.visitId}:${source.childTurnId}:${source.transcriptRevision}`;
     const missingAnswerCheck = this.lessonDefinition.id === "mae386" && this.state && !this.state.hasChildTranscript;
+    const incorrectInstruction = confidentlyIncorrect
+      ? this.lessonDefinition.recovery.incorrectAnswerInstruction
+      : undefined;
+    const variant = missingAnswerCheck ? "missing_answer_check" : incorrectInstruction ? "incorrect_answer" : "generic";
     const content = missingAnswerCheck
       ? missingAnswerCheckInstruction(eventId)
-      : this.state
-        ? answerRecoveryInstruction(this.lessonDefinition, this.state)
-        : this.lessonDefinition.recovery.answerRecoveryInstruction;
+      : (incorrectInstruction ??
+        (this.state
+          ? answerRecoveryInstruction(this.lessonDefinition, this.state)
+          : this.lessonDefinition.recovery.answerRecoveryInstruction));
     try {
       this.sendInstruction({
         type: "session.instructions.append",
@@ -1358,7 +1364,7 @@ export class LessonRuntime {
         delegation_id: null,
         content,
       });
-      this.log("gpt_live.answer_recovery_append", { eventId, content }, source);
+      this.log("gpt_live.answer_recovery_append", { eventId, content, variant }, source);
       if (missingAnswerCheck) this.missingAnswerCheck = { eventId, source };
     } catch {
       this.log("answer_recovery.send_failed", { message: "Scene held; request budget spent." }, source);

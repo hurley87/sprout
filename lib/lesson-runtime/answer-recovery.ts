@@ -19,6 +19,7 @@ export class AnswerRecovery {
   private turn?: ClassificationSource;
   private reason: "missing_transcript" | "semantic_hold" = "missing_transcript";
   private completionReady = false;
+  private confidentlyIncorrect = false;
   private allowRecheck = true;
   private missingQuietSince?: number;
   private missingCandidateTurn?: number;
@@ -28,7 +29,7 @@ export class AnswerRecovery {
   private readonly requestedStages = new Set<string>();
 
   constructor(
-    private readonly request: (source: ClassificationSource) => void,
+    private readonly request: (source: ClassificationSource, confidentlyIncorrect: boolean) => void,
     private readonly diagnostic: (type: string, source: ClassificationSource, detail: unknown) => void,
     private readonly preserveMissingAcrossCandidates = false,
     // Closure rechecks have no mastery authority and do not spend the prompt
@@ -54,7 +55,12 @@ export class AnswerRecovery {
     this.observe(state, enabled);
   }
 
-  armSemanticHold(state: LessonRuntimeState, enabled: boolean, source: ClassificationSource, completionReady = false) {
+  armSemanticHold(
+    state: LessonRuntimeState,
+    enabled: boolean,
+    source: ClassificationSource,
+    { completionReady = false, confidentlyIncorrect = false } = {},
+  ) {
     // Only a successful canonical response for the exact current snapshot may
     // request this recovery. Network errors or cancelled requests are not holds.
     if (!state.hasChildTranscript || JSON.stringify(sourceFor(state)) !== JSON.stringify(source)) return;
@@ -62,6 +68,7 @@ export class AnswerRecovery {
     this.turn = source;
     this.reason = "semantic_hold";
     this.completionReady = completionReady;
+    this.confidentlyIncorrect = confidentlyIncorrect;
     this.observe(state, enabled);
   }
 
@@ -142,7 +149,7 @@ export class AnswerRecovery {
         if (this.reason === "missing_transcript" && this.allowRecheck && this.recheckBeforePrompt?.(source)) return;
         if (this.requestedStages.has(stage)) return;
         this.requestedStages.add(stage); // Send failures also spend the budget.
-        this.request(source);
+        this.request(source, this.confidentlyIncorrect);
       },
       missingText ? Math.max(0, waitMs - (Date.now() - this.missingQuietSince!)) : waitMs,
     );
@@ -159,6 +166,7 @@ export class AnswerRecovery {
     this.timer = undefined;
     if (this.turn) this.diagnostic("answer_recovery.cancelled", this.turn, { reason });
     this.turn = undefined;
+    this.confidentlyIncorrect = false;
     this.missingQuietSince = undefined;
     this.missingCandidateTurn = undefined;
   }

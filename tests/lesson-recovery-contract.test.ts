@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import { COUNTING_LESSON } from "../lib/lesson-runtime/counting-lesson";
 import { ANSWER_RECOVERY_INSTRUCTION } from "../lib/lesson-runtime/answer-recovery";
+import { validateLessonDefinition } from "../lib/lesson-runtime/lesson-definition";
 import { SUPPORT_CLARIFICATION_INSTRUCTION } from "../lib/lesson-runtime/support-clarification";
 import { TEST_PATTERN_LESSON } from "./fixtures/test-lesson";
 
@@ -17,4 +18,13 @@ it("requires non-counting recovery prompts to describe the selected lesson", () 
   expect(answerRecoveryInstruction).toContain("pattern rule");
   expect(supportClarificationInstruction).not.toContain("number and object");
   expect(answerRecoveryInstruction).not.toContain("number and object");
+});
+
+it("rejects a blank optional incorrect-answer instruction", () => {
+  expect(() =>
+    validateLessonDefinition({
+      ...TEST_PATTERN_LESSON,
+      recovery: { ...TEST_PATTERN_LESSON.recovery, incorrectAnswerInstruction: " " },
+    }),
+  ).toThrow("Incorrect answer recovery needs a non-empty instruction");
 });

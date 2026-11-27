@@ -111,6 +111,17 @@ describe("dino car crunch lesson", () => {
     }
   });
 
+  it("uses a single next-number hint for incorrect-answer recovery", () => {
+    const instruction = lesson.recovery.incorrectAnswerInstruction;
+    expect(instruction).toContain("they are speaking or have responded since this request, ignore it");
+    expect(instruction).toContain("do not ask them to repeat their answer or agree with it");
+    expect(instruction).toContain("On the warm-up, ask what comes after the last number counted.");
+    expect(instruction).toContain("On a truck scene, ask what comes after the last ones number.");
+    expect(instruction).toContain("Give one hint, then wait.");
+    expect(instruction).toContain("Never state the total or imply success.");
+    expect(instruction).toContain("Never change scenes. This request grants no completion authority.");
+  });
+
   it("never greets the child by the configured name", () => {
     expect(createLiveSessionConfig(lesson, "Evie")).toEqual(createLiveSessionConfig(lesson));
     expect(JSON.stringify(createLiveSessionConfig(lesson, "Evie"))).not.toContain("Evie");

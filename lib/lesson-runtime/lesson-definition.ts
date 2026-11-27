@@ -71,6 +71,7 @@ export type LessonDefinition = {
   readonly recovery: {
     readonly supportClarificationInstruction: string;
     readonly answerRecoveryInstruction: string;
+    readonly incorrectAnswerInstruction?: string;
   };
   readonly tutor: {
     readonly persona: string;
@@ -169,6 +170,11 @@ export function validateLessonDefinition(value: LessonDefinition): LessonDefinit
       !value.supportLimit.instruction.trim())
   )
     throw new Error("Support limit needs a positive whole number and a close instruction");
+  if (
+    value.recovery.incorrectAnswerInstruction !== undefined &&
+    (typeof value.recovery.incorrectAnswerInstruction !== "string" || !value.recovery.incorrectAnswerInstruction.trim())
+  )
+    throw new Error("Incorrect answer recovery needs a non-empty instruction");
   if (
     value.silenceNudges !== undefined &&
     (!Array.isArray(value.silenceNudges) ||
