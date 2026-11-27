@@ -51,6 +51,8 @@ while keeping the tree opaque. Lessons that omit the flag keep their existing
 state shape.
 [Reducer](../lib/lesson-runtime/lesson-runtime-reducer.ts)
 
+Down the Chimney uses the separate opt-in [count-along window](down-the-chimney-counting.md#count-along-window) to defer judgement while listening.
+
 In development, Next.js can log “Image with src … has either width or height
 modified, but not the other” for item SVGs when one rendered dimension matches
 its `<Image>` attribute exactly and the other differs. This warning has no
