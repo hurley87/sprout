@@ -62,6 +62,8 @@ export type LessonDefinition = {
   /** Record current-visit incorrect answers and explicit help requests for presentation.
    * Tracking alone imposes no support limit and grants no transition or answer authority. */
   readonly trackDifficulties?: true;
+  /** Defer answer judgment while an application-owned count-along window is open. */
+  readonly countAlong?: true;
   readonly supportLimit?: { readonly maxDifficulties: number; readonly instruction: string };
   /** Ordered tutor prompts for a learner who has not spoken since the tutor asked. Each fires at most
    * once per visit, after its own sustained silence; any learner activity restarts the wait. */
@@ -176,6 +178,8 @@ export function validateLessonDefinition(value: LessonDefinition): LessonDefinit
     (!Number.isSafeInteger(value.successHoldMs) || value.successHoldMs <= 0 || value.successHoldMs > 5_000)
   )
     throw new Error("Success hold must be a positive whole number of milliseconds up to 5000");
+  if (value.countAlong !== undefined && value.countAlong !== true)
+    throw new Error("countAlong must be true or omitted");
   if (value.trackDifficulties !== undefined && value.trackDifficulties !== true)
     throw new Error("trackDifficulties must be true or omitted");
   if (

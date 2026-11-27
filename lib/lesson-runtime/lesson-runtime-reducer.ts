@@ -471,7 +471,7 @@ function outputHasDrained(state: LessonRuntimeState, lesson: LessonDefinition) {
   );
 }
 
-function finish(current: LessonRuntimeState, lesson: LessonDefinition): LessonRuntimeResult {
+function finish(current: LessonRuntimeState, lesson: LessonDefinition, holdTransition = false): LessonRuntimeResult {
   const showingSuccess =
     current.phase === "active" && current.tutorOutputObserved && hasCurrentCompletionEvidence(current, lesson);
   const state =
@@ -485,6 +485,7 @@ function finish(current: LessonRuntimeState, lesson: LessonDefinition): LessonRu
       !state.tutorOutputObserved &&
       state.outputActivity !== "active");
   const next = { ...state, tutorOutputDrained: drained, transitionReady: false };
+  if (holdTransition) return { state: next, effects: [] };
   const release = next.supportLimitReached?.closeSent && !hasCurrentCompletionEvidence(next, lesson);
   if (
     (!hasCurrentCompletionEvidence(next, lesson) && !release) ||
@@ -604,6 +605,7 @@ export function reduceLessonRuntime(
   state: LessonRuntimeState,
   event: LessonRuntimeEvent,
   lesson: LessonDefinition,
+  options?: { holdTransition?: boolean },
 ): LessonRuntimeResult {
   const ignore = (reason: string): LessonRuntimeResult => ({
     state,
@@ -899,7 +901,7 @@ export function reduceLessonRuntime(
     case "child.turn.confirmed":
       if (!state.childSpeaking || !state.childCandidate) return ignored;
       if (state.childCandidate.deferredTurn)
-        return reduceLessonRuntime(state, { ...event, type: "child.turn.started" }, lesson);
+        return reduceLessonRuntime(state, { ...event, type: "child.turn.started" }, lesson, options);
       next = {
         ...next,
         childCandidate: null,
@@ -934,8 +936,8 @@ export function reduceLessonRuntime(
     case "transcript.updated": {
       if (!Number.isSafeInteger(event.revision) || event.revision <= state.transcriptRevision) return ignored;
       if (event.speaker === "child" && state.childCandidate?.deferredTurn) {
-        const confirmed = reduceLessonRuntime(state, { ...event, type: "child.turn.started" }, lesson).state;
-        return reduceLessonRuntime(confirmed, { ...event, source: runtimeSource(confirmed) }, lesson);
+        const confirmed = reduceLessonRuntime(state, { ...event, type: "child.turn.started" }, lesson, options).state;
+        return reduceLessonRuntime(confirmed, { ...event, source: runtimeSource(confirmed) }, lesson, options);
       }
       const exchange =
         lesson.conversationFirst && event.speaker === "child" ? closingTutorExchange(event.transcriptSnapshot) : null;
@@ -1491,7 +1493,7 @@ export function reduceLessonRuntime(
       next = { ...next, questionObservations: observations };
     }
   }
-  const result = finish(next, lesson);
+  const result = finish(next, lesson, options?.holdTransition);
   return {
     ...result,
     effects: [...additionalEffects, ...result.effects],
