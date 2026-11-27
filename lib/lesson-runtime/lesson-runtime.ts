@@ -23,6 +23,7 @@ import {
 } from "./live-context";
 import { SupportClarification } from "./support-clarification";
 import { AnswerRecovery } from "./answer-recovery";
+import { SilenceNudge } from "./silence-nudge";
 import { TutorStabilizationGate } from "./tutor-stabilization";
 import { parseClassifierEndpointCode } from "./classifier-failure";
 import { DiagnosticJournal, type LessonDiagnostic, type LessonEventCursor } from "./diagnostic-journal";
@@ -148,6 +149,7 @@ export class LessonRuntime {
   private readonly supportClarification: SupportClarification;
   private readonly answerRecovery: AnswerRecovery;
   private readonly terminalTranscriptRecovery: AnswerRecovery;
+  private readonly silenceNudge: SilenceNudge;
   private clarificationRequest?: { eventId: string; source: ClassificationSource };
   private stabilizationTimer?: ReturnType<typeof setTimeout>;
   private clockTimer?: ReturnType<typeof setTimeout>;
@@ -306,6 +308,24 @@ export class LessonRuntime {
         return true;
       },
     );
+    this.silenceNudge = new SilenceNudge(
+      this.lessonDefinition,
+      (source, step, nudge) => {
+        const eventId = `${this.runtimeId}:silence-nudge:${source.visitId}:${step}`;
+        try {
+          this.sendInstruction({
+            type: "session.instructions.append",
+            event_id: eventId,
+            delegation_id: null,
+            content: nudge.instruction,
+          });
+          this.log("gpt_live.silence_nudge_append", { eventId, step, content: nudge.instruction }, source);
+        } catch {
+          this.log("silence_nudge.send_failed", { eventId, step, message: "Nudge budget spent." }, source);
+        }
+      },
+      (type, source, detail) => this.log(type, detail, source),
+    );
     this.transport = new BrowserTransport(audio, true);
     this.transport.setPlaybackDiagnosticSink?.(event => {
       if (!this.state) return;
@@ -389,7 +409,13 @@ export class LessonRuntime {
   }
 
   private publish() {
+    this.observeSilence();
     this.changed(this.snapshot());
+  }
+
+  /** Every runtime change publishes, so this sees each learner/tutor activity edge. */
+  private observeSilence() {
+    this.silenceNudge.observe(this.state, this.status === "live" && !this.steering && !this.effect && !this.mathPlugin);
   }
 
   /** Open a window for a page sound effect: microphone events are ignored and provider input is paused
@@ -421,6 +447,7 @@ export class LessonRuntime {
       timer: setTimeout(() => this.endEffect(), durationMs + EFFECT_TAIL_MS),
     };
     this.log("effect.started", { name, durationMs });
+    this.observeSilence();
     return true;
   }
 
@@ -431,6 +458,7 @@ export class LessonRuntime {
     this.effect = undefined;
     this.transport.resumeInput();
     this.log("effect.ended", { name: effect.name, durationMs: effect.durationMs });
+    this.observeSilence();
   }
 
   snapshot(): LessonSnapshot {
@@ -1558,6 +1586,7 @@ export class LessonRuntime {
     this.cancelClassification(reason);
     this.answerRecovery.cancel(reason);
     this.terminalTranscriptRecovery.cancel(reason);
+    this.silenceNudge.cancel(reason);
     clearTimeout(this.clockTimer);
     clearTimeout(this.startupTimer);
     clearTimeout(this.terminalTimer);
