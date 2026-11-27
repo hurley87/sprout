@@ -74,12 +74,6 @@ export function voiceActivity(presentation: ReturnType<typeof lessonPresentation
   }
 }
 
-/** The glow cue replaces the status words while the conversation is live. A theme may keep the words
- * visible on the child's turn, so a first-time player knows the game is waiting for a spoken answer. */
-export function statusCopyVisible(activity: VoiceActivity, glow: boolean, showReadyCopy = false) {
-  return !glow || activity === "off" || (showReadyCopy && activity === "your-turn");
-}
-
 type MotionSnapshot = Pick<LessonSnapshot, "status" | "error" | "awaitingSteering" | "display" | "runtime">;
 
 /** Success reflects only the reducer's own authority for the displayed visit: the exact completion
