@@ -221,7 +221,7 @@ export type PairingLine = {
   readonly to: ScenePoint;
 };
 export type SnowflakePairing = {
-  /** One line per pair, top to bottom by the blue end: draw them in this order, beneath the snowflakes. */
+  /** One line per pair, top to bottom by the blue end: draw them in this order, above the snowflakes. */
   readonly lines: readonly PairingLine[];
   /** The larger side's unpaired slots, which glow gold; null when the counts match. */
   readonly leftover: { readonly colour: MittenColour; readonly slots: readonly number[] } | null;
@@ -266,8 +266,9 @@ function distanceToSegment(p: Point, a: Point, b: Point): number {
  * then keeps lines short, which leaves the leftovers on the far side of the larger mitten. Both sides
  * are searched top to bottom and ties keep the first matching found, so the result is deterministic.
  *
- * A line can still run behind a snowflake when no matching avoids it (say, three in one row on each
- * mitten), so draw the lines beneath the snowflakes.
+ * A line can still pass a snowflake when no matching avoids it (say, three in one row on each mitten),
+ * so the stage draws the lines above the snowflakes with a white casing and rings each joined pair, and a
+ * passed snowflake never looks joined.
  */
 export function pairingLines(blueSlots: readonly number[], pinkSlots: readonly number[]): SnowflakePairing {
   const sideSlots = { blue: checkedSlots(blueSlots), pink: checkedSlots(pinkSlots) };
