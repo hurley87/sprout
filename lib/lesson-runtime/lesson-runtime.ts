@@ -93,6 +93,7 @@ export type LessonObservation = {
 export type LessonSnapshot = {
   math?: CalculusSnapshot;
   scribe?: ReturnType<MathScribeRuntime["snapshot"]>;
+  countAlong?: { name: string; endsAtMs: number } | null;
   status: "prepared" | "connecting" | "live" | "ended";
   runtime: LessonRuntimeState | null;
   display: RenderIdentity;
@@ -161,6 +162,7 @@ export class LessonRuntime {
   private supportRequestedAt?: { visitId: number; revision: number };
   private missingAnswerCheck?: { eventId: string; source: ClassificationSource };
   private startupTimer?: ReturnType<typeof setTimeout>;
+  private countAlong?: { name: string; endsAtMs: number; spoke: boolean; timer: ReturnType<typeof setTimeout> };
   private effect?: { name: string; durationMs: number; startedAt: number; timer: ReturnType<typeof setTimeout> };
   private steering?: {
     eventId: string;
@@ -186,7 +188,7 @@ export class LessonRuntime {
         () => ({
           state: this.state,
           fragments: this.fragments,
-          quiet: this.isQuietActive(),
+          quiet: this.isQuietActive() && !this.countAlong,
           steering: !!this.steering,
           supportRequestedAt: this.supportRequestedAt,
         }),
@@ -438,9 +440,67 @@ export class LessonRuntime {
 
   /** Observe learner/tutor activity and answer recovery's timer settling without a send. */
   private observeNudges() {
-    const enabled = this.status === "live" && !this.steering && !this.effect && !this.mathPlugin;
+    const enabled = this.status === "live" && !this.steering && !this.effect && !this.countAlong && !this.mathPlugin;
     this.silenceNudge.observe(this.state, enabled);
     this.replyNudge?.observe(this.state, enabled, this.answerRecovery.activity);
+  }
+
+  /** Keep listening while deferring judgment and conversational quiet timers. */
+  beginCountAlong(name: string, durationMs: number): boolean {
+    const reason = !this.lessonDefinition.countAlong
+      ? "not_enabled"
+      : this.status !== "live" || !this.state
+        ? "not_live"
+        : this.state.phase !== "active"
+          ? "phase"
+          : this.countAlong
+            ? "window_open"
+            : !Number.isFinite(durationMs) || durationMs <= 0 || durationMs > 15_000
+              ? "duration"
+              : null;
+    if (reason) {
+      this.log("count_along.refused", { name, durationMs, reason });
+      return false;
+    }
+    const state = this.state!;
+    const endsAtMs = this.now() + durationMs;
+    this.countAlong = {
+      name,
+      endsAtMs,
+      spoke: false,
+      timer: setTimeout(() => this.endCountAlong("elapsed"), durationMs),
+    };
+    this.cancelClassification("count_along_started");
+    this.mathPlugin?.cancelCheck();
+    this.answerRecovery.cancel("count_along_started");
+    this.terminalTranscriptRecovery.cancel("count_along_started");
+    this.silenceNudge.cancel("count_along_started");
+    this.replyNudge?.cancel("count_along_started");
+    this.log("count_along.started", { name, durationMs, nodeId: state.nodeId, visitId: state.visitId });
+    this.publish();
+    return true;
+  }
+
+  private endCountAlong(reason: "elapsed" | "scene_skipped" | "node_visit_changed" | "stop" | "disconnect") {
+    const window = this.countAlong;
+    if (!window) return;
+    clearTimeout(window.timer);
+    this.countAlong = undefined;
+    // ReplyNudge creates a wait even while disabled; discard it so the close starts a fresh interval.
+    this.replyNudge?.cancel("count_along_ended");
+    this.log("count_along.ended", { name: window.name, reason });
+    if (reason === "elapsed") {
+      const source = this.state && classificationSource(this.state);
+      // Do not revive a cancelled old snapshot when this window contained no speech.
+      this.lastClassifiedKey = window.spoke ? undefined : source ? JSON.stringify(source) : this.lastClassifiedKey;
+      if (window.spoke && this.state && !this.state.childSpeaking && !this.state.childCandidate) {
+        if (!this.state.hasChildTranscript && !this.mathPlugin)
+          this.answerRecovery.arm(this.state, this.status === "live" && !this.steering);
+        this.scheduleClassification("count_along_ended");
+      }
+      if (this.state) this.dispatch({ type: "clock.tick", source: runtimeSource(this.state), atMs: this.now() });
+      this.publish();
+    }
   }
 
   /** Open a window for a page sound effect: microphone events are ignored and provider input is paused
@@ -490,6 +550,9 @@ export class LessonRuntime {
     return {
       math: this.mathPlugin instanceof CalculusRuntime ? this.mathPlugin.snapshot() : undefined,
       ...(this.mathPlugin instanceof MathScribeRuntime ? { scribe: this.mathPlugin.snapshot() } : {}),
+      ...(this.lessonDefinition.countAlong
+        ? { countAlong: this.countAlong ? { name: this.countAlong.name, endsAtMs: this.countAlong.endsAtMs } : null }
+        : {}),
       status: this.status,
       runtime: this.state,
       display: this.display,
@@ -550,7 +613,7 @@ export class LessonRuntime {
   private dispatch(event: LessonRuntimeEvent, capturedOrigin?: TrackingOrigin) {
     if (!this.state || this.status === "ended") return;
     const before = this.state;
-    const result = reduceLessonRuntime(before, event, this.lessonDefinition);
+    const result = reduceLessonRuntime(before, event, this.lessonDefinition, { holdTransition: !!this.countAlong });
     this.state = result.state;
     if (event.type === "child.turn.ended" && before !== this.state) this.replyNudge?.childTurnEnded(event.source);
     if (
@@ -621,6 +684,7 @@ export class LessonRuntime {
           break;
         }
         case "render.requested":
+          this.endCountAlong("node_visit_changed");
           if (before.supportLimitReached && this.state.pendingRender?.outcome?.outcome === "succeeded")
             this.log("support_limit.cancelled", { reason: "success_accepted" }, before.supportLimitReached.source);
           if (this.mathPlugin) {
@@ -730,6 +794,7 @@ export class LessonRuntime {
       case "microphone.speech_started":
         if (this.status !== "live") return;
         this.log(event.type);
+        if (this.countAlong && event.type === "microphone.speech_started") this.countAlong.spoke = true;
         this.mathPlugin?.onSpeechStarted(event.type === "microphone.speech_started");
         if (!this.state.childSpeaking) {
           // Provisional energy does not change a deferring lesson's classification
@@ -790,10 +855,10 @@ export class LessonRuntime {
             if (
               this.lessonDefinition.nodes[this.state.nodeId].completeAfterTutorOutput &&
               this.state.terminalLearnerPending
-            )
-              this.terminalTranscriptRecovery.arm(this.state, !this.steering);
-            else if (!this.mathPlugin && (!this.lessonDefinition.conversationFirst || !this.requestedNavigation())) {
-              this.answerRecovery.arm(this.state, !this.steering);
+            ) {
+              if (!this.countAlong) this.terminalTranscriptRecovery.arm(this.state, !this.steering);
+            } else if (!this.mathPlugin && (!this.lessonDefinition.conversationFirst || !this.requestedNavigation())) {
+              if (!this.countAlong) this.answerRecovery.arm(this.state, !this.steering);
               if (this.replyNudge) this.observeNudges();
             }
           }
@@ -960,6 +1025,7 @@ export class LessonRuntime {
       return;
     }
     if (!event.delta) return;
+    if (speaker === "child" && event.delta.trim() && this.countAlong) this.countAlong.spoke = true;
     if (this.state.phase !== "active") return;
     // Valid learner text confirms provisional energy even before the detector's
     // sustained-speech callback. Bind it to the newly confirmed turn.
@@ -1097,6 +1163,7 @@ export class LessonRuntime {
 
   private scheduleClassification(trigger: string) {
     clearTimeout(this.stabilizationTimer);
+    if (this.countAlong) return;
     if (this.mathPlugin && this.state && this.mathPlugin.onQuiet()) return;
     // Stop needs authenticated ended learner speech, but never waits for playback drain or Jev.
     if (
@@ -1168,6 +1235,13 @@ export class LessonRuntime {
   }
 
   private syncTutorStabilization(trigger: string) {
+    if (this.countAlong) {
+      this.answerRecovery.cancel("count_along_open");
+      this.terminalTranscriptRecovery.cancel("count_along_open");
+      this.supportClarification.cancel("count_along_open");
+      this.tutorStabilization.cancel("count_along_open");
+      return;
+    }
     if (this.mathPlugin && this.state && !this.lessonDefinition.nodes[this.state.nodeId].completeAfterTutorOutput)
       return;
     if (this.state && this.lessonDefinition.nodes[this.state.nodeId].completeAfterTutorOutput) {
@@ -1193,6 +1267,7 @@ export class LessonRuntime {
       !this.state ||
       this.status !== "live" ||
       this.steering ||
+      this.countAlong ||
       (this.supportRequestedAt?.visitId === this.state.visitId &&
         this.supportRequestedAt.revision === this.state.transcriptRevision)
     )
@@ -1494,6 +1569,7 @@ export class LessonRuntime {
   }
 
   private performSupport(request: "help" | "repeat", spoken = false) {
+    if (this.countAlong && spoken) return;
     if (
       !this.state ||
       (!this.lessonDefinition.questionGroups && !this.mathPlugin) ||
@@ -1533,6 +1609,7 @@ export class LessonRuntime {
       this.now() - this.state.quietSinceMs < this.state.quietDrainMs
     )
       return;
+    this.endCountAlong("scene_skipped");
     this.mathPlugin?.cancelCheck();
     const source = runtimeSource(this.state);
     const edge = this.lessonDefinition.nodes[this.state.nodeId].onSuccess;
@@ -1554,6 +1631,7 @@ export class LessonRuntime {
       !this.state ||
       this.status !== "live" ||
       this.steering !== undefined ||
+      this.countAlong ||
       !this.state.transitionReady ||
       source === null ||
       this.state.childSpeaking ||
@@ -1607,6 +1685,7 @@ export class LessonRuntime {
 
   stop(reason = "parent_stop", disconnected = false) {
     if (this.status === "ended") return;
+    this.endCountAlong(disconnected ? "disconnect" : "stop");
     this.endEffect();
     const supportSource =
       this.state?.supportLimitReached?.source ??

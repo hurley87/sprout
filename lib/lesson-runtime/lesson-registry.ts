@@ -11,6 +11,7 @@ import { GARDEN_RESCUE_LESSON } from "./garden-rescue-lesson";
 import { CATCHING_UNICORNS_LESSON } from "./catching-unicorns-lesson";
 import { MAE386_LESSON } from "./mae386-lesson";
 import { christmasTreeLesson, parseChristmasTreeLessonId } from "./christmas-tree-lesson";
+import { downTheChimneyLesson, parseDownTheChimneyLessonId } from "./down-the-chimney-lesson";
 import type { LessonDefinition } from "./lesson-definition";
 
 /** Application-owned allowlist. Keep additions explicit and small. */
@@ -32,5 +33,7 @@ const APPLICATION_LESSONS: Readonly<Record<string, LessonDefinition>> = {
 export function resolveLessonDefinition(value: unknown): LessonDefinition | null {
   if (typeof value === "string" && Object.hasOwn(APPLICATION_LESSONS, value)) return APPLICATION_LESSONS[value];
   const seed = parseChristmasTreeLessonId(value);
-  return seed === null ? null : christmasTreeLesson(seed);
+  if (seed !== null) return christmasTreeLesson(seed);
+  const chimneySeed = parseDownTheChimneyLessonId(value);
+  return chimneySeed === null ? null : downTheChimneyLesson(chimneySeed);
 }

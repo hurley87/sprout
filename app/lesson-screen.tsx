@@ -45,6 +45,7 @@ export type LessonStageProps = {
   sceneRef: Ref<HTMLDivElement>;
   motion: StageMotion;
   playEffect?: (name: string, durationMs: number) => boolean;
+  beginCountAlong?: (name: string, durationMs: number) => boolean;
 };
 
 export function LessonScreen({
@@ -74,7 +75,7 @@ export function LessonScreen({
   onStart?: () => void;
 }) {
   const lessonDefinition = theme.lesson;
-  const { audio, sceneRef, snapshot, live, start, stop, download, playEffect } = useVoiceDemo({
+  const { audio, sceneRef, snapshot, live, start, stop, download, playEffect, beginCountAlong } = useVoiceDemo({
     lesson: lessonDefinition,
     exportReport,
     exportPrefix,
@@ -116,6 +117,7 @@ export function LessonScreen({
           {renderStage({
             snapshot,
             playEffect,
+            beginCountAlong,
             node,
             renderToken: display?.token,
             sceneRef,

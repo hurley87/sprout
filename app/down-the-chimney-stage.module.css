@@ -1,0 +1,217 @@
+.frame,
+.stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+.stage {
+  isolation: isolate;
+  overflow: hidden;
+  container-type: size;
+  background: #29204b;
+  --align: var(--align-landscape);
+  --bg-width: max(100cqw, 100cqh * 16 / 9);
+  --bg-height: max(100cqh, 100cqw * 9 / 16);
+}
+@media (orientation: portrait) {
+  .stage {
+    --align: var(--align-portrait);
+  }
+}
+.background {
+  position: absolute;
+  inset: 0;
+}
+.background img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: calc(var(--align) * 100%) bottom;
+}
+.layer {
+  position: absolute;
+  left: calc((100% - var(--bg-width)) * var(--align));
+  bottom: 0;
+  width: var(--bg-width);
+  height: var(--bg-height);
+}
+.object {
+  position: absolute;
+  translate: -50% -50%;
+}
+.object img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.preload {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+.preload img {
+  width: 1px;
+  height: 1px;
+}
+/* Stay solid and accelerate like a drop; the chimney's front layer hides the present as it goes in. */
+.falling {
+  animation: fall var(--fall-ms) cubic-bezier(0.5, 0, 1, 0.6) forwards;
+}
+@keyframes fall {
+  to {
+    top: var(--fall-top);
+  }
+}
+.puff {
+  animation: puff 500ms 500ms ease-out both;
+}
+@keyframes puff {
+  0% {
+    opacity: 0;
+    scale: 0.5;
+  }
+  35% {
+    opacity: 1;
+    scale: 1;
+  }
+  100% {
+    opacity: 0;
+    scale: 1.3;
+  }
+}
+.jolt {
+  animation: jolt 200ms 500ms ease-out;
+}
+@keyframes jolt {
+  35% {
+    rotate: 2deg;
+  }
+  70% {
+    rotate: -2deg;
+  }
+}
+.fire {
+  animation: fade-in 700ms ease-out both;
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.reveal {
+  animation: reveal 650ms calc(var(--order) * 600ms) ease-out both;
+}
+@keyframes reveal {
+  0% {
+    opacity: 0;
+    transform: translate(-30%, -20%);
+  }
+  55% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  75% {
+    transform: translateY(-18%);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.newPile {
+  animation: pile-move 900ms 3200ms ease-in-out both;
+}
+.lights {
+  animation: twinkle 2s ease-in-out infinite;
+}
+@keyframes twinkle {
+  50% {
+    filter: brightness(1.3) drop-shadow(0 0 0.4rem #ffe6a0);
+  }
+}
+.sleigh {
+  animation: fly 5s ease-in-out forwards;
+}
+@keyframes fly {
+  to {
+    left: 67.5%;
+  }
+}
+section[data-palette]:has(.frame) [data-status-cue="glow"]:has([data-voice-activity]) {
+  background: transparent;
+  box-shadow: none;
+}
+section:has(.frame) [data-status-cue="glow"] [data-voice-activity] {
+  visibility: hidden;
+}
+section:has([data-voice-activity="speaking"]) .stage .moon img {
+  filter: drop-shadow(0 0 0.8rem #ffdb88);
+}
+section:has([data-voice-activity="your-turn"], [data-voice-activity="listening"]) .stage .moon img {
+  filter: drop-shadow(0 0 0.5rem #fff1bc);
+}
+.complete {
+  position: absolute;
+  bottom: calc(var(--stage-bottom, 1rem) + 1rem);
+  left: 50%;
+  translate: -50%;
+  padding: 0.5rem 1rem;
+  border-radius: 1rem;
+  background: #fff8eedb;
+  color: #4b315b;
+  text-align: center;
+}
+.loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #29204b;
+  color: white;
+}
+@media (prefers-reduced-motion: reduce) {
+  .falling {
+    animation: fade-out 500ms linear forwards;
+  }
+  @keyframes fade-out {
+    to {
+      opacity: 0;
+    }
+  }
+  .jolt {
+    animation: none;
+  }
+  .reveal {
+    animation: none;
+  }
+  .sleigh,
+  .lights {
+    animation: none;
+  }
+}
+
+@keyframes pile-move {
+  0% {
+    opacity: 0;
+    transform: translate(var(--pile-x), var(--pile-y)) scale(1.5);
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .newPile {
+    animation: fade-in 1ms 3200ms both;
+  }
+}
