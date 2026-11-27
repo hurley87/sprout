@@ -9,11 +9,13 @@ import {
   type ConversationStateOutputs,
 } from "./conversation-observer-contract";
 import { applySpokenNumberCheck } from "./spoken-number-check";
+import { applySpokenColourCheck } from "./spoken-colour-check";
 import { isLessonNodeId, type LessonDefinition } from "./lesson-definition";
 export type LiveClassificationDiagnostic = {
   classifierVersion: typeof CLASSIFIER_VERSION;
   rewriteAssessment?: ConversationStateDecision["rewriteAssessment"];
   spokenNumber?: ConversationStateDecision["spokenNumber"];
+  spokenColour?: ConversationStateDecision["spokenColour"];
   decision: ConversationStateDecision["status"];
   outcome: ConversationStateDecision["outcome"];
   reason?: string;
@@ -162,24 +164,38 @@ export function parseLiveClassificationDiagnostic(
     : hasConceptQuestions
       ? !completionEligible && !confidentConcepts && !outputs?.rewrite
       : !genericConfident && !completionEligible;
+  // Replay each spoken check the server applied; an exported diagnostic must match what the check decides.
   let spokenNumber: ConversationStateDecision["spokenNumber"];
-  if (value.spokenNumber !== undefined) {
-    if (!lesson?.spokenNumberCheck || transcript === undefined) return null;
-    const input = { lesson, nodeId: value.nodeId, transcriptRevision: value.transcriptRevision as number, transcript };
-    const checked = applySpokenNumberCheck(
-      outputs ? mapConversationObservation(input, outputs) : abstain(value.reason as string),
-      input,
-    );
+  let spokenColour: ConversationStateDecision["spokenColour"];
+  if (value.spokenNumber !== undefined || value.spokenColour !== undefined) {
+    if (
+      transcript === undefined ||
+      (value.spokenNumber !== undefined && !lesson?.spokenNumberCheck) ||
+      (value.spokenColour !== undefined && !lesson?.spokenColourCheck)
+    )
+      return null;
+    const input = {
+      lesson: lesson!,
+      nodeId: value.nodeId,
+      transcriptRevision: value.transcriptRevision as number,
+      transcript,
+    };
+    const base = outputs ? mapConversationObservation(input, outputs) : abstain(value.reason as string);
+    const checked =
+      value.spokenNumber !== undefined ? applySpokenNumberCheck(base, input) : applySpokenColourCheck(base, input);
     if (
       JSON.stringify(value.spokenNumber) !== JSON.stringify(checked.spokenNumber) ||
+      JSON.stringify(value.spokenColour) !== JSON.stringify(checked.spokenColour) ||
       value.decision !== checked.status ||
       value.outcome !== checked.outcome
     )
       return null;
     spokenNumber = checked.spokenNumber;
+    spokenColour = checked.spokenColour;
   }
-  const overridden =
-    spokenNumber?.action === "rescue" || spokenNumber?.action === "veto" || spokenNumber?.action === "assisted";
+  const overridden = [spokenNumber?.action, spokenColour?.action].some(
+    action => action === "rescue" || action === "veto" || action === "assisted",
+  );
   if (
     value.labelCompletionEligible !== labelCompletionEligible ||
     (value.decision === "accepted" &&
@@ -196,6 +212,7 @@ export function parseLiveClassificationDiagnostic(
   return {
     classifierVersion: CLASSIFIER_VERSION,
     ...(spokenNumber ? { spokenNumber } : {}),
+    ...(spokenColour ? { spokenColour } : {}),
     ...(value.rewriteAssessment
       ? { rewriteAssessment: value.rewriteAssessment as ConversationStateDecision["rewriteAssessment"] }
       : {}),

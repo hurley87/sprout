@@ -67,8 +67,17 @@ export async function POST(request: Request) {
         timeout.aborted ? 504 : 499,
       );
     const identity = { nodeId: snapshot.nodeId, transcriptRevision: snapshot.transcriptRevision, elapsedMs };
-    const { proposal, outputs, outcome, status, reason, labelCompletionEligible, rewriteAssessment, spokenNumber } =
-      decision;
+    const {
+      proposal,
+      outputs,
+      outcome,
+      status,
+      reason,
+      labelCompletionEligible,
+      rewriteAssessment,
+      spokenNumber,
+      spokenColour,
+    } = decision;
     return json({
       proposal,
       diagnostic: {
@@ -76,6 +85,7 @@ export async function POST(request: Request) {
         decision: status,
         ...(rewriteAssessment ? { rewriteAssessment } : {}),
         ...(spokenNumber ? { spokenNumber } : {}),
+        ...(spokenColour ? { spokenColour } : {}),
         outputs,
         outcome,
         ...(reason ? { reason } : {}),
