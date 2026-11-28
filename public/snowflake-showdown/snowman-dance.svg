@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 220">
+  <!-- Dance, for the finale: the top two balls sway over the planted base, one arm up and one out. -->
+  <ellipse cx="90" cy="211" rx="58" ry="7" fill="#5f7f96" opacity=".18"/>
+  <circle cx="90" cy="164" r="45" fill="#fbfdfb" stroke="#9fb8c8" stroke-width="4.5"/>
+  <path d="M120 140q12 22-4 46" fill="none" stroke="#dfeaf0" stroke-width="8" stroke-linecap="round"/>
+  <path d="M34 196q-10-12-2-26m116 26q10-12 2-26" fill="none" stroke="#c3d6e0" stroke-width="4" stroke-linecap="round"/>
+  <g transform="rotate(-10 90 140)">
+    <path d="M60 100 36 70m6 2-10-10m4 8-14 2M120 108l36 6m-8-1 10-9m-10 9 8 10" fill="none" stroke="#7a5240" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="90" cy="106" r="32" fill="#fbfdfb" stroke="#9fb8c8" stroke-width="4.5"/>
+    <path d="M112 92q8 14 0 30" fill="none" stroke="#dfeaf0" stroke-width="7" stroke-linecap="round"/>
+    <circle cx="90" cy="54" r="27" fill="#fbfdfb" stroke="#9fb8c8" stroke-width="4.5"/>
+    <circle cx="73" cy="61" r="4.5" fill="#f6b3c3" opacity=".85"/>
+    <circle cx="108" cy="65" r="4.5" fill="#f6b3c3" opacity=".85"/>
+    <path d="M77 52q4-6 8 0m10 0q4-6 8 0" fill="none" stroke="#4a3f4a" stroke-width="3.2" stroke-linecap="round"/>
+    <path d="M90 54l20 4.5-20 5z" fill="#f29a4a" stroke="#b0612e" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M80 66q10 10 20 0z" fill="#6b3f4a" stroke="#4a3f4a" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M64 80q26 12 52 0l2 12q-28 14-56 0z" fill="#4f86c9" stroke="#2f5888" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M104 88l10 32 13-5-11-30z" fill="#4f86c9" stroke="#2f5888" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M108 101l12-4m-8 14 12-4" fill="none" stroke="#fff6ed" stroke-width="4" stroke-linecap="round"/>
+    <g transform="rotate(14 90 40)">
+      <path d="M66 40c0-30 48-30 48 0z" fill="#4f86c9" stroke="#2f5888" stroke-width="4" stroke-linejoin="round"/>
+      <rect x="62" y="34" width="56" height="12" rx="6" fill="#3d6ead" stroke="#2f5888" stroke-width="4"/>
+      <circle cx="90" cy="14" r="8" fill="#fff6ed" stroke="#c9b4a8" stroke-width="3.5"/>
+    </g>
+  </g>
+</svg>

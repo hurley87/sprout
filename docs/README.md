@@ -5,6 +5,7 @@ The production prototype is the realtime counting lesson at `/`, backed by
 
 | Document | Purpose |
 | --- | --- |
+| [Snowflake Showdown counting](snowflake-showdown-counting.md) | Seeded who-has-more game, colour check child aliases and verification limits |
 | [Which Stocking counting](which-stocking-counting.md) | Seeded colour-answer game, spoken colour check and verification limits |
 | [Down the Chimney counting](down-the-chimney-counting.md) | Seeded count-along game, replay pacing and verification limits |
 | [Christmas Tree counting](christmas-tree-counting.md) | Seeded counting scene, picture cues and verification limits |

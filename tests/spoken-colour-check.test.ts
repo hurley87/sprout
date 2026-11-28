@@ -45,6 +45,18 @@ const lesson: LessonDefinition = validateLessonDefinition({
     }),
   },
 });
+// Snowflake Showdown's shape: her pink mitten and the snowman's blue one, with perspective child aliases.
+const childAliases = { me: "pink", mine: "pink", my: "pink", you: "blue", yours: "blue", snowman: "blue" };
+const showdown: LessonDefinition = validateLessonDefinition({
+  ...base,
+  initialNodeId: "showdown-1",
+  spokenNumberCheck: undefined,
+  spokenColourCheck: { childAliases },
+  nodes: {
+    "showdown-1": stocking("showdown-1", { answer: "blue", colours: "blue,pink", count_blue: 5, count_pink: 1 }),
+  },
+});
+const intro = "Tutor: Pink is yours and blue is the snowman's. When they flip, tell me who has more snowflakes!";
 const input = (transcript: string, nodeId = "stocking-2", target: LessonDefinition = lesson) => ({
   lesson: target,
   nodeId,
@@ -99,6 +111,10 @@ const confident = (choice: "incorrect" | "no_attempt" | "unresolved_help" | "unc
 });
 function check(transcript: string, scores = outputs, nodeId = "stocking-2") {
   const snapshot = input(transcript, nodeId);
+  return applySpokenColourCheck(mapConversationObservation(snapshot, scores), snapshot);
+}
+function checkShowdown(transcript: string, scores = outputs) {
+  const snapshot = input(transcript, "showdown-1", showdown);
   return applySpokenColourCheck(mapConversationObservation(snapshot, scores), snapshot);
 }
 afterEach(() => {
@@ -229,6 +245,101 @@ describe("spoken colour check", () => {
   });
 });
 
+describe("spoken colour check with child aliases", () => {
+  it.each([
+    ["her colour", `${intro}\nChild: blue`, "blue", "blue"],
+    ["a perspective word", `${intro}\nChild: you!`, "blue", "you"],
+    ["the snowman", `${intro}\nChild: the snowman's`, "blue", "snowman"],
+    ["a perspective word after the tutor's own", "Tutor: Can you tell me who has more?\nChild: yours", "blue", "yours"],
+  ])("agrees with %s", (_label, transcript, value, source) => {
+    expect(checkShowdown(transcript)).toMatchObject({
+      outcome: "allow_semantic_completion_evidence",
+      proposal: { answerOutcome: "correct" },
+      spokenColour: { action: "agree", reader: { status: "colour", value, source, owner: "child" } },
+    });
+  });
+
+  it("rescues her perspective word when the classifier is unsure", () => {
+    expect(checkShowdown(`${intro}\nChild: you`, uncertain)).toMatchObject({
+      outcome: "allow_semantic_completion_evidence",
+      spokenColour: { action: "rescue", reader: { value: "blue", owner: "child" } },
+    });
+  });
+
+  it.each([
+    ["her own mitten", `${intro}\nChild: mine`, "incorrect"],
+    ["alternatives", "Child: me or you", "unclear"],
+    ["a negation", "Child: not mine", "unclear"],
+    ["the number back", "Child: three", "unclear"],
+  ] as const)("vetoes a correct proposal for %s", (_label, transcript, answerOutcome) => {
+    expect(checkShowdown(transcript)).toMatchObject({
+      outcome: "hold_scene",
+      proposal: { answerOutcome },
+      spokenColour: { action: "veto" },
+    });
+  });
+
+  it("holds an echo of the tutor naming only the answer, then accepts her second repeat as assisted", () => {
+    const disclosed = `${intro}\nTutor: Blue has more.\nChild: blue`;
+    expect(checkShowdown(disclosed)).toMatchObject({
+      outcome: "hold_scene",
+      proposal: { answerOutcome: "none", answerCommitment: "no_answer" },
+      spokenColour: { action: "veto", reader: { owner: "echo" } },
+    });
+    expect(checkShowdown(`${disclosed}\nTutor: Say it again?\nChild: the snowman's`)).toMatchObject({
+      outcome: "allow_semantic_completion_evidence",
+      spokenColour: { action: "assisted", reader: { value: "blue", owner: "assisted" } },
+    });
+  });
+
+  it("records both mittens' amounts with every answer, even without a target", () => {
+    expect(checkShowdown("Child: mine").spokenColour).toEqual({
+      action: "veto",
+      reader: { status: "colour", value: "pink", source: "mine", owner: "child" },
+      classifierOutcome: "correct",
+      picked: "pink",
+      pickedCount: 1,
+      choiceCounts: { blue: 5, pink: 1 },
+    });
+    expect(checkShowdown("Child: that one").spokenColour).toEqual({
+      action: "veto",
+      reader: { status: "deictic", source: "that one" },
+      classifierOutcome: "correct",
+      choiceCounts: { blue: 5, pink: 1 },
+    });
+  });
+
+  it("replays child aliases and choice counts in the exported diagnostic", () => {
+    const transcript = `${intro}\nChild: you!`;
+    const snapshot = input(transcript, "showdown-1", showdown);
+    const decision = applySpokenColourCheck(mapConversationObservation(snapshot, outputs), snapshot);
+    const exported = (spokenColour: ConversationStateDecision["spokenColour"], target = showdown) =>
+      parseLiveClassificationDiagnostic(
+        {
+          classifierVersion: CLASSIFIER_VERSION,
+          decision: decision.status,
+          outcome: decision.outcome,
+          outputs: decision.outputs,
+          labelCompletionEligible: decision.labelCompletionEligible,
+          spokenColour,
+          thresholds: CONVERSATION_CLASSIFICATION_THRESHOLDS,
+          nodeId: snapshot.nodeId,
+          transcriptRevision: snapshot.transcriptRevision,
+          elapsedMs: 1,
+        },
+        target,
+        snapshot.nodeId,
+        transcript,
+      );
+    expect(decision.spokenColour).toMatchObject({ action: "agree", choiceCounts: { blue: 5, pink: 1 } });
+    expect(exported(decision.spokenColour)).toMatchObject({ spokenColour: decision.spokenColour });
+    expect(exported({ ...decision.spokenColour!, choiceCounts: { blue: 5, pink: 4 } })).toBeNull();
+    expect(exported({ ...decision.spokenColour!, choiceCounts: undefined })).toBeNull();
+    // Replayed without the child aliases, her "you" is no colour, so the diagnostic no longer matches.
+    expect(exported(decision.spokenColour, { ...showdown, spokenColourCheck: {} })).toBeNull();
+  });
+});
+
 describe("spoken colour diagnostic", () => {
   it.each([
     ["a near miss (one more)", "Child: pink", { picked: "pink", pickedCount: 4, target: 3, nearMiss: true }],
@@ -240,6 +351,7 @@ describe("spoken colour diagnostic", () => {
       reader: expect.objectContaining({ status: "colour" }),
       classifierOutcome: "correct",
       ...fields,
+      choiceCounts: { gold: 1, pink: 4, purple: 3 },
     });
   });
 
@@ -275,6 +387,7 @@ describe("spoken colour diagnostic", () => {
       classifierOutcome: "correct",
       picked: "blue",
       target: 3,
+      choiceCounts: { gold: 1, pink: 4, purple: 3 },
     });
     const bare = {
       ...lesson,
@@ -300,6 +413,24 @@ describe("spoken colour diagnostic", () => {
       action: "veto",
       reader: { status: "number_only", source: "three" },
       classifierOutcome: "correct",
+      choiceCounts: { gold: 1, pink: 4, purple: 3 },
+    });
+  });
+
+  it("records only the on-screen colours that have a count fact", () => {
+    const partial = {
+      ...lesson,
+      nodes: {
+        ...lesson.nodes,
+        "stocking-2": {
+          ...lesson.nodes["stocking-2"],
+          presentation: { answerKind: "colour", answer: "purple", colours: "gold,pink,purple", count_pink: 4 },
+        },
+      },
+    };
+    const snapshot = input("Child: three", "stocking-2", partial);
+    expect(applySpokenColourCheck(mapConversationObservation(snapshot, outputs), snapshot).spokenColour).toMatchObject({
+      choiceCounts: { pink: 4 },
     });
   });
 
@@ -314,7 +445,14 @@ describe("spoken colour diagnostic", () => {
     const decision = await classifyConversationStateWithDiagnostics(snapshot, new AbortController().signal);
     expect(decision).toMatchObject({
       proposal: { answerOutcome: "correct", answerCommitment: "committed" },
-      spokenColour: { action: "rescue", picked: "purple", pickedCount: 3, target: 3, nearMiss: false },
+      spokenColour: {
+        action: "rescue",
+        picked: "purple",
+        pickedCount: 3,
+        target: 3,
+        nearMiss: false,
+        choiceCounts: { gold: 1, pink: 4, purple: 3 },
+      },
     });
     expect(decision).not.toHaveProperty("spokenNumber");
     const exported = (spokenColour: ConversationStateDecision["spokenColour"], target = lesson) =>
@@ -338,6 +476,7 @@ describe("spoken colour diagnostic", () => {
     expect(exported(decision.spokenColour)).toMatchObject({ spokenColour: decision.spokenColour });
     // A diagnostic that does not replay, or comes from a lesson without the setting, is rejected.
     expect(exported({ ...decision.spokenColour!, nearMiss: true })).toBeNull();
+    expect(exported({ ...decision.spokenColour!, choiceCounts: { gold: 1, pink: 4, purple: 4 } })).toBeNull();
     expect(exported(decision.spokenColour, { ...lesson, spokenColourCheck: undefined })).toBeNull();
   });
 });
@@ -354,6 +493,12 @@ describe("spoken colour check setting", () => {
     ["no aliases", { ...lesson, spokenColourCheck: {} }],
     ["an empty alias map", { ...lesson, spokenColourCheck: { aliases: {} } }],
     ["the gold aliases", lesson],
+    ["the perspective child aliases", showdown],
+    ["an empty child alias map", { ...lesson, spokenColourCheck: { childAliases: {} } }],
+    [
+      "aliases and child aliases together",
+      { ...lesson, spokenColourCheck: { aliases: { yellow: "gold" }, childAliases: { mine: "pink" } } },
+    ],
   ])("accepts %s", (_label, definition) => {
     expect(validateLessonDefinition(definition)).toBe(definition);
   });
@@ -374,9 +519,33 @@ describe("spoken colour check setting", () => {
     ["an alias shadowing a colour", { ...lesson, spokenColourCheck: { aliases: { pink: "purple" } } }],
     ["an uppercase alias", { ...lesson, spokenColourCheck: { aliases: { Yellow: "gold" } } }],
     ["a non-object alias map", { ...lesson, spokenColourCheck: { aliases: "yellow" as never } }],
+    ["an alias hiding a pointing word", { ...lesson, spokenColourCheck: { aliases: { that: "gold" } } }],
+    ["an alias hiding a pronoun", { ...lesson, spokenColourCheck: { aliases: { it: "gold" } } }],
+    ["a child alias to an unknown colour", { ...lesson, spokenColourCheck: { childAliases: { you: "blue" } } }],
+    ["a child alias shadowing a colour", { ...lesson, spokenColourCheck: { childAliases: { pink: "purple" } } }],
+    ["an uppercase child alias", { ...lesson, spokenColourCheck: { childAliases: { Mine: "pink" } } }],
+    ["a multi-word child alias", { ...lesson, spokenColourCheck: { childAliases: { "my one": "pink" } } }],
+    ["a non-object child alias map", { ...lesson, spokenColourCheck: { childAliases: ["mine"] as never } }],
+    ["a null child alias map", { ...lesson, spokenColourCheck: { childAliases: null as never } }],
+    [
+      "a word in both alias maps",
+      { ...lesson, spokenColourCheck: { aliases: { yellow: "gold" }, childAliases: { yellow: "gold" } } },
+    ],
+    [
+      "a word in both alias maps for different colours",
+      { ...lesson, spokenColourCheck: { aliases: { mine: "gold" }, childAliases: { mine: "pink" } } },
+    ],
   ])("rejects %s", (_label, definition) => {
     expect(() => validateLessonDefinition(definition)).toThrow(/Spoken-colour check/);
   });
+
+  it.each(["that", "this", "there", "here", "it", "him", "her"])(
+    "rejects a child alias hiding the reader word %s",
+    word => {
+      const definition = { ...lesson, spokenColourCheck: { childAliases: { [word]: "pink" } } };
+      expect(() => validateLessonDefinition(definition)).toThrow(/Spoken-colour check/);
+    },
+  );
 
   it("rejects both spoken checks together", () => {
     expect(() => validateLessonDefinition({ ...lesson, spokenNumberCheck: true })).toThrow();

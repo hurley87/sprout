@@ -160,6 +160,93 @@ Child: purple`;
   });
 });
 
+describe("spoken colour reader with child aliases", () => {
+  // Snowflake Showdown: her pink mitten and the snowman's blue one. Perspective words flip by speaker.
+  const childAliases: Readonly<Record<string, string>> = {
+    me: "pink",
+    mine: "pink",
+    my: "pink",
+    you: "blue",
+    yours: "blue",
+    snowman: "blue",
+  };
+  const mittens: SpokenColourOptions = { answer: "blue", colours: ["blue", "pink"], childAliases };
+  const readMitten = (transcript: string, overrides: Partial<SpokenColourOptions> = {}) =>
+    latestChildColour(transcript, { ...mittens, ...overrides });
+  const intro = "Tutor: Pink is yours and blue is the snowman's. When they flip, tell me who has more snowflakes!";
+
+  it.each([
+    ["mine!", "pink", "mine"],
+    ["Me!", "pink", "Me"],
+    ["my one", "pink", "my"],
+    ["it's mine", "pink", "mine"],
+    ["you!", "blue", "you"],
+    ["yours", "blue", "yours"],
+    ["the snowman's", "blue", "snowman"],
+    ["blue", "blue", "blue"],
+    ["mine… no, the snowman's", "blue", "snowman"],
+  ])("reads %s", (speech, value, source) => {
+    expect(readMitten(`Child: ${speech}`)).toEqual({ status: "colour", value, source, owner: "child" });
+  });
+
+  it.each([
+    ["me or you", { status: "ambiguous", reason: "alternatives" }],
+    ["pink or yours", { status: "ambiguous", reason: "alternatives" }],
+    ["not mine", { status: "ambiguous", reason: "negated" }],
+    ["mine?", { status: "ambiguous", reason: "question" }],
+    ["three", { status: "number_only", source: "three" }],
+    ["that one", { status: "deictic", source: "that one" }],
+    ["it", { status: "deictic", source: "it" }],
+  ])("keeps the reader's order for %s", (speech, result) => {
+    expect(readMitten(`Child: ${speech}`)).toEqual(result);
+  });
+
+  it("reads perspective words as nothing without child aliases", () => {
+    expect(readMitten("Child: mine", { childAliases: undefined })).toEqual({ status: "none" });
+    expect(readMitten("Child: you", { childAliases: undefined })).toEqual({ status: "none" });
+  });
+
+  it.each([
+    ["Tutor: Can you tell me who has more?", "blue", "Child: blue"],
+    ["Tutor: Can you tell me who has more?", "blue", "Child: you"],
+    ["Tutor: Is it your mitten? Tell me!", "pink", "Child: pink"],
+    ["Tutor: Is it yours? Look at my snowman!", "pink", "Child: mine"],
+    ["Tutor: You tell me!", "pink", "Child: me"],
+  ])("never treats the tutor's perspective words as a disclosure: %s", (tutor, answer, child) => {
+    expect(readMitten(`${tutor}\n${child}`, { answer })).toMatchObject({ value: answer, owner: "child" });
+  });
+
+  it.each(["blue", "pink"])("does not make her answer an echo after the intro lists both colours: %s", answer => {
+    expect(readMitten(`${intro}\nChild: ${answer}`, { answer })).toMatchObject({ value: answer, owner: "child" });
+    expect(readMitten(`Tutor: Pink or blue?\nChild: ${answer}`, { answer })).toMatchObject({ owner: "child" });
+  });
+
+  it("still makes her answer an echo when the tutor names only the answer colour, then assisted", () => {
+    const disclosed = `${intro}\nTutor: Blue has more.\nChild: blue`;
+    expect(readMitten(disclosed)).toMatchObject({ value: "blue", owner: "echo" });
+    expect(readMitten(`${disclosed}\nTutor: Say it again?\nChild: you!`)).toMatchObject({
+      value: "blue",
+      owner: "assisted",
+    });
+  });
+
+  it("counts her child-alias attempts in ownership", () => {
+    expect(readMitten("Child: you\nTutor: Yes, blue! Say it again?\nChild: blue")).toMatchObject({ owner: "child" });
+    expect(readMitten("Tutor: Blue!\nChild: the snowman's")).toMatchObject({ value: "blue", owner: "echo" });
+  });
+
+  it("counts only on-screen colours as other choices", () => {
+    expect(readMitten("Tutor: Is it red or blue?\nChild: blue")).toMatchObject({ owner: "echo" });
+  });
+
+  it("keeps a one-colour tutor question a disclosure in Which Stocking", () => {
+    expect(read("Tutor: One! Is it purple?\nChild: purple")).toMatchObject({ value: "purple", owner: "echo" });
+    expect(read("Tutor: Is it the yellow one?\nChild: gold", { answer: "gold" })).toMatchObject({ owner: "echo" });
+    // Naming two stockings lists them rather than giving one away.
+    expect(read("Tutor: Pink has four and purple has three.\nChild: purple")).toMatchObject({ owner: "child" });
+  });
+});
+
 describe("picked colour helper", () => {
   const presentation = { answerKind: "colour", answer: "purple", colours: "gold,pink,purple", target: 3 };
   it("parses the presentation colours left to right", () => {
@@ -171,6 +258,14 @@ describe("picked colour helper", () => {
     expect(pickedColour("Child: the pink one", presentation)).toBe("pink");
     expect(pickedColour("Child: yellow", presentation, aliases)).toBe("gold");
     expect(pickedColour("Tutor: purple\nChild: purple", presentation)).toBe("purple");
+  });
+  it("resolves her child aliases to the colour she picked", () => {
+    const mittens = { answerKind: "colour", answer: "blue", colours: "blue,pink" };
+    const childAliases = { mine: "pink", you: "blue" };
+    expect(pickedColour("Child: mine!", mittens, undefined, childAliases)).toBe("pink");
+    expect(pickedColour("Tutor: Can you tell me?\nChild: you", mittens, undefined, childAliases)).toBe("blue");
+    expect(pickedColour("Child: mine", mittens)).toBeNull();
+    expect(pickedColour("Child: mine or you", mittens, undefined, childAliases)).toBeNull();
   });
   it("returns null when no single on-screen colour was named", () => {
     expect(pickedColour("Child: blue", presentation)).toBeNull();

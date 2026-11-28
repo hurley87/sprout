@@ -13,6 +13,7 @@ import { MAE386_LESSON } from "./mae386-lesson";
 import { christmasTreeLesson, parseChristmasTreeLessonId } from "./christmas-tree-lesson";
 import { downTheChimneyLesson, parseDownTheChimneyLessonId } from "./down-the-chimney-lesson";
 import { parseWhichStockingLessonId, whichStockingLesson } from "./which-stocking-lesson";
+import { parseSnowflakeShowdownLessonId, snowflakeShowdownLesson } from "./snowflake-showdown-lesson";
 import type { LessonDefinition } from "./lesson-definition";
 
 /** Application-owned allowlist. Keep additions explicit and small. */
@@ -38,5 +39,7 @@ export function resolveLessonDefinition(value: unknown): LessonDefinition | null
   const chimneySeed = parseDownTheChimneyLessonId(value);
   if (chimneySeed !== null) return downTheChimneyLesson(chimneySeed);
   const stockingSeed = parseWhichStockingLessonId(value);
-  return stockingSeed === null ? null : whichStockingLesson(stockingSeed);
+  if (stockingSeed !== null) return whichStockingLesson(stockingSeed);
+  const showdownSeed = parseSnowflakeShowdownLessonId(value);
+  return showdownSeed === null ? null : snowflakeShowdownLesson(showdownSeed);
 }

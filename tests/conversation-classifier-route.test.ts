@@ -189,6 +189,7 @@ it("exports the spoken-colour diagnostic beside the spoken-number one", async ()
     pickedCount: 4,
     target: 3,
     nearMiss: true,
+    choiceCounts: { gold: 1, pink: 4, purple: 3 },
   };
   vi.spyOn(canonical, "classifyConversationStateWithDiagnostics").mockResolvedValue({
     ...mapSimplifiedObservation(input, outputs),

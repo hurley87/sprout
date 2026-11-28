@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72">
+  <!-- The unearned star: /christmas-tree/star.svg's outline and inner facet in frosty white and
+       blue-grey, so it swaps in place for the gold one. -->
+  <path d="M36 5 45 25 67 27 50 43 55 65 36 54 17 65 22 43 5 27 27 25Z"
+        fill="#eef4f7" stroke="#93adc0" stroke-width="4.5" stroke-linejoin="round"/>
+  <path d="m36 12 5 17 18 1-16 6-7 17-3-17-19-6 17-2z" fill="#fbfdfd"/>
+</svg>

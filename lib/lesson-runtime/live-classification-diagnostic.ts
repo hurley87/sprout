@@ -164,7 +164,9 @@ export function parseLiveClassificationDiagnostic(
     : hasConceptQuestions
       ? !completionEligible && !confidentConcepts && !outputs?.rewrite
       : !genericConfident && !completionEligible;
-  // Replay each spoken check the server applied; an exported diagnostic must match what the check decides.
+  // Replay each spoken check the server applied; an exported diagnostic must match what the check decides,
+  // field for field. The replay reads the lesson's own aliases and child aliases and recomputes the colour
+  // pick details and `choiceCounts` from the node facts, so a forged or stale count is rejected too.
   let spokenNumber: ConversationStateDecision["spokenNumber"];
   let spokenColour: ConversationStateDecision["spokenColour"];
   if (value.spokenNumber !== undefined || value.spokenColour !== undefined) {

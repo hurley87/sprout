@@ -1,0 +1,513 @@
+.frame,
+.stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+.stage {
+  isolation: isolate;
+  overflow: hidden;
+  container-type: size;
+  background: #cfe3f1;
+  --align: var(--align-landscape);
+  --bg-width: max(100cqw, 100cqh * 16 / 9);
+  --bg-height: max(100cqh, 100cqw * 9 / 16);
+}
+@media (orientation: portrait) {
+  .stage {
+    --align: var(--align-portrait);
+  }
+}
+.background {
+  position: absolute;
+  inset: 0;
+}
+.background img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: calc(var(--align) * 100%) bottom;
+}
+/* Follows the background's cover crop, so placements are fractions of the 1600 × 900 artwork. */
+.layer {
+  position: absolute;
+  left: calc((100% - var(--bg-width)) * var(--align));
+  bottom: 0;
+  width: var(--bg-width);
+  height: var(--bg-height);
+}
+.object {
+  position: absolute;
+  translate: -50% -50%;
+}
+.object img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.preload {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+.preload img {
+  width: 1px;
+  height: 1px;
+}
+
+/* A mitten, its faces and its snowflakes, the size of the layer so placements share its coordinates.
+ * It turns, wiggles and dances about its own centre (--ox, --oy). */
+.mitten,
+.face {
+  position: absolute;
+  inset: 0;
+  transform-origin: var(--ox) var(--oy);
+}
+.hand img {
+  transition: filter 300ms ease-out;
+}
+
+/* The flip: both mittens turn over together, back to palm, with a soft visual swish. */
+.turning {
+  transform-style: preserve-3d;
+  animation: flip 500ms cubic-bezier(0.45, 0, 0.35, 1) both;
+}
+.turning .face {
+  backface-visibility: hidden;
+}
+.turning .palm {
+  transform: rotateY(180deg);
+}
+@keyframes flip {
+  from {
+    transform: perspective(1400px) rotateY(0deg);
+  }
+  to {
+    transform: perspective(1400px) rotateY(180deg);
+  }
+}
+.swish {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, #ffffffd9, #ffffff59 55%, transparent);
+  pointer-events: none;
+  animation: swish 500ms ease-out both;
+}
+@keyframes swish {
+  0% {
+    opacity: 0;
+    transform: scaleX(0.3) translateX(-30%);
+  }
+  45% {
+    opacity: 0.75;
+  }
+  100% {
+    opacity: 0;
+    transform: scaleX(1.15) translateX(25%);
+  }
+}
+
+/* Silence: both mittens wiggle once. */
+.wiggle {
+  animation: wiggle 600ms ease-in-out;
+}
+@keyframes wiggle {
+  20% {
+    rotate: calc(var(--sway) * 4deg);
+  }
+  45% {
+    rotate: calc(var(--sway) * -4deg);
+  }
+  70% {
+    rotate: calc(var(--sway) * 2.5deg);
+  }
+  90% {
+    rotate: calc(var(--sway) * -1deg);
+  }
+}
+
+/* Success: the mitten with more does a little dance. */
+.dance {
+  animation: dance 600ms ease-in-out;
+}
+@keyframes dance {
+  25% {
+    translate: 0 -3%;
+    rotate: -5deg;
+  }
+  50% {
+    translate: 0 0;
+    rotate: 0deg;
+  }
+  75% {
+    translate: 0 -3%;
+    rotate: 5deg;
+  }
+}
+/* The finale: both mittens dance on, out of step. */
+.party {
+  animation: dance 1.2s calc(var(--sway) * -150ms + 1.8s) ease-in-out infinite;
+}
+
+/* The snowman claps or shrugs with a little bounce; in the finale he dances on. */
+.react img {
+  animation: hop 600ms var(--snowman-at) ease-out both;
+}
+.jig img {
+  animation: hop 900ms 1.8s ease-in-out infinite;
+}
+@keyframes hop {
+  40% {
+    transform: translateY(-6%) rotate(-3deg);
+  }
+  70% {
+    transform: translateY(0) rotate(2deg);
+  }
+}
+
+/* Wrong call: the pairing lines run above the snowflakes, cased in white so a line passing another
+ * snowflake never looks joined to it. Each pair's two snowflakes get a ring in the line's tint. */
+.pairing {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.casing,
+.line {
+  fill: none;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: draw 350ms ease-out forwards;
+}
+.casing {
+  stroke: #ffffffeb;
+  stroke-width: 12;
+}
+.line {
+  stroke: var(--pair);
+  stroke-width: 5;
+}
+@keyframes draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.flake::after {
+  content: "";
+  position: absolute;
+  inset: -12%;
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+}
+.paired::after {
+  border: calc(var(--bg-width) * 3.5 / 1600) solid var(--pair);
+  box-shadow: 0 0 0 calc(var(--bg-width) * 2 / 1600) #ffffffcc;
+  opacity: 1;
+  animation: ring-in 300ms ease-out both;
+}
+@keyframes ring-in {
+  from {
+    opacity: 0;
+    scale: 0.6;
+  }
+}
+/* The leftovers glow gold once the pairing is done, and stay lit until the round ends. */
+.leftover::before {
+  content: "";
+  position: absolute;
+  inset: -34%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, #ffe27ae6, #ffcc3d80 55%, transparent);
+  animation: leftover-pulse 1.8s ease-in-out infinite;
+}
+.leftover img {
+  position: relative;
+  filter: drop-shadow(0 0 0.45rem #ffd24d) drop-shadow(0 0 0.2rem #f5b82e);
+}
+@keyframes leftover-pulse {
+  50% {
+    opacity: 0.65;
+    scale: 1.1;
+  }
+}
+
+/* The star row: pale until earned. This round's star lands with a twinkle. */
+.landed img {
+  animation: twinkle 500ms ease-out;
+}
+@keyframes twinkle {
+  40% {
+    transform: scale(1.35) rotate(12deg);
+    filter: brightness(1.2) drop-shadow(0 0 0.5rem #ffe58a);
+  }
+}
+.flight {
+  position: absolute;
+  width: var(--w);
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  filter: drop-shadow(0 0 0.5rem #fff6c8);
+  animation: fly var(--flight) var(--star-at) cubic-bezier(0.5, 0, 0.35, 1) both;
+}
+.flight img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.flight img + img {
+  animation: turn-gold var(--flight) var(--star-at) ease-in both;
+}
+@keyframes fly {
+  0% {
+    left: var(--from-x);
+    top: var(--from-y);
+    scale: 2.2;
+    rotate: 0deg;
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  100% {
+    left: var(--to-x);
+    top: var(--to-y);
+    scale: 1;
+    rotate: 360deg;
+    opacity: 1;
+  }
+}
+@keyframes turn-gold {
+  0%,
+  20% {
+    opacity: 0;
+  }
+  70%,
+  100% {
+    opacity: 1;
+  }
+}
+
+/* Three clean rounds in a row: a flurry blows across the sky once. */
+.flurry {
+  animation: flurry 1.5s var(--flurry-at) cubic-bezier(0.3, 0, 0.6, 1) both;
+}
+@keyframes flurry {
+  0% {
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  50% {
+    translate: -50% -70%;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    left: var(--to-x);
+    opacity: 0;
+  }
+}
+
+/* The finale: every star swirls in to the middle and a big snowflake blooms there. */
+.orbit {
+  position: absolute;
+  width: 0;
+  height: 0;
+  animation: orbit 1.6s calc(var(--order) * 60ms) cubic-bezier(0.5, 0, 0.6, 1) both;
+}
+@keyframes orbit {
+  to {
+    rotate: 540deg;
+  }
+}
+.swirl {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: calc(var(--bg-width) * var(--w));
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  animation: inward 1.6s calc(var(--order) * 60ms) cubic-bezier(0.5, 0, 0.6, 1) both;
+}
+.swirl img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+@keyframes inward {
+  from {
+    transform: translate(calc(var(--bg-width) * var(--dx)), calc(var(--bg-height) * var(--dy)));
+  }
+  85% {
+    opacity: 1;
+  }
+  to {
+    transform: translate(0, 0) scale(0.4);
+    opacity: 0;
+  }
+}
+.bigFlake {
+  animation:
+    bloom 900ms 1.4s cubic-bezier(0.3, 1.4, 0.5, 1) both,
+    spin 12s 2.3s linear infinite;
+}
+.bigFlake img {
+  filter: drop-shadow(0 0 1.2rem #ffffff) drop-shadow(0 0 0.4rem #bfe0ff);
+}
+@keyframes bloom {
+  from {
+    opacity: 0;
+    scale: 0.1;
+    rotate: -90deg;
+  }
+}
+@keyframes spin {
+  to {
+    rotate: 360deg;
+  }
+}
+
+/* Voice cue: the pink mitten's cuff glows in place of the status pill. The status text stays for
+ * screen readers. A cool shimmer while Sprout talks; a warm glow on her turn, breathing as she speaks. */
+.cuffGlow {
+  position: absolute;
+  border-radius: calc(var(--bg-width) * var(--cuff-radius));
+  background: #fff4c440;
+  box-shadow:
+    0 0 0 calc(var(--bg-width) * 3 / 1600) #ffe28a,
+    0 0 1.4rem 0.4rem #ffd76a;
+  opacity: 0;
+  transition: opacity 600ms ease-in-out;
+  pointer-events: none;
+}
+section[data-palette]:has(.frame) [data-status-cue="glow"]:has([data-voice-activity]) {
+  background: transparent;
+  box-shadow: none;
+}
+section:has(.frame) [data-status-cue="glow"] [data-voice-activity] {
+  visibility: hidden;
+}
+section:has([data-voice-activity="speaking"]) .stage .cuffGlow {
+  background: #e6f3ff40;
+  box-shadow:
+    0 0 0 calc(var(--bg-width) * 3 / 1600) #ffffff,
+    0 0 1.3rem 0.45rem #9fcdf5;
+  opacity: 0.9;
+}
+section:has([data-voice-activity="your-turn"], [data-voice-activity="listening"]) .stage .cuffGlow {
+  opacity: 1;
+}
+section:has([data-voice-activity="listening"]) .stage .cuffGlow {
+  animation: breathe 1.6s ease-in-out infinite;
+}
+@keyframes breathe {
+  50% {
+    box-shadow:
+      0 0 0 calc(var(--bg-width) * 4 / 1600) #ffe28a,
+      0 0 2rem 0.7rem #ffd76a;
+  }
+}
+
+.complete {
+  position: absolute;
+  bottom: calc(var(--stage-bottom, 1rem) + 1rem);
+  left: 50%;
+  translate: -50%;
+  padding: 0.5rem 1rem;
+  border-radius: 1rem;
+  background: #f7fbffe0;
+  color: #34456b;
+  text-align: center;
+  white-space: nowrap;
+}
+.loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #8fb1cf;
+  color: #1f2e4a;
+}
+
+/* Reduced motion: nothing turns, travels or swirls. The mittens fade to their snowflake side, the
+ * pairing appears at once (the stage's timers do that too), the star turns gold in place, and the
+ * dance and wiggle become a brief brightening. */
+@media (prefers-reduced-motion: reduce) {
+  .turning {
+    animation: none;
+    transform-style: flat;
+  }
+  .turning .palm {
+    transform: none;
+    animation: fade-in 500ms ease-in-out both;
+  }
+  .turning .back {
+    animation: fade-out 500ms ease-in-out both;
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes fade-out {
+    to {
+      opacity: 0;
+    }
+  }
+  .swish,
+  .flight,
+  .flurry {
+    display: none;
+  }
+  .wiggle,
+  .dance,
+  .party {
+    animation: none;
+  }
+  .wiggle .hand img,
+  .dance .hand img {
+    animation: flash 600ms ease-in-out;
+  }
+  @keyframes flash {
+    50% {
+      filter: brightness(1.15) drop-shadow(0 0 0.6rem #fff3b8);
+    }
+  }
+  .react img,
+  .jig img {
+    animation: none;
+  }
+  .casing,
+  .line {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+  .paired::after,
+  .leftover::before {
+    animation: none;
+  }
+  .landed img {
+    animation: flash 600ms ease-in-out;
+  }
+  .bigFlake {
+    animation: fade-in 600ms ease-in both;
+  }
+  .cuffGlow {
+    transition: none;
+  }
+  section:has([data-voice-activity="listening"]) .stage .cuffGlow {
+    animation: none;
+  }
+}

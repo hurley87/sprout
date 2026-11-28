@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 140">
+  <!-- A gust for the streak effect: a few flakes blowing right, with wind trails behind them.
+       The flakes are small and soft so they never pass for the counted palm snowflakes. -->
+  <defs>
+    <path id="flake" d="M0-9V9M-7.8-4.5 7.8 4.5M-7.8 4.5 7.8-4.5"/>
+  </defs>
+  <g fill="none" stroke-linecap="round">
+    <path d="M14 46q60-26 130-10 50 12 96 0M40 98q70-20 140-4 40 9 80-2M100 122q40-10 80 0" stroke="#ffffff" stroke-width="6" opacity=".7"/>
+    <path d="M14 46q60-26 130-10 50 12 96 0M40 98q70-20 140-4 40 9 80-2M100 122q40-10 80 0" stroke="#c9dbe5" stroke-width="2.5" opacity=".9"/>
+  </g>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <g transform="translate(262 34) rotate(12)"><use href="#flake" stroke="#a9c1d2" stroke-width="5.5"/><use href="#flake" stroke="#ffffff" stroke-width="2.6"/></g>
+    <g transform="translate(286 92) rotate(-8) scale(.8)"><use href="#flake" stroke="#a9c1d2" stroke-width="6"/><use href="#flake" stroke="#ffffff" stroke-width="3"/></g>
+    <g transform="translate(200 116) rotate(20) scale(.65)"><use href="#flake" stroke="#a9c1d2" stroke-width="6.5"/><use href="#flake" stroke="#ffffff" stroke-width="3.2"/></g>
+    <g transform="translate(176 22) rotate(-16) scale(.6)"><use href="#flake" stroke="#a9c1d2" stroke-width="6.5"/><use href="#flake" stroke="#ffffff" stroke-width="3.2"/></g>
+  </g>
+</svg>

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 220">
+  <!-- Idle. Every pose shares this viewBox, the base ball and the shadow at y 211, so poses swap in place.
+       A blue hat and scarf tie him to the blue mitten; no buttons, so there is nothing to count. -->
+  <ellipse cx="90" cy="211" rx="58" ry="7" fill="#5f7f96" opacity=".18"/>
+  <circle cx="90" cy="164" r="45" fill="#fbfdfb" stroke="#9fb8c8" stroke-width="4.5"/>
+  <path d="M120 140q12 22-4 46" fill="none" stroke="#dfeaf0" stroke-width="8" stroke-linecap="round"/>
+  <path d="M60 104 26 126m8-5-14-2m14 2-6 13M120 104l34 22m-8-5 14-2m-14 2 6 13" fill="none" stroke="#7a5240" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="90" cy="106" r="32" fill="#fbfdfb" stroke="#9fb8c8" stroke-width="4.5"/>
+  <path d="M112 92q8 14 0 30" fill="none" stroke="#dfeaf0" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="90" cy="54" r="27" fill="#fbfdfb" stroke="#9fb8c8" stroke-width="4.5"/>
+  <circle cx="73" cy="61" r="4.5" fill="#f6b3c3" opacity=".75"/>
+  <circle cx="108" cy="65" r="4.5" fill="#f6b3c3" opacity=".75"/>
+  <circle cx="81" cy="50" r="3.6" fill="#4a3f4a"/>
+  <circle cx="99" cy="50" r="3.6" fill="#4a3f4a"/>
+  <path d="M90 54l20 4.5-20 5z" fill="#f29a4a" stroke="#b0612e" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M81 67q9 7 18 0" fill="none" stroke="#4a3f4a" stroke-width="3" stroke-linecap="round"/>
+  <path d="M64 80q26 12 52 0l2 12q-28 14-56 0z" fill="#4f86c9" stroke="#2f5888" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M104 88l4 34 14-3-6-33z" fill="#4f86c9" stroke="#2f5888" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M106 102l13-3m-11 11 13-3" fill="none" stroke="#fff6ed" stroke-width="4" stroke-linecap="round"/>
+  <path d="M66 40c0-30 48-30 48 0z" fill="#4f86c9" stroke="#2f5888" stroke-width="4" stroke-linejoin="round"/>
+  <rect x="62" y="34" width="56" height="12" rx="6" fill="#3d6ead" stroke="#2f5888" stroke-width="4"/>
+  <circle cx="90" cy="14" r="8" fill="#fff6ed" stroke="#c9b4a8" stroke-width="3.5"/>
+</svg>
